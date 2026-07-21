@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Same Page — Mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .app-screen.active { display: flex; }
+  .prep-step { display: none; }
+  .prep-step.active { display: block; }
+</style>
+</head>
+<body class="bg-gray-100">
+
+<!-- MOCKUP NAV -->
+<div class="fixed top-0 left-0 right-0 z-50 h-10 bg-gray-950 flex items-center px-4 gap-2" style="background:#0a0a0a">
+  <span class="text-gray-500 text-xs mr-2">The Same Page — Mockup</span>
+  <button onclick="show('marketing')" id="nav-marketing" class="nav-btn text-xs px-3 py-1 rounded-full text-gray-300 bg-indigo-600 transition-colors">Marketing</button>
+  <button onclick="show('dashboard')" id="nav-dashboard" class="nav-btn text-xs px-3 py-1 rounded-full text-gray-400 bg-gray-800 hover:bg-gray-700 transition-colors">Dashboard</button>
+  <button onclick="show('dr')" id="nav-dr" class="nav-btn text-xs px-3 py-1 rounded-full text-gray-400 bg-gray-800 hover:bg-gray-700 transition-colors">Team Member</button>
+  <button onclick="show('prep')" id="nav-prep" class="nav-btn text-xs px-3 py-1 rounded-full text-gray-400 bg-gray-800 hover:bg-gray-700 transition-colors">1:1 Prep</button>
+  <button onclick="show('commits')" id="nav-commits" class="nav-btn text-xs px-3 py-1 rounded-full text-gray-400 bg-gray-800 hover:bg-gray-700 transition-colors">Commitments</button>
+</div>
+
+<div class="pt-10">
+
+<!-- ======================== -->
+<!-- SCREEN 1: MARKETING HOME -->
+<!-- ======================== -->
+<div id="screen-marketing" class="screen active bg-white">
+  <!-- Nav -->
+  <div class="border-b border-gray-100 bg-white sticky top-10 z-40">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <span class="font-semibold text-sm text-gray-900">The Same Page</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="#" class="text-sm text-gray-500">Features</a>
+        <a href="#" class="text-sm text-gray-500">Pricing</a>
+        <a href="#" class="text-sm text-gray-500">Blog</a>
+        <a href="#" class="text-sm text-gray-500">Log in</a>
+        <button onclick="show('dashboard')" class="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-indigo-700">Get started free</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="max-w-6xl mx-auto px-6 pt-20 pb-24 grid grid-cols-2 gap-16 items-center">
+    <div>
+      <div class="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
+        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full inline-block"></span>
+        For first-time managers
+      </div>
+      <h1 class="text-5xl font-bold text-gray-900 leading-tight mb-6">Mission control<br>for your team.</h1>
+      <p class="text-lg text-gray-500 leading-relaxed mb-8">One place to prep for 1:1s, track commitments, and always know how each person on your team is doing — without stitching together five different tools.</p>
+      <div class="flex gap-3 mb-4">
+        <button onclick="show('dashboard')" class="bg-indigo-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-indigo-700">Get started free</button>
+        <button class="border border-gray-200 text-gray-700 px-6 py-3 rounded-lg text-sm font-medium hover:border-gray-300">See how it works</button>
+      </div>
+      <p class="text-xs text-gray-400">No credit card required. Free for 30 days.</p>
+    </div>
+    <!-- Product preview -->
+    <div>
+      <div class="bg-gray-900 rounded-xl shadow-2xl overflow-hidden">
+        <div class="bg-gray-800 px-4 py-2.5 flex items-center gap-2">
+          <div class="w-3 h-3 bg-red-400 rounded-full"></div>
+          <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
+          <div class="w-3 h-3 bg-green-400 rounded-full"></div>
+          <div class="flex-1 mx-3 bg-gray-700 rounded h-5 flex items-center justify-center">
+            <span class="text-gray-400 text-xs">app.thesamepage.io/dashboard</span>
+          </div>
+        </div>
+        <div class="bg-slate-50 flex" style="height:300px">
+          <!-- mini sidebar -->
+          <div class="w-10 bg-slate-900 flex flex-col items-center pt-4 gap-3">
+            <div class="w-6 h-6 bg-indigo-600 rounded-md mb-2"></div>
+            <div class="w-5 h-4 bg-slate-700 rounded"></div>
+            <div class="w-5 h-4 bg-indigo-600 rounded"></div>
+            <div class="w-5 h-4 bg-slate-700 rounded"></div>
+            <div class="w-5 h-4 bg-slate-700 rounded"></div>
+          </div>
+          <!-- mini content -->
+          <div class="flex-1 p-4">
+            <div class="h-3 bg-slate-700 rounded w-40 mb-1"></div>
+            <div class="h-2 bg-slate-300 rounded w-56 mb-4"></div>
+            <!-- AI insight bar -->
+            <div class="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+              <div class="w-3 h-3 bg-indigo-400 rounded-full flex-shrink-0"></div>
+              <div class="h-2 bg-indigo-300 rounded flex-1"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-6 h-6 bg-purple-200 rounded-full flex items-center justify-center text-purple-700 text-xs font-bold">P</div>
+                  <div class="h-2 bg-slate-600 rounded flex-1"></div>
+                </div>
+                <span class="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Needs check-in</span>
+              </div>
+              <div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-6 h-6 bg-blue-200 rounded-full flex items-center justify-center text-blue-700 text-xs font-bold">M</div>
+                  <div class="h-2 bg-slate-600 rounded flex-1"></div>
+                </div>
+                <span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">On track</span>
+              </div>
+              <div class="bg-white rounded-lg p-3 shadow-sm border border-red-100">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-6 h-6 bg-orange-200 rounded-full flex items-center justify-center text-orange-700 text-xs font-bold">J</div>
+                  <div class="h-2 bg-slate-600 rounded flex-1"></div>
+                </div>
+                <span class="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-medium">At risk</span>
+              </div>
+              <div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-6 h-6 bg-teal-200 rounded-full flex items-center justify-center text-teal-700 text-xs font-bold">J</div>
+                  <div class="h-2 bg-slate-600 rounded flex-1"></div>
+                </div>
+                <span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">On track</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pain points -->
+  <div class="bg-slate-50 border-y border-slate-100 py-20">
+    <div class="max-w-5xl mx-auto px-6">
+      <h2 class="text-3xl font-bold text-gray-900 text-center mb-12">The old way is exhausting.</h2>
+      <div class="grid grid-cols-3 gap-10">
+        <div class="text-center">
+          <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          </div>
+          <h3 class="font-semibold text-gray-900 mb-2">Scrambling before every 1:1</h3>
+          <p class="text-sm text-gray-500">Digging through Slack, your notes app, and last week's calendar invite five minutes before the meeting.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h3 class="font-semibold text-gray-900 mb-2">Commitments that disappear</h3>
+          <p class="text-sm text-gray-500">You said you'd follow up. They said they'd ship. Three weeks later — nobody remembers.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h3 class="font-semibold text-gray-900 mb-2">Guessing how your team is doing</h3>
+          <p class="text-sm text-gray-500">You have a feeling someone is struggling, but nothing to point to when review season arrives.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="py-20">
+    <div class="max-w-5xl mx-auto px-6">
+      <h2 class="text-3xl font-bold text-gray-900 text-center mb-4">Three things that matter.</h2>
+      <p class="text-center text-gray-500 mb-16 max-w-xl mx-auto">Everything else is noise. The Same Page focuses on the work that makes the biggest difference week to week.</p>
+
+      <!-- Feature 1: 1:1 prep -->
+      <div class="grid grid-cols-2 gap-12 items-center mb-20">
+        <div>
+          <span class="text-xs font-semibold text-indigo-600 uppercase tracking-wider">01 — 1:1 Prep</span>
+          <h3 class="text-2xl font-bold text-gray-900 mt-2 mb-4">Walk in prepared,<br>not scrambling.</h3>
+          <p class="text-gray-500 leading-relaxed mb-6">Before each meeting, The Same Page surfaces what matters: open commitments, context on how this person is doing, and AI-suggested talking points grounded in real management frameworks.</p>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Auto-surfaces open items and past context</li>
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>AI agenda you can edit before walking in</li>
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Under 5 minutes, not 30</li>
+          </ul>
+        </div>
+        <div class="bg-slate-50 rounded-2xl p-6 border border-slate-200">
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">1:1 Prep · Priya Patel · Tomorrow 2pm</p>
+          <div class="space-y-3">
+            <div class="bg-white rounded-lg p-3 border border-amber-200">
+              <p class="text-xs font-semibold text-amber-700 mb-1">⚠ Open commitment</p>
+              <p class="text-xs text-slate-600">Priya asked about a path to Senior CSM. You said you'd look into it. — July 10</p>
+            </div>
+            <div class="bg-white rounded-lg p-3 border border-indigo-200">
+              <p class="text-xs font-semibold text-indigo-700 mb-1">✦ AI talking point</p>
+              <p class="text-xs text-slate-600">She mentioned the CRM rollout feeling overwhelming. Check in: "What's gotten easier, what's still hard?"</p>
+            </div>
+            <div class="bg-white rounded-lg p-3 border border-emerald-200">
+              <p class="text-xs font-semibold text-emerald-700 mb-1">✓ Momentum to name</p>
+              <p class="text-xs text-slate-600">Closed 3 expansions last week — first time hitting target in Q3. Worth naming specifically.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature 2: Commitments -->
+      <div class="grid grid-cols-2 gap-12 items-center mb-20">
+        <div class="order-2">
+          <span class="text-xs font-semibold text-indigo-600 uppercase tracking-wider">02 — Commitments</span>
+          <h3 class="text-2xl font-bold text-gray-900 mt-2 mb-4">Say what you'll do.<br>Know when it's done.</h3>
+          <p class="text-gray-500 leading-relaxed mb-6">Track every commitment — yours and theirs — across your whole team. The Same Page makes it impossible to let things slip between 1:1s.</p>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Captured during prep or added manually</li>
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Surfaced automatically before the next 1:1</li>
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Whole-team view, not buried in per-person notes</li>
+          </ul>
+        </div>
+        <div class="order-1 bg-slate-50 rounded-2xl p-6 border border-slate-200">
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Team Commitments</p>
+          <div class="space-y-2">
+            <div class="flex items-center gap-3 bg-white rounded-lg p-2.5 border border-slate-200">
+              <div class="w-4 h-4 rounded border-2 border-emerald-500 bg-emerald-50 flex items-center justify-center flex-shrink-0"><svg class="w-2.5 h-2.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></div>
+              <p class="text-xs text-slate-600 flex-1">Follow up on Senior CSM path for Priya</p>
+              <span class="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Done</span>
+            </div>
+            <div class="flex items-center gap-3 bg-white rounded-lg p-2.5 border border-amber-200">
+              <div class="w-4 h-4 rounded border-2 border-amber-400 flex-shrink-0"></div>
+              <p class="text-xs text-slate-600 flex-1">Submit Q3 pipeline review deck</p>
+              <span class="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Due Fri</span>
+            </div>
+            <div class="flex items-center gap-3 bg-white rounded-lg p-2.5 border border-red-200">
+              <div class="w-4 h-4 rounded border-2 border-red-400 flex-shrink-0"></div>
+              <p class="text-xs text-slate-600 flex-1">Schedule comp review with Jamie</p>
+              <span class="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Overdue</span>
+            </div>
+            <div class="flex items-center gap-3 bg-white rounded-lg p-2.5 border border-slate-200">
+              <div class="w-4 h-4 rounded border-2 border-slate-300 flex-shrink-0"></div>
+              <p class="text-xs text-slate-600 flex-1">Complete BDR certification module 3</p>
+              <span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Jul 25</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature 3: Team health -->
+      <div class="grid grid-cols-2 gap-12 items-center">
+        <div>
+          <span class="text-xs font-semibold text-indigo-600 uppercase tracking-wider">03 — Team Health</span>
+          <h3 class="text-2xl font-bold text-gray-900 mt-2 mb-4">Stop guessing.<br>Start knowing.</h3>
+          <p class="text-gray-500 leading-relaxed mb-6">Your dashboard rolls up everything across your team — who's on track, who needs a check-in, who might be at risk — so you're never caught off guard in a review.</p>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Status signals based on real data, not gut feel</li>
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Drill into any team member for the full picture</li>
+            <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Evidence ready when review season arrives</li>
+          </ul>
+        </div>
+        <div class="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
+          <div class="p-4 border-b border-slate-200 bg-white">
+            <p class="text-xs font-semibold text-slate-500">Your team · 4 reports</p>
+          </div>
+          <div class="p-3 space-y-2">
+            <div class="bg-white rounded-lg px-3 py-2.5 border border-slate-200 flex items-center gap-3">
+              <div class="w-7 h-7 bg-purple-200 rounded-full flex items-center justify-center text-xs font-semibold text-purple-700">P</div>
+              <div class="flex-1"><p class="text-xs font-medium text-slate-800">Priya Patel</p><p class="text-xs text-slate-400">Customer Success</p></div>
+              <span class="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">Needs check-in</span>
+            </div>
+            <div class="bg-white rounded-lg px-3 py-2.5 border border-slate-200 flex items-center gap-3">
+              <div class="w-7 h-7 bg-blue-200 rounded-full flex items-center justify-center text-xs font-semibold text-blue-700">M</div>
+              <div class="flex-1"><p class="text-xs font-medium text-slate-800">Marcus Johnson</p><p class="text-xs text-slate-400">Account Executive</p></div>
+              <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">On track</span>
+            </div>
+            <div class="bg-white rounded-lg px-3 py-2.5 border border-red-200 flex items-center gap-3">
+              <div class="w-7 h-7 bg-orange-200 rounded-full flex items-center justify-center text-xs font-semibold text-orange-700">J</div>
+              <div class="flex-1"><p class="text-xs font-medium text-slate-800">Jamie Kim</p><p class="text-xs text-slate-400">Customer Success</p></div>
+              <span class="text-xs bg-red-50 text-red-700 px-2 py-0.5 rounded-full">At risk</span>
+            </div>
+            <div class="bg-white rounded-lg px-3 py-2.5 border border-slate-200 flex items-center gap-3">
+              <div class="w-7 h-7 bg-teal-200 rounded-full flex items-center justify-center text-xs font-semibold text-teal-700">J</div>
+              <div class="flex-1"><p class="text-xs font-medium text-slate-800">Jordan Williams</p><p class="text-xs text-slate-400">Business Development</p></div>
+              <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">On track</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quote -->
+  <div class="bg-indigo-600 py-20">
+    <div class="max-w-3xl mx-auto px-6 text-center">
+      <p class="text-2xl font-medium text-white leading-relaxed mb-6">"I used to spend 30 minutes before every 1:1 digging through Slack and my notes app. Now I'm prepped in five. And I actually remember what I committed to."</p>
+      <div class="flex items-center justify-center gap-3">
+        <div class="w-10 h-10 bg-indigo-400 rounded-full flex items-center justify-center text-white font-semibold text-sm">JK</div>
+        <div class="text-left">
+          <p class="text-sm font-medium text-white">Jamie K.</p>
+          <p class="text-xs text-indigo-300">Account Management Team Lead · 1 year managing</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pricing -->
+  <div class="py-20 bg-white">
+    <div class="max-w-3xl mx-auto px-6 text-center">
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">Simple pricing. No sales call.</h2>
+      <p class="text-gray-500 mb-12">Buy for yourself. No procurement, no approval needed.</p>
+      <div class="grid grid-cols-2 gap-6">
+        <div class="border-2 border-indigo-600 rounded-2xl p-8 text-left relative">
+          <div class="absolute -top-3 left-6 bg-indigo-600 text-white text-xs font-semibold px-3 py-1 rounded-full">Most popular</div>
+          <p class="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">Manager</p>
+          <div class="flex items-end gap-1 mb-4"><span class="text-4xl font-bold text-gray-900">$20</span><span class="text-gray-500 mb-1">/mo</span></div>
+          <ul class="space-y-2 mb-6 text-sm text-gray-700">
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>AI-assisted 1:1 prep</li>
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Commitment tracking</li>
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Team status dashboard</li>
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Unlimited 1:1 history</li>
+          </ul>
+          <button class="w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-indigo-700">Start free — 30 days</button>
+        </div>
+        <div class="border border-gray-200 rounded-2xl p-8 text-left">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Team</p>
+          <div class="flex items-end gap-1 mb-4"><span class="text-4xl font-bold text-gray-900">$100</span><span class="text-gray-500 mb-1">/mo</span></div>
+          <ul class="space-y-2 mb-6 text-sm text-gray-600">
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Everything in Manager</li>
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Up to 5 managers</li>
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Department roll-up view</li>
+            <li class="flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Shared goal tracking</li>
+          </ul>
+          <button class="w-full border border-gray-300 text-gray-700 py-3 rounded-xl text-sm font-semibold">Talk to us</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom CTA -->
+  <div class="bg-slate-900 py-20 text-center">
+    <h2 class="text-3xl font-bold text-white mb-4">Built for the manager. Not HR.</h2>
+    <p class="text-slate-400 mb-8 max-w-xl mx-auto">Every competitor is sold to People teams and priced for enterprise. The Same Page is designed for the person actually running the 1:1.</p>
+    <button onclick="show('dashboard')" class="bg-indigo-600 text-white px-8 py-4 rounded-xl text-sm font-semibold hover:bg-indigo-700">Get started free</button>
+  </div>
+
+  <!-- Footer -->
+  <div class="border-t border-gray-100 py-8 bg-white flex items-center justify-between px-10">
+    <div class="flex items-center gap-2">
+      <div class="w-5 h-5 bg-indigo-600 rounded flex items-center justify-center"><svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+      <span class="text-sm font-semibold text-gray-900">The Same Page</span>
+    </div>
+    <p class="text-xs text-gray-400">© 2026 The Same Page. Built for managers, not HR.</p>
+  </div>
+</div>
+
+<!-- ============================= -->
+<!-- SCREEN 2: DASHBOARD           -->
+<!-- ============================= -->
+<div id="screen-dashboard" class="screen app-screen" style="height:calc(100vh - 40px)">
+  <!-- Sidebar -->
+  <div class="w-56 bg-slate-900 flex flex-col flex-shrink-0">
+    <div class="p-4 border-b border-slate-800 flex items-center gap-2">
+      <div class="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0"><svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+      <span class="text-white font-semibold text-sm">The Same Page</span>
+    </div>
+    <nav class="flex-1 p-3 space-y-0.5">
+      <button onclick="show('dashboard')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 text-white">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        Dashboard
+      </button>
+      <button onclick="show('dr')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        My Team
+      </button>
+      <button onclick="show('prep')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        1:1s
+      </button>
+      <button onclick="show('commits')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        Commitments
+      </button>
+    </nav>
+    <div class="p-4 border-t border-slate-800 flex items-center gap-3">
+      <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">SC</div>
+      <div><p class="text-sm font-medium text-white">Sarah Chen</p><p class="text-xs text-slate-400">Team Lead</p></div>
+    </div>
+  </div>
+  <!-- Main -->
+  <div class="flex-1 overflow-y-auto bg-slate-50">
+    <div class="p-8">
+      <div class="mb-8">
+        <h1 class="text-2xl font-bold text-slate-900">Good morning, Sarah.</h1>
+        <p class="text-slate-500 mt-1">Thursday, July 17 · 4 direct reports · 2 upcoming 1:1s this week</p>
+      </div>
+
+      <!-- AI insight -->
+      <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-8 flex items-start gap-3">
+        <div class="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+          <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-indigo-900">Priya's 1:1 is tomorrow at 2pm — her prep guide is ready.</p>
+          <p class="text-sm text-indigo-700 mt-0.5">Jamie has 4 overdue commitments. Worth addressing in Thursday's 1:1 before they stack further.</p>
+        </div>
+        <button onclick="show('prep')" class="ml-auto bg-indigo-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-indigo-700 flex-shrink-0">Prep now →</button>
+      </div>
+
+      <!-- Team cards -->
+      <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Your Team</h2>
+      <div class="grid grid-cols-2 gap-4">
+
+        <!-- Priya -->
+        <div class="bg-white rounded-xl border border-amber-200 shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow" onclick="show('dr')">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-purple-200 rounded-full flex items-center justify-center text-purple-700 font-semibold">P</div>
+              <div>
+                <p class="font-semibold text-slate-900">Priya Patel</p>
+                <p class="text-xs text-slate-400">Customer Success Manager</p>
+              </div>
+            </div>
+            <span class="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-medium">Needs check-in</span>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-center mb-4">
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">2</p>
+              <p class="text-xs text-slate-400">open items</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">7d</p>
+              <p class="text-xs text-slate-400">since last 1:1</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-amber-600">1</p>
+              <p class="text-xs text-slate-400">overdue</p>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-slate-400">Next 1:1: <span class="text-amber-700 font-medium">Tomorrow 2pm</span></p>
+            <button onclick="event.stopPropagation(); show('prep')" class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-700">Prep →</button>
+          </div>
+        </div>
+
+        <!-- Marcus -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow" onclick="show('dr')">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center text-blue-700 font-semibold">M</div>
+              <div>
+                <p class="font-semibold text-slate-900">Marcus Johnson</p>
+                <p class="text-xs text-slate-400">Account Executive</p>
+              </div>
+            </div>
+            <span class="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-medium">On track</span>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-center mb-4">
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">3</p>
+              <p class="text-xs text-slate-400">open items</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">7d</p>
+              <p class="text-xs text-slate-400">since last 1:1</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">0</p>
+              <p class="text-xs text-slate-400">overdue</p>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-slate-400">Next 1:1: <span class="text-slate-600 font-medium">Thu Jul 18</span></p>
+            <button class="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-medium hover:border-indigo-300 hover:text-indigo-600">Prep →</button>
+          </div>
+        </div>
+
+        <!-- Jamie -->
+        <div class="bg-white rounded-xl border border-red-200 shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow" onclick="show('dr')">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-orange-200 rounded-full flex items-center justify-center text-orange-700 font-semibold">J</div>
+              <div>
+                <p class="font-semibold text-slate-900">Jamie Kim</p>
+                <p class="text-xs text-slate-400">Customer Success Manager</p>
+              </div>
+            </div>
+            <span class="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-medium">At risk</span>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-center mb-4">
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">4</p>
+              <p class="text-xs text-slate-400">open items</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">14d</p>
+              <p class="text-xs text-slate-400">since last 1:1</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-red-600">3</p>
+              <p class="text-xs text-slate-400">overdue</p>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-slate-400">Next 1:1: <span class="text-red-600 font-medium">Thu Jul 18</span></p>
+            <button class="text-xs border border-red-200 text-red-600 px-3 py-1.5 rounded-lg font-medium hover:bg-red-50">Prep →</button>
+          </div>
+        </div>
+
+        <!-- Jordan -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow" onclick="show('dr')">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-teal-200 rounded-full flex items-center justify-center text-teal-700 font-semibold">J</div>
+              <div>
+                <p class="font-semibold text-slate-900">Jordan Williams</p>
+                <p class="text-xs text-slate-400">Business Development Rep</p>
+              </div>
+            </div>
+            <span class="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-medium">On track</span>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-center mb-4">
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">1</p>
+              <p class="text-xs text-slate-400">open items</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">5d</p>
+              <p class="text-xs text-slate-400">since last 1:1</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-2">
+              <p class="text-lg font-bold text-slate-900">0</p>
+              <p class="text-xs text-slate-400">overdue</p>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-slate-400">Next 1:1: <span class="text-slate-600 font-medium">Wed Jul 23</span></p>
+            <button class="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-medium hover:border-indigo-300 hover:text-indigo-600">Prep →</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- SCREEN 3: DIRECT REPORT DETAIL -->
+<!-- ============================== -->
+<div id="screen-dr" class="screen app-screen" style="height:calc(100vh - 40px)">
+  <!-- Sidebar -->
+  <div class="w-56 bg-slate-900 flex flex-col flex-shrink-0">
+    <div class="p-4 border-b border-slate-800 flex items-center gap-2">
+      <div class="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0"><svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+      <span class="text-white font-semibold text-sm">The Same Page</span>
+    </div>
+    <nav class="flex-1 p-3 space-y-0.5">
+      <button onclick="show('dashboard')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        Dashboard
+      </button>
+      <button onclick="show('dr')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 text-white">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        My Team
+      </button>
+      <button onclick="show('prep')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        1:1s
+      </button>
+      <button onclick="show('commits')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        Commitments
+      </button>
+    </nav>
+    <div class="p-4 border-t border-slate-800 flex items-center gap-3">
+      <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">SC</div>
+      <div><p class="text-sm font-medium text-white">Sarah Chen</p><p class="text-xs text-slate-400">Team Lead</p></div>
+    </div>
+  </div>
+  <!-- Main -->
+  <div class="flex-1 overflow-y-auto bg-slate-50">
+    <div class="p-8">
+      <button onclick="show('dashboard')" class="text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1 mb-6">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Back to team
+      </button>
+
+      <!-- Header -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center gap-4">
+            <div class="w-16 h-16 bg-purple-200 rounded-full flex items-center justify-center text-purple-700 text-2xl font-bold">P</div>
+            <div>
+              <h1 class="text-2xl font-bold text-slate-900">Priya Patel</h1>
+              <p class="text-slate-500">Customer Success Manager · On team 1 year</p>
+              <div class="flex items-center gap-4 mt-2">
+                <span class="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-medium">Needs check-in</span>
+                <span class="text-xs text-slate-400">Last 1:1: July 10</span>
+                <span class="text-xs text-amber-700 font-medium">Next 1:1: Tomorrow 2pm</span>
+              </div>
+            </div>
+          </div>
+          <button onclick="show('prep')" class="bg-indigo-600 text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-indigo-700">Prep for 1:1 →</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-6">
+        <!-- Left col: 2/3 -->
+        <div class="col-span-2 space-y-6">
+          <!-- AI Summary -->
+          <div class="bg-white rounded-xl border border-indigo-200 p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-5 h-5 bg-indigo-600 rounded flex items-center justify-center"><svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+              <p class="text-sm font-semibold text-slate-700">Where Priya stands heading into tomorrow</p>
+            </div>
+            <p class="text-sm text-slate-600 leading-relaxed">Priya's been having a strong month on metrics — 3 expansion closes last week, first time hitting Q3 target. But she mentioned feeling overwhelmed by the CRM rollout in your last 1:1, and you still haven't followed up on her question about a path to Senior CSM. That commitment is now 7 days old. Tomorrow is a good time to close both.</p>
+          </div>
+
+          <!-- 1:1 History -->
+          <div class="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 class="font-semibold text-slate-900 mb-4">1:1 History</h3>
+            <div class="space-y-3">
+              <div class="border border-slate-100 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-sm font-medium text-slate-800">July 10, 2026</p>
+                  <span class="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">2 commitments made</span>
+                </div>
+                <p class="text-sm text-slate-500">Discussed CRM transition challenges, Q3 pipeline, and career growth. Priya raised interest in Senior CSM path. Good rapport but needs follow-up on career convo.</p>
+              </div>
+              <div class="border border-slate-100 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-sm font-medium text-slate-800">July 3, 2026</p>
+                  <span class="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">1 commitment made</span>
+                </div>
+                <p class="text-sm text-slate-500">Mid-quarter check-in. Strong expansion numbers, struggling with prioritization across accounts. Agreed on weekly focus list approach.</p>
+              </div>
+              <div class="border border-slate-100 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-sm font-medium text-slate-800">June 26, 2026</p>
+                  <span class="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">No commitments</span>
+                </div>
+                <p class="text-sm text-slate-500">Lighter check-in before quarter-end push. Morale good. Confirmed she's targeting 4 expansions to close Q3 strong.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right col: 1/3 -->
+        <div class="space-y-4">
+          <!-- Open commitments -->
+          <div class="bg-white rounded-xl border border-amber-200 p-5">
+            <h3 class="font-semibold text-slate-900 mb-3">Open Commitments</h3>
+            <div class="space-y-3">
+              <div class="flex items-start gap-2">
+                <div class="w-4 h-4 border-2 border-amber-400 rounded mt-0.5 flex-shrink-0"></div>
+                <div>
+                  <p class="text-xs font-medium text-slate-700">Research Senior CSM promotion path</p>
+                  <p class="text-xs text-slate-400 mt-0.5">You · From July 10 · <span class="text-amber-600">7 days old</span></p>
+                </div>
+              </div>
+              <div class="flex items-start gap-2">
+                <div class="w-4 h-4 border-2 border-slate-300 rounded mt-0.5 flex-shrink-0"></div>
+                <div>
+                  <p class="text-xs font-medium text-slate-700">Share weekly focus list template</p>
+                  <p class="text-xs text-slate-400 mt-0.5">You · From July 3 · Due Jul 20</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick stats -->
+          <div class="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 class="font-semibold text-slate-900 mb-3">At a Glance</h3>
+            <div class="space-y-3">
+              <div class="flex justify-between text-sm"><span class="text-slate-500">1:1s this quarter</span><span class="font-medium text-slate-800">8</span></div>
+              <div class="flex justify-between text-sm"><span class="text-slate-500">Commitments closed</span><span class="font-medium text-emerald-600">11</span></div>
+              <div class="flex justify-between text-sm"><span class="text-slate-500">Open commitments</span><span class="font-medium text-amber-600">2</span></div>
+              <div class="flex justify-between text-sm"><span class="text-slate-500">Avg days between 1:1s</span><span class="font-medium text-slate-800">7</span></div>
+            </div>
+          </div>
+
+          <button onclick="show('prep')" class="w-full bg-indigo-600 text-white text-sm font-semibold py-3 rounded-xl hover:bg-indigo-700">Prep for tomorrow's 1:1 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== -->
+<!-- SCREEN 4: 1:1 PREP FLOW  -->
+<!-- ======================== -->
+<div id="screen-prep" class="screen app-screen" style="height:calc(100vh - 40px)">
+  <!-- Sidebar -->
+  <div class="w-56 bg-slate-900 flex flex-col flex-shrink-0">
+    <div class="p-4 border-b border-slate-800 flex items-center gap-2">
+      <div class="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0"><svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+      <span class="text-white font-semibold text-sm">The Same Page</span>
+    </div>
+    <nav class="flex-1 p-3 space-y-0.5">
+      <button onclick="show('dashboard')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        Dashboard
+      </button>
+      <button onclick="show('dr')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        My Team
+      </button>
+      <button onclick="show('prep')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 text-white">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        1:1s
+      </button>
+      <button onclick="show('commits')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        Commitments
+      </button>
+    </nav>
+    <div class="p-4 border-t border-slate-800 flex items-center gap-3">
+      <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">SC</div>
+      <div><p class="text-sm font-medium text-white">Sarah Chen</p><p class="text-xs text-slate-400">Team Lead</p></div>
+    </div>
+  </div>
+  <!-- Main -->
+  <div class="flex-1 overflow-y-auto bg-slate-50">
+    <div class="max-w-2xl mx-auto p-8">
+      <!-- Header -->
+      <div class="mb-8">
+        <button onclick="show('dr')" class="text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1 mb-4">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          Priya Patel
+        </button>
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 bg-purple-200 rounded-full flex items-center justify-center text-purple-700 font-bold text-lg">P</div>
+          <div>
+            <h1 class="text-xl font-bold text-slate-900">1:1 Prep · Priya Patel</h1>
+            <p class="text-sm text-slate-400">Tomorrow, Friday July 18 · 2:00 PM</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step indicator -->
+      <div class="flex items-center gap-0 mb-8">
+        <button onclick="showStep(1)" class="flex items-center gap-2 text-sm cursor-pointer" id="step-ind-1">
+          <div id="step-dot-1" class="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center">1</div>
+          <span class="font-medium text-indigo-600">Context</span>
+        </button>
+        <div class="flex-1 h-px bg-slate-300 mx-3"></div>
+        <button onclick="showStep(2)" class="flex items-center gap-2 text-sm cursor-pointer" id="step-ind-2">
+          <div id="step-dot-2" class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 text-xs font-semibold flex items-center justify-center">2</div>
+          <span class="text-slate-400" id="step-label-2">Agenda</span>
+        </button>
+        <div class="flex-1 h-px bg-slate-300 mx-3"></div>
+        <button onclick="showStep(3)" class="flex items-center gap-2 text-sm cursor-pointer" id="step-ind-3">
+          <div id="step-dot-3" class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 text-xs font-semibold flex items-center justify-center">3</div>
+          <span class="text-slate-400" id="step-label-3">Your Notes</span>
+        </button>
+      </div>
+
+      <!-- Step 1: Context -->
+      <div id="ps-1" class="prep-step active">
+        <div class="space-y-4">
+          <div class="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 class="font-semibold text-slate-900 mb-1">Last 1:1 recap</h3>
+            <p class="text-xs text-slate-400 mb-3">July 10, 2026</p>
+            <p class="text-sm text-slate-600 leading-relaxed">Discussed CRM transition challenges — Priya said it's adding 2-3 hrs/week to her admin load. Reviewed Q3 pipeline: 8 accounts in renewal, 3 expansion opportunities. She asked about the path to Senior CSM — you said you'd look into it but haven't followed up yet.</p>
+          </div>
+          <div class="bg-white rounded-xl border border-amber-200 p-5">
+            <h3 class="font-semibold text-slate-900 mb-3">Open commitments to address</h3>
+            <div class="space-y-3">
+              <div class="flex items-start gap-3">
+                <div class="w-4 h-4 border-2 border-amber-400 rounded mt-0.5 flex-shrink-0"></div>
+                <div>
+                  <p class="text-sm font-medium text-slate-700">Research Senior CSM promotion criteria</p>
+                  <p class="text-xs text-slate-400 mt-0.5">Your commitment · From July 10 · <span class="text-amber-600 font-medium">7 days old</span></p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <div class="w-4 h-4 border-2 border-slate-300 rounded mt-0.5 flex-shrink-0"></div>
+                <div>
+                  <p class="text-sm font-medium text-slate-700">Share weekly focus list template</p>
+                  <p class="text-xs text-slate-400 mt-0.5">Your commitment · From July 3 · Due July 20</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl border border-emerald-200 p-5">
+            <h3 class="font-semibold text-slate-900 mb-3">Momentum since last 1:1</h3>
+            <ul class="space-y-2">
+              <li class="flex items-start gap-2 text-sm text-slate-600"><span class="text-emerald-500 font-bold mt-0.5">✓</span>Closed 3 expansion deals — first time hitting Q3 expansion target</li>
+              <li class="flex items-start gap-2 text-sm text-slate-600"><span class="text-emerald-500 font-bold mt-0.5">✓</span>Ran renewal QBR with Acme Corp, received strong CSAT score</li>
+              <li class="flex items-start gap-2 text-sm text-slate-500"><span class="text-amber-500 font-bold mt-0.5">→</span>Still ramping on new CRM workflows (admin overhead noted)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="flex justify-end mt-6">
+          <button onclick="showStep(2)" class="bg-indigo-600 text-white text-sm font-semibold px-6 py-3 rounded-lg hover:bg-indigo-700">See agenda →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: AI Agenda -->
+      <div id="ps-2" class="prep-step">
+        <div class="bg-white rounded-xl border border-indigo-200 p-5 mb-4">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-5 h-5 bg-indigo-600 rounded flex items-center justify-center flex-shrink-0"><svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+            <p class="text-sm font-semibold text-slate-700">Your prep guide · Generated from your 1:1 history</p>
+          </div>
+          <div class="space-y-4">
+            <!-- Item 1 -->
+            <div class="flex items-start gap-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
+              <div class="w-6 h-6 bg-amber-200 rounded flex items-center justify-center flex-shrink-0 text-amber-700 font-bold text-xs">1</div>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-slate-800">Close the loop on Senior CSM path</p>
+                <p class="text-sm text-slate-600 mt-1">This commitment is 7 days old. Come with an answer — even "I looked into it and here's what I found" moves the conversation forward. She raised it; closing it builds trust.</p>
+                <p class="text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded mt-2 inline-block">Your commitment to close</p>
+              </div>
+            </div>
+            <!-- Item 2 -->
+            <div class="flex items-start gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div class="w-6 h-6 bg-slate-200 rounded flex items-center justify-center flex-shrink-0 text-slate-600 font-bold text-xs">2</div>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-slate-800">Check in on the CRM transition</p>
+                <p class="text-sm text-slate-600 mt-1">She flagged this as a real overhead issue two weeks ago. A good opener: <em>"What's gotten easier with the new CRM, and what's still feeling heavy?"</em> This shows you remembered and gives her room to update you.</p>
+                <p class="text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded mt-2 inline-block">✦ AI suggested</p>
+              </div>
+            </div>
+            <!-- Item 3 -->
+            <div class="flex items-start gap-4 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+              <div class="w-6 h-6 bg-emerald-200 rounded flex items-center justify-center flex-shrink-0 text-emerald-700 font-bold text-xs">3</div>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-slate-800">Name the expansion wins specifically</p>
+                <p class="text-sm text-slate-600 mt-1">Three expansions closed this week — first time hitting Q3 target. This is specific enough to call out by name. <em>"I saw the Acme and Northstar expansions close — that's the Q3 target. How did those go?"</em> Specific recognition lands differently than general praise.</p>
+                <p class="text-xs text-emerald-600 bg-emerald-100 px-2 py-1 rounded mt-2 inline-block">✦ AI suggested</p>
+              </div>
+            </div>
+            <!-- Item 4 -->
+            <div class="flex items-start gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div class="w-6 h-6 bg-slate-200 rounded flex items-center justify-center flex-shrink-0 text-slate-600 font-bold text-xs">4</div>
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-slate-800">What does she need from you for Q3 close?</p>
+                <p class="text-sm text-slate-600 mt-1">5 accounts still in play for Q3. Useful to ask: <em>"What would make it easier to close the remaining 5 by end of quarter? Anything I can unblock?"</em> This positions you as a resource, not a scorekeeper.</p>
+                <p class="text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded mt-2 inline-block">✦ AI suggested</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-between mt-6">
+          <button onclick="showStep(1)" class="border border-slate-200 text-slate-600 text-sm font-medium px-5 py-2.5 rounded-lg hover:border-slate-300">← Back</button>
+          <button onclick="showStep(3)" class="bg-indigo-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-indigo-700">Add your notes →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Notes -->
+      <div id="ps-3" class="prep-step">
+        <div class="bg-white rounded-xl border border-slate-200 p-5 mb-4">
+          <h3 class="font-semibold text-slate-900 mb-2">Your notes</h3>
+          <p class="text-sm text-slate-400 mb-4">Anything you want to add or remember that's not in the agenda above.</p>
+          <textarea class="w-full border border-slate-200 rounded-lg p-3 text-sm text-slate-700 placeholder-slate-300 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" rows="5" placeholder="e.g. She mentioned wanting more visibility into department goals. Follow up on that. Also — remember to check in on how she's doing personally, not just work."></textarea>
+        </div>
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
+          <p class="text-sm font-medium text-indigo-800 mb-1">You're ready.</p>
+          <p class="text-sm text-indigo-700">4 talking points. 2 commitments to close. 1:1 is tomorrow at 2pm.</p>
+        </div>
+        <div class="flex justify-between">
+          <button onclick="showStep(2)" class="border border-slate-200 text-slate-600 text-sm font-medium px-5 py-2.5 rounded-lg hover:border-slate-300">← Back</button>
+          <button onclick="show('dashboard')" class="bg-emerald-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-emerald-700">✓ I'm ready for this 1:1</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ========================== -->
+<!-- SCREEN 5: COMMITMENTS      -->
+<!-- ========================== -->
+<div id="screen-commits" class="screen app-screen" style="height:calc(100vh - 40px)">
+  <!-- Sidebar -->
+  <div class="w-56 bg-slate-900 flex flex-col flex-shrink-0">
+    <div class="p-4 border-b border-slate-800 flex items-center gap-2">
+      <div class="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0"><svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+      <span class="text-white font-semibold text-sm">The Same Page</span>
+    </div>
+    <nav class="flex-1 p-3 space-y-0.5">
+      <button onclick="show('dashboard')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        Dashboard
+      </button>
+      <button onclick="show('dr')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        My Team
+      </button>
+      <button onclick="show('prep')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        1:1s
+      </button>
+      <button onclick="show('commits')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 text-white">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        Commitments
+      </button>
+    </nav>
+    <div class="p-4 border-t border-slate-800 flex items-center gap-3">
+      <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">SC</div>
+      <div><p class="text-sm font-medium text-white">Sarah Chen</p><p class="text-xs text-slate-400">Team Lead</p></div>
+    </div>
+  </div>
+  <!-- Main -->
+  <div class="flex-1 overflow-y-auto bg-slate-50">
+    <div class="p-8">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Commitments</h1>
+          <p class="text-slate-500 mt-1">9 open · 3 overdue · 24 completed this quarter</p>
+        </div>
+        <button class="bg-indigo-600 text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-indigo-700">+ Add commitment</button>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex items-center gap-3 mb-6">
+        <div class="flex gap-1 bg-white border border-slate-200 rounded-lg p-1">
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md bg-slate-900 text-white">All</button>
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">Overdue</button>
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">Open</button>
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">Done</button>
+        </div>
+        <div class="flex gap-1 bg-white border border-slate-200 rounded-lg p-1">
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md bg-slate-900 text-white">Everyone</button>
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">Priya</button>
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">Marcus</button>
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">Jamie</button>
+          <button class="text-xs font-medium px-3 py-1.5 rounded-md text-slate-500 hover:bg-slate-50">Jordan</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <!-- Header -->
+        <div class="grid grid-cols-12 gap-4 px-5 py-3 border-b border-slate-100 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <div class="col-span-1"></div>
+          <div class="col-span-4">Commitment</div>
+          <div class="col-span-2">Person</div>
+          <div class="col-span-2">Owner</div>
+          <div class="col-span-2">Due</div>
+          <div class="col-span-1">Status</div>
+        </div>
+        <!-- Rows -->
+        <!-- Overdue section -->
+        <div class="bg-red-50 px-5 py-2 text-xs font-semibold text-red-600 uppercase tracking-wider border-b border-red-100">Overdue · 3</div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-red-400 rounded"></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-800">Schedule comp review conversation</p><p class="text-xs text-slate-400 mt-0.5">From 1:1 · July 3</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-orange-200 rounded-full flex items-center justify-center text-xs font-semibold text-orange-700">J</div><span class="text-sm text-slate-600">Jamie Kim</span></div>
+          <div class="col-span-2 text-sm text-slate-600">You</div>
+          <div class="col-span-2 text-sm text-red-600 font-medium">Jul 10</div>
+          <div class="col-span-1"><span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Overdue</span></div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-red-400 rounded"></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-800">Connect Jamie with VP for skip-level</p><p class="text-xs text-slate-400 mt-0.5">From 1:1 · June 26</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-orange-200 rounded-full flex items-center justify-center text-xs font-semibold text-orange-700">J</div><span class="text-sm text-slate-600">Jamie Kim</span></div>
+          <div class="col-span-2 text-sm text-slate-600">You</div>
+          <div class="col-span-2 text-sm text-red-600 font-medium">Jul 3</div>
+          <div class="col-span-1"><span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Overdue</span></div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-red-400 rounded"></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-800">Research Senior CSM promotion criteria</p><p class="text-xs text-slate-400 mt-0.5">From 1:1 · July 10</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-purple-200 rounded-full flex items-center justify-center text-xs font-semibold text-purple-700">P</div><span class="text-sm text-slate-600">Priya Patel</span></div>
+          <div class="col-span-2 text-sm text-slate-600">You</div>
+          <div class="col-span-2 text-sm text-red-600 font-medium">Jul 14</div>
+          <div class="col-span-1"><span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Overdue</span></div>
+        </div>
+
+        <!-- Open section -->
+        <div class="bg-slate-50 px-5 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">Open · 6</div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-amber-400 rounded"></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-800">Submit Q3 pipeline review deck</p><p class="text-xs text-slate-400 mt-0.5">From 1:1 · July 10</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-blue-200 rounded-full flex items-center justify-center text-xs font-semibold text-blue-700">M</div><span class="text-sm text-slate-600">Marcus Johnson</span></div>
+          <div class="col-span-2 text-sm text-slate-600">Them</div>
+          <div class="col-span-2 text-sm text-amber-600 font-medium">Jul 18</div>
+          <div class="col-span-1"><span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">Due Fri</span></div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-slate-300 rounded"></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-800">Share weekly focus list template</p><p class="text-xs text-slate-400 mt-0.5">From 1:1 · July 3</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-purple-200 rounded-full flex items-center justify-center text-xs font-semibold text-purple-700">P</div><span class="text-sm text-slate-600">Priya Patel</span></div>
+          <div class="col-span-2 text-sm text-slate-600">You</div>
+          <div class="col-span-2 text-sm text-slate-500">Jul 20</div>
+          <div class="col-span-1"><span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">Open</span></div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-slate-300 rounded"></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-800">Complete BDR certification module 3</p><p class="text-xs text-slate-400 mt-0.5">From 1:1 · July 12</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-teal-200 rounded-full flex items-center justify-center text-xs font-semibold text-teal-700">J</div><span class="text-sm text-slate-600">Jordan Williams</span></div>
+          <div class="col-span-2 text-sm text-slate-600">Them</div>
+          <div class="col-span-2 text-sm text-slate-500">Jul 25</div>
+          <div class="col-span-1"><span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">Open</span></div>
+        </div>
+
+        <!-- Done section -->
+        <div class="bg-emerald-50 px-5 py-2 text-xs font-semibold text-emerald-600 uppercase tracking-wider border-b border-emerald-100">Recently completed</div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center opacity-70">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-emerald-500 rounded bg-emerald-50 flex items-center justify-center"><svg class="w-2.5 h-2.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-500 line-through">Set up weekly team stand-up agenda</p><p class="text-xs text-slate-400 mt-0.5">Completed Jul 15</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-blue-200 rounded-full flex items-center justify-center text-xs font-semibold text-blue-700">M</div><span class="text-sm text-slate-500">Marcus Johnson</span></div>
+          <div class="col-span-2 text-sm text-slate-400">You</div>
+          <div class="col-span-2 text-sm text-slate-400">Jul 15</div>
+          <div class="col-span-1"><span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Done</span></div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4 px-5 py-4 items-center opacity-70">
+          <div class="col-span-1"><div class="w-4 h-4 border-2 border-emerald-500 rounded bg-emerald-50 flex items-center justify-center"><svg class="w-2.5 h-2.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg></div></div>
+          <div class="col-span-4"><p class="text-sm text-slate-500 line-through">Send Priya the Q2 expansion playbook</p><p class="text-xs text-slate-400 mt-0.5">Completed Jul 12</p></div>
+          <div class="col-span-2 flex items-center gap-2"><div class="w-6 h-6 bg-purple-200 rounded-full flex items-center justify-center text-xs font-semibold text-purple-700">P</div><span class="text-sm text-slate-500">Priya Patel</span></div>
+          <div class="col-span-2 text-sm text-slate-400">You</div>
+          <div class="col-span-2 text-sm text-slate-400">Jul 12</div>
+          <div class="col-span-1"><span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Done</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /pt-10 -->
+
+<script>
+  function show(name) {
+    // Hide all
+    document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+    // Show target
+    const target = document.getElementById('screen-' + name);
+    if (target.classList.contains('app-screen')) {
+      target.style.display = 'flex';
+    } else {
+      target.style.display = 'block';
+    }
+    // Update nav
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      b.classList.remove('bg-indigo-600', 'text-white');
+      b.classList.add('bg-gray-800', 'text-gray-400');
+    });
+    const activeBtn = document.getElementById('nav-' + name);
+    if (activeBtn) {
+      activeBtn.classList.add('bg-indigo-600', 'text-white');
+      activeBtn.classList.remove('bg-gray-800', 'text-gray-400');
+    }
+  }
+
+  let currentStep = 1;
+  function showStep(n) {
+    document.querySelectorAll('.prep-step').forEach(s => s.style.display = 'none');
+    document.getElementById('ps-' + n).style.display = 'block';
+    currentStep = n;
+    for (let i = 1; i <= 3; i++) {
+      const dot = document.getElementById('step-dot-' + i);
+      const label = document.getElementById('step-label-' + i);
+      if (i < n) {
+        dot.className = 'w-7 h-7 rounded-full bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center';
+        dot.textContent = '✓';
+        if (label) { label.className = 'text-emerald-600 font-medium'; }
+      } else if (i === n) {
+        dot.className = 'w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center';
+        dot.textContent = i;
+        if (label) { label.className = 'font-medium text-indigo-600'; }
+      } else {
+        dot.className = 'w-7 h-7 rounded-full bg-slate-200 text-slate-500 text-xs font-semibold flex items-center justify-center';
+        dot.textContent = i;
+        if (label) { label.className = 'text-slate-400'; }
+      }
+    }
+  }
+
+  // Init
+  show('marketing');
+</script>
+</body>
+</html>
