@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getDirectReports, createDirectReport } from "@/lib/api";
 
 type DirectReport = { id: string; name: string; role_title: string | null };
@@ -8,9 +9,12 @@ type DirectReport = { id: string; name: string; role_title: string | null };
 export default function DashboardPage() {
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [name, setName] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    getDirectReports().then(setReports).catch(console.error);
+    getDirectReports()
+      .then(setReports)
+      .catch((e) => setLoadError(e.message));
   }, []);
 
   async function addReport(e: React.FormEvent) {
@@ -37,10 +41,12 @@ export default function DashboardPage() {
         </button>
       </form>
 
+      {loadError && <p className="mt-4 text-sm text-red-500">{loadError}</p>}
+
       <ul className="mt-8 divide-y divide-gray-200">
         {reports.map((r) => (
           <li key={r.id} className="py-3">
-            <a href={`/app/reports/${r.id}`} className="font-medium">{r.name}</a>
+            <Link href={`/app/reports/${r.id}`} className="font-medium">{r.name}</Link>
             {r.role_title && <span className="ml-2 text-gray-500">{r.role_title}</span>}
           </li>
         ))}

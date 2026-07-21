@@ -71,7 +71,7 @@ Wire the `/prep` endpoint to the frontend. Done.
 - On successful log, redirect to DR detail page (not dashboard) so history is visible.
 
 **Next step (completed in same session — see below):**
-Supabase Auth wired. Deploy next.
+Backend deployed to Railway. Frontend Vercel deploy is next.
 
 ---
 
@@ -103,13 +103,47 @@ Supabase Auth wired. Deploy next.
   Supabase project's "Redirect URLs" allow-list (Auth → URL Configuration).
   Add both `http://localhost:3000/auth/callback` (dev) and the Vercel prod URL.
 
+**Next step (completed in same session — see below):**
+Backend deployed to Railway. Frontend Vercel deploy is next.
+
+---
+
+## Session 4d — 2026-07-21
+
+**Goal:** Get Supabase running and backend deployed to Railway.
+
+**What was done:**
+- Fixed `database/schema.sql` — forward reference error (organizations policy
+  referenced users before it was created). Restructured to tables-first,
+  policies-last. Schema now runs clean in Supabase.
+- Additional schema fixes: renamed `full_name` → `name` on direct_reports,
+  added `summary` column to one_on_ones, made `org_id` nullable on core tables,
+  made `commitments.title` nullable, added `handle_new_user()` trigger to
+  auto-create public.users row on auth signup.
+- Fixed backend column name mismatches: `user_id` → `manager_id` in
+  direct_reports.py and one_on_ones.py; `user_id` → `owner_id` in commitments
+  insert.
+- Initialized git repo, pushed to github.com/SkiMang07/thesamepage.
+- Created `backend/Procfile` (`web: uvicorn main:app --host 0.0.0.0 --port $PORT`).
+- Added `backend/.python-version` pinned to 3.11 (pydantic-core build failed
+  on Railway without it).
+- Backend deployed successfully to Railway.
+
+**Decisions locked:**
+- Use Supabase legacy API keys (`eyJ...` format) — new `sb_publishable_` format
+  not confirmed compatible with SDK versions in requirements.txt.
+- Python 3.11 pinned via `.python-version` for Railway builds.
+- `FRONTEND_URL` in Railway set to placeholder — must be updated to real Vercel
+  domain after frontend deploy, then Railway redeployed.
+
 **Next step:**
-Deploy. Backend → Railway, frontend → Vercel. Env vars needed:
-  Backend (Railway): SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
-    ANTHROPIC_API_KEY, FRONTEND_URL (Vercel domain)
-  Frontend (Vercel): NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    NEXT_PUBLIC_BACKEND_URL (Railway domain)
-After deploy: add the Vercel /auth/callback URL to Supabase's redirect allow-list.
+Deploy frontend to Vercel:
+1. vercel.com → New Project → import SkiMang07/thesamepage → root dir: `frontend`
+2. Env vars: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY (legacy),
+   NEXT_PUBLIC_BACKEND_URL (Railway domain)
+3. After deploy: update FRONTEND_URL in Railway to real Vercel domain → redeploy.
+4. Add `https://your-app.vercel.app/auth/callback` to Supabase Auth → URL
+   Configuration → Redirect URLs.
 
 ---
 

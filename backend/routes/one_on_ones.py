@@ -10,7 +10,7 @@ any new commitments made during it.
 import json
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ai_core import generate_text
@@ -169,15 +169,20 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
     user_id, supabase = auth
 
     # Fetch direct report name
-    report = (
-        supabase.table("direct_reports")
-        .select("name")
-        .eq("id", body.direct_report_id)
-        .eq("manager_id", user_id)
-        .single()
-        .execute()
-        .data
-    )
+    try:
+        report_result = (
+            supabase.table("direct_reports")
+            .select("name")
+            .eq("id", body.direct_report_id)
+            .eq("manager_id", user_id)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    if not report_result.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    report = report_result.data
 
     # Fetch open commitments for this report
     open_commitments = (

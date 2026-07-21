@@ -6,7 +6,7 @@ Schema column: manager_id (the logged-in manager's auth.uid()).
 RLS enforces this automatically, but we also pass it explicitly for
 defense-in-depth. Matches direct_reports.manager_id in schema.sql.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from utils import get_authenticated_client
@@ -47,14 +47,19 @@ async def create_direct_report(body: DirectReportIn, auth=Depends(get_authentica
 @router.get("/{report_id}")
 async def get_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
-    result = (
-        supabase.table("direct_reports")
-        .select("*")
-        .eq("id", report_id)
-        .eq("manager_id", user_id)
-        .single()
-        .execute()
-    )
+    try:
+        result = (
+            supabase.table("direct_reports")
+            .select("*")
+            .eq("id", report_id)
+            .eq("manager_id", user_id)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
     return result.data
 
 
