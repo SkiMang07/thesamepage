@@ -228,8 +228,16 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
 
     raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)
 
+        # Strip markdown code fences — model sometimes wraps JSON in ```json...```
+        raw_clean = raw.strip()
+    if raw_clean.startswith("```"):
+                start = raw_clean.find("{")
+                end = raw_clean.rfind("}") + 1
+                raw_clean = raw_clean[start:end] if start != -1 else raw_clean
+        
+
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(raw_clean)
     except json.JSONDecodeError:
         parsed = {
             "situation_summary": "Unable to generate summary — please try again.",
