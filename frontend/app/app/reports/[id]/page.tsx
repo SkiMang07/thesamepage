@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getDirectReport, getOneOnOneHistory, DirectReport, OneOnOne } from "@/lib/api";
+import {
+  getDirectReport,
+  getOneOnOneHistory,
+  getCommitments,
+  updateCommitment,
+  DirectReport,
+  OneOnOne,
+  Commitment,
+} from "@/lib/api";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -13,26 +21,56 @@ function formatDate(iso: string) {
   });
 }
 
+function isOverdue(dueDate: string | null) {
+  if (!dueDate) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(dueDate + "T00:00:00") < today;
+}
+
 export default function ReportDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [report, setReport] = useState<DirectReport | null>(null);
   const [history, setHistory] = useState<OneOnOne[]>([]);
+  const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [showResolved, setShowResolved] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getDirectReport(id), getOneOnOneHistory(id)])
-      .then(([dr, h]) => {
+    Promise.all([
+      getDirectReport(id),
+      getOneOnOneHistory(id),
+      getCommitments({ directReportId: id }),
+    ])
+      .then(([dr, h, c]) => {
         setReport(dr);
         setHistory(h);
+        setCommitments(c);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
 
+  async function setStatus(commitmentId: string, status: Commitment["status"]) {
+    setUpdatingId(commitmentId);
+    try {
+      const updated = await updateCommitment(commitmentId, status);
+      setCommitments((cs) => cs.map((c) => (c.id === commitmentId ? { ...c, ...updated } : c)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update commitment");
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   if (loading) return <p className="p-8 text-gray-500">Loading...</p>;
   if (error) return <p className="p-8 text-red-500">{error}</p>;
   if (!report) return null;
+
+  const open = commitments.filter((c) => c.status === "open");
+  const resolved = commitments.filter((c) => c.status !== "open");
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
@@ -62,6 +100,97 @@ export default function ReportDetailPage() {
           <p className="mt-2 text-gray-700">{report.notes}</p>
         </div>
       )}
+
+      {/* Open commitments */}
+      <div className="mt-10">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+          Open commitments{open.length > 0 && ` (${open.length})`}
+        </h2>
+
+        {open.length === 0 ? (
+          <p className="mt-4 text-gray-500">
+            Nothing outstanding. Commitments you make in 1:1s show up here.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {open.map((c) => (
+              <li
+                key={c.id}
+                className="flex items-start gap-3 rounded-lg border border-gray-200 px-4 py-3"
+              >
+                <input
+                  type="checkbox"
+                  checked={false}
+                  disabled={updatingId === c.id}
+                  onChange={() => setStatus(c.id, "done")}
+                  aria-label={`Mark done: ${c.description}`}
+                  className="mt-1 h-4 w-4 cursor-pointer rounded border-gray-300"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-gray-800">{c.description}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {c.due_date ? (
+                      <span className={isOverdue(c.due_date) ? "font-medium text-red-500" : ""}>
+                        Due {formatDate(c.due_date + "T00:00:00")}
+                        {isOverdue(c.due_date) && " — overdue"}
+                      </span>
+                    ) : (
+                      <>Added {formatDate(c.created_at)}</>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setStatus(c.id, "dropped")}
+                  disabled={updatingId === c.id}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                  title="No longer relevant"
+                >
+                  Drop
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {resolved.length > 0 && (
+          <div className="mt-4">
+            <button
+              onClick={() => setShowResolved((s) => !s)}
+              className="text-sm text-gray-500 hover:underline"
+            >
+              {showResolved ? "Hide" : "Show"} resolved ({resolved.length})
+            </button>
+            {showResolved && (
+              <ul className="mt-3 space-y-2">
+                {resolved.map((c) => (
+                  <li key={c.id} className="flex items-start gap-3 px-4 py-1 text-sm">
+                    <span className="mt-0.5 text-gray-400">
+                      {c.status === "done" ? "✓" : "—"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-gray-500 line-through decoration-gray-300">
+                        {c.description}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {c.status === "done"
+                          ? `Done${c.completed_at ? ` ${formatDate(c.completed_at)}` : ""}`
+                          : "Dropped"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setStatus(c.id, "open")}
+                      disabled={updatingId === c.id}
+                      className="text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      Reopen
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* 1:1 History */}
       <div className="mt-10">

@@ -11,6 +11,45 @@ Format per entry:
 
 ---
 
+## Session 5 — 2026-08-01
+
+**Goal:** Commitment tracker UI — surface and resolve commitments (they could
+be created and fed into prep, but never viewed or closed anywhere).
+
+**What was done:**
+- Created `backend/routes/commitments.py`:
+  - `GET /api/commitments` — lists the manager's commitments, optional
+    `direct_report_id` and `status` query filters, joins `direct_reports(name)`
+    and flattens it to `direct_report_name` (for future dashboard use).
+  - `PATCH /api/commitments/{id}` — set status to open/done/dropped; sets
+    `completed_at` on done, clears it otherwise. Scoped by `owner_id`.
+- Registered the router in `backend/main.py` under `/api/commitments`.
+- `frontend/lib/api.ts`: extended `Commitment` type (status union includes
+  `dropped`, added `created_at`, `completed_at`, `direct_report_id`,
+  `direct_report_name`), added `getCommitments()` and `updateCommitment()`.
+  `PrepResponse.open_commitments_to_check` narrowed to
+  `Pick<Commitment, "description" | "due_date">[]` to match what the backend
+  actually returns.
+- `frontend/app/app/reports/[id]/page.tsx`: new "Open commitments" section
+  between About and 1:1 History — checkbox marks done, "Drop" link for
+  no-longer-relevant items, red "overdue" styling when `due_date` is past,
+  collapsible "Show resolved" list with reopen action.
+
+**Decisions locked:**
+- Commitment resolution is checkbox-style on the DR detail page (no separate
+  tracker page yet — dashboard rollup is the natural next step).
+- `dropped` is a first-class status (already in schema) — dropping is distinct
+  from done so accountability data stays honest. Both are reversible via Reopen.
+- List endpoint flattens the joined DR name to `direct_report_name` — keeps
+  the API shape flat for the frontend.
+
+**Next step:**
+Dashboard → mini mission control: per-DR cards with last 1:1 date, open
+commitment count (the new `GET /api/commitments` endpoint feeds this), and an
+"overdue for a 1:1" nudge (>21 days, matching the prep prompt's cadence logic).
+
+---
+
 ## Session 4 — 2026-07-17
 
 **Goal:** Implement real AI-assisted 1:1 prep — the core product IP.

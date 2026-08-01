@@ -44,7 +44,11 @@ export type Commitment = {
   id: string;
   description: string;
   due_date: string | null;
-  status: "open" | "done";
+  status: "open" | "done" | "dropped";
+  created_at: string;
+  completed_at: string | null;
+  direct_report_id: string;
+  direct_report_name?: string | null;
 };
 
 export type AgendaItem = {
@@ -56,7 +60,8 @@ export type AgendaItem = {
 export type PrepResponse = {
   situation_summary: string;
   agenda_items: AgendaItem[];
-  open_commitments_to_check: Commitment[];
+  // The prep endpoint returns only these two fields per commitment.
+  open_commitments_to_check: Pick<Commitment, "description" | "due_date">[];
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +76,21 @@ export const getDirectReport = (id: string): Promise<DirectReport> =>
 
 export const createDirectReport = (body: { name: string; role_title?: string; notes?: string }): Promise<DirectReport> =>
   authedFetch("/api/direct-reports", { method: "POST", body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------------------
+// Commitments
+// ---------------------------------------------------------------------------
+
+export const getCommitments = (params?: { directReportId?: string; status?: "open" | "done" | "dropped" }): Promise<Commitment[]> => {
+  const q = new URLSearchParams();
+  if (params?.directReportId) q.set("direct_report_id", params.directReportId);
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
+  return authedFetch(`/api/commitments${qs ? `?${qs}` : ""}`);
+};
+
+export const updateCommitment = (id: string, status: "open" | "done" | "dropped"): Promise<Commitment> =>
+  authedFetch(`/api/commitments/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
 
 // ---------------------------------------------------------------------------
 // 1:1s
