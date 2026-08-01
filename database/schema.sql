@@ -492,17 +492,42 @@ create or replace trigger on_auth_user_created
 -- All policies defined here, after all tables exist.
 -- Core MVP tables (direct_reports, one_on_ones, commitments) use
 -- auth.uid() directly — no org lookup needed for single-manager MVP.
+--
+-- Org-scoped policies use current_org_id() (SECURITY DEFINER) instead of
+-- subquerying users inline — a subquery on users inside the users policy
+-- causes "infinite recursion detected in policy" (42P17), and inline
+-- subqueries elsewhere inherit that failure. Fixed 2026-08-01.
 -- ============================================================
+
+create or replace function public.current_org_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select org_id from public.users where id = auth.uid()
+$$;
+
+revoke all on function public.current_org_id() from public;
+grant execute on function public.current_org_id() to authenticated;
 
 -- organizations
 create policy "organizations_select_own" on organizations
-  for select using (
-    id in (select org_id from users where id = auth.uid())
-  );
+  for select using (id = public.current_org_id());
+
+create policy "organizations_insert_authenticated" on organizations
+  for insert to authenticated
+  with check (true);
+
+create policy "organizations_update_own" on organizations
+  for update
+  using (id = public.current_org_id())
+  with check (id = public.current_org_id());
 
 -- users
 create policy "users_select_own_org" on users
-  for select using (id = auth.uid() or org_id = (select org_id from users where id = auth.uid() and org_id is not null));
+  for select using (id = auth.uid() or (org_id is not null and org_id = public.current_org_id()));
 create policy "users_update_own" on users
   for update using (id = auth.uid()) with check (id = auth.uid());
 create policy "users_insert_own" on users
@@ -510,8 +535,8 @@ create policy "users_insert_own" on users
 
 -- role_levels
 create policy "role_levels_all_own_org" on role_levels
-  for all using (org_id = (select org_id from users where id = auth.uid()))
-  with check (org_id = (select org_id from users where id = auth.uid()));
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
 
 -- direct_reports — manager sees their own reports
 create policy "direct_reports_all_own" on direct_reports
@@ -531,8 +556,8 @@ create policy "commitments_all_own" on commitments
 
 -- assessment_levels
 create policy "assessment_levels_all_own_org" on assessment_levels
-  for all using (org_id = (select org_id from users where id = auth.uid()))
-  with check (org_id = (select org_id from users where id = auth.uid()));
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
 
 -- assessments
 create policy "assessments_all_own" on assessments
@@ -544,15 +569,15 @@ create policy "performance_reviews_all_own" on performance_reviews
 
 -- metric_configs
 create policy "metric_configs_all_own_org" on metric_configs
-  for all using (org_id = (select org_id from users where id = auth.uid()))
-  with check (org_id = (select org_id from users where id = auth.uid()));
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
 
 -- metric_scale_definitions
 create policy "metric_scale_defs_select_own_org" on metric_scale_definitions
   for select using (
     metric_config_id in (
       select id from metric_configs
-      where org_id = (select org_id from users where id = auth.uid())
+      where org_id = public.current_org_id()
     )
   );
 
@@ -562,15 +587,15 @@ create policy "metric_entries_all_own" on metric_entries
 
 -- skill_configs
 create policy "skill_configs_all_own_org" on skill_configs
-  for all using (org_id = (select org_id from users where id = auth.uid()))
-  with check (org_id = (select org_id from users where id = auth.uid()));
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
 
 -- skill_scale_definitions
 create policy "skill_scale_defs_select_own_org" on skill_scale_definitions
   for select using (
     skill_config_id in (
       select id from skill_configs
-      where org_id = (select org_id from users where id = auth.uid())
+      where org_id = public.current_org_id()
     )
   );
 
@@ -580,15 +605,15 @@ create policy "skill_assessments_all_own" on skill_assessments
 
 -- value_configs
 create policy "value_configs_all_own_org" on value_configs
-  for all using (org_id = (select org_id from users where id = auth.uid()))
-  with check (org_id = (select org_id from users where id = auth.uid()));
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
 
 -- value_scale_definitions
 create policy "value_scale_defs_select_own_org" on value_scale_definitions
   for select using (
     value_config_id in (
       select id from value_configs
-      where org_id = (select org_id from users where id = auth.uid())
+      where org_id = public.current_org_id()
     )
   );
 
