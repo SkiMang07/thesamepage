@@ -11,6 +11,63 @@ Format per entry:
 
 ---
 
+## Session 6 — 2026-08-01
+
+**Goal:** Settings page — the configuration backbone connecting people, roles,
+and performance expectations (pulled forward ahead of the dashboard roadmap).
+
+**What was done:**
+- Reviewed the original Settings mockup on the Miro board (4 frames: Job,
+  Company, Capacity & Recruitment, Project — each with Edit Access +
+  Create/Update cards) and agreed the v1 section structure with Andrew.
+- Created `backend/routes/settings.py` (registered under `/api/settings`):
+  - `GET/PUT /profile` — manager name + company; first save bootstraps an
+    `organizations` row and links `users.org_id` (`_ensure_org()`).
+  - `GET/POST/PUT/DELETE /role-levels` — role_levels CRUD. Delete manually
+    cleans up `direct_reports.role_level_id` and the three config tables
+    (no FK cascade on role_level_id).
+  - `GET/POST/PUT/DELETE /expectations/{metrics|skills|values}` — one
+    handler over metric_configs / skill_configs / value_configs.
+- `direct_reports.py`: `DirectReportIn` accepts `role_level_id`.
+- Created `frontend/app/app/settings/page.tsx` — three sections with left
+  nav: Profile & Company, Roles & Levels (incl. "who's in which role"
+  assigner), Expectations (role-level picker + Metrics/Skills/Values tabs).
+- `lib/api.ts`: Profile/RoleLevel/Expectation types + calls; dashboard got a
+  Settings link (top right).
+- Migrations (both run in Supabase):
+  - `2026-08-01_settings_policies.sql` — organizations INSERT/UPDATE policies
+    (profile save needs to create the org).
+  - `2026-08-01_fix_users_rls_recursion.sql` — HOTFIX: `users_select_own_org`
+    subqueried `users` inside its own policy → Postgres "infinite recursion
+    detected in policy" (42P17). Every `/api/settings/*` call 503'd (surfaced
+    as CORS "Failed to fetch") while the rest of the app worked, since only
+    settings routes touch users/org-scoped tables. Fix: SECURITY DEFINER
+    `public.current_org_id()`; all org-scoped policies rebuilt on it.
+    `schema.sql` patched to match so fresh installs never hit it.
+- Verified live end to end: profile loads with the signup-trigger users row,
+  roles/expectations sections work.
+
+**Decisions locked:**
+- v1 Settings = Profile & Company, Roles & Levels, Expectations. Deferred
+  entirely (no placeholder nav): evaluation weighting, scale definitions,
+  capacity/recruitment, project settings, Edit Access/permissions — all
+  department-tier; today's user is a solo manager.
+- Depth: UI-first, minimal table activation. Newly active tables:
+  organizations, users, role_levels, metric_configs, skill_configs,
+  value_configs. Scale-definition and assessment tables stay dormant.
+- Org-scoped RLS must go through `public.current_org_id()` — never inline
+  `(select org_id from users ...)` subqueries in policies.
+- Expectations attach to a role_level, not a person — a DR inherits
+  expectations via their role assignment (Settings > Roles & Levels).
+
+**Next step:**
+Either resume the dashboard roadmap (standalone log-a-meeting flow, per
+Session 5b) or make expectations visible where they matter: surface the
+assigned role's expectations on the DR detail page and feed them into the
+1:1 prep prompt — that's the first payoff of the Settings backbone.
+
+---
+
 ## Session 5 — 2026-08-01
 
 **Goal:** Commitment tracker UI — surface and resolve commitments (they could

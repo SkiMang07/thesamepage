@@ -51,9 +51,22 @@ new backend endpoint, add the corresponding client function to `api.ts` first.
 
 ### RLS
 
-Every table has RLS enabled. The policy on all tables is `user_id = auth.uid()`.
-The RLS-scoped client from `get_authenticated_client()` enforces this
-automatically — you don't need to add `WHERE user_id = ?` to every query.
+Every table has RLS enabled. Core tables scope by `auth.uid()` directly
+(`manager_id` / `owner_id`); the RLS-scoped client from
+`get_authenticated_client()` enforces this automatically — you don't need to
+add `WHERE user_id = ?` to every query.
+
+Org-scoped tables (role_levels, *_configs, assessment_levels, organizations)
+scope through `public.current_org_id()` — a SECURITY DEFINER function that
+reads `users.org_id` without re-invoking RLS. **Never write a policy with an
+inline `(select org_id from users ...)` subquery**: on the `users` table it's
+self-referencing ("infinite recursion detected in policy", 42P17), and it
+takes every dependent policy down with it. Learned the hard way in Session 6.
+
+Org bootstrap: users have no `organizations` row until they first save
+Settings → Profile. `_ensure_org()` in `routes/settings.py` creates the org +
+links `users.org_id` on any settings write (org insert uses
+`returning="minimal"` since the select policy can't see an unlinked org yet).
 
 ---
 
@@ -135,8 +148,10 @@ backend/
   utils.py        get_authenticated_client(), shared helpers
   ai_core.py      generate_text() — the only place Anthropic SDK is called
   routes/
-    direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports
+    direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview)
     one_on_ones.py      GET/POST /api/one-on-ones, POST /api/one-on-ones/prep
+    commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
+    settings.py         /api/settings — profile, role-levels, expectations
 
 frontend/
   app/

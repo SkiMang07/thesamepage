@@ -43,6 +43,8 @@ or UX patterns. Starts minimal — add decisions here as they get locked.
 /blog                       frontend/app/(marketing)/blog/page.tsx
 /app/login                  frontend/app/app/login/page.tsx
 /app/dashboard              frontend/app/app/dashboard/page.tsx
+/app/reports/[id]           frontend/app/app/reports/[id]/page.tsx
+/app/settings               frontend/app/app/settings/page.tsx
 ```
 
 Marketing pages (`(marketing)/`) are public and need to be SSG-renderable for
@@ -56,5 +58,7 @@ SEO. Do not add client-side-only patterns to these pages.
 |---|---|---|
 | 2026-07-14 | Tailwind for styling | Consistent with Prism Tree; fast for solo dev |
 | 2026-07-14 | No component library yet | Avoid abstraction before we know what components we actually need |
+| 2026-08-01 | Settings uses left-nav sections (Profile & Company / Roles & Levels / Expectations), not tabs or one long page | Three distinct setup jobs; nav keeps each screen answering one question |
+| 2026-08-01 | Deferred settings sections get no placeholder/"coming soon" nav entries | Calm > roadmap-signaling; empty locked sections add noise for a solo manager |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_
