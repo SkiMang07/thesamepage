@@ -11,6 +11,54 @@ Format per entry:
 
 ---
 
+## Session 7 — 2026-08-01
+
+**Goal:** Make the Settings backbone pay off — surface each DR's role
+expectations on the detail page and ground the AI 1:1 prep in them.
+
+**What was done:**
+- `backend/routes/direct_reports.py`: added `fetch_role_expectations(supabase,
+  role_level_id)` — returns the role_level (id, job_role, job_level,
+  functional_team, job_responsibilities) plus its metric/skill/value configs
+  (ordered primary→secondary→tertiary, then name), or `None` when no role is
+  assigned or the role row is gone. `GET /{report_id}` now returns the DR row
+  with an `expectations` key built from it (no new endpoint).
+- `backend/routes/one_on_ones.py`: `/prep` fetches the DR's `role_level_id`,
+  calls the shared helper, and passes the result into `_build_prep_prompt()`.
+  New `_format_expectations_block()` renders a "ROLE EXPECTATIONS — what good
+  looks like" section between OPEN COMMITMENTS and the manager's notes, with
+  an instruction to ground performance/feedback/growth questions and SBI
+  phrasing in the named expectations — and to pull in only what the notes make
+  relevant, never audit all of them. Role assigned but zero configs → a short
+  "ROLE CONTEXT" note instead (no instruction pointing at nothing). No role →
+  section omitted entirely; prompt reads as before.
+- `frontend/lib/api.ts`: new `RoleExpectations` type; `DirectReport` gains
+  optional `expectations` (detail endpoint only).
+- `frontend/app/app/reports/[id]/page.tsx`: "Expectations" section between
+  About and Open commitments — role + level (+ team) line, then Metrics /
+  Skills / Values groups (name + expectation/description). Hidden entirely
+  when no role is assigned; role with no configs shows a one-line nudge
+  linking to Settings.
+
+**Decisions locked:**
+- Expectations ride on `GET /api/direct-reports/{id}` rather than a separate
+  endpoint — the detail page already fetches it, and prep reuses the same
+  helper server-side.
+- Prompt behavior: expectations are grounding context, not an agenda — the
+  prompt explicitly forbids auditing every expectation in one 1:1.
+- Graceful degradation contract: no role → no section, no prompt block, no
+  errors (per the standing constraint).
+
+**Next step:**
+Resume the dashboard roadmap: standalone log-a-meeting flow ("Log a 1:1"
+button on the DR detail page straight to the summary + commitments form,
+reusing prep step 3) for ad-hoc conversations that happen without prep.
+Deploy note: backend + frontend changes ship together (the page tolerates a
+missing `expectations` key, so ordering isn't critical, but the section only
+appears once the backend is live).
+
+---
+
 ## Session 6 — 2026-08-01
 
 **Goal:** Settings page — the configuration backbone connecting people, roles,

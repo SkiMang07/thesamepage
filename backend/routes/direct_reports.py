@@ -13,6 +13,50 @@ from utils import get_authenticated_client
 
 router = APIRouter()
 
+# Mirrors settings.py's config-table mapping (kept local — settings owns the
+# CRUD, this module only reads). kind -> (table, name column).
+_EXPECTATION_TABLES = {
+    "metrics": ("metric_configs", "metric_name"),
+    "skills": ("skill_configs", "skill_name"),
+    "values": ("value_configs", "value_name"),
+}
+
+
+def fetch_role_expectations(supabase, role_level_id: str | None) -> dict | None:
+    """The DR's assigned role_level plus its metric/skill/value configs.
+
+    Returns None when no role is assigned (or the role row is gone) so both
+    the DR detail page and the prep prompt can degrade gracefully. Shared by
+    GET /{report_id} here and the 1:1 prep prompt in one_on_ones.py.
+    """
+    if not role_level_id:
+        return None
+
+    role_rows = (
+        supabase.table("role_levels")
+        .select("id,job_role,job_level,functional_team,job_responsibilities")
+        .eq("id", role_level_id)
+        .execute()
+        .data
+    )
+    if not role_rows:
+        return None
+
+    result: dict = {"role_level": role_rows[0]}
+    for kind, (table, name_col) in _EXPECTATION_TABLES.items():
+        # order_type sorts primary < secondary < tertiary alphabetically;
+        # Postgres puts nulls last on ascending order.
+        result[kind] = (
+            supabase.table(table)
+            .select("*")
+            .eq("role_level_id", role_level_id)
+            .order("order_type")
+            .order(name_col)
+            .execute()
+            .data
+        )
+    return result
+
 
 class DirectReportIn(BaseModel):
     name: str
@@ -117,7 +161,11 @@ async def get_direct_report(report_id: str, auth=Depends(get_authenticated_clien
         raise HTTPException(status_code=404, detail="Direct report not found")
     if not result.data:
         raise HTTPException(status_code=404, detail="Direct report not found")
-    return result.data
+    report = result.data
+    # Settings payoff: surface what "good" looks like for this person's role.
+    # None (not an error) when no role is assigned.
+    report["expectations"] = fetch_role_expectations(supabase, report.get("role_level_id"))
+    return report
 
 
 @router.put("/{report_id}")

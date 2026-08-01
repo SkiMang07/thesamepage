@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
+from routes.direct_reports import fetch_role_expectations
 from utils import get_authenticated_client
 
 router = APIRouter()
@@ -51,12 +52,71 @@ class LogOneOnOneIn(BaseModel):
 # Prompt builder — this is the core product IP
 # ---------------------------------------------------------------------------
 
+def _format_expectations_block(report_name: str, expectations: dict | None) -> str:
+    """Optional prompt section: the role's configured expectations (Settings >
+    Expectations). Empty string when the DR has no role assigned — the prompt
+    must read naturally without it."""
+    if not expectations:
+        return ""
+
+    role = expectations["role_level"]
+    role_label = f"{role['job_role']}, level {role['job_level']}"
+    if role.get("functional_team"):
+        role_label += f" ({role['functional_team']})"
+
+    def _items(kind: str, name_col: str) -> str:
+        rows = expectations.get(kind) or []
+        if not rows:
+            return ""
+        lines = []
+        for r in rows:
+            parts = [r[name_col]]
+            if r.get("expectation"):
+                parts.append(f"expectation: {r['expectation']}")
+            if r.get("description"):
+                parts.append(r["description"])
+            if kind == "metrics" and r.get("measurement_period") and r["measurement_period"] != "none":
+                parts.append(f"measured per {r['measurement_period']}")
+            lines.append("    • " + " — ".join(parts))
+        label = {"metrics": "Metrics", "skills": "Skills", "values": "Values"}[kind]
+        return f"  {label}:\n" + "\n".join(lines)
+
+    groups = [
+        block
+        for block in (
+            _items("metrics", "metric_name"),
+            _items("skills", "skill_name"),
+            _items("values", "value_name"),
+        )
+        if block
+    ]
+    responsibilities = ""
+    if role.get("job_responsibilities"):
+        responsibilities = f"\n  Role responsibilities: {role['job_responsibilities']}"
+
+    if not groups:
+        # Role assigned but nothing configured — give the role context without
+        # an instruction that has nothing to point at.
+        return f"""
+ROLE CONTEXT — {report_name}'s role: {role_label}.{responsibilities}
+(No performance expectations are configured for this role yet.)
+"""
+
+    body = "\n".join(groups)
+    return f"""
+ROLE EXPECTATIONS — what good looks like for {report_name}'s role ({role_label}):{responsibilities}
+{body}
+When the manager's notes or history touch performance, feedback, growth, or career direction, ground your questions and any SBI phrasing in these specific expectations — name the relevant metric, skill, or value explicitly. Do NOT audit every expectation in one 1:1; pull in only the ones the notes make relevant. If nothing in the notes connects to them, leave them out entirely.
+"""
+
+
 def _build_prep_prompt(
     report_name: str,
     raw_notes: str,
     open_commitments: list[dict],
     recent_summaries: list[str],
     days_since_last: int | None,
+    role_expectations: dict | None = None,
 ) -> str:
     # --- Recency context ---
     if days_since_last is None:
@@ -103,7 +163,7 @@ RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
 
 OPEN COMMITMENTS (things the manager promised to follow up on, still unresolved):
 {commitments_block}
-
+{_format_expectations_block(report_name, role_expectations)}
 MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
 {raw_notes}
 
@@ -172,7 +232,7 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
     try:
         report_result = (
             supabase.table("direct_reports")
-            .select("name")
+            .select("name,role_level_id")
             .eq("id", body.direct_report_id)
             .eq("manager_id", user_id)
             .single()
@@ -218,12 +278,17 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
 
     recent_summaries = [row["summary"] for row in history_rows if row.get("summary")]
 
+    # Role expectations (Settings backbone payoff) — None when no role assigned,
+    # and the prompt simply omits the section.
+    role_expectations = fetch_role_expectations(supabase, report.get("role_level_id"))
+
     prompt = _build_prep_prompt(
         report_name=report["name"],
         raw_notes=body.raw_notes,
         open_commitments=open_commitments,
         recent_summaries=recent_summaries,
         days_since_last=days_since_last,
+        role_expectations=role_expectations,
     )
 
     raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)

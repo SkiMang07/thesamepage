@@ -8,9 +8,11 @@ import {
   getOneOnOneHistory,
   getCommitments,
   updateCommitment,
+  expectationName,
   DirectReport,
   OneOnOne,
   Commitment,
+  Expectation,
 } from "@/lib/api";
 
 function formatDate(iso: string) {
@@ -19,6 +21,25 @@ function formatDate(iso: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function ExpectationGroup({ label, items }: { label: string; items: Expectation[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-4">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</h3>
+      <ul className="mt-2 space-y-2">
+        {items.map((e) => (
+          <li key={e.id} className="rounded-lg border border-gray-200 px-4 py-2.5">
+            <p className="text-sm font-medium text-gray-800">{expectationName(e)}</p>
+            {(e.expectation || e.description) && (
+              <p className="mt-0.5 text-sm text-gray-500">{e.expectation || e.description}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function isOverdue(dueDate: string | null) {
@@ -98,6 +119,38 @@ export default function ReportDetailPage() {
         <div className="mt-8">
           <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">About</h2>
           <p className="mt-2 text-gray-700">{report.notes}</p>
+        </div>
+      )}
+
+      {/* Role expectations — only when a role is assigned in Settings */}
+      {report.expectations && (
+        <div className="mt-10">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+            Expectations
+          </h2>
+          <p className="mt-2 text-gray-700">
+            {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
+            {report.expectations.role_level.functional_team &&
+              ` · ${report.expectations.role_level.functional_team}`}
+          </p>
+          {report.expectations.metrics.length +
+            report.expectations.skills.length +
+            report.expectations.values.length ===
+          0 ? (
+            <p className="mt-3 text-gray-500">
+              No expectations configured for this role yet.{" "}
+              <Link href="/app/settings" className="underline hover:text-gray-700">
+                Add them in Settings
+              </Link>
+              .
+            </p>
+          ) : (
+            <>
+              <ExpectationGroup label="Metrics" items={report.expectations.metrics} />
+              <ExpectationGroup label="Skills" items={report.expectations.skills} />
+              <ExpectationGroup label="Values" items={report.expectations.values} />
+            </>
+          )}
         </div>
       )}
 

@@ -32,6 +32,18 @@ export type DirectReport = {
   role_title: string | null;
   notes: string | null;
   role_level_id?: string | null;
+  // Present on GET /api/direct-reports/{id} only: the assigned role's
+  // configured expectations. null when no role is assigned.
+  expectations?: RoleExpectations | null;
+};
+
+// What GET /api/direct-reports/{id} returns under `expectations` — the DR's
+// assigned role_level plus its metric/skill/value configs (Settings > Expectations).
+export type RoleExpectations = {
+  role_level: Pick<RoleLevel, "id" | "job_role" | "job_level" | "functional_team" | "job_responsibilities">;
+  metrics: Expectation[];
+  skills: Expectation[];
+  values: Expectation[];
 };
 
 export type OneOnOne = {
