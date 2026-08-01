@@ -71,6 +71,17 @@ export type PrepResponse = {
 export const getDirectReports = (): Promise<DirectReport[]> =>
   authedFetch("/api/direct-reports");
 
+export type TeamOverviewItem = {
+  id: string;
+  name: string;
+  role_title: string | null;
+  last_one_on_one_at: string | null;
+  open_commitment_count: number;
+};
+
+export const getTeamOverview = (): Promise<TeamOverviewItem[]> =>
+  authedFetch("/api/direct-reports/overview");
+
 export const getDirectReport = (id: string): Promise<DirectReport> =>
   authedFetch(`/api/direct-reports/${id}`);
 

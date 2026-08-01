@@ -43,10 +43,39 @@ be created and fed into prep, but never viewed or closed anywhere).
 - List endpoint flattens the joined DR name to `direct_report_name` — keeps
   the API shape flat for the frontend.
 
+**Next step (completed in same session — see 5b below):**
+Dashboard → mini mission control. Done.
+
+---
+
+## Session 5b — 2026-08-01
+
+**Goal:** Dashboard → mini mission control.
+
+**What was done:**
+- Added `GET /api/direct-reports/overview` to `backend/routes/direct_reports.py`:
+  every DR with `last_one_on_one_at` and `open_commitment_count`. Three queries
+  merged in Python (fine at MVP scale). Declared BEFORE `/{report_id}` so
+  FastAPI doesn't match "overview" as an id — keep it that way.
+- `frontend/lib/api.ts`: added `TeamOverviewItem` type + `getTeamOverview()`.
+- Rewrote `frontend/app/app/dashboard/page.tsx`: per-DR cards (whole card links
+  to DR detail) showing role, last-1:1 recency in words, open commitment count,
+  and an amber "Time for a 1:1" badge when >21 days or never. Header sub-line
+  summarizes how many people are due. Add-report form kept, now with
+  loading/disabled state.
+
+**Decisions locked:**
+- 1:1 cadence threshold is 21 days everywhere — dashboard badge matches the
+  prep prompt's recency logic in `one_on_ones.py`. If one changes, change both.
+- Dashboard stays single-column cards (calm > dense grid) until team sizes
+  demand otherwise.
+- No new endpoint for commitments on the dashboard — the overview endpoint
+  carries the count; the DR detail page remains the place to resolve them.
+
 **Next step:**
-Dashboard → mini mission control: per-DR cards with last 1:1 date, open
-commitment count (the new `GET /api/commitments` endpoint feeds this), and an
-"overdue for a 1:1" nudge (>21 days, matching the prep prompt's cadence logic).
+Standalone log-a-meeting flow: a "Log a 1:1" button on the DR detail page that
+goes straight to the summary + commitments form (reuse prep step 3), for
+ad-hoc conversations that happen without prep.
 
 ---
 

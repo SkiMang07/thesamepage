@@ -33,6 +33,61 @@ async def list_direct_reports(auth=Depends(get_authenticated_client)):
     return result.data
 
 
+# NOTE: declared before /{report_id} so FastAPI doesn't match "overview" as an id.
+@router.get("/overview")
+async def get_team_overview(auth=Depends(get_authenticated_client)):
+    """Dashboard rollup: every direct report with their last 1:1 date and
+    open commitment count. Three queries + a Python merge — fine at MVP
+    scale (a manager has a handful of reports, not thousands)."""
+    user_id, supabase = auth
+
+    reports = (
+        supabase.table("direct_reports")
+        .select("id,name,role_title")
+        .eq("manager_id", user_id)
+        .order("name")
+        .execute()
+        .data
+    )
+
+    one_on_ones = (
+        supabase.table("one_on_ones")
+        .select("direct_report_id,created_at")
+        .eq("manager_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+
+    open_commitments = (
+        supabase.table("commitments")
+        .select("direct_report_id")
+        .eq("owner_id", user_id)
+        .eq("status", "open")
+        .execute()
+        .data
+    )
+
+    # Newest-first order means the first occurrence per report is the latest 1:1.
+    last_one_on_one: dict = {}
+    for row in one_on_ones:
+        last_one_on_one.setdefault(row["direct_report_id"], row["created_at"])
+
+    commitment_counts: dict = {}
+    for row in open_commitments:
+        rid = row["direct_report_id"]
+        commitment_counts[rid] = commitment_counts.get(rid, 0) + 1
+
+    return [
+        {
+            **r,
+            "last_one_on_one_at": last_one_on_one.get(r["id"]),
+            "open_commitment_count": commitment_counts.get(r["id"], 0),
+        }
+        for r in reports
+    ]
+
+
 @router.post("")
 async def create_direct_report(body: DirectReportIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
