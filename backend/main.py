@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from config import settings
-from routes import commitments, direct_reports, one_on_ones
+from routes import commitments, direct_reports, one_on_ones, settings as settings_routes
 
 app = FastAPI(title="The Same Page API")
 
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(direct_reports.router, prefix="/api/direct-reports", tags=["direct-reports"])
 app.include_router(one_on_ones.router, prefix="/api/one-on-ones", tags=["one-on-ones"])
 app.include_router(commitments.router, prefix="/api/commitments", tags=["commitments"])
+app.include_router(settings_routes.router, prefix="/api/settings", tags=["settings"])
 
 
 # Catch-all OPTIONS handler — belt-and-suspenders for Railway's reverse proxy,

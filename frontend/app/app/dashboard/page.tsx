@@ -62,7 +62,12 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="text-2xl font-semibold">Your team</h1>
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-2xl font-semibold">Your team</h1>
+        <Link href="/app/settings" className="text-sm text-gray-500 hover:text-gray-900">
+          Settings
+        </Link>
+      </div>
       {!loading && team.length > 0 && (
         <p className="mt-1 text-sm text-gray-500">
           {dueCount === 0

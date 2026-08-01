@@ -31,6 +31,7 @@ export type DirectReport = {
   name: string;
   role_title: string | null;
   notes: string | null;
+  role_level_id?: string | null;
 };
 
 export type OneOnOne = {
@@ -115,3 +116,94 @@ export const prepOneOnOne = (body: { direct_report_id: string; raw_notes: string
 
 export const logOneOnOne = (body: { direct_report_id: string; summary: string; new_commitments?: string[] }): Promise<OneOnOne> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------------------
+// Settings (Session 6) — Profile & Company, Roles & Levels, Expectations
+// ---------------------------------------------------------------------------
+
+export type Profile = {
+  email: string;
+  full_name: string;
+  company_name: string;
+  org_ready: boolean;
+};
+
+export type RoleLevel = {
+  id: string;
+  job_role: string;
+  job_level: number;
+  functional_team: string | null;
+  job_responsibilities: string | null;
+};
+
+export type ExpectationKind = "metrics" | "skills" | "values";
+
+export type Expectation = {
+  id: string;
+  role_level_id: string | null;
+  order_type: "primary" | "secondary" | "tertiary" | null;
+  description: string | null;
+  expectation?: string | null; // metrics + skills
+  measurement_period?: string | null; // metrics only
+  value_type?: "team" | "company" | "department" | null; // values only
+  metric_name?: string;
+  skill_name?: string;
+  value_name?: string;
+};
+
+// The backend stores the name under metric_name / skill_name / value_name.
+export const expectationName = (e: Expectation): string =>
+  e.metric_name ?? e.skill_name ?? e.value_name ?? "";
+
+export const getProfile = (): Promise<Profile> => authedFetch("/api/settings/profile");
+
+export const updateProfile = (body: { full_name: string; company_name: string }): Promise<Profile> =>
+  authedFetch("/api/settings/profile", { method: "PUT", body: JSON.stringify(body) });
+
+export const getRoleLevels = (): Promise<RoleLevel[]> => authedFetch("/api/settings/role-levels");
+
+export type RoleLevelIn = {
+  job_role: string;
+  job_level?: number;
+  functional_team?: string;
+  job_responsibilities?: string;
+};
+
+export const createRoleLevel = (body: RoleLevelIn): Promise<RoleLevel> =>
+  authedFetch("/api/settings/role-levels", { method: "POST", body: JSON.stringify(body) });
+
+export const updateRoleLevel = (id: string, body: RoleLevelIn): Promise<RoleLevel> =>
+  authedFetch(`/api/settings/role-levels/${id}`, { method: "PUT", body: JSON.stringify(body) });
+
+export const deleteRoleLevel = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/settings/role-levels/${id}`, { method: "DELETE" });
+
+export const getExpectations = (kind: ExpectationKind, roleLevelId?: string): Promise<Expectation[]> =>
+  authedFetch(`/api/settings/expectations/${kind}${roleLevelId ? `?role_level_id=${roleLevelId}` : ""}`);
+
+export type ExpectationIn = {
+  name: string;
+  role_level_id?: string | null;
+  order_type?: string;
+  description?: string;
+  expectation?: string;
+  measurement_period?: string;
+  value_type?: string;
+};
+
+export const createExpectation = (kind: ExpectationKind, body: ExpectationIn): Promise<Expectation> =>
+  authedFetch(`/api/settings/expectations/${kind}`, { method: "POST", body: JSON.stringify(body) });
+
+export const deleteExpectation = (kind: ExpectationKind, id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/settings/expectations/${kind}/${id}`, { method: "DELETE" });
+
+export const assignReportRole = (reportId: string, report: DirectReport, roleLevelId: string | null): Promise<DirectReport> =>
+  authedFetch(`/api/direct-reports/${reportId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      name: report.name,
+      role_title: report.role_title,
+      notes: report.notes,
+      role_level_id: roleLevelId,
+    }),
+  });

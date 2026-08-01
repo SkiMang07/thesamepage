@@ -18,6 +18,8 @@ class DirectReportIn(BaseModel):
     name: str
     role_title: str | None = None
     notes: str | None = None
+    # Settings page (Session 6): link a report to a configured role+level.
+    role_level_id: str | None = None
 
 
 @router.get("")
