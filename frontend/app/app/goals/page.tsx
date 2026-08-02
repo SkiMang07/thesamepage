@@ -79,6 +79,7 @@ export default function GoalsPage() {
   async function addGoal(input: {
     title: string;
     description: string;
+    successMetrics: string;
     level: GoalLevel;
     directReportId: string;
     parentGoalId: string;
@@ -88,6 +89,7 @@ export default function GoalsPage() {
     const created = await createGoal({
       title: input.title.trim(),
       description: input.description.trim() || undefined,
+      success_metrics: input.successMetrics.trim() || undefined,
       level: input.level,
       status: input.status,
       due_date: input.dueDate || undefined,
@@ -228,6 +230,12 @@ function GoalList({
                 <p className="mt-0.5 text-xs text-gray-400">Part of: {g.parent_goal_title}</p>
               )}
               {g.description && <p className="mt-1 text-sm text-gray-500">{g.description}</p>}
+              {g.success_metrics && (
+                <p className="mt-1 text-sm text-gray-500">
+                  <span className="text-gray-400">Success metric: </span>
+                  {g.success_metrics}
+                </p>
+              )}
               {g.due_date && <p className="mt-1 text-xs text-gray-400">Due {formatDate(g.due_date)}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -271,6 +279,7 @@ function GoalForm({
   onSubmit: (input: {
     title: string;
     description: string;
+    successMetrics: string;
     level: GoalLevel;
     directReportId: string;
     parentGoalId: string;
@@ -280,6 +289,7 @@ function GoalForm({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [successMetrics, setSuccessMetrics] = useState("");
   const [goalLevel, setGoalLevel] = useState<GoalLevel>(defaultLevel);
   const [directReportId, setDirectReportId] = useState("");
   const [parentGoalId, setParentGoalId] = useState("");
@@ -292,9 +302,10 @@ function GoalForm({
     if (!title.trim() || saving) return;
     setSaving(true);
     try {
-      await onSubmit({ title, description, level: goalLevel, directReportId, parentGoalId, status, dueDate });
+      await onSubmit({ title, description, successMetrics, level: goalLevel, directReportId, parentGoalId, status, dueDate });
       setTitle("");
       setDescription("");
+      setSuccessMetrics("");
       setDirectReportId("");
       setParentGoalId("");
       setStatus("active");
@@ -371,7 +382,18 @@ function GoalForm({
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
           className={inputCls}
-          placeholder="What success looks like, in a sentence or two"
+          placeholder="What this goal is about, in a sentence or two"
+        />
+      </div>
+
+      <div>
+        <label className={labelCls}>Success metric (optional)</label>
+        <textarea
+          value={successMetrics}
+          onChange={(e) => setSuccessMetrics(e.target.value)}
+          rows={2}
+          className={inputCls}
+          placeholder="How you'll know it's done — e.g. NRR at or above 110%, churn under 5%"
         />
       </div>
 

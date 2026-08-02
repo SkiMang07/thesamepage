@@ -25,10 +25,14 @@ were agreed, build it.
   - Goals gets its own top-level page (`/app/goals`), not folded into
     Settings — Settings is "configure once," goals get written to
     constantly.
-  - DR detail page gets a new "Goals" section, always visible (Commitments-
-    style empty state), not hidden-until-configured like Expectations —
-    goals aren't gated behind a setup prerequisite the way expectations are
-    gated behind a role assignment.
+  - DR detail page gets a new "Goals" section. Built it always-visible
+    (Commitments-style empty state) rather than hidden-until-configured like
+    Expectations, reasoning that goals aren't gated behind a setup
+    prerequisite the way Expectations is gated behind a role assignment —
+    **but this was a judgment call made mid-build, not re-confirmed with
+    Andrew** (the scoping question he'd actually answered was phrased
+    "mirrors Expectations — hidden if empty"). Flagged to him after the
+    build; unresolved as of this entry.
   - Full company/department/team/individual hierarchy (`goals.level`) ships
     now, not narrowed to individual-only — Andrew's explicit call over the
     more conservative default. Company/department goals are usable today but
@@ -75,14 +79,43 @@ were agreed, build it.
   ENGINEERING.md's RLS section so the next session doesn't get confused by
   the "_all_own_org" naming.
 
+**Follow-up (same session): `success_metrics` field.**
+Before any dogfooding happened, Andrew asked for a SMART-framework anchor —
+title/description already cover Specific, due_date covers Time-bound, but
+nothing captured Measurable. Added `success_metrics`: a single free-text
+column, deliberately unstructured (no new metric_configs-style table) since
+it's meant to be read by AI/agents rather than parsed or scored, and a rigid
+structure would just produce blank fields for goals that don't fit it.
+- New migration: `database/migrations/2026-08-02_goals_success_metrics.sql`
+  (`alter table goals add column if not exists success_metrics text`) —
+  **not yet run against the live database.** `database/schema.sql` updated
+  to match for future reads.
+- `backend/routes/goals.py`: added to `GoalIn` and `_SELECT_COLUMNS`; create/
+  update/patch all pass it through via the existing `model_dump()` calls, no
+  other route logic changed.
+- `frontend/lib/api.ts`: added to `Goal`/`GoalIn` types.
+- `frontend/app/app/goals/page.tsx`: new optional "Success metric" textarea
+  in the add-goal form (below Description), rendered on each goal card when
+  present. Not added to the DR detail page's Goals section — that stays a
+  lean summary surface (title/status/due date only), consistent with why it
+  was kept minimal in the first place.
+- Verified: `python -m py_compile` clean, `main.py` still imports and all 5
+  `/api/goals` routes register; `npx tsc --noEmit` and `next build` both
+  clean (`/app/goals` still compiles/prerenders as its own route).
+
 **Next step:**
 Not yet dogfooded — no live Supabase run happened in this session (no DB
-access from here; Andrew runs `npm run build` / applies against his own
-Supabase instance from his machine). First real next step is Andrew trying
-the Goals page end to end (create a goal at each level, confirm the
-individual-tab grouping and inline status updates feel right) and reporting
-back before any further Goals work (e.g. activating `projects`, or building
-toward the rollup/status-calculation concept) gets scoped.
+access from here; Andrew runs things against his own Supabase instance from
+his machine). Before trying the Goals page, Andrew needs to run the new
+`2026-08-02_goals_success_metrics.sql` migration in the Supabase SQL editor
+— without it, `success_metrics` will 400 on any goal create/update. After
+that: try the Goals page end to end (create a goal at each level, confirm
+the individual-tab grouping, inline status updates, and the new success
+metric field all feel right) and report back before any further Goals work
+(e.g. activating `projects`, building toward rollup/status calculation, or
+resolving the DR-surfacing question flagged above) gets scoped. Also still
+open: correcting ENGINEERING.md's stale "Production deploy not yet
+configured" line — turns out Vercel + Railway both auto-deploy on push.
 
 ---
 

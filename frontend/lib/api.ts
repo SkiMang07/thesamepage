@@ -168,6 +168,9 @@ export type Goal = {
   id: string;
   title: string;
   description: string | null;
+  // Free text, deliberately unstructured — the SMART-framework "Measurable"
+  // anchor. Meant to be read by AI/agents, not parsed or scored.
+  success_metrics: string | null;
   level: GoalLevel;
   status: GoalStatus;
   due_date: string | null;
@@ -183,6 +186,7 @@ export type Goal = {
 export type GoalIn = {
   title: string;
   description?: string | null;
+  success_metrics?: string | null;
   level: GoalLevel;
   status?: GoalStatus;
   due_date?: string | null;

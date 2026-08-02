@@ -354,6 +354,10 @@ create table goals (
   org_id           uuid references organizations(id) on delete cascade,
   title            text not null,
   description      text,
+  -- Free text, deliberately unstructured (Session 10 follow-up) — the
+  -- SMART-framework "Measurable" anchor. Meant to be read by AI/agents, not
+  -- parsed or scored, so no dedicated metric table.
+  success_metrics  text,
   level            text not null check (level in ('company', 'department', 'team', 'individual')),
   owner_id         uuid references auth.users(id),
   direct_report_id uuid references direct_reports(id) on delete cascade,

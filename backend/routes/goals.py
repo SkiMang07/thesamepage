@@ -18,6 +18,15 @@ Decisions locked before this file was written:
     children) is explicitly NOT built. `status` is a plain manually-set
     field; PRODUCT_VISION.md's rollup concept is future work.
 
+Follow-up (same session, 2026-08-02): added `success_metrics` — a single
+free-text field, the SMART-framework "Measurable" anchor (title/description
+already cover Specific; due_date covers Time-bound). Deliberately
+unstructured per Andrew: it's meant to be read by AI/agents, not parsed or
+scored, so no dedicated metric table — that would just produce blank fields
+for goals that don't fit a rigid shape. Requires
+`database/migrations/2026-08-02_goals_success_metrics.sql` to be run against
+the live database before this field will persist.
+
 RLS note: schema.sql's goals/projects policies are named "*_all_own_org" but
 actually scope by `owner_id = auth.uid()`, not org_id — unlike role_levels /
 metric_configs / skill_configs / value_configs, which scope by
@@ -37,7 +46,7 @@ _LEVELS = ("company", "department", "team", "individual")
 _STATUSES = ("active", "on_track", "at_risk", "completed", "cancelled")
 
 _SELECT_COLUMNS = (
-    "id,title,description,level,status,due_date,direct_report_id,"
+    "id,title,description,success_metrics,level,status,due_date,direct_report_id,"
     "parent_goal_id,created_at,direct_reports(name)"
 )
 
@@ -45,6 +54,7 @@ _SELECT_COLUMNS = (
 class GoalIn(BaseModel):
     title: str
     description: str | None = None
+    success_metrics: str | None = None
     level: str
     status: str = "active"
     due_date: str | None = None

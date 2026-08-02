@@ -19,6 +19,10 @@ schema, auth, AI integration, or infrastructure.
 The plumbing (`utils.py`, `ai_core.py`) is a direct port of patterns proven in
 a separate, more complex project (Prism Tree). Don't reinvent them.
 
+**Deploy (confirmed Session 10):** both Railway and Vercel auto-deploy on
+push — no separate deploy step needed. (This doc previously listed
+production deploy as "not yet configured"; that was stale.)
+
 ---
 
 ## Conventions
@@ -148,7 +152,6 @@ Things explicitly not yet built:
   goals exist and are usable (Session 10) but don't yet have a distinct
   dept-head/VP audience until this ships.
 - IC login (user_id on direct_reports is nullable as a future hook)
-- Production deploy configuration
 - `projects` table (goals' sibling — "goals=what, projects=how")
 - Goal rollup/status calculation (a parent goal's status computed from its
   children's) — PRODUCT_VISION.md's concept, not built; `goals.status` is a
@@ -188,5 +191,4 @@ frontend/
 
 - Stripe webhook handler + subscription-gating middleware
 - Blog content pipeline (MDX in-repo is the default when we get there)
-- Production deploy (Railway + Vercel not yet configured)
 - Error monitoring (Sentry, or Railway's built-in, or nothing for now)
