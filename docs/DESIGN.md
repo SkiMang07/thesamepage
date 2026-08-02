@@ -45,6 +45,7 @@ or UX patterns. Starts minimal — add decisions here as they get locked.
 /app/dashboard              frontend/app/app/dashboard/page.tsx
 /app/reports/[id]           frontend/app/app/reports/[id]/page.tsx
 /app/goals                  frontend/app/app/goals/page.tsx
+/app/org                    frontend/app/app/org/page.tsx
 /app/settings               frontend/app/app/settings/page.tsx
 ```
 
@@ -72,5 +73,9 @@ SEO. Do not add client-side-only patterns to these pages.
 | 2026-08-02 | Goal status is an inline `<select>` styled as a pill on each goal card, not a separate edit form | Status is the field that changes constantly (the reason Goals got its own page in the first place) — matches the existing inline-select pattern used for assigning a direct report's role in Settings |
 | 2026-08-02 | Added a "Success metric" free-text field to the goal create form and card display, right below Description | Andrew wanted a SMART-framework "Measurable" anchor without over-structuring goals into fields that stay blank for anything that doesn't fit a rigid model — kept it as unstructured text, same as description, not a new metric-picker UI |
 | 2026-08-02 | Goal cards get an "Edit" action next to Delete, which swaps the card in place for the same form used to create goals (pre-filled) rather than opening a modal or a separate page | Andrew caught this gap live in the deployed app — status and delete existed but there was no way to fix a typo or update a description. Reusing the create form in place keeps this to one component instead of building a second edit UI, and swapping in-place (not navigating away) matches how the rest of the page already behaves |
+| 2026-08-02 | Org (team/department entities) gets its own top-level page (`/app/org`), not a Settings section | Same reasoning as Goals' placement (Session 10) — a distinct object, not a "configure once and forget" setting, even though it's edited less frequently than Goals |
+| 2026-08-02 | Org-chart builder is a hybrid: a nested tree to add/edit/delete units and set parents, plus a separate read-only visual chart rendered from the same data | Andrew's explicit call over a true drag-and-drop canvas, which would require adding the app's first UI dependency (a diagramming library). The chart view uses styled-jsx (ships with Next.js) for a pure-CSS nested-list chart — no new dependency either way |
+| 2026-08-02 | "Company" is not a stored `org_units` row — the chart root is the existing `organizations.name` (Settings → Profile & Company), with top-level departments (`parent_unit_id` null) branching directly off it | Avoids a row that would just duplicate what `organizations` already represents; proposed by Claude during scoping, confirmed by Andrew before building |
+| 2026-08-02 | Settings' Roles & Levels form drops the free-text "Team (optional)" input, and `roleLabel()` stops appending `functional_team` to the role display | Session 11: team/department is now a structured `org_unit_id` on the direct report, not free text on the role template — keeping both would let them disagree. The "Who's in which role" list gets a second picker (org unit) next to the existing role picker |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_

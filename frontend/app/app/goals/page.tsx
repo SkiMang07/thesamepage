@@ -16,10 +16,12 @@ import {
   Goal,
   GoalLevel,
   GoalStatus,
+  OrgUnit,
   createGoal,
   deleteGoal,
   getDirectReports,
   getGoals,
+  getOrgUnits,
   updateGoal,
   updateGoalStatus,
 } from "@/lib/api";
@@ -57,6 +59,10 @@ type GoalFormValues = {
   successMetrics: string;
   level: GoalLevel;
   directReportId: string;
+  // Session 11: which specific department/team a team/department-level goal
+  // belongs to. Filtered to units matching `level` in the picker, so this
+  // can't disagree with the level tab it's filed under.
+  orgUnitId: string;
   parentGoalId: string;
   status: GoalStatus;
   dueDate: string;
@@ -79,6 +85,7 @@ function toGoalPayload(input: GoalFormValues) {
     status: input.status,
     due_date: input.dueDate || undefined,
     direct_report_id: input.level === "individual" ? input.directReportId || undefined : undefined,
+    org_unit_id: input.level === "team" || input.level === "department" ? input.orgUnitId || undefined : undefined,
     parent_goal_id: input.parentGoalId || undefined,
   };
 }
@@ -87,16 +94,18 @@ export default function GoalsPage() {
   const [level, setLevel] = useState<GoalLevel>("individual");
   const [goals, setGoals] = useState<Goal[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getGoals(), getDirectReports()])
-      .then(([g, r]) => {
+    Promise.all([getGoals(), getDirectReports(), getOrgUnits()])
+      .then(([g, r, ou]) => {
         setGoals(g);
         setReports(r);
+        setOrgUnits(ou);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -160,6 +169,7 @@ export default function GoalsPage() {
     onCancelEdit: () => setEditingGoalId(null),
     onSaveEdit: saveEdit,
     reports,
+    orgUnits,
     allGoals: goals,
   };
 
@@ -209,6 +219,7 @@ export default function GoalsPage() {
         <GoalForm
           defaultLevel={level}
           reports={reports}
+          orgUnits={orgUnits}
           allGoals={goals}
           onCancel={() => setShowForm(false)}
           onSubmit={addGoal}
@@ -254,6 +265,7 @@ function GoalList({
   onCancelEdit,
   onSaveEdit,
   reports,
+  orgUnits,
   allGoals,
 }: {
   goals: Goal[];
@@ -264,6 +276,7 @@ function GoalList({
   onCancelEdit: () => void;
   onSaveEdit: (id: string, input: GoalFormValues) => Promise<void>;
   reports: DirectReport[];
+  orgUnits: OrgUnit[];
   allGoals: Goal[];
 }) {
   return (
@@ -275,6 +288,7 @@ function GoalList({
               defaultLevel={g.level}
               initialGoal={g}
               reports={reports}
+              orgUnits={orgUnits}
               allGoals={allGoals.filter((x) => x.id !== g.id)}
               onCancel={onCancelEdit}
               onSubmit={(input) => onSaveEdit(g.id, input)}
@@ -287,6 +301,11 @@ function GoalList({
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-gray-900">{g.title}</p>
+                {g.org_unit_name && (
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {g.level === "department" ? "Department" : "Team"}: {g.org_unit_name}
+                  </p>
+                )}
                 {g.parent_goal_title && (
                   <p className="mt-0.5 text-xs text-gray-400">Part of: {g.parent_goal_title}</p>
                 )}
@@ -338,6 +357,7 @@ function GoalForm({
   defaultLevel,
   initialGoal,
   reports,
+  orgUnits,
   allGoals,
   onCancel,
   onSubmit,
@@ -347,6 +367,7 @@ function GoalForm({
   defaultLevel: GoalLevel;
   initialGoal?: Goal | null;
   reports: DirectReport[];
+  orgUnits: OrgUnit[];
   allGoals: Goal[];
   onCancel: () => void;
   onSubmit: (input: GoalFormValues) => Promise<void>;
@@ -358,6 +379,7 @@ function GoalForm({
   const [successMetrics, setSuccessMetrics] = useState(initialGoal?.success_metrics ?? "");
   const [goalLevel, setGoalLevel] = useState<GoalLevel>(initialGoal?.level ?? defaultLevel);
   const [directReportId, setDirectReportId] = useState(initialGoal?.direct_report_id ?? "");
+  const [orgUnitId, setOrgUnitId] = useState(initialGoal?.org_unit_id ?? "");
   const [parentGoalId, setParentGoalId] = useState(initialGoal?.parent_goal_id ?? "");
   const [status, setStatus] = useState<GoalStatus>(initialGoal?.status ?? "active");
   const [dueDate, setDueDate] = useState(initialGoal?.due_date ?? "");
@@ -365,17 +387,32 @@ function GoalForm({
 
   const isEdit = !!initialGoal;
 
+  // Org units matching the picked level — "team" goals only offer teams,
+  // "department" goals only offer departments, so level and org_unit_id
+  // can never disagree (Session 11).
+  const matchingOrgUnits = orgUnits.filter((ou) => ou.unit_type === goalLevel);
+
+  function handleLevelChange(next: GoalLevel) {
+    setGoalLevel(next);
+    // Clear a picked unit that no longer matches — e.g. switching from
+    // Team to Department drops a team selection rather than silently
+    // keeping a mismatched org_unit_id.
+    if (next !== "team" && next !== "department") setOrgUnitId("");
+    else if (!orgUnits.some((ou) => ou.id === orgUnitId && ou.unit_type === next)) setOrgUnitId("");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || saving) return;
     setSaving(true);
     try {
-      await onSubmit({ title, description, successMetrics, level: goalLevel, directReportId, parentGoalId, status, dueDate });
+      await onSubmit({ title, description, successMetrics, level: goalLevel, directReportId, orgUnitId, parentGoalId, status, dueDate });
       if (!isEdit) {
         setTitle("");
         setDescription("");
         setSuccessMetrics("");
         setDirectReportId("");
+        setOrgUnitId("");
         setParentGoalId("");
         setStatus("active");
         setDueDate("");
@@ -394,7 +431,7 @@ function GoalForm({
         </div>
         <div className="w-40">
           <label className={labelCls}>Level</label>
-          <select value={goalLevel} onChange={(e) => setGoalLevel(e.target.value as GoalLevel)} className={inputCls}>
+          <select value={goalLevel} onChange={(e) => handleLevelChange(e.target.value as GoalLevel)} className={inputCls}>
             {LEVEL_TABS.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}
@@ -413,6 +450,19 @@ function GoalForm({
               {reports.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {(goalLevel === "team" || goalLevel === "department") && (
+          <div className="flex-1">
+            <label className={labelCls}>{goalLevel === "team" ? "Team" : "Department"} (optional)</label>
+            <select value={orgUnitId} onChange={(e) => setOrgUnitId(e.target.value)} className={inputCls}>
+              <option value="">Not linked to a specific {goalLevel}</option>
+              {matchingOrgUnits.map((ou) => (
+                <option key={ou.id} value={ou.id}>
+                  {ou.name}
                 </option>
               ))}
             </select>

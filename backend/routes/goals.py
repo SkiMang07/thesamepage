@@ -47,7 +47,7 @@ _STATUSES = ("active", "on_track", "at_risk", "completed", "cancelled")
 
 _SELECT_COLUMNS = (
     "id,title,description,success_metrics,level,status,due_date,direct_report_id,"
-    "parent_goal_id,created_at,direct_reports(name)"
+    "parent_goal_id,org_unit_id,created_at,direct_reports(name),org_units(name,unit_type)"
 )
 
 
@@ -60,6 +60,10 @@ class GoalIn(BaseModel):
     due_date: str | None = None
     direct_report_id: str | None = None
     parent_goal_id: str | None = None
+    # Session 11: which specific department/team this goal belongs to. Null
+    # for company/individual-level goals. The frontend filters the org_unit
+    # picker by unit_type = level, so the two can't disagree.
+    org_unit_id: str | None = None
 
 
 class GoalStatusUpdate(BaseModel):
@@ -86,6 +90,8 @@ def _shape_rows(rows: list[dict]) -> list[dict]:
     for row in rows:
         joined = row.pop("direct_reports", None) or {}
         row["direct_report_name"] = joined.get("name")
+        org_unit = row.pop("org_units", None) or {}
+        row["org_unit_name"] = org_unit.get("name")
         parent = by_id.get(row.get("parent_goal_id"))
         row["parent_goal_title"] = parent["title"] if parent else None
     return rows
@@ -95,6 +101,7 @@ def _shape_rows(rows: list[dict]) -> list[dict]:
 async def list_goals(
     level: str | None = None,
     direct_report_id: str | None = None,
+    org_unit_id: str | None = None,
     status: str | None = None,
     auth=Depends(get_authenticated_client),
 ):
@@ -104,6 +111,8 @@ async def list_goals(
         query = query.eq("level", level)
     if direct_report_id:
         query = query.eq("direct_report_id", direct_report_id)
+    if org_unit_id:
+        query = query.eq("org_unit_id", org_unit_id)
     if status:
         query = query.eq("status", status)
     rows = query.order("created_at", desc=True).execute().data

@@ -64,6 +64,10 @@ class DirectReportIn(BaseModel):
     notes: str | None = None
     # Settings page (Session 6): link a report to a configured role+level.
     role_level_id: str | None = None
+    # Session 11: which team/department this report structurally sits in.
+    # Separate from role_level_id — two reports can share a role/comp band
+    # but sit on different real teams.
+    org_unit_id: str | None = None
 
 
 @router.get("")

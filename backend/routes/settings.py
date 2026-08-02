@@ -14,15 +14,14 @@ Deliberately NOT built yet (deferred with Andrew on 2026-08-01):
 
 RLS bootstrap: role_levels and the *_configs tables are scoped by
 users.org_id, but the MVP has no users row or organization until the manager
-first saves their profile. `_ensure_org()` creates both on demand. Requires
-the policies in database/migrations/2026-08-01_settings_policies.sql.
+first saves their profile. `ensure_org()` (backend/utils.py — shared with
+org_units.py as of Session 11) creates both on demand. Requires the policies
+in database/migrations/2026-08-01_settings_policies.sql.
 """
-import uuid
-
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-from utils import get_authenticated_client, verify_token_with_supabase
+from utils import ensure_org, get_authenticated_client, get_email_from_token
 
 router = APIRouter()
 
@@ -37,43 +36,17 @@ _CONFIG_TABLES = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_email(authorization: str | None) -> str:
-    """Re-verify the token to read the email claim (cached in utils, so this
-    does not add a second network call per request)."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    user_data = verify_token_with_supabase(authorization.removeprefix("Bearer ").strip())
-    return user_data.get("email") or ""
+# _get_email / _ensure_org used to live here as private helpers; moved to
+# utils.py (get_email_from_token / ensure_org) once org_units.py needed the
+# same org-bootstrap pattern. Local aliases kept so the rest of this file's
+# call sites don't need touching.
+_get_email = get_email_from_token
+_ensure_org = ensure_org
 
 
 def _get_profile(user_id: str, supabase):
     rows = supabase.table("users").select("*").eq("id", user_id).execute().data
     return rows[0] if rows else None
-
-
-def _ensure_org(user_id: str, supabase, email: str, company_name: str | None = None) -> str:
-    """Make sure a users row + organization exist and are linked; return org_id.
-    Idempotent — safe to call from any settings write path."""
-    profile = _get_profile(user_id, supabase)
-
-    if profile is None:
-        supabase.table("users").insert(
-            {"id": user_id, "email": email, "full_name": ""}
-        ).execute()
-        profile = {"org_id": None}
-
-    if profile.get("org_id"):
-        return profile["org_id"]
-
-    org_id = str(uuid.uuid4())
-    # returning="minimal": the org isn't linked to the user yet, so the
-    # select-own RLS policy would block returning the inserted row.
-    supabase.table("organizations").insert(
-        {"id": org_id, "name": company_name or "My company"},
-        returning="minimal",
-    ).execute()
-    supabase.table("users").update({"org_id": org_id}).eq("id", user_id).execute()
-    return org_id
 
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,127 @@ Format per entry:
 
 ---
 
+## Session 11 — 2026-08-02
+
+**Goal:** Design (then build) an org hierarchy data model — team/department/
+company as real entities, not free text — plus a visual org-chart builder.
+Same pattern as Goals: scope with Andrew first, then build once shape and
+placement are agreed.
+
+**What was done:**
+- Read `database/schema.sql`, `frontend/app/app/goals/page.tsx`,
+  `PRODUCT_VISION.md`, `docs/DESIGN.md`, and `docs/ENGINEERING.md` before
+  proposing anything. Walked through the concrete gap with Andrew: a direct
+  report (e.g. Leah Wellborn) has no structured team/department anywhere —
+  the closest thing, `role_levels.functional_team`, is free text on a
+  *role*, not a person, so it can't be queried and can't have a parent.
+  `goals.level` has the right taxonomy but no FK to a specific unit.
+- Confirmed via discussion with Andrew (not defaulted, via AskUserQuestion):
+  - **Schema shape:** a single self-referencing `org_units` table
+    (`unit_type` department/team, `parent_unit_id`), not three separate
+    tables — mirrors `goals.parent_goal_id` and `users.manager_id`, patterns
+    already in the schema, rather than introducing a new one.
+  - **`role_levels.functional_team`:** replaced by `org_unit_id`, not kept
+    as a parallel concept. Column stays in the schema (not dropped, no data
+    migration), but the UI stops writing/showing it.
+  - **Builder UI:** hybrid — a nested tree to build/edit (no new frontend
+    dependency), plus a read-only visual chart rendered from the same data.
+    Rejected a true drag-and-drop canvas (would need a diagramming library —
+    the app's first real UI dependency, against DESIGN.md's plain-Tailwind
+    stance).
+  - **Placement:** `/app/org`, its own top-level nav page — same reasoning
+    as Goals' placement in Session 10 (a distinct object, not a Settings
+    "configure once" section, even though it's edited less often than
+    Goals).
+  - **Company node:** Claude proposed, Andrew confirmed, that "company" is
+    NOT a stored `org_units` row — the chart root is the existing
+    `organizations.name`, with top-level departments (`parent_unit_id` null)
+    branching directly off it. Avoids a row duplicating what `organizations`
+    already represents.
+- Built the feature on top of that agreement:
+  - `database/schema.sql` + new `database/migrations/2026-08-02_org_units.sql`
+    — `org_units` table (org-scoped via `current_org_id()`, like
+    `role_levels`, not manager-scoped like `direct_reports`/`goals`), plus
+    nullable `org_unit_id` FKs on `direct_reports` and `goals` (both
+    `ON DELETE SET NULL`). **Not yet run against the live database.**
+  - `backend/utils.py`: pulled `ensure_org()`/`get_email_from_token()` up
+    from private helpers in `settings.py` (renamed from `_ensure_org`/
+    `_get_email`) since `org_units.py` needed the same org-bootstrap
+    pattern. `settings.py` keeps local aliases so its call sites didn't need
+    touching.
+  - `backend/routes/org_units.py` (new): `GET`/`POST`/`PUT`/`DELETE`
+    `/api/org-units`. Delete relies on `ON DELETE SET NULL` cascades rather
+    than manual unparenting (unlike `goals.delete_goal`, which has to
+    unparent manually since `parent_goal_id` has no `ON DELETE` clause).
+    Update guards against a unit becoming its own direct parent; does not
+    walk the tree for deeper cycles (documented limitation, acceptable for a
+    solo manager hand-building a small tree). Registered in `main.py`.
+  - `backend/routes/direct_reports.py`: added `org_unit_id` to
+    `DirectReportIn` — flows through the existing `model_dump()` calls, no
+    other route logic changed.
+  - `backend/routes/goals.py`: added `org_unit_id` to `GoalIn`, joined
+    `org_units(name,unit_type)` in `_SELECT_COLUMNS`, flattened to
+    `org_unit_name` in `_shape_rows`, added an `org_unit_id` filter to
+    `GET /api/goals` (mirrors the existing `direct_report_id` filter).
+  - `frontend/lib/api.ts`: `OrgUnit`/`OrgUnitType`/`OrgUnitIn` types +
+    `getOrgUnits`/`createOrgUnit`/`updateOrgUnit`/`deleteOrgUnit`;
+    `org_unit_id` on `DirectReport`; `org_unit_id`/`org_unit_name` on
+    `Goal`/`GoalIn`; `assignReportOrgUnit` (mirrors `assignReportRole`).
+    **Caught while writing this:** `assignReportRole`'s `PUT` didn't
+    preserve `org_unit_id` — since the backend route replaces the whole
+    record, reassigning someone's role would have silently wiped their team
+    assignment. Fixed by passing `org_unit_id: report.org_unit_id` through;
+    the new `assignReportOrgUnit` symmetrically preserves `role_level_id`.
+  - `frontend/app/app/org/page.tsx` (new): the hybrid builder. "Build" tab —
+    nested tree, "+ Add department or team" at root and "+ Add child" per
+    node, inline Edit (rename/retype/reparent) and Delete. "Chart" tab —
+    read-only visual chart, pure-CSS nested-list technique via `styled-jsx`
+    (ships with Next.js — no new dependency), rooted at the company name
+    pulled from `getProfile()`.
+  - `frontend/app/app/dashboard/page.tsx`: added an "Org" nav link between
+    Goals and Settings.
+  - `frontend/app/app/settings/page.tsx`: Roles & Levels — removed the
+    free-text "Team (optional)" input from the add-role form and stopped
+    appending `functional_team` in `roleLabel()`; "Who's in which role" list
+    now has a second picker (org unit) next to the existing role picker, via
+    the new `assignOrgUnit` handler.
+  - `frontend/app/app/goals/page.tsx`: `GoalForm` shows an org-unit picker
+    when level is Team or Department, filtered to matching `unit_type` so
+    level and unit can't disagree; switching level away clears a
+    now-mismatched selection (`handleLevelChange`). `GoalList` shows the
+    assigned unit's name on team/department goal cards.
+  - `docs/ENGINEERING.md`, `docs/DESIGN.md` — updated (schema table list,
+    scope-discipline open items, file map, decisions log).
+  - Saved the scoping decisions to an `org_hierarchy_scoping` project memory
+    note before building, so they weren't relitigated mid-build.
+
+**Decisions locked:**
+- See "What was done" above — schema shape, the `functional_team` deprecation,
+  builder interaction model, page placement, and the company-node resolution
+  were all explicit calls confirmed with Andrew before code was written.
+- `org_units` is org-scoped (`current_org_id()`), unlike `direct_reports`/
+  `goals` which are manager-scoped (`owner_id`/`manager_id`) — team/
+  department structure belongs to the org, not to one manager's private
+  view of it. Documented in `org_units.py`'s module docstring.
+
+**Verification:** `python3 -m py_compile` clean on all touched/new backend
+files (`main.py`, `utils.py`, `routes/settings.py`, `routes/org_units.py`,
+`routes/direct_reports.py`, `routes/goals.py`). Frontend `tsc`/`next build`
+verification pending — see next step.
+
+**Next step:**
+1. Run `database/migrations/2026-08-02_org_units.sql` against the live
+   Supabase database — nothing in this feature works until that lands.
+2. Confirm `npx tsc --noEmit` and `next build` are clean (attempted from the
+   sandbox; confirm result before/while dogfooding).
+3. Once live: build out the org tree for real (Andrew's actual departments/
+   teams), assign existing direct reports to units in Settings, and check
+   Goals' team/department pickers against real data.
+4. Role-scoped views (manager/dept-head/individual) are the natural next
+   payoff now that real org_units exist — not scoped this session.
+
+---
+
 ## Session 10 — 2026-08-02
 
 **Goal:** Scope how Goals fits into the product with Andrew (design/scoping

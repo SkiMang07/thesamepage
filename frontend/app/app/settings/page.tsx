@@ -12,8 +12,10 @@ import {
   DirectReport,
   Expectation,
   ExpectationKind,
+  OrgUnit,
   Profile,
   RoleLevel,
+  assignReportOrgUnit,
   assignReportRole,
   createExpectation,
   createRoleLevel,
@@ -22,6 +24,7 @@ import {
   expectationName,
   getDirectReports,
   getExpectations,
+  getOrgUnits,
   getProfile,
   getRoleLevels,
   updateProfile,
@@ -52,12 +55,14 @@ export default function SettingsPage() {
   // Shared data
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
 
   useEffect(() => {
-    Promise.all([getRoleLevels(), getDirectReports()])
-      .then(([rls, drs]) => {
+    Promise.all([getRoleLevels(), getDirectReports(), getOrgUnits()])
+      .then(([rls, drs, ous]) => {
         setRoleLevels(rls);
         setReports(drs);
+        setOrgUnits(ous);
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -100,6 +105,7 @@ export default function SettingsPage() {
               setRoleLevels={setRoleLevels}
               reports={reports}
               setReports={setReports}
+              orgUnits={orgUnits}
               onError={setError}
             />
           )}
@@ -180,7 +186,14 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
 // ---------------------------------------------------------------------------
 
 function roleLabel(rl: RoleLevel) {
-  return `${rl.job_role} · L${rl.job_level}${rl.functional_team ? ` · ${rl.functional_team}` : ""}`;
+  // functional_team (free text) dropped from the label as of Session 11 —
+  // "which team" now lives on the direct report as a structured org_unit_id,
+  // shown separately below. The column stays in the schema, just unused here.
+  return `${rl.job_role} · L${rl.job_level}`;
+}
+
+function orgUnitLabel(ou: OrgUnit) {
+  return `${ou.unit_type === "department" ? "Department" : "Team"} · ${ou.name}`;
 }
 
 function RolesSection({
@@ -188,17 +201,18 @@ function RolesSection({
   setRoleLevels,
   reports,
   setReports,
+  orgUnits,
   onError,
 }: {
   roleLevels: RoleLevel[];
   setRoleLevels: React.Dispatch<React.SetStateAction<RoleLevel[]>>;
   reports: DirectReport[];
   setReports: React.Dispatch<React.SetStateAction<DirectReport[]>>;
+  orgUnits: OrgUnit[];
   onError: (m: string | null) => void;
 }) {
   const [jobRole, setJobRole] = useState("");
   const [jobLevel, setJobLevel] = useState(1);
-  const [team, setTeam] = useState("");
   const [responsibilities, setResponsibilities] = useState("");
   const [adding, setAdding] = useState(false);
 
@@ -210,12 +224,10 @@ function RolesSection({
       const created = await createRoleLevel({
         job_role: jobRole.trim(),
         job_level: jobLevel,
-        functional_team: team.trim() || undefined,
         job_responsibilities: responsibilities.trim() || undefined,
       });
       setRoleLevels((r) => [...r, created]);
       setJobRole("");
-      setTeam("");
       setResponsibilities("");
       setJobLevel(1);
       onError(null);
@@ -242,6 +254,15 @@ function RolesSection({
       setReports((rs) => rs.map((r) => (r.id === report.id ? { ...r, role_level_id: updated.role_level_id ?? (roleLevelId || null) } : r)));
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to assign role");
+    }
+  }
+
+  async function assignOrgUnit(report: DirectReport, orgUnitId: string) {
+    try {
+      const updated = await assignReportOrgUnit(report.id, report, orgUnitId || null);
+      setReports((rs) => rs.map((r) => (r.id === report.id ? { ...r, org_unit_id: updated.org_unit_id ?? (orgUnitId || null) } : r)));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to assign team");
     }
   }
 
@@ -289,10 +310,6 @@ function RolesSection({
                 className={inputCls}
               />
             </div>
-            <div className="w-40">
-              <label className={labelCls}>Team (optional)</label>
-              <input value={team} onChange={(e) => setTeam(e.target.value)} className={inputCls} placeholder="e.g. CS" />
-            </div>
           </div>
           <div>
             <label className={labelCls}>Responsibilities (optional)</label>
@@ -312,7 +329,10 @@ function RolesSection({
 
       <div>
         <h2 className="font-medium text-gray-900">Who&apos;s in which role</h2>
-        <p className="mt-1 text-sm text-gray-500">Connect each direct report to a role so their expectations follow them.</p>
+        <p className="mt-1 text-sm text-gray-500">
+          Connect each direct report to a role so their expectations follow them, and to a team/department (set up
+          in <Link href="/app/org" className="underline">Org</Link>) so goals and reporting can be scoped correctly.
+        </p>
         <ul className="mt-4 space-y-2">
           {reports.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
@@ -320,18 +340,32 @@ function RolesSection({
                 <p className="text-sm font-medium text-gray-900">{r.name}</p>
                 {r.role_title && <p className="text-xs text-gray-500">{r.role_title}</p>}
               </div>
-              <select
-                value={r.role_level_id ?? ""}
-                onChange={(e) => assign(r, e.target.value)}
-                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-              >
-                <option value="">No role assigned</option>
-                {roleLevels.map((rl) => (
-                  <option key={rl.id} value={rl.id}>
-                    {roleLabel(rl)}
-                  </option>
-                ))}
-              </select>
+              <div className="flex shrink-0 items-center gap-2">
+                <select
+                  value={r.role_level_id ?? ""}
+                  onChange={(e) => assign(r, e.target.value)}
+                  className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">No role assigned</option>
+                  {roleLevels.map((rl) => (
+                    <option key={rl.id} value={rl.id}>
+                      {roleLabel(rl)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={r.org_unit_id ?? ""}
+                  onChange={(e) => assignOrgUnit(r, e.target.value)}
+                  className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">No team assigned</option>
+                  {orgUnits.map((ou) => (
+                    <option key={ou.id} value={ou.id}>
+                      {orgUnitLabel(ou)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </li>
           ))}
           {reports.length === 0 && (

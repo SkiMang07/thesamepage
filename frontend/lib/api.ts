@@ -32,6 +32,11 @@ export type DirectReport = {
   role_title: string | null;
   notes: string | null;
   role_level_id?: string | null;
+  // Session 11: which team/department this report structurally sits in.
+  // Separate from role_level_id (their job/comp band). Resolve the display
+  // name client-side against a loaded OrgUnit[] list, same pattern as
+  // role_level_id -> RoleLevel in Settings.
+  org_unit_id?: string | null;
   // Present on GET /api/direct-reports/{id} only: the assigned role's
   // configured expectations. null when no role is assigned.
   expectations?: RoleExpectations | null;
@@ -139,6 +144,21 @@ export const getDirectReport = (id: string): Promise<DirectReport> =>
 export const createDirectReport = (body: { name: string; role_title?: string; notes?: string }): Promise<DirectReport> =>
   authedFetch("/api/direct-reports", { method: "POST", body: JSON.stringify(body) });
 
+// Assigns a direct report to a team/department, preserving their other
+// fields — same "read, tweak one field, PUT the whole record" pattern as
+// assignReportRole further down.
+export const assignReportOrgUnit = (reportId: string, report: DirectReport, orgUnitId: string | null): Promise<DirectReport> =>
+  authedFetch(`/api/direct-reports/${reportId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      name: report.name,
+      role_title: report.role_title,
+      notes: report.notes,
+      role_level_id: report.role_level_id,
+      org_unit_id: orgUnitId,
+    }),
+  });
+
 // ---------------------------------------------------------------------------
 // Commitments
 // ---------------------------------------------------------------------------
@@ -180,6 +200,11 @@ export type Goal = {
   // Only populated when the parent goal is present in the same fetched
   // result set — see goals.py's _shape_rows.
   parent_goal_title?: string | null;
+  // Session 11: which specific department/team this goal belongs to. Null
+  // for company/individual-level goals. org_unit_name comes from goals.py's
+  // org_units(name,unit_type) join.
+  org_unit_id: string | null;
+  org_unit_name?: string | null;
   created_at: string;
 };
 
@@ -192,12 +217,14 @@ export type GoalIn = {
   due_date?: string | null;
   direct_report_id?: string | null;
   parent_goal_id?: string | null;
+  org_unit_id?: string | null;
 };
 
-export const getGoals = (params?: { level?: GoalLevel; directReportId?: string; status?: GoalStatus }): Promise<Goal[]> => {
+export const getGoals = (params?: { level?: GoalLevel; directReportId?: string; orgUnitId?: string; status?: GoalStatus }): Promise<Goal[]> => {
   const q = new URLSearchParams();
   if (params?.level) q.set("level", params.level);
   if (params?.directReportId) q.set("direct_report_id", params.directReportId);
+  if (params?.orgUnitId) q.set("org_unit_id", params.orgUnitId);
   if (params?.status) q.set("status", params.status);
   const qs = q.toString();
   return authedFetch(`/api/goals${qs ? `?${qs}` : ""}`);
@@ -214,6 +241,41 @@ export const updateGoalStatus = (id: string, status: GoalStatus): Promise<Goal> 
 
 export const deleteGoal = (id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/goals/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Org units (Session 11) — team/department entities with parent/child
+// relationships. Own top-level page (/app/org). "Company" is NOT a unit_type
+// here — it's the existing organizations row (Profile & Company in
+// Settings), shown as the chart's root; a department with parent_unit_id
+// null sits directly under it. See docs/SESSION_HISTORY.md and the
+// org_hierarchy_scoping project memory note.
+// ---------------------------------------------------------------------------
+
+export type OrgUnitType = "department" | "team";
+
+export type OrgUnit = {
+  id: string;
+  name: string;
+  unit_type: OrgUnitType;
+  parent_unit_id: string | null;
+};
+
+export type OrgUnitIn = {
+  name: string;
+  unit_type: OrgUnitType;
+  parent_unit_id?: string | null;
+};
+
+export const getOrgUnits = (): Promise<OrgUnit[]> => authedFetch("/api/org-units");
+
+export const createOrgUnit = (body: OrgUnitIn): Promise<OrgUnit> =>
+  authedFetch("/api/org-units", { method: "POST", body: JSON.stringify(body) });
+
+export const updateOrgUnit = (id: string, body: OrgUnitIn): Promise<OrgUnit> =>
+  authedFetch(`/api/org-units/${id}`, { method: "PUT", body: JSON.stringify(body) });
+
+export const deleteOrgUnit = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/org-units/${id}`, { method: "DELETE" });
 
 // ---------------------------------------------------------------------------
 // 1:1s
@@ -339,5 +401,8 @@ export const assignReportRole = (reportId: string, report: DirectReport, roleLev
       role_title: report.role_title,
       notes: report.notes,
       role_level_id: roleLevelId,
+      // PUT replaces the whole record — preserve the report's org unit or
+      // reassigning a role would silently clear their team (Session 11).
+      org_unit_id: report.org_unit_id,
     }),
   });

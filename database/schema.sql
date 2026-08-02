@@ -75,10 +75,45 @@ create table role_levels (
 alter table role_levels enable row level security;
 
 -- -------------------------
+-- ORG UNITS
+-- Team/department entities with parent/child relationships (Session 11,
+-- 2026-08-02 — see docs/SESSION_HISTORY.md and the org_hierarchy_scoping
+-- project memory note for the scoping conversation).
+--
+-- One self-referencing table, not separate department/team tables — mirrors
+-- goals.parent_goal_id and users.manager_id, patterns already in this
+-- schema. unit_type is 'department' or 'team' ONLY: "company" is not a row
+-- here — the existing `organizations` row is the chart's root, and a
+-- department with parent_unit_id null sits directly under it.
+--
+-- Org-scoped like role_levels (org_id = current_org_id()), not
+-- manager-scoped like direct_reports/goals — team/department structure
+-- belongs to the org, not to one manager's private view of it.
+--
+-- Replaces role_levels.functional_team as the source of truth for "which
+-- team" — that free-text column stays in the schema for now (not dropped,
+-- data not migrated) but the UI stops writing/showing it in favor of
+-- direct_reports.org_unit_id below.
+-- -------------------------
+create table org_units (
+  id             uuid primary key default uuid_generate_v4(),
+  org_id         uuid references organizations(id) on delete cascade,
+  name           text not null,
+  unit_type      text not null check (unit_type in ('department', 'team')),
+  parent_unit_id uuid references org_units(id) on delete set null,
+  created_at     timestamptz not null default now()
+);
+
+alter table org_units enable row level security;
+
+-- -------------------------
 -- DIRECT REPORTS
 -- 'name' (not 'full_name') to match backend DirectReportIn model.
 -- manager_id = the logged-in manager's auth.uid().
 -- org_id nullable for MVP.
+-- org_unit_id: which team/department this person structurally sits in —
+-- separate from role_level_id (their job/comp band), since two people with
+-- the same role_level can be on different real teams.
 -- -------------------------
 create table direct_reports (
   id            uuid primary key default uuid_generate_v4(),
@@ -88,6 +123,7 @@ create table direct_reports (
   name          text not null,
   email         text,
   role_level_id uuid references role_levels(id),
+  org_unit_id   uuid references org_units(id) on delete set null,
   role_title    text,
   notes         text,
   start_date    date,
@@ -359,6 +395,10 @@ create table goals (
   -- parsed or scored, so no dedicated metric table.
   success_metrics  text,
   level            text not null check (level in ('company', 'department', 'team', 'individual')),
+  -- Which specific department/team this goal belongs to (Session 11) — null
+  -- for company/individual-level goals. The org_unit picker in the UI is
+  -- filtered by unit_type = level, so the two can't disagree.
+  org_unit_id      uuid references org_units(id) on delete set null,
   owner_id         uuid references auth.users(id),
   direct_report_id uuid references direct_reports(id) on delete cascade,
   parent_goal_id   uuid references goals(id),
@@ -542,6 +582,11 @@ create policy "users_insert_own" on users
 
 -- role_levels
 create policy "role_levels_all_own_org" on role_levels
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+-- org_units
+create policy "org_units_all_own_org" on org_units
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 

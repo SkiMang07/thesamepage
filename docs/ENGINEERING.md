@@ -68,9 +68,12 @@ self-referencing ("infinite recursion detected in policy", 42P17), and it
 takes every dependent policy down with it. Learned the hard way in Session 6.
 
 Org bootstrap: users have no `organizations` row until they first save
-Settings → Profile. `_ensure_org()` in `routes/settings.py` creates the org +
-links `users.org_id` on any settings write (org insert uses
-`returning="minimal"` since the select policy can't see an unlinked org yet).
+Settings → Profile (or add their first org unit, Session 11). `ensure_org()`
+in `utils.py` (moved there from `routes/settings.py` when `org_units.py`
+needed the same bootstrap-on-write behavior; `settings.py` keeps `_ensure_org`
+as a local alias) creates the org + links `users.org_id` on any org-scoped
+write (org insert uses `returning="minimal"` since the select policy can't
+see an unlinked org yet).
 
 **Gotcha (Session 10):** `goals`/`projects` policies in schema.sql are named
 `"goals_all_own_org"` / `"projects_all_own_org"` but actually scope by
@@ -81,7 +84,7 @@ misleading, don't assume org-scoping from the policy name alone. Like
 
 ---
 
-## Database schema (28 tables — aligned with Miro board)
+## Database schema (29 tables — aligned with Miro board)
 
 Full schema with indexes and RLS policies: `database/schema.sql`.
 
@@ -93,12 +96,18 @@ manager_report_connections  -- explicit join table for hierarchy traversal (was 
 direct_reports       -- the manager's team; user_id nullable (IC login post-MVP)
 one_on_ones          -- 1:1 logs; notes private to writing manager (RLS)
 commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id
-goals                -- activated Session 10; parent_goal_id self-ref; level: company/department/team/individual
+goals                -- activated Session 10; parent_goal_id self-ref; level: company/department/team/individual;
+                        org_unit_id (Session 11) names which specific team/department a team/dept goal is for
 subscriptions        -- Stripe billing
 ```
 
 **Configuration tables (set up once per org, not written to constantly):**
 ```
+org_units                   -- activated Session 11; team/department entities, self-ref parent_unit_id.
+                                "company" is NOT a row here — the organizations row is the chart root.
+                                Org-scoped (current_org_id()), replaces role_levels.functional_team as the
+                                source of truth for "which team" — that column stays in schema, UI stopped
+                                writing/showing it.
 role_levels                 -- central concept; links metrics/skills/values to a role+level
 assessment_levels           -- stable ordinal (1-5) + configurable label per org
 metric_configs              -- per role_level; order_type: primary/secondary/tertiary
@@ -150,12 +159,21 @@ Things explicitly not yet built:
 - Role-scoped views (individual/manager/dept-head) — schema supports it, UI
   doesn't exist yet. Notably relevant to Goals: company/department-level
   goals exist and are usable (Session 10) but don't yet have a distinct
-  dept-head/VP audience until this ships.
+  dept-head/VP audience until this ships. Also relevant to the new org
+  hierarchy (Session 11) — role-scoped views are the natural next payoff for
+  having real org_units, but weren't built this pass.
 - IC login (user_id on direct_reports is nullable as a future hook)
 - `projects` table (goals' sibling — "goals=what, projects=how")
 - Goal rollup/status calculation (a parent goal's status computed from its
   children's) — PRODUCT_VISION.md's concept, not built; `goals.status` is a
   plain manually-set field today
+- `role_levels.functional_team` data migration — the column stays in the
+  schema (not dropped) but the UI stopped writing/showing it as of Session
+  11; existing free-text values are not backfilled into org_units.
+- Cycle prevention on `org_units.parent_unit_id` — `org_units.py` only
+  guards a unit becoming its own direct parent, not a deeper cycle (A's
+  parent set to B when B's parent is already A). Fine for a solo manager
+  hand-building a small tree; revisit if this becomes multi-editor.
 
 ---
 
@@ -165,13 +183,14 @@ Things explicitly not yet built:
 backend/
   main.py         FastAPI app init, CORS, router registration
   config.py       Settings — reads .env, exposes AI model names + Supabase keys
-  utils.py        get_authenticated_client(), shared helpers
+  utils.py        get_authenticated_client(), ensure_org()/get_email_from_token() (Session 11), shared helpers
   ai_core.py      generate_text() — the only place Anthropic SDK is called
   routes/
     direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview)
     one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet), POST /wrapup (notes → draft log)
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10)
+    org_units.py         GET/POST/PUT/DELETE /api/org-units — team/department tree (Session 11)
     settings.py         /api/settings — profile, role-levels, expectations
 
 frontend/
@@ -180,6 +199,7 @@ frontend/
     app/dashboard/      Auth-gated app shell
     app/login/          Login page
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
+    app/org/            Org builder — own top-level page, tree (build/edit) + read-only chart (Session 11)
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client

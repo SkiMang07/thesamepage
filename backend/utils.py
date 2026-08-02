@@ -12,6 +12,7 @@ the service-role client directly against user data.
 import time
 import base64
 import json
+import uuid
 from fastapi import HTTPException, Header
 from supabase import create_client, Client
 
@@ -86,3 +87,46 @@ def get_admin_client() -> Client:
     """Service-role client — bypasses RLS. Use ONLY for admin/background jobs,
     never inside a user-facing request path for user data."""
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
+
+# ---------------------------------------------------------------------------
+# Org bootstrap — shared by every org-scoped write path (Settings' Roles &
+# Levels / Expectations, and org_units as of Session 11). Originally lived
+# only in settings.py as private helpers; pulled up here once a second
+# router (org_units.py) needed the same bootstrap-on-write behavior.
+# ---------------------------------------------------------------------------
+
+def get_email_from_token(authorization: str | None) -> str:
+    """Re-verify the token to read the email claim (cached in
+    verify_token_with_supabase, so this does not add a second network call
+    per request)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    user_data = verify_token_with_supabase(authorization.removeprefix("Bearer ").strip())
+    return user_data.get("email") or ""
+
+
+def ensure_org(user_id: str, supabase: Client, email: str, company_name: str | None = None) -> str:
+    """Make sure a users row + organization exist and are linked; return
+    org_id. Idempotent — safe to call from any org-scoped write path."""
+    rows = supabase.table("users").select("*").eq("id", user_id).execute().data
+    profile = rows[0] if rows else None
+
+    if profile is None:
+        supabase.table("users").insert(
+            {"id": user_id, "email": email, "full_name": ""}
+        ).execute()
+        profile = {"org_id": None}
+
+    if profile.get("org_id"):
+        return profile["org_id"]
+
+    org_id = str(uuid.uuid4())
+    # returning="minimal": the org isn't linked to the user yet, so the
+    # select-own RLS policy would block returning the inserted row.
+    supabase.table("organizations").insert(
+        {"id": org_id, "name": company_name or "My company"},
+        returning="minimal",
+    ).execute()
+    supabase.table("users").update({"org_id": org_id}).eq("id", user_id).execute()
+    return org_id
