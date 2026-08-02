@@ -11,6 +11,96 @@ Format per entry:
 
 ---
 
+## Session 9 — 2026-08-02
+
+**Goal:** Give managers access to past 1:1 activity from the DR detail page —
+both completed sessions and in-progress prep sheets. Andrew's pain point: he
+preps for a 1:1 a day or two out, then has no way back into that sheet
+without regenerating it from scratch.
+
+**What was done:**
+- `POST /prep` now persists. Confirmed it was a pure AI call with no DB write
+  before starting (per its own docstring). It now saves the full prep
+  response — `situation_summary`, `agenda_items`, and the
+  `open_commitments_to_check` snapshot — into `one_on_ones.prep_guide`, with
+  `summary`/`notes` left null. Status is derived, not stored: a row is
+  "planned" when `prep_guide` is set and `summary` is null, "completed" once
+  `summary` is set. No schema change needed — `prep_guide jsonb` already
+  existed on the table, just never written to.
+- Upsert, not insert-every-time: `_find_planned_session()` looks for an
+  existing planned row for the report before creating one. Re-running prep
+  for the same report updates that row's `prep_guide` in place rather than
+  piling up duplicate planned sessions. At most one planned session per
+  report is the assumed shape — fits a solo-manager cadence where there's
+  one upcoming 1:1 at a time per person.
+- `POST /` (log) now accepts an optional `one_on_one_id`. When the meeting
+  was prepped, saving fills in that SAME row's `summary`/`notes` (planned →
+  completed) instead of inserting a second row. Threaded through
+  `prep/page.tsx` → `wrap-up-review.tsx` → `logOneOnOne()`. The standalone
+  `/log` flow never sets it, so ad-hoc logs are unaffected — still a plain
+  insert.
+- New `GET /api/one-on-ones/session/{id}` (single session, for resuming) and
+  `DELETE /api/one-on-ones/session/{id}` (dismiss a planned session that
+  isn't happening — refuses on a completed one, that's real history).
+  `GET /{direct_report_id}/history` now returns each row through
+  `_serialize_session()`, adding `status` and `display_summary`.
+- **Bug caught before it shipped:** once `/prep` writes rows, a planned
+  session (no `summary` yet) would otherwise count as "the last 1:1" in two
+  places — the prep prompt's recency logic and the dashboard's 21-day
+  cadence badge (`direct_reports.py` → `/overview`) — going stale the moment
+  a manager preps. Both now filter to completed meetings only
+  (`summary` set) before computing recency. These two intentionally still
+  share the threshold per CLAUDE.md; fixed together, not separately.
+- `frontend/app/app/reports/[id]/page.tsx`: "1:1 History" → "1:1 Sessions",
+  now lists planned + completed with a status badge. A planned row links to
+  `/prep?resume={id}`; a "Not happening" link dismisses it. Header CTA
+  becomes "Resume prep sheet →" (instead of "Start 1:1 prep →") when a
+  planned session already exists, so the fix reaches the pain point from the
+  top of the page too, not just the list at the bottom.
+- `frontend/app/app/reports/[id]/prep/page.tsx`: reads `?resume={id}`, loads
+  the stored session, and renders step 2 directly from `prep_guide` — no
+  regenerating. `useSearchParams` requires the `<Suspense>` wrapper pattern
+  already used in `app/login/page.tsx`; followed it here (`PrepPage` wraps
+  `PrepFlow`).
+- Verified: `npx tsc --noEmit` clean, `next build` succeeds (all routes
+  compile and prerender, including the new Suspense boundary). Backend:
+  `python -m py_compile` + importing `main.py` with the exact pinned
+  `requirements.txt` in a venv, both clean. No live Supabase run in this
+  session — no DB access from here.
+
+**Decisions locked:**
+- Status is always derived from `prep_guide`/`summary`, never a stored
+  column — one less thing that can drift out of sync.
+- "Deferred" (from the original ask's planned/completed/deferred sketch) is
+  NOT a tracked status — there's no trigger in the app that would set it
+  automatically (no scheduling UI, `scheduled_at` stays unused). Implemented
+  the practical version instead: "Not happening" deletes the planned row.
+  Revisit if Andrew wants deferred sessions kept as a record rather than
+  removed.
+- Prep resume shows the prep sheet exactly as generated, including a
+  point-in-time snapshot of `open_commitments_to_check` — it does not
+  re-fetch current commitment status live. A commitment resolved between
+  prepping and resuming will still show as open on the resumed sheet. Live
+  open commitments remain correct everywhere else (DR detail's commitments
+  section, a freshly generated prep sheet).
+
+**Open item — not resolved this session:**
+`2026-08-01_commitments_committed_by.sql` (Session 8) — still needs
+confirmation it's been run in Supabase. This session's work doesn't touch
+`committed_by`, so it isn't blocked by it, but it's the standing caution
+from CLAUDE.md and remains unconfirmed.
+
+**Next step:**
+Run this in Supabase-connected env, dogfood: prep a 1:1, close the tab,
+come back via the DR detail page's planned entry (and via the header
+"Resume prep sheet →" button), confirm it resumes without a second AI call,
+then complete the wrap-up and confirm the row transitions to "Completed"
+with no duplicate row left behind. Also confirm the "Not happening" dismiss
+action and the dashboard's 21-day badge stay correct once a planned session
+exists.
+
+---
+
 ## Session 8 — 2026-08-01
 
 **Goal:** Capture what actually happens on the call. Andrew's observation:

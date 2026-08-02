@@ -46,11 +46,28 @@ export type RoleExpectations = {
   values: Expectation[];
 };
 
+// A session's status is derived server-side from which columns are filled —
+// never set directly. planned: prepped, meeting hasn't happened yet
+// (prep_guide set, summary null). completed: logged (summary set).
+export type SessionStatus = "planned" | "completed";
+
+export type PrepGuide = {
+  situation_summary: string;
+  agenda_items: AgendaItem[];
+  open_commitments_to_check: Pick<Commitment, "description" | "due_date" | "committed_by">[];
+};
+
 export type OneOnOne = {
   id: string;
   direct_report_id: string;
-  summary: string;
+  summary: string | null;
+  notes?: string | null;
+  prep_guide?: PrepGuide | null;
   created_at: string;
+  status: SessionStatus;
+  // completed -> summary; planned -> the prep sheet's situation_summary.
+  // What the DR detail page's session list actually renders per row.
+  display_summary: string;
 };
 
 // Who owes a commitment — both sides of a 1:1 can make them (Session 8).
@@ -75,6 +92,10 @@ export type AgendaItem = {
 };
 
 export type PrepResponse = {
+  // The one_on_ones row this prep sheet was saved to (the "planned"
+  // session) — pass back as one_on_one_id when logging, and use it to
+  // resume this sheet later via getOneOnOne().
+  id: string;
   situation_summary: string;
   agenda_items: AgendaItem[];
   // The prep endpoint returns only these fields per commitment.
@@ -140,6 +161,16 @@ export const updateCommitment = (id: string, status: "open" | "done" | "dropped"
 export const getOneOnOneHistory = (directReportId: string): Promise<OneOnOne[]> =>
   authedFetch(`/api/one-on-ones/${directReportId}/history`);
 
+// A single session by id — used to resume a planned prep sheet without
+// regenerating it.
+export const getOneOnOne = (id: string): Promise<OneOnOne> =>
+  authedFetch(`/api/one-on-ones/session/${id}`);
+
+// Dismiss a planned session that isn't going to happen. Refuses (400) on a
+// completed session — that's real history, not a stub to clean up.
+export const deleteOneOnOne = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/one-on-ones/session/${id}`, { method: "DELETE" });
+
 export const prepOneOnOne = (body: { direct_report_id: string; raw_notes: string }): Promise<PrepResponse> =>
   authedFetch("/api/one-on-ones/prep", { method: "POST", body: JSON.stringify(body) });
 
@@ -153,6 +184,9 @@ export const logOneOnOne = (body: {
   summary: string;
   notes?: string;
   new_commitments?: WrapUpCommitment[];
+  // Set when this meeting was prepped: fills in the existing planned row
+  // instead of creating a second one. Omitted for ad-hoc logs.
+  one_on_one_id?: string;
 }): Promise<OneOnOne> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 

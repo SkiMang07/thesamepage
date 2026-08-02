@@ -8,6 +8,7 @@ import {
   getOneOnOneHistory,
   getCommitments,
   updateCommitment,
+  deleteOneOnOne,
   expectationName,
   DirectReport,
   OneOnOne,
@@ -56,6 +57,7 @@ export default function ReportDetailPage() {
   const [commitments, setCommitments] = useState<Commitment[]>([]);
   const [showResolved, setShowResolved] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,12 +88,27 @@ export default function ReportDetailPage() {
     }
   }
 
+  async function dismissSession(sessionId: string) {
+    setDismissingId(sessionId);
+    try {
+      await deleteOneOnOne(sessionId);
+      setHistory((hs) => hs.filter((h) => h.id !== sessionId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to dismiss session");
+    } finally {
+      setDismissingId(null);
+    }
+  }
+
   if (loading) return <p className="p-8 text-gray-500">Loading...</p>;
   if (error) return <p className="p-8 text-red-500">{error}</p>;
   if (!report) return null;
 
   const open = commitments.filter((c) => c.status === "open");
   const resolved = commitments.filter((c) => c.status !== "open");
+  // Most-recent planned session, if any — lets the header CTA jump straight
+  // back into an existing prep sheet instead of regenerating one.
+  const plannedSession = history.find((h) => h.status === "planned");
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
@@ -114,10 +131,14 @@ export default function ReportDetailPage() {
             Log a 1:1
           </Link>
           <Link
-            href={`/app/reports/${id}/prep`}
+            href={
+              plannedSession
+                ? `/app/reports/${id}/prep?resume=${plannedSession.id}`
+                : `/app/reports/${id}/prep`
+            }
             className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
           >
-            Start 1:1 prep →
+            {plannedSession ? "Resume prep sheet →" : "Start 1:1 prep →"}
           </Link>
         </div>
       </div>
@@ -260,20 +281,63 @@ export default function ReportDetailPage() {
         )}
       </div>
 
-      {/* 1:1 History */}
+      {/* 1:1 Sessions — past (completed) + upcoming (planned/prepped) */}
       <div className="mt-10">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">1:1 History</h2>
+        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">1:1 Sessions</h2>
 
         {history.length === 0 ? (
-          <p className="mt-4 text-gray-500">No 1:1s logged yet.</p>
+          <p className="mt-4 text-gray-500">
+            No 1:1s yet. Prepping or logging one with {report.name.split(" ")[0]} will show up here.
+          </p>
         ) : (
           <ul className="mt-4 divide-y divide-gray-200">
-            {history.map((h) => (
-              <li key={h.id} className="py-4">
-                <p className="text-xs text-gray-400">{formatDate(h.created_at)}</p>
-                <p className="mt-1 text-gray-700">{h.summary}</p>
-              </li>
-            ))}
+            {history.map((h) => {
+              const isPlanned = h.status === "planned";
+              const body = (
+                <>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-400">{formatDate(h.created_at)}</p>
+                    <span
+                      className={
+                        isPlanned
+                          ? "rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-500"
+                          : "rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500"
+                      }
+                    >
+                      {isPlanned ? "Planned" : "Completed"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-gray-700">
+                    {h.display_summary || (isPlanned ? "Prep sheet generated — no summary yet." : "")}
+                  </p>
+                </>
+              );
+
+              return (
+                <li key={h.id} className="py-4">
+                  {isPlanned ? (
+                    <div className="flex items-start justify-between gap-4">
+                      <Link
+                        href={`/app/reports/${id}/prep?resume=${h.id}`}
+                        className="min-w-0 flex-1 hover:opacity-70"
+                      >
+                        {body}
+                      </Link>
+                      <button
+                        onClick={() => dismissSession(h.id)}
+                        disabled={dismissingId === h.id}
+                        className="shrink-0 text-xs text-gray-400 hover:text-gray-600"
+                        title="This 1:1 isn't happening — remove the planned session"
+                      >
+                        {dismissingId === h.id ? "Removing…" : "Not happening"}
+                      </button>
+                    </div>
+                  ) : (
+                    body
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

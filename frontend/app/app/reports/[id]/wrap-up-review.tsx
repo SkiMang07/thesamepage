@@ -17,6 +17,7 @@ export default function WrapUpReview({
   draft,
   onBack,
   backLabel,
+  oneOnOneId,
 }: {
   directReportId: string;
   reportName: string;
@@ -24,6 +25,10 @@ export default function WrapUpReview({
   draft: WrapUpDraft;
   onBack: () => void;
   backLabel: string;
+  // Set when this meeting was prepped (the planned one_on_ones row's id) —
+  // saving fills in that row instead of creating a new one. Omitted for
+  // ad-hoc logs from the standalone Log a 1:1 flow.
+  oneOnOneId?: string;
 }) {
   const router = useRouter();
   const [summary, setSummary] = useState(draft.summary);
@@ -60,6 +65,7 @@ export default function WrapUpReview({
         new_commitments: commitments
           .map(({ key: _key, ...c }) => ({ ...c, description: c.description.trim() }))
           .filter((c) => c.description),
+        one_on_one_id: oneOnOneId,
       });
       router.push(`/app/reports/${directReportId}`);
     } catch (e) {

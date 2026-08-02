@@ -3,9 +3,15 @@ The core feature: 1:1 prep + logging.
 
 POST /prep generates a structured prep sheet for an upcoming 1:1 using the
 manager's raw notes plus that direct report's open commitments (the
-"remembers what you told them" hook). It is a pure AI-call route — no DB
-write. The manager reviews/edits, then POST / actually logs the 1:1 and
-any new commitments made during it.
+"remembers what you told them" hook). It persists a "planned" one_on_ones
+row (prep_guide set, summary null) so the sheet survives the gap between
+prepping and the actual meeting — see _find_planned_session(). The manager
+reviews/edits, then POST / logs the meeting: if it was prepped, this fills
+in summary/notes on that SAME row (planned -> completed) instead of
+inserting a second row.
+
+Status is derived, not stored: a row with summary is "completed"; a row
+without summary (only prep_guide) is "planned". See _serialize_session().
 """
 import json
 from datetime import date, datetime
@@ -37,6 +43,7 @@ class AgendaItem(BaseModel):
 
 
 class PrepResponse(BaseModel):
+    id: str  # the one_on_ones row this prep sheet was saved to (planned session)
     situation_summary: str
     agenda_items: list[AgendaItem]
     open_commitments_to_check: list[dict]
@@ -55,6 +62,11 @@ class LogOneOnOneIn(BaseModel):
     # Stored on one_on_ones.notes — private to the writing manager (RLS).
     notes: str | None = None
     new_commitments: list[NewCommitmentIn] = []
+    # Set when this meeting was prepped: the id of the "planned" one_on_ones
+    # row created by POST /prep. Logging then UPDATEs that row (planned ->
+    # completed) instead of inserting a second one. Omitted for ad-hoc logs
+    # (the standalone /log flow, which never went through /prep).
+    one_on_one_id: str | None = None
 
 
 class WrapUpRequest(BaseModel):
@@ -278,6 +290,43 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
 
 # ---------------------------------------------------------------------------
+# Session status — derived from which columns are filled, never stored.
+# planned:   prep_guide set, summary null (prepped, meeting hasn't happened)
+# completed: summary set (logged, whether or not it was prepped first)
+# ---------------------------------------------------------------------------
+
+def _serialize_session(row: dict) -> dict:
+    """Adds a derived `status` + `display_summary` to a one_on_ones row for
+    the frontend's combined past+planned list. Doesn't mutate storage."""
+    is_completed = bool(row.get("summary"))
+    prep_guide = row.get("prep_guide") or {}
+    return {
+        **row,
+        "status": "completed" if is_completed else "planned",
+        "display_summary": row["summary"] if is_completed else prep_guide.get("situation_summary", ""),
+    }
+
+
+def _find_planned_session(supabase, user_id: str, direct_report_id: str) -> dict | None:
+    """The DR's current unfinished prep, if any. At most one planned session
+    per report is expected at a time — re-running /prep for the same report
+    updates this row in place rather than piling up duplicates."""
+    rows = (
+        supabase.table("one_on_ones")
+        .select("id")
+        .eq("manager_id", user_id)
+        .eq("direct_report_id", direct_report_id)
+        .is_("summary", "null")
+        .not_.is_("prep_guide", "null")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    return rows[0] if rows else None
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -311,17 +360,22 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
         .data
     )
 
-    # Fetch recent 1:1 history (last 3 meetings, newest first)
-    history_rows = (
+    # Fetch recent 1:1 history. Over-fetch and filter to COMPLETED meetings
+    # only (summary set) — a "planned" row (prep_guide only, meeting hasn't
+    # happened yet) must not count as the last 1:1, or the recency logic and
+    # the dashboard's 21-day cadence badge would both go stale the moment a
+    # prep sheet is generated. See CLAUDE.md: the two share this threshold.
+    history_rows_raw = (
         supabase.table("one_on_ones")
         .select("summary,created_at")
         .eq("direct_report_id", body.direct_report_id)
         .eq("manager_id", user_id)
         .order("created_at", desc=True)
-        .limit(3)
+        .limit(10)
         .execute()
         .data
     )
+    history_rows = [row for row in history_rows_raw if row.get("summary")][:3]
 
     # Compute days since last 1:1
     days_since_last: int | None = None
@@ -365,16 +419,50 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
             "agenda_items": [],
         }
 
+    agenda_items = [
+        AgendaItem(
+            title=item.get("title", ""),
+            rationale=item.get("rationale", ""),
+            suggested_questions=item.get("suggested_questions", []),
+        )
+        for item in parsed.get("agenda_items", [])
+    ]
+
+    # Persist the sheet so it survives the gap between prepping and the
+    # actual meeting (Andrew's pain point: prep a day or two out, lose the
+    # sheet, have to regenerate). The full response — not just the AI JSON —
+    # is stored so a resumed session shows exactly what was generated,
+    # including the open-commitments snapshot from prep time.
+    prep_guide = {
+        "situation_summary": parsed.get("situation_summary", ""),
+        "agenda_items": [item.model_dump() for item in agenda_items],
+        "open_commitments_to_check": open_commitments,
+    }
+    existing = _find_planned_session(supabase, user_id, body.direct_report_id)
+    if existing:
+        saved = (
+            supabase.table("one_on_ones")
+            .update({"prep_guide": prep_guide})
+            .eq("id", existing["id"])
+            .execute()
+            .data[0]
+        )
+    else:
+        saved = (
+            supabase.table("one_on_ones")
+            .insert({
+                "manager_id": user_id,
+                "direct_report_id": body.direct_report_id,
+                "prep_guide": prep_guide,
+            })
+            .execute()
+            .data[0]
+        )
+
     return PrepResponse(
-        situation_summary=parsed.get("situation_summary", ""),
-        agenda_items=[
-            AgendaItem(
-                title=item.get("title", ""),
-                rationale=item.get("rationale", ""),
-                suggested_questions=item.get("suggested_questions", []),
-            )
-            for item in parsed.get("agenda_items", [])
-        ],
+        id=saved["id"],
+        situation_summary=prep_guide["situation_summary"],
+        agenda_items=agenda_items,
         open_commitments_to_check=open_commitments,
     )
 
@@ -446,18 +534,38 @@ async def wrap_up_one_on_one(body: WrapUpRequest, auth=Depends(get_authenticated
 async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
 
-    meeting = (
-        supabase.table("one_on_ones")
-        .insert({
-            "manager_id": user_id,
-            "direct_report_id": body.direct_report_id,
-            "summary": body.summary,
-            # Raw call notes — private to the writing manager (RLS).
-            "notes": body.notes,
-        })
-        .execute()
-        .data[0]
-    )
+    if body.one_on_one_id:
+        # This meeting was prepped — fill in the existing planned row
+        # (planned -> completed) rather than inserting a second one.
+        # Scoped by manager_id + direct_report_id so a stale/foreign id
+        # can't be used to overwrite someone else's row.
+        result = (
+            supabase.table("one_on_ones")
+            .update({
+                "summary": body.summary,
+                "notes": body.notes,
+            })
+            .eq("id", body.one_on_one_id)
+            .eq("manager_id", user_id)
+            .eq("direct_report_id", body.direct_report_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Planned session not found")
+        meeting = result.data[0]
+    else:
+        meeting = (
+            supabase.table("one_on_ones")
+            .insert({
+                "manager_id": user_id,
+                "direct_report_id": body.direct_report_id,
+                "summary": body.summary,
+                # Raw call notes — private to the writing manager (RLS).
+                "notes": body.notes,
+            })
+            .execute()
+            .data[0]
+        )
 
     for c in body.new_commitments:
         description = c.description.strip()
@@ -479,6 +587,9 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
 
 @router.get("/{direct_report_id}/history")
 async def get_history(direct_report_id: str, auth=Depends(get_authenticated_client)):
+    """Combined past + planned sessions for the DR detail page — newest
+    first, which naturally surfaces an in-progress planned session near the
+    top since it was just prepped."""
     user_id, supabase = auth
     result = (
         supabase.table("one_on_ones")
@@ -488,4 +599,51 @@ async def get_history(direct_report_id: str, auth=Depends(get_authenticated_clie
         .order("created_at", desc=True)
         .execute()
     )
-    return result.data
+    return [_serialize_session(row) for row in result.data]
+
+
+@router.get("/session/{one_on_one_id}")
+async def get_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
+    """A single session by id — used to resume a planned prep sheet without
+    regenerating it (frontend: prep/page.tsx?resume={id})."""
+    user_id, supabase = auth
+    try:
+        result = (
+            supabase.table("one_on_ones")
+            .select("*")
+            .eq("id", one_on_one_id)
+            .eq("manager_id", user_id)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return _serialize_session(result.data)
+
+
+@router.delete("/session/{one_on_one_id}")
+async def dismiss_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
+    """Dismiss a planned session that isn't going to happen (e.g. the 1:1
+    got cancelled). Refuses to delete a completed session — that's real
+    history, not a stub to clean up."""
+    user_id, supabase = auth
+    try:
+        result = (
+            supabase.table("one_on_ones")
+            .select("id,summary")
+            .eq("id", one_on_one_id)
+            .eq("manager_id", user_id)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if result.data.get("summary"):
+        raise HTTPException(status_code=400, detail="Cannot dismiss a completed 1:1")
+
+    supabase.table("one_on_ones").delete().eq("id", one_on_one_id).eq("manager_id", user_id).execute()
+    return {"deleted": True}

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   getDirectReport,
+  getOneOnOne,
   prepOneOnOne,
   wrapUpOneOnOne,
   PrepResponse,
@@ -58,8 +59,20 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
 
 type Step = 1 | 2 | 3;
 
+// useSearchParams (for ?resume=) requires a Suspense boundary — same
+// pattern as app/app/login/page.tsx.
 export default function PrepPage() {
+  return (
+    <Suspense>
+      <PrepFlow />
+    </Suspense>
+  );
+}
+
+function PrepFlow() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const resumeId = searchParams.get("resume");
 
   const [step, setStep] = useState<Step>(1);
   const [notes, setNotes] = useState("");
@@ -67,6 +80,18 @@ export default function PrepPage() {
   const [error, setError] = useState<string | null>(null);
   const [prep, setPrep] = useState<PrepResponse | null>(null);
   const [reportName, setReportName] = useState("");
+
+  // The planned one_on_ones row this prep sheet is saved to — set either by
+  // a fresh /prep call below, or by loading an existing planned session when
+  // resuming. Passed through to the wrap-up save so logging fills in this
+  // SAME row instead of creating a second one.
+  const [oneOnOneId, setOneOnOneId] = useState<string | null>(null);
+
+  // Resuming a planned session (?resume=<id> from the DR detail page's
+  // session list) skips straight to step 2 with the stored prep sheet —
+  // no regenerating it.
+  const [resumeLoading, setResumeLoading] = useState(!!resumeId);
+  const [resumeError, setResumeError] = useState<string | null>(null);
 
   // Step 2 — notes taken during the call (typed live or pasted afterward)
   const [callNotes, setCallNotes] = useState("");
@@ -80,6 +105,27 @@ export default function PrepPage() {
       .catch(() => {});
   }, [id]);
 
+  useEffect(() => {
+    if (!resumeId) return;
+    getOneOnOne(resumeId)
+      .then((session) => {
+        if (session.direct_report_id !== id || session.status !== "planned" || !session.prep_guide) {
+          setResumeError("This prep sheet is no longer available.");
+          return;
+        }
+        setPrep({
+          id: session.id,
+          situation_summary: session.prep_guide.situation_summary,
+          agenda_items: session.prep_guide.agenda_items,
+          open_commitments_to_check: session.prep_guide.open_commitments_to_check,
+        });
+        setOneOnOneId(session.id);
+        setStep(2);
+      })
+      .catch(() => setResumeError("This prep sheet is no longer available."))
+      .finally(() => setResumeLoading(false));
+  }, [resumeId, id]);
+
   // Step 1 → 2: call AI prep endpoint
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -89,6 +135,7 @@ export default function PrepPage() {
     try {
       const result = await prepOneOnOne({ direct_report_id: id, raw_notes: notes });
       setPrep(result);
+      setOneOnOneId(result.id);
       setStep(2);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
@@ -111,6 +158,23 @@ export default function PrepPage() {
     } finally {
       setWrappingUp(false);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Resuming a planned session — loading / not-found states
+  // ---------------------------------------------------------------------------
+  if (resumeLoading) {
+    return <p className="p-8 text-gray-500">Loading your prep sheet…</p>;
+  }
+  if (resumeError) {
+    return (
+      <main className="mx-auto max-w-2xl px-6 py-16">
+        <Link href={`/app/reports/${id}`} className="text-sm text-gray-500 hover:underline">
+          ← Back
+        </Link>
+        <p className="mt-4 text-gray-700">{resumeError}</p>
+      </main>
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -250,6 +314,7 @@ export default function PrepPage() {
         draft={draft}
         onBack={() => setStep(2)}
         backLabel="Back to the call"
+        oneOnOneId={oneOnOneId ?? undefined}
       />
     );
   }

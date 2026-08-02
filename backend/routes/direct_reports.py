@@ -96,10 +96,16 @@ async def get_team_overview(auth=Depends(get_authenticated_client)):
         .data
     )
 
+    # Only COMPLETED meetings count toward "last 1:1" — a planned session
+    # (prep sheet generated, meeting hasn't happened yet) must not reset the
+    # 21-day cadence clock, or the badge would go stale the moment a manager
+    # preps. Same rule applied in one_on_ones.py's prep recency logic —
+    # these two share the threshold (see CLAUDE.md); don't change one alone.
     one_on_ones = (
         supabase.table("one_on_ones")
-        .select("direct_report_id,created_at")
+        .select("direct_report_id,created_at,summary")
         .eq("manager_id", user_id)
+        .not_.is_("summary", "null")
         .order("created_at", desc=True)
         .execute()
         .data
