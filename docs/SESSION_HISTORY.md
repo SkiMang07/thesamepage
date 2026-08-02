@@ -102,20 +102,36 @@ structure would just produce blank fields for goals that don't fit it.
 - Verified: `python -m py_compile` clean, `main.py` still imports and all 5
   `/api/goals` routes register; `npx tsc --noEmit` and `next build` both
   clean (`/app/goals` still compiles/prerenders as its own route).
+- Also fixed while in these docs: ENGINEERING.md's "Production deploy not
+  yet configured" line was stale — Andrew confirmed both Vercel and Railway
+  auto-deploy on push. Corrected in the Stack section and removed from both
+  "not yet built" lists.
+
+**Follow-up (same session): goal editing.**
+Andrew pushed this to Vercel/Railway and started dogfooding on the live
+`thesamepage-blush.vercel.app` deploy — first real live use of the feature.
+Caught a real gap immediately: status has an inline select and there's a
+Delete button, but no way to fix a typo in a title or update a description
+once a goal exists. Added an Edit action:
+- `frontend/app/app/goals/page.tsx`: `GoalForm` now takes an optional
+  `initialGoal` prop and pre-fills from it; submit label switches between
+  "Add goal"/"Save changes". Each goal card gets an "Edit" button next to
+  Delete — clicking it swaps that list item in place for the same form
+  (pre-filled), rather than a modal or a separate page. Reused
+  `frontend/lib/api.ts`'s existing `updateGoal` (PUT) — it was already built
+  in the initial pass but never wired to a UI action.
+- Verified: `npx tsc --noEmit` and `next build` both clean again, `/app/goals`
+  still compiles/prerenders.
 
 **Next step:**
-Not yet dogfooded — no live Supabase run happened in this session (no DB
-access from here; Andrew runs things against his own Supabase instance from
-his machine). Before trying the Goals page, Andrew needs to run the new
-`2026-08-02_goals_success_metrics.sql` migration in the Supabase SQL editor
-— without it, `success_metrics` will 400 on any goal create/update. After
-that: try the Goals page end to end (create a goal at each level, confirm
-the individual-tab grouping, inline status updates, and the new success
-metric field all feel right) and report back before any further Goals work
-(e.g. activating `projects`, building toward rollup/status calculation, or
-resolving the DR-surfacing question flagged above) gets scoped. Also still
-open: correcting ENGINEERING.md's stale "Production deploy not yet
-configured" line — turns out Vercel + Railway both auto-deploy on push.
+Andrew is now dogfooding live (first real use, not just build-verified).
+Confirm the success_metrics migration actually landed (unclear from what's
+visible so far — the goals shown in his first screenshot have metrics typed
+directly into the description, from before this field existed, not the new
+dedicated field) and that editing works end to end on the deployed app.
+Report back before any further Goals work (activating `projects`, rollup/
+status calculation, or resolving the still-open DR-surfacing question
+flagged above) gets scoped.
 
 ---
 
