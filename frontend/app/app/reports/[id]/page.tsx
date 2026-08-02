@@ -7,6 +7,7 @@ import {
   getDirectReport,
   getOneOnOneHistory,
   getCommitments,
+  getGoals,
   updateCommitment,
   deleteOneOnOne,
   expectationName,
@@ -14,7 +15,25 @@ import {
   OneOnOne,
   Commitment,
   Expectation,
+  Goal,
+  GoalStatus,
 } from "@/lib/api";
+
+const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
+  active: "Active",
+  on_track: "On track",
+  at_risk: "At risk",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
+  active: "bg-gray-100 text-gray-600",
+  on_track: "bg-green-50 text-green-600",
+  at_risk: "bg-amber-50 text-amber-600",
+  completed: "bg-blue-50 text-blue-600",
+  cancelled: "bg-gray-100 text-gray-400",
+};
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -55,6 +74,7 @@ export default function ReportDetailPage() {
   const [report, setReport] = useState<DirectReport | null>(null);
   const [history, setHistory] = useState<OneOnOne[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [showResolved, setShowResolved] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
@@ -66,11 +86,13 @@ export default function ReportDetailPage() {
       getDirectReport(id),
       getOneOnOneHistory(id),
       getCommitments({ directReportId: id }),
+      getGoals({ directReportId: id }),
     ])
-      .then(([dr, h, c]) => {
+      .then(([dr, h, c, g]) => {
         setReport(dr);
         setHistory(h);
         setCommitments(c);
+        setGoals(g);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -182,6 +204,48 @@ export default function ReportDetailPage() {
           )}
         </div>
       )}
+
+      {/* Goals — always shown (unlike Expectations, not gated behind a
+          Settings prerequisite). Summary/read surface only: creating and
+          editing goals happens on the dedicated Goals page. */}
+      <div className="mt-10">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+            Goals{goals.length > 0 && ` (${goals.length})`}
+          </h2>
+          <Link href="/app/goals" className="text-xs text-gray-400 hover:text-gray-600">
+            Manage goals →
+          </Link>
+        </div>
+
+        {goals.length === 0 ? (
+          <p className="mt-4 text-gray-500">
+            No goals set yet.{" "}
+            <Link href="/app/goals" className="underline hover:text-gray-700">
+              Add one from the Goals page
+            </Link>
+            .
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {goals.map((g) => (
+              <li key={g.id} className="rounded-lg border border-gray-200 px-4 py-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{g.title}</p>
+                    {g.due_date && (
+                      <p className="mt-0.5 text-xs text-gray-400">Due {formatDate(g.due_date + "T00:00:00")}</p>
+                    )}
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${GOAL_STATUS_STYLES[g.status]}`}>
+                    {GOAL_STATUS_LABELS[g.status]}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* Open commitments */}
       <div className="mt-10">

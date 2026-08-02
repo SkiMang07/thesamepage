@@ -155,6 +155,63 @@ export const updateCommitment = (id: string, status: "open" | "done" | "dropped"
   authedFetch(`/api/commitments/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
 
 // ---------------------------------------------------------------------------
+// Goals (Session 10) — full company/department/team/individual hierarchy.
+// Own top-level page (/app/goals), not Settings — see docs/SESSION_HISTORY.md.
+// `projects` stays dormant; no rollup/status calculation yet (status is
+// manually set).
+// ---------------------------------------------------------------------------
+
+export type GoalLevel = "company" | "department" | "team" | "individual";
+export type GoalStatus = "active" | "on_track" | "at_risk" | "completed" | "cancelled";
+
+export type Goal = {
+  id: string;
+  title: string;
+  description: string | null;
+  level: GoalLevel;
+  status: GoalStatus;
+  due_date: string | null;
+  direct_report_id: string | null;
+  direct_report_name?: string | null;
+  parent_goal_id: string | null;
+  // Only populated when the parent goal is present in the same fetched
+  // result set — see goals.py's _shape_rows.
+  parent_goal_title?: string | null;
+  created_at: string;
+};
+
+export type GoalIn = {
+  title: string;
+  description?: string | null;
+  level: GoalLevel;
+  status?: GoalStatus;
+  due_date?: string | null;
+  direct_report_id?: string | null;
+  parent_goal_id?: string | null;
+};
+
+export const getGoals = (params?: { level?: GoalLevel; directReportId?: string; status?: GoalStatus }): Promise<Goal[]> => {
+  const q = new URLSearchParams();
+  if (params?.level) q.set("level", params.level);
+  if (params?.directReportId) q.set("direct_report_id", params.directReportId);
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
+  return authedFetch(`/api/goals${qs ? `?${qs}` : ""}`);
+};
+
+export const createGoal = (body: GoalIn): Promise<Goal> =>
+  authedFetch("/api/goals", { method: "POST", body: JSON.stringify(body) });
+
+export const updateGoal = (id: string, body: GoalIn): Promise<Goal> =>
+  authedFetch(`/api/goals/${id}`, { method: "PUT", body: JSON.stringify(body) });
+
+export const updateGoalStatus = (id: string, status: GoalStatus): Promise<Goal> =>
+  authedFetch(`/api/goals/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+
+export const deleteGoal = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/goals/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
 // 1:1s
 // ---------------------------------------------------------------------------
 

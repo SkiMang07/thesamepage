@@ -68,6 +68,13 @@ Settings → Profile. `_ensure_org()` in `routes/settings.py` creates the org +
 links `users.org_id` on any settings write (org insert uses
 `returning="minimal"` since the select policy can't see an unlinked org yet).
 
+**Gotcha (Session 10):** `goals`/`projects` policies in schema.sql are named
+`"goals_all_own_org"` / `"projects_all_own_org"` but actually scope by
+`owner_id = auth.uid()`, not `org_id = current_org_id()` — the naming is
+misleading, don't assume org-scoping from the policy name alone. Like
+`direct_reports`/`one_on_ones`, routes on these tables don't need
+`_ensure_org()` or to populate `org_id` for isolation to work.
+
 ---
 
 ## Database schema (28 tables — aligned with Miro board)
@@ -82,6 +89,7 @@ manager_report_connections  -- explicit join table for hierarchy traversal (was 
 direct_reports       -- the manager's team; user_id nullable (IC login post-MVP)
 one_on_ones          -- 1:1 logs; notes private to writing manager (RLS)
 commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id
+goals                -- activated Session 10; parent_goal_id self-ref; level: company/department/team/individual
 subscriptions        -- Stripe billing
 ```
 
@@ -106,9 +114,8 @@ value_assessments    -- per-value score per direct report
 metric_entries       -- time-series metric data per direct report
 ```
 
-**Goals / projects / development plans:**
+**Projects / development plans (still dormant):**
 ```
-goals                -- parent_goal_id self-ref; level: company/department/team/individual
 projects             -- connected to a goal or standalone; goals=what, projects=how
 development_plans    -- one per direct report
 dev_plan_aspirations    -- career aspiration: desired role/path + timeline
@@ -127,15 +134,25 @@ dev_plan_manager_notes  -- private to manager
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
-**Build order still matters** — don't implement the goals/competency/assessment
-layer until the core 1:1 prep + commitments flow is working and in users' hands.
+**Build order still matters** — don't implement the competency/assessment
+layer until it's actually needed. Goals shipped in Session 10 (the core 1:1
+prep + commitments flow was working and in Andrew's hands first, per the
+original rule); `projects` is the next candidate in this family but is
+explicitly still dormant.
 
 Things explicitly not yet built:
 - Stripe webhook handler + subscription-gating middleware
 - Blog content pipeline (start with MDX in-repo when the time comes)
-- Role-scoped views (individual/manager/dept-head) — schema supports it, UI doesn't exist yet
+- Role-scoped views (individual/manager/dept-head) — schema supports it, UI
+  doesn't exist yet. Notably relevant to Goals: company/department-level
+  goals exist and are usable (Session 10) but don't yet have a distinct
+  dept-head/VP audience until this ships.
 - IC login (user_id on direct_reports is nullable as a future hook)
 - Production deploy configuration
+- `projects` table (goals' sibling — "goals=what, projects=how")
+- Goal rollup/status calculation (a parent goal's status computed from its
+  children's) — PRODUCT_VISION.md's concept, not built; `goals.status` is a
+  plain manually-set field today
 
 ---
 
@@ -151,6 +168,7 @@ backend/
     direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview)
     one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet), POST /wrapup (notes → draft log)
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
+    goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10)
     settings.py         /api/settings — profile, role-levels, expectations
 
 frontend/
@@ -158,6 +176,7 @@ frontend/
     (marketing)/        Public SSG pages (home, pricing, blog) — need to be indexable
     app/dashboard/      Auth-gated app shell
     app/login/          Login page
+    app/goals/          Goals page — own top-level page, not under Settings (Session 10)
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client

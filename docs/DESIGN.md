@@ -44,6 +44,7 @@ or UX patterns. Starts minimal — add decisions here as they get locked.
 /app/login                  frontend/app/app/login/page.tsx
 /app/dashboard              frontend/app/app/dashboard/page.tsx
 /app/reports/[id]           frontend/app/app/reports/[id]/page.tsx
+/app/goals                  frontend/app/app/goals/page.tsx
 /app/settings               frontend/app/app/settings/page.tsx
 ```
 
@@ -65,5 +66,9 @@ SEO. Do not add client-side-only patterns to these pages.
 | 2026-08-01 | AI wrap-up is always draft-then-review — extracted summary/commitments render on an editable review screen before anything saves | Commitments are accountability records; a hallucinated one costs trust in the entire product |
 | 2026-08-02 | DR detail "1:1 History" renamed "1:1 Sessions" — now lists planned (prepped, not yet happened) alongside completed, with a status badge; a planned row is clickable straight into the resumed prep sheet | A prep sheet the manager can't get back to isn't useful; the list is now honest about what's upcoming vs. done, not just a log of the past |
 | 2026-08-02 | Header CTA becomes "Resume prep sheet →" instead of "Start 1:1 prep →" whenever a planned session already exists for that report | The fix for "I lost my prep sheet" needs to be reachable from the primary action, not only from a list item further down the page |
+| 2026-08-02 | Goals gets its own top-level page (`/app/goals`), not a Settings section | Settings is "configured once, not written to constantly" (see Settings decisions above); goals get created per period and have their status updated regularly — a different interaction pattern |
+| 2026-08-02 | DR detail "Goals" section is always shown, with a one-line empty state + link when there are none — NOT hidden entirely like Expectations | Expectations is gated behind a Settings prerequisite (assign a role first), so hiding it until that's done is calm degradation. Goals has no such prerequisite — it's a first-class object like Commitments, so it follows Commitments' always-visible empty-state pattern instead |
+| 2026-08-02 | Goals page ships full company/department/team/individual level tabs now, even though role-scoped views (manager/dept-head/individual) don't exist yet | Andrew's explicit call in the Session 10 scoping conversation, over the more conservative "individual only" default — company/department goals are usable today, just without a distinct dept-head/VP audience until role-scoped views ship |
+| 2026-08-02 | Goal status is an inline `<select>` styled as a pill on each goal card, not a separate edit form | Status is the field that changes constantly (the reason Goals got its own page in the first place) — matches the existing inline-select pattern used for assigning a direct report's role in Settings |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_

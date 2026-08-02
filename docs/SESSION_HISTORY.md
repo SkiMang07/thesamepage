@@ -11,6 +11,81 @@ Format per entry:
 
 ---
 
+## Session 10 — 2026-08-02
+
+**Goal:** Scope how Goals fits into the product with Andrew (design/scoping
+conversation, not a build session at first) — then, once placement and shape
+were agreed, build it.
+
+**What was done:**
+- Read `PRODUCT_VISION.md`'s Mission Control section, `database/schema.sql`'s
+  `goals`/`projects` tables, `docs/DESIGN.md`, and `docs/ENGINEERING.md`
+  before proposing anything. Confirmed via discussion with Andrew (not
+  defaulted):
+  - Goals gets its own top-level page (`/app/goals`), not folded into
+    Settings — Settings is "configure once," goals get written to
+    constantly.
+  - DR detail page gets a new "Goals" section, always visible (Commitments-
+    style empty state), not hidden-until-configured like Expectations —
+    goals aren't gated behind a setup prerequisite the way expectations are
+    gated behind a role assignment.
+  - Full company/department/team/individual hierarchy (`goals.level`) ships
+    now, not narrowed to individual-only — Andrew's explicit call over the
+    more conservative default. Company/department goals are usable today but
+    have no distinct dept-head/VP audience yet, since role-scoped views
+    aren't built (ENGINEERING.md open question) — acknowledged gap, not an
+    oversight.
+  - `projects` stays dormant this pass. Rollup/status calculation (a parent
+    goal's status computed from its children, per PRODUCT_VISION) is
+    explicitly out of scope — `status` is a plain manually-set field.
+  - Discovered while reading schema.sql: the `goals`/`projects` RLS policies
+    are named `*_all_own_org` but actually scope by `owner_id = auth.uid()`,
+    not `org_id = current_org_id()` — unlike role_levels/*_configs. So (like
+    direct_reports/one_on_ones) the new router does not populate `org_id` or
+    do the Settings org-bootstrap dance; it isn't required for isolation.
+- Built the feature on top of that agreement:
+  - `backend/routes/goals.py` (new): `GET /api/goals` (list, filters:
+    level/direct_report_id/status), `POST`, `PUT` (full edit), `PATCH`
+    (status-only, mirrors `commitments.py`'s pattern), `DELETE` (unparents
+    any child goals first — `parent_goal_id` has no `ON DELETE` clause, so
+    deleting an unreferenced-child guard avoids an FK error). Registered in
+    `backend/main.py` under `/api/goals`.
+  - `frontend/lib/api.ts`: `Goal`/`GoalLevel`/`GoalStatus`/`GoalIn` types +
+    `getGoals`/`createGoal`/`updateGoal`/`updateGoalStatus`/`deleteGoal`.
+  - `frontend/app/app/goals/page.tsx` (new): level tabs (Individual/Team/
+    Department/Company — individual defaults first since that's what
+    connects most directly to existing direct-report data), individual tab
+    sub-grouped by direct report, add-goal form (title/level/direct report
+    when individual/parent goal/status/due date/description), inline status
+    select per goal (the field that changes constantly), delete.
+  - `frontend/app/app/reports/[id]/page.tsx`: new "Goals" section between
+    Expectations and Open Commitments — summary/read surface only, links out
+    to `/app/goals` for actual create/edit/delete.
+  - `frontend/app/app/dashboard/page.tsx`: added a "Goals" link in the header
+    next to Settings.
+  - Saved the scoping decisions to a `goals_scoping` project memory note so
+    they carry into future sessions without re-litigating.
+
+**Decisions locked:**
+- See "What was done" above — placement, DR surfacing, hierarchy scope, and
+  the projects/rollup deferrals were all explicit calls made with Andrew
+  before code was written.
+- `goals`/`projects` RLS is owner_id-scoped, not org-scoped, despite the
+  policy names — documented in `goals.py`'s module docstring and
+  ENGINEERING.md's RLS section so the next session doesn't get confused by
+  the "_all_own_org" naming.
+
+**Next step:**
+Not yet dogfooded — no live Supabase run happened in this session (no DB
+access from here; Andrew runs `npm run build` / applies against his own
+Supabase instance from his machine). First real next step is Andrew trying
+the Goals page end to end (create a goal at each level, confirm the
+individual-tab grouping and inline status updates feel right) and reporting
+back before any further Goals work (e.g. activating `projects`, or building
+toward the rollup/status-calculation concept) gets scoped.
+
+---
+
 ## Session 9 — 2026-08-02
 
 **Goal:** Give managers access to past 1:1 activity from the DR detail page —
