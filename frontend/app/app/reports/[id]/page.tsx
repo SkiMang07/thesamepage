@@ -8,6 +8,7 @@ import {
   getOneOnOneHistory,
   getCommitments,
   getGoals,
+  getProjects,
   updateCommitment,
   deleteOneOnOne,
   expectationName,
@@ -17,8 +18,11 @@ import {
   Expectation,
   Goal,
   GoalStatus,
+  Project,
 } from "@/lib/api";
 
+// Projects reuses Goals' status enum/styles — same shape (active/on_track/
+// at_risk/completed/cancelled).
 const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
   active: "Active",
   on_track: "On track",
@@ -75,6 +79,7 @@ export default function ReportDetailPage() {
   const [history, setHistory] = useState<OneOnOne[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [showResolved, setShowResolved] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
@@ -87,12 +92,14 @@ export default function ReportDetailPage() {
       getOneOnOneHistory(id),
       getCommitments({ directReportId: id }),
       getGoals({ directReportId: id }),
+      getProjects({ directReportId: id }),
     ])
-      .then(([dr, h, c, g]) => {
+      .then(([dr, h, c, g, p]) => {
         setReport(dr);
         setHistory(h);
         setCommitments(c);
         setGoals(g);
+        setProjects(p);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -239,6 +246,52 @@ export default function ReportDetailPage() {
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${GOAL_STATUS_STYLES[g.status]}`}>
                     {GOAL_STATUS_LABELS[g.status]}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Projects — same always-visible pattern as Goals (Session 13; also
+          settles Goals' previously-unconfirmed hidden-vs-visible question
+          the same direction). Summary/read surface only: creating and
+          editing projects happens on the dedicated Projects page. */}
+      <div className="mt-10">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+            Projects{projects.length > 0 && ` (${projects.length})`}
+          </h2>
+          <Link href="/app/projects" className="text-xs text-gray-400 hover:text-gray-600">
+            Manage projects →
+          </Link>
+        </div>
+
+        {projects.length === 0 ? (
+          <p className="mt-4 text-gray-500">
+            No projects assigned yet.{" "}
+            <Link href="/app/projects" className="underline hover:text-gray-700">
+              Add one from the Projects page
+            </Link>
+            .
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {projects.map((p) => (
+              <li key={p.id} className="rounded-lg border border-gray-200 px-4 py-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{p.title}</p>
+                    {p.goal_title && (
+                      <p className="mt-0.5 text-xs text-gray-400">Supports goal: {p.goal_title}</p>
+                    )}
+                    {p.due_date && (
+                      <p className="mt-0.5 text-xs text-gray-400">Due {formatDate(p.due_date + "T00:00:00")}</p>
+                    )}
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${GOAL_STATUS_STYLES[p.status]}`}>
+                    {GOAL_STATUS_LABELS[p.status]}
                   </span>
                 </div>
               </li>

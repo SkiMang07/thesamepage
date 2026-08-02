@@ -98,6 +98,8 @@ one_on_ones          -- 1:1 logs; notes private to writing manager (RLS)
 commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id
 goals                -- activated Session 10; parent_goal_id self-ref; level: company/department/team/individual;
                         org_unit_id (Session 11) names which specific team/department a team/dept goal is for
+projects             -- activated Session 13; goal_id (optional, on delete set null) + direct_report_id (optional,
+                        on delete cascade). No level/org_unit_id of its own — "goals=what, projects=how"
 subscriptions        -- Stripe billing
 ```
 
@@ -127,9 +129,8 @@ value_assessments    -- per-value score per direct report
 metric_entries       -- time-series metric data per direct report
 ```
 
-**Projects / development plans (still dormant):**
+**Development plans (still dormant):**
 ```
-projects             -- connected to a goal or standalone; goals=what, projects=how
 development_plans    -- one per direct report
 dev_plan_aspirations    -- career aspiration: desired role/path + timeline
 dev_plan_opportunities  -- areas of opportunity: skills + knowledge
@@ -148,10 +149,9 @@ dev_plan_manager_notes  -- private to manager
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
 **Build order still matters** — don't implement the competency/assessment
-layer until it's actually needed. Goals shipped in Session 10 (the core 1:1
-prep + commitments flow was working and in Andrew's hands first, per the
-original rule); `projects` is the next candidate in this family but is
-explicitly still dormant.
+layer until it's actually needed. Goals shipped in Session 10, Org shipped in
+Session 11, Projects shipped in Session 13 (the core 1:1 prep + commitments
+flow was working and in Andrew's hands first, per the original rule).
 
 Things explicitly not yet built:
 - Stripe webhook handler + subscription-gating middleware
@@ -163,10 +163,12 @@ Things explicitly not yet built:
   hierarchy (Session 11) — role-scoped views are the natural next payoff for
   having real org_units, but weren't built this pass.
 - IC login (user_id on direct_reports is nullable as a future hook)
-- `projects` table (goals' sibling — "goals=what, projects=how")
+- Commitments → project linking (`source_type='project'`, already in
+  schema.sql's check constraint) — Projects (Session 13) shipped CRUD only,
+  same scope discipline as Goals shipping without rollup calculation
 - Goal rollup/status calculation (a parent goal's status computed from its
   children's) — PRODUCT_VISION.md's concept, not built; `goals.status` is a
-  plain manually-set field today
+  plain manually-set field today. Same is true of `projects.status`.
 - `role_levels.functional_team` data migration — the column stays in the
   schema (not dropped) but the UI stopped writing/showing it as of Session
   11; existing free-text values are not backfilled into org_units.
@@ -190,6 +192,7 @@ backend/
     one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet), POST /wrapup (notes → draft log)
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10)
+    projects.py          GET/POST/PUT/PATCH/DELETE /api/projects — goal_id + direct_report_id, no level (Session 13)
     org_units.py         GET/POST/PUT/DELETE /api/org-units — team/department tree (Session 11)
     settings.py         /api/settings — profile, role-levels, expectations
 
@@ -199,6 +202,7 @@ frontend/
     app/dashboard/      Auth-gated app shell
     app/login/          Login page
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
+    app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)
     app/org/            Org builder — own top-level page, tree (build/edit) + read-only chart (Session 11)
   lib/
     api.ts              All fetch() calls live here

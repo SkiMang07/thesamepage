@@ -177,8 +177,8 @@ export const updateCommitment = (id: string, status: "open" | "done" | "dropped"
 // ---------------------------------------------------------------------------
 // Goals (Session 10) — full company/department/team/individual hierarchy.
 // Own top-level page (/app/goals), not Settings — see docs/SESSION_HISTORY.md.
-// `projects` stays dormant; no rollup/status calculation yet (status is
-// manually set).
+// `projects` activated in Session 13; no rollup/status calculation yet
+// (status is manually set).
 // ---------------------------------------------------------------------------
 
 export type GoalLevel = "company" | "department" | "team" | "individual";
@@ -241,6 +241,63 @@ export const updateGoalStatus = (id: string, status: GoalStatus): Promise<Goal> 
 
 export const deleteGoal = (id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/goals/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Projects (Session 13) — "goals = what, projects = how" (PRODUCT_VISION.md).
+// Own top-level page (/app/projects), same "written to regularly" reasoning
+// as Goals. Optionally linked to a goal (goal_id) and/or a direct report
+// (direct_report_id) — both nullable, a project can be standalone. No
+// level/org_unit_id of its own: scope is derived from whatever it's linked
+// to rather than duplicating goals' hierarchy fields. Commitments -> project
+// linking (source_type='project', already in schema) stays deferred.
+// ---------------------------------------------------------------------------
+
+export type ProjectStatus = GoalStatus; // same enum shape (active/on_track/at_risk/completed/cancelled)
+
+export type Project = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: ProjectStatus;
+  due_date: string | null;
+  direct_report_id: string | null;
+  direct_report_name?: string | null;
+  goal_id: string | null;
+  // Only populated when goals.py's join resolves it — see projects.py's
+  // _shape_rows.
+  goal_title?: string | null;
+  created_at: string;
+};
+
+export type ProjectIn = {
+  title: string;
+  description?: string | null;
+  status?: ProjectStatus;
+  due_date?: string | null;
+  direct_report_id?: string | null;
+  goal_id?: string | null;
+};
+
+export const getProjects = (params?: { directReportId?: string; goalId?: string; status?: ProjectStatus }): Promise<Project[]> => {
+  const q = new URLSearchParams();
+  if (params?.directReportId) q.set("direct_report_id", params.directReportId);
+  if (params?.goalId) q.set("goal_id", params.goalId);
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
+  return authedFetch(`/api/projects${qs ? `?${qs}` : ""}`);
+};
+
+export const createProject = (body: ProjectIn): Promise<Project> =>
+  authedFetch("/api/projects", { method: "POST", body: JSON.stringify(body) });
+
+export const updateProject = (id: string, body: ProjectIn): Promise<Project> =>
+  authedFetch(`/api/projects/${id}`, { method: "PUT", body: JSON.stringify(body) });
+
+export const updateProjectStatus = (id: string, status: ProjectStatus): Promise<Project> =>
+  authedFetch(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+
+export const deleteProject = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/projects/${id}`, { method: "DELETE" });
 
 // ---------------------------------------------------------------------------
 // Org units (Session 11) — team/department entities with parent/child

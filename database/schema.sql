@@ -415,16 +415,23 @@ alter table goals enable row level security;
 -- ============================================================
 
 create table projects (
-  id          uuid primary key default uuid_generate_v4(),
-  org_id      uuid references organizations(id) on delete cascade,
-  title       text not null,
-  description text,
-  goal_id     uuid references goals(id) on delete set null,
-  owner_id    uuid references auth.users(id),
-  status      text not null default 'active'
-              check (status in ('active', 'on_track', 'at_risk', 'completed', 'cancelled')),
-  due_date    date,
-  created_at  timestamptz not null default now()
+  id                uuid primary key default uuid_generate_v4(),
+  org_id            uuid references organizations(id) on delete cascade,
+  title             text not null,
+  description       text,
+  goal_id           uuid references goals(id) on delete set null,
+  -- Activated Session 13 (was null-only up to here). Which direct report
+  -- this project belongs to — null means it's the manager's own initiative.
+  -- Deliberately NOT given its own level/org_unit_id like goals: a project's
+  -- scope is derived from whatever it's linked to (its goal's level, or the
+  -- direct report it's assigned to, or nothing for a standalone manager
+  -- initiative) rather than duplicating goals' hierarchy fields.
+  direct_report_id  uuid references direct_reports(id) on delete cascade,
+  owner_id          uuid references auth.users(id),
+  status            text not null default 'active'
+                    check (status in ('active', 'on_track', 'at_risk', 'completed', 'cancelled')),
+  due_date          date,
+  created_at        timestamptz not null default now()
 );
 
 alter table projects enable row level security;

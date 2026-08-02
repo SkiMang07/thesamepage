@@ -45,6 +45,7 @@ or UX patterns. Starts minimal — add decisions here as they get locked.
 /app/dashboard              frontend/app/app/dashboard/page.tsx
 /app/reports/[id]           frontend/app/app/reports/[id]/page.tsx
 /app/goals                  frontend/app/app/goals/page.tsx
+/app/projects               frontend/app/app/projects/page.tsx
 /app/org                    frontend/app/app/org/page.tsx
 /app/settings               frontend/app/app/settings/page.tsx
 ```
@@ -77,5 +78,10 @@ SEO. Do not add client-side-only patterns to these pages.
 | 2026-08-02 | Org-chart builder is a hybrid: a nested tree to add/edit/delete units and set parents, plus a separate read-only visual chart rendered from the same data | Andrew's explicit call over a true drag-and-drop canvas, which would require adding the app's first UI dependency (a diagramming library). The chart view uses styled-jsx (ships with Next.js) for a pure-CSS nested-list chart — no new dependency either way |
 | 2026-08-02 | "Company" is not a stored `org_units` row — the chart root is the existing `organizations.name` (Settings → Profile & Company), with top-level departments (`parent_unit_id` null) branching directly off it | Avoids a row that would just duplicate what `organizations` already represents; proposed by Claude during scoping, confirmed by Andrew before building |
 | 2026-08-02 | Settings' Roles & Levels form drops the free-text "Team (optional)" input, and `roleLabel()` stops appending `functional_team` to the role display | Session 11: team/department is now a structured `org_unit_id` on the direct report, not free text on the role template — keeping both would let them disagree. The "Who's in which role" list gets a second picker (org unit) next to the existing role picker |
+| 2026-08-02 | Projects gets its own top-level page (`/app/projects`), not a tab on Goals | Session 13, same reasoning as Goals' own placement — projects get created and status-updated regularly |
+| 2026-08-02 | Projects gets no `level`/`org_unit_id` of its own, unlike Goals | Per PRODUCT_VISION.md's "goals = what, projects = how" — a project's scope is derived from whatever it's linked to (its goal's level, or the report it's assigned to), not a duplicated parallel hierarchy. Revisit if a project ever needs independent scope (e.g. team-level with no goal attached) |
+| 2026-08-02 | Projects list groups by assignee ("Your initiatives" first, then one group per direct report), same visual pattern as Goals' individual-level grouping | Keeps the list from turning into one flat wall once a manager has projects both of their own and delegated to reports |
+| 2026-08-02 | DR detail "Projects" section is always shown, with a one-line empty state + link when there are none — same pattern as Goals | Session 13 also resolves Goals' Session 10 open question ("hidden if empty" vs. always-visible) the same direction, since both are first-class objects like Commitments with no Settings prerequisite |
+| 2026-08-02 | Commitments → project linking (`source_type='project'`, already in schema.sql's check constraint) stays deferred | Same scope discipline as Goals shipping Session 10 without rollup calculation — activate the core object first, dogfood it, then decide if the cross-link earns its complexity |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_

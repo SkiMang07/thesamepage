@@ -11,6 +11,80 @@ Format per entry:
 
 ---
 
+## Session 13 — 2026-08-02
+
+**Goal:** Activate `projects` — the dormant table flagged as "the next
+candidate in this family" after Goals (Session 10) and Org (Session 11).
+Same "scope with Andrew first, then build" pattern as those sessions.
+
+**What was done:**
+- Read `PRODUCT_VISION.md`, `docs/DESIGN.md`, `docs/ENGINEERING.md`,
+  `database/schema.sql`, `backend/routes/goals.py`, `frontend/lib/api.ts`,
+  `frontend/app/app/goals/page.tsx`, and the reports/[id] detail page before
+  proposing anything, to see how Goals/Org's shape decisions applied to
+  Projects. Confirmed the Miro board tie-in: PRODUCT_VISION.md's Mission
+  Control cards "Key Initiatives" (active projects) and "Reports & Dashboard"
+  (linked projects/reports) map to this table; ENGINEERING.md's "goals=what,
+  projects=how" framing set the scoping approach.
+- Scoped with Andrew via AskUserQuestion before building:
+  - Own top-level page (`/app/projects`), same reasoning as Goals/Org.
+  - A project can be assigned to a specific direct report (new
+    `direct_report_id` column — the table didn't have one).
+  - DR detail page gets a Projects section, always-visible with an empty
+    state — same call also resolves Goals' Session 10 open question
+    (hidden-vs-always-visible) the same direction.
+  - Commitments → project linking (`source_type='project'`, already in
+    schema) stays deferred this pass.
+  - Deliberately did NOT give projects their own `level`/`org_unit_id` like
+    goals — a project's scope is derived from whatever it's linked to (its
+    goal's level, or the report it's assigned to), not a duplicated parallel
+    hierarchy. Flagged as easy to add later if a project ever needs
+    independent scope.
+- `database/schema.sql` + `database/migrations/2026-08-02_projects_direct_report.sql`
+  (new) — added `direct_report_id uuid references direct_reports(id) on
+  delete cascade` to `projects`. Everything else (`goal_id`, `status`,
+  `due_date`, RLS policy) already existed from the original 28-table build
+  (Session 3). **Migration not yet run against the live database.**
+- `backend/routes/projects.py` (new) — GET (filters: direct_report_id,
+  goal_id, status), POST, PUT, PATCH (status-only, mirrors goals.py), DELETE.
+  Registered in `main.py` under `/api/projects`. Joins `direct_reports(name)`
+  and `goals(title)` for display, same `_shape_rows` pattern as goals.py.
+- `frontend/lib/api.ts` — `Project`/`ProjectStatus`/`ProjectIn` types (status
+  reuses `GoalStatus`'s shape) + client functions incl. `updateProjectStatus`.
+- `frontend/app/app/projects/page.tsx` (new) — flat list grouped by assignee
+  ("Your initiatives" first, then one group per direct report), create form
+  (title, description, status, due date, optional assignee picker, optional
+  goal picker), inline status pill, edit-in-place (same card-swap pattern as
+  Goals), delete.
+- `frontend/app/app/dashboard/page.tsx` — "Projects" nav link added next to
+  Goals.
+- `frontend/app/app/reports/[id]/page.tsx` — new Projects section, always
+  visible with empty state, same visual pattern as the Goals section
+  immediately above it.
+- `docs/DESIGN.md`, `docs/ENGINEERING.md` — updated (decisions log, page
+  structure, schema table list, scope-discipline gaps, file map).
+
+**Decisions locked:** see above — all confirmed with Andrew via
+AskUserQuestion before building, same discipline as Sessions 10-12.
+
+**Verified:** `python3 -m py_compile` clean on all backend files;
+`python -c "import main"` succeeds and `/api/projects` (GET/POST/PUT/PATCH/
+DELETE) all appear in the generated OpenAPI schema. Frontend: assembled the
+full frontend project in the sandbox (`npm install`), `npx tsc --noEmit`
+clean, `npx next build` clean — `/app/projects` compiles and prerenders
+alongside all 13 other routes. No live Supabase run from the sandbox itself.
+
+**Next step:**
+Confirm Andrew ran `2026-08-02_projects_direct_report.sql` against live
+Supabase, then dogfood Projects the same way Goals surfaced its edit-button
+gap in Session 10 — expect small gaps to turn up from live use. Also worth
+revisiting once real usage exists: whether commitments → project linking
+earns its complexity, and whether the still-unconfirmed Session 10 Goals
+question (now effectively answered by this session's Projects DR-surfacing
+choice) needs an explicit sign-off from Andrew either way.
+
+---
+
 ## Session 12 — 2026-08-02
 
 **Goal:** Split "Team" out of Settings' Roles & Levels into its own section,
