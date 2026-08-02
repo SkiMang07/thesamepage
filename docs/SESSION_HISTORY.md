@@ -11,6 +11,57 @@ Format per entry:
 
 ---
 
+## Session 12 — 2026-08-02
+
+**Goal:** Split "Team" out of Settings' Roles & Levels into its own section,
+and add Edit (update-in-place) for role_levels — same "scope first" pattern
+as Goals/Org.
+
+**What was done:**
+- Confirmed shape with Andrew via AskUserQuestion before touching code:
+  - Team lands as a 4th item in Settings' existing left-nav (Profile &
+    Company, Roles & Levels, Team, Expectations) — not a new top-level page,
+    not a tab on `/app/org`.
+  - Everything moves: the "who's in which role" list AND the org_unit
+    (team/department) picker both move out of Roles & Levels into Team.
+    Roles & Levels becomes pure role_level CRUD.
+  - Edit uses the same card-swap edit-in-place pattern as Goals (Session
+    10) — clicking Edit swaps the role's card for the add-role form,
+    pre-filled, Save/Cancel in place — not a modal.
+- `frontend/app/app/settings/page.tsx`:
+  - Added `"team"` to `SectionId` and a 4th `SECTIONS` entry.
+  - Extracted `RoleForm` (shared by add and edit — `initialRole` prop
+    toggles edit mode), used by both the standing "Add role" form and the
+    new inline edit-in-place row.
+  - `RolesSection` is now pure role_level CRUD: list + Edit/Remove per row +
+    `RoleForm`. No longer takes `reports`/`orgUnits` props.
+  - New `TeamSection`: the "who's in which role" list + role picker + org
+    unit picker, moved verbatim out of the old `RolesSection`. Takes an
+    `onNavigateToRoles` callback (wired to `setSection("roles")`) so its
+    copy can point back at Roles & Levels without a real page navigation,
+    since both sections live inside the same client-state-driven Settings
+    page.
+  - No backend changes — `PUT /api/settings/role-levels/{id}`
+    (`update_role_level`) and `updateRoleLevel()` in `lib/api.ts` already
+    existed from earlier work and were simply wired up for the first time.
+- Verified via `tsc --noEmit` and `next build` (both clean) before writing
+  the file back to Andrew's machine.
+
+**Decisions locked:**
+- Team is a Settings sub-page, not a top-level nav item and not folded into
+  Org — it's about "who does what," which Andrew judged closer to
+  configuration than to org structure/goals.
+- Role assignment + team assignment travel together as one section (Team),
+  not split further.
+
+**Next step:**
+Confirm the Session 11 `org_units` migration
+(`database/migrations/2026-08-02_org_units.sql`) has actually been run
+against live Supabase — still unconfirmed as of this session's start. No
+other open threads from this session.
+
+---
+
 ## Session 11 — 2026-08-02
 
 **Goal:** Design (then build) an org hierarchy data model — team/department/

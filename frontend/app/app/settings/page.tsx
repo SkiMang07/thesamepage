@@ -1,8 +1,13 @@
 "use client";
 
 // Settings — the configuration backbone (Session 6).
-// Three sections agreed from the Miro Settings mockup review (2026-08-01):
-//   1. Profile & Company   2. Roles & Levels   3. Expectations
+// Four sections as of Session 12 (originally three from the Miro mockup
+// review, 2026-08-01): Profile & Company, Roles & Levels, Team, Expectations.
+// "Team" split out of Roles & Levels in Session 12 — the "who's in which
+// role" list + org_unit assignment moved to their own section; Roles &
+// Levels is now pure role_level CRUD (add/edit/delete role definitions).
+// Session 12 also added Edit (update-in-place) for role_levels, matching
+// the card-swap edit-in-place pattern from Goals (Session 10).
 // Deferred: evaluation weighting, scale definitions, capacity/recruitment,
 // project settings, permissions (all department-tier — see SESSION_HISTORY).
 
@@ -28,13 +33,15 @@ import {
   getProfile,
   getRoleLevels,
   updateProfile,
+  updateRoleLevel,
 } from "@/lib/api";
 
-type SectionId = "profile" | "roles" | "expectations";
+type SectionId = "profile" | "roles" | "team" | "expectations";
 
 const SECTIONS: { id: SectionId; label: string; blurb: string }[] = [
   { id: "profile", label: "Profile & Company", blurb: "You and your company" },
   { id: "roles", label: "Roles & Levels", blurb: "The jobs on your team" },
+  { id: "team", label: "Team", blurb: "Who's on which team" },
   { id: "expectations", label: "Expectations", blurb: "What good looks like" },
 ];
 
@@ -103,9 +110,17 @@ export default function SettingsPage() {
             <RolesSection
               roleLevels={roleLevels}
               setRoleLevels={setRoleLevels}
+              setReports={setReports}
+              onError={setError}
+            />
+          )}
+          {section === "team" && (
+            <TeamSection
               reports={reports}
               setReports={setReports}
+              roleLevels={roleLevels}
               orgUnits={orgUnits}
+              onNavigateToRoles={() => setSection("roles")}
               onError={setError}
             />
           )}
@@ -182,13 +197,15 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// Section 2 — Roles & Levels (+ assigning your reports to them)
+// Section 2 — Roles & Levels (role_level CRUD only, as of Session 12 —
+// "who's in which role" + org_unit assignment moved to TeamSection below)
 // ---------------------------------------------------------------------------
 
 function roleLabel(rl: RoleLevel) {
   // functional_team (free text) dropped from the label as of Session 11 —
   // "which team" now lives on the direct report as a structured org_unit_id,
-  // shown separately below. The column stays in the schema, just unused here.
+  // shown separately in TeamSection. The column stays in the schema, just
+  // unused here.
   return `${rl.job_role} · L${rl.job_level}`;
 }
 
@@ -196,45 +213,139 @@ function orgUnitLabel(ou: OrgUnit) {
   return `${ou.unit_type === "department" ? "Department" : "Team"} · ${ou.name}`;
 }
 
+type RoleFormValues = {
+  jobRole: string;
+  jobLevel: number;
+  responsibilities: string;
+};
+
+// Shared by "Add role" and "Edit role" — same card-swap edit-in-place
+// pattern as Goals' GoalForm (Session 10). initialRole present -> edit mode.
+function RoleForm({
+  initialRole,
+  onCancel,
+  onSubmit,
+  submitLabel,
+  savingLabel,
+}: {
+  initialRole?: RoleLevel | null;
+  onCancel?: () => void;
+  onSubmit: (input: RoleFormValues) => Promise<void>;
+  submitLabel: string;
+  savingLabel: string;
+}) {
+  const [jobRole, setJobRole] = useState(initialRole?.job_role ?? "");
+  const [jobLevel, setJobLevel] = useState(initialRole?.job_level ?? 1);
+  const [responsibilities, setResponsibilities] = useState(initialRole?.job_responsibilities ?? "");
+  const [saving, setSaving] = useState(false);
+  const isEdit = !!initialRole;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!jobRole.trim() || saving) return;
+    setSaving(true);
+    try {
+      await onSubmit({ jobRole: jobRole.trim(), jobLevel, responsibilities: responsibilities.trim() });
+      if (!isEdit) {
+        setJobRole("");
+        setResponsibilities("");
+        setJobLevel(1);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className={labelCls}>Role</label>
+          <input value={jobRole} onChange={(e) => setJobRole(e.target.value)} className={inputCls} placeholder="e.g. Customer Success Manager" />
+        </div>
+        <div className="w-24">
+          <label className={labelCls}>Level</label>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={jobLevel}
+            onChange={(e) => setJobLevel(parseInt(e.target.value || "1", 10))}
+            className={inputCls}
+          />
+        </div>
+      </div>
+      <div>
+        <label className={labelCls}>Responsibilities (optional)</label>
+        <textarea
+          value={responsibilities}
+          onChange={(e) => setResponsibilities(e.target.value)}
+          rows={2}
+          className={inputCls}
+          placeholder="What this role owns, in a sentence or two"
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <button type="submit" disabled={saving} className={primaryBtnCls}>
+          {saving ? savingLabel : submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-900">
+            Cancel
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
 function RolesSection({
   roleLevels,
   setRoleLevels,
-  reports,
   setReports,
-  orgUnits,
   onError,
 }: {
   roleLevels: RoleLevel[];
   setRoleLevels: React.Dispatch<React.SetStateAction<RoleLevel[]>>;
-  reports: DirectReport[];
   setReports: React.Dispatch<React.SetStateAction<DirectReport[]>>;
-  orgUnits: OrgUnit[];
   onError: (m: string | null) => void;
 }) {
-  const [jobRole, setJobRole] = useState("");
-  const [jobLevel, setJobLevel] = useState(1);
-  const [responsibilities, setResponsibilities] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
 
-  async function addRole(e: React.FormEvent) {
-    e.preventDefault();
-    if (!jobRole.trim() || adding) return;
-    setAdding(true);
+  async function addRole(input: RoleFormValues) {
     try {
       const created = await createRoleLevel({
-        job_role: jobRole.trim(),
-        job_level: jobLevel,
-        job_responsibilities: responsibilities.trim() || undefined,
+        job_role: input.jobRole,
+        job_level: input.jobLevel,
+        job_responsibilities: input.responsibilities || undefined,
       });
       setRoleLevels((r) => [...r, created]);
-      setJobRole("");
-      setResponsibilities("");
-      setJobLevel(1);
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to add role");
-    } finally {
-      setAdding(false);
+    }
+  }
+
+  // Takes the full role, not just its id, so the PUT (which replaces the
+  // whole role_levels row server-side) can carry the existing
+  // functional_team through unchanged. RoleForm doesn't expose that field
+  // (deprecated in favor of org_unit_id since Session 11), so without this
+  // an edit would silently null it out for any role that still has one set
+  // from before Session 11 — same "read, tweak one field, PUT the whole
+  // record" preservation pattern as assignReportRole/assignReportOrgUnit.
+  async function saveEdit(role: RoleLevel, input: RoleFormValues) {
+    try {
+      const updated = await updateRoleLevel(role.id, {
+        job_role: input.jobRole,
+        job_level: input.jobLevel,
+        job_responsibilities: input.responsibilities || undefined,
+        functional_team: role.functional_team ?? undefined,
+      });
+      setRoleLevels((r) => r.map((x) => (x.id === role.id ? updated : x)));
+      onError(null);
+      setEditingRoleId(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to save role");
     }
   }
 
@@ -242,12 +353,90 @@ function RolesSection({
     try {
       await deleteRoleLevel(id);
       setRoleLevels((r) => r.filter((x) => x.id !== id));
+      // Mirrors the backend's own cascade (delete_role_level nulls
+      // direct_reports.role_level_id server-side) so the Team section's
+      // already-loaded `reports` state doesn't show a stale role pointing
+      // at a role_level that no longer exists until the next full reload.
       setReports((rs) => rs.map((r) => (r.role_level_id === id ? { ...r, role_level_id: null } : r)));
+      setEditingRoleId((current) => (current === id ? null : current));
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to delete role");
     }
   }
 
+  return (
+    <div>
+      <h2 className="font-medium text-gray-900">Roles on your team</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        A role + level is the anchor everything else attaches to — expectations now, ratings later. Assigning
+        people to roles and teams now lives in <span className="font-medium text-gray-700">Team</span>.
+      </p>
+
+      <ul className="mt-4 space-y-2">
+        {roleLevels.map((rl) =>
+          rl.id === editingRoleId ? (
+            <li key={rl.id}>
+              <RoleForm
+                initialRole={rl}
+                onCancel={() => setEditingRoleId(null)}
+                onSubmit={(input) => saveEdit(rl, input)}
+                submitLabel="Save changes"
+                savingLabel="Saving..."
+              />
+            </li>
+          ) : (
+            <li key={rl.id} className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900">{roleLabel(rl)}</p>
+                {rl.job_responsibilities && (
+                  <p className="mt-1 text-xs text-gray-500">{rl.job_responsibilities}</p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <button
+                  onClick={() => setEditingRoleId(rl.id)}
+                  className="text-xs text-gray-400 hover:text-gray-700"
+                  title="Edit role"
+                >
+                  Edit
+                </button>
+                <button onClick={() => removeRole(rl.id)} className="text-xs text-gray-400 hover:text-red-500" title="Delete role">
+                  Remove
+                </button>
+              </div>
+            </li>
+          )
+        )}
+        {roleLevels.length === 0 && (
+          <p className="py-2 text-sm text-gray-500">No roles yet. Add the first role on your team below.</p>
+        )}
+      </ul>
+
+      <RoleForm onSubmit={addRole} submitLabel="Add role" savingLabel="Adding..." />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section — Team (Session 12): "who's in which role" + org_unit assignment,
+// split out of Roles & Levels so that section can stay pure role_level CRUD.
+// ---------------------------------------------------------------------------
+
+function TeamSection({
+  reports,
+  setReports,
+  roleLevels,
+  orgUnits,
+  onNavigateToRoles,
+  onError,
+}: {
+  reports: DirectReport[];
+  setReports: React.Dispatch<React.SetStateAction<DirectReport[]>>;
+  roleLevels: RoleLevel[];
+  orgUnits: OrgUnit[];
+  onNavigateToRoles: () => void;
+  onError: (m: string | null) => void;
+}) {
   async function assign(report: DirectReport, roleLevelId: string) {
     try {
       const updated = await assignReportRole(report.id, report, roleLevelId || null);
@@ -267,114 +456,60 @@ function RolesSection({
   }
 
   return (
-    <div className="space-y-10">
-      <div>
-        <h2 className="font-medium text-gray-900">Roles on your team</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          A role + level is the anchor everything else attaches to — expectations now, ratings later.
-        </p>
-
-        <ul className="mt-4 space-y-2">
-          {roleLevels.map((rl) => (
-            <li key={rl.id} className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">{roleLabel(rl)}</p>
-                {rl.job_responsibilities && (
-                  <p className="mt-1 text-xs text-gray-500">{rl.job_responsibilities}</p>
-                )}
-              </div>
-              <button onClick={() => removeRole(rl.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
-                Remove
-              </button>
-            </li>
-          ))}
-          {roleLevels.length === 0 && (
-            <p className="py-2 text-sm text-gray-500">No roles yet. Add the first role on your team below.</p>
-          )}
-        </ul>
-
-        <form onSubmit={addRole} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className={labelCls}>Role</label>
-              <input value={jobRole} onChange={(e) => setJobRole(e.target.value)} className={inputCls} placeholder="e.g. Customer Success Manager" />
+    <div>
+      <h2 className="font-medium text-gray-900">Who&apos;s in which role</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Connect each direct report to a role (defined in{" "}
+        <button onClick={onNavigateToRoles} className="underline">
+          Roles &amp; Levels
+        </button>
+        ) so their expectations follow them, and to a team/department (set up in{" "}
+        <Link href="/app/org" className="underline">
+          Org
+        </Link>
+        ) so goals and reporting can be scoped correctly.
+      </p>
+      <ul className="mt-4 space-y-2">
+        {reports.map((r) => (
+          <li key={r.id} className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-900">{r.name}</p>
+              {r.role_title && <p className="text-xs text-gray-500">{r.role_title}</p>}
             </div>
-            <div className="w-24">
-              <label className={labelCls}>Level</label>
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={jobLevel}
-                onChange={(e) => setJobLevel(parseInt(e.target.value || "1", 10))}
-                className={inputCls}
-              />
+            <div className="flex shrink-0 items-center gap-2">
+              <select
+                value={r.role_level_id ?? ""}
+                onChange={(e) => assign(r, e.target.value)}
+                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">No role assigned</option>
+                {roleLevels.map((rl) => (
+                  <option key={rl.id} value={rl.id}>
+                    {roleLabel(rl)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={r.org_unit_id ?? ""}
+                onChange={(e) => assignOrgUnit(r, e.target.value)}
+                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">No team assigned</option>
+                {orgUnits.map((ou) => (
+                  <option key={ou.id} value={ou.id}>
+                    {orgUnitLabel(ou)}
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
-          <div>
-            <label className={labelCls}>Responsibilities (optional)</label>
-            <textarea
-              value={responsibilities}
-              onChange={(e) => setResponsibilities(e.target.value)}
-              rows={2}
-              className={inputCls}
-              placeholder="What this role owns, in a sentence or two"
-            />
-          </div>
-          <button type="submit" disabled={adding} className={primaryBtnCls}>
-            {adding ? "Adding..." : "Add role"}
-          </button>
-        </form>
-      </div>
-
-      <div>
-        <h2 className="font-medium text-gray-900">Who&apos;s in which role</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Connect each direct report to a role so their expectations follow them, and to a team/department (set up
-          in <Link href="/app/org" className="underline">Org</Link>) so goals and reporting can be scoped correctly.
-        </p>
-        <ul className="mt-4 space-y-2">
-          {reports.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">{r.name}</p>
-                {r.role_title && <p className="text-xs text-gray-500">{r.role_title}</p>}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <select
-                  value={r.role_level_id ?? ""}
-                  onChange={(e) => assign(r, e.target.value)}
-                  className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                >
-                  <option value="">No role assigned</option>
-                  {roleLevels.map((rl) => (
-                    <option key={rl.id} value={rl.id}>
-                      {roleLabel(rl)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={r.org_unit_id ?? ""}
-                  onChange={(e) => assignOrgUnit(r, e.target.value)}
-                  className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                >
-                  <option value="">No team assigned</option>
-                  {orgUnits.map((ou) => (
-                    <option key={ou.id} value={ou.id}>
-                      {orgUnitLabel(ou)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </li>
-          ))}
-          {reports.length === 0 && (
-            <p className="py-2 text-sm text-gray-500">
-              No direct reports yet — add them from your <Link href="/app/dashboard" className="underline">dashboard</Link> first.
-            </p>
-          )}
-        </ul>
-      </div>
+          </li>
+        ))}
+        {reports.length === 0 && (
+          <p className="py-2 text-sm text-gray-500">
+            No direct reports yet — add them from your <Link href="/app/dashboard" className="underline">dashboard</Link> first.
+          </p>
+        )}
+      </ul>
     </div>
   );
 }
