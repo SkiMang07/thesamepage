@@ -11,6 +11,115 @@ Format per entry:
 
 ---
 
+## Session 14 — 2026-08-02
+
+**Goal:** Capacity model and planning — Andrew's own framing: help managers/
+dept heads understand team bandwidth, and codify how much "work" a team,
+individual, or department can actually handle. Flagged up front as critical/
+high-powered/complex, and correctly so — it's the "Capacity & Recruitment"
+Settings tab deferred back in Session 6 as department-tier and premature for
+a solo-manager MVP, now revisited with real org_units (Session 11) in place.
+
+**What was done:**
+- Read `docs/SESSION_HISTORY.md`, `PRODUCT_VISION.md`, `docs/ENGINEERING.md`,
+  `docs/DESIGN.md`, `database/schema.sql`, and the settings/org_units/goals/
+  projects routers + pages before proposing anything, plus the
+  `settings_page`/`org_hierarchy_scoping`/`goals_scoping`/`projects_scoping`
+  project memory notes. Confirmed via grep that `mockup.html` doesn't contain
+  the original Miro "Capacity & Recruitment" frame — that mockup was never
+  staged into this repo, only referenced in the Session 6 memory note.
+- Proposed the core framing directly to Andrew before any AskUserQuestion:
+  hours as the shared currency under the hood (so individual → team →
+  department rollups stay mathematically honest), with a thin per-role
+  translation layer on top so support can still see tickets and eng can
+  still see story points. Also proposed the "max capacity isn't 100%"
+  baseline (contracted hours × target utilization, minus time off) and
+  flagged that true department/org rollup needs cross-manager visibility,
+  which the app doesn't have today (`direct_reports` is strictly
+  `manager_id = auth.uid()`-scoped) — the same reason Capacity & Recruitment
+  got deferred as department-tier back in Session 6.
+- Scoped with Andrew via two rounds of AskUserQuestion (7 questions total)
+  before building:
+  1. **Currency:** hours underneath, per-role unit translation on top
+     (not native-units-only, not hours-with-no-translation).
+  2. **Demand:** supply only for v1 — no allocation/demand tracking against
+     Projects/Goals this pass. Explicit, acknowledged follow-up.
+  3. **Rollup scope:** Andrew chose full department/org rollup now, not
+     "just my own team" — overriding the more conservative default. This
+     drove the second round of questions below.
+  4. **Placement:** own top-level page (`/app/capacity`), same reasoning as
+     Goals/Projects/Org.
+  5. **Rollup source:** by the `org_units` tree, not the manager-reporting
+     chain (`users.manager_id`) — matches how Goals/Org already treat
+     org_units as the real structure.
+  6. **Cross-team privacy:** aggregated numbers only outside your own team —
+     a viewer never sees another manager's individual reports by name.
+  7. **Current usage:** solo manager today; this is being built ahead of
+     real multi-manager data, same as `org_units` was in Session 11.
+- **My call, flagged not re-asked** (same pattern as Projects' Session 13
+  scope note): the department/org rollup is implemented as a SECURITY
+  DEFINER SQL function (`org_unit_capacity_rollup()`) whose return shape is
+  aggregate-only by construction (org_unit_id + count + summed hours) —
+  this satisfies "aggregate outside your own team" without building a new
+  per-org-unit permissions system, which has nothing real to test against
+  yet (answer to question 7). `direct_reports`/`capacity_profiles`/
+  `time_off_entries` all stay exactly as manager-scoped as everything else
+  in the app; this function is the one deliberate, narrow exception,
+  mirroring how `current_org_id()` already works.
+
+**What got built (same session, right after scoping):**
+- `database/schema.sql` + `database/migrations/2026-08-02_capacity.sql`
+  (new) — four tables (`capacity_settings` org-wide defaults,
+  `capacity_profiles` per-report override, `time_off_entries`,
+  `work_unit_configs` per-role-level translation) + RLS policies +
+  `org_unit_capacity_rollup()`. **Migration not yet run against the live
+  database** — nothing in this feature works until Andrew runs it in the
+  Supabase SQL editor.
+- `backend/routes/capacity.py` (new) — settings CRUD, work-unit CRUD,
+  per-report profile GET/PUT (upsert), time-off CRUD, `/overview` (the
+  caller's own team, computed in Python — RLS already scopes this) and
+  `/rollup` (calls the SQL function, joins with `org_units` for display
+  names). Registered in `main.py` under `/api/capacity`. The overview and
+  rollup formulas must be kept in sync by hand — documented with a
+  cross-reference comment in both this file and `schema.sql`.
+- `frontend/lib/api.ts` — `CapacitySettings`/`CapacityProfile`/
+  `TimeOffEntry`/`WorkUnitConfig`/`CapacityOverviewItem`/
+  `CapacityRollupItem` types + CRUD + fetch functions.
+- `frontend/app/app/capacity/page.tsx` (new) — week/month/quarter period
+  selector with prev/next paging, "Your team" (full detail, your own
+  reports) and "By department" (aggregate-only, org_units tree walked and
+  summed bottom-up client-side — same approach the Org page already uses
+  for its chart).
+- `frontend/app/app/settings/page.tsx` — new "Capacity" section (org-wide
+  contracted-hours/utilization defaults + work-unit-per-role config),
+  following the existing "configured once" pattern from Roles & Levels /
+  Expectations.
+- `frontend/app/app/reports/[id]/page.tsx` — new Capacity section:
+  per-person override form (blank = inherit org default) + time-off log
+  (add/list/remove), placed after Expectations since it's baseline-setup
+  in the same spirit, not a regularly-updated object like Goals/Projects.
+- `frontend/app/app/dashboard/page.tsx` — "Capacity" nav link added.
+- Docs updated: this entry, `docs/ENGINEERING.md`, `docs/DESIGN.md`.
+
+**Verification:** `python3 -m py_compile` clean on all touched/new backend
+files; imported `main.py` in a sandboxed venv with dummy env vars and
+confirmed all 9 `/api/capacity/*` routes register. Frontend: assembled the
+full frontend project in the sandbox (`npm install`), `npx tsc --noEmit`
+clean, `npx next build` clean — `/app/capacity` compiles and prerenders
+alongside all 14 routes.
+
+**How to apply:** next session should (1) confirm Andrew ran
+`2026-08-02_capacity.sql` against live Supabase, (2) once live, set org
+defaults in Settings > Capacity and try the per-report override + time-off
+flow on a real report, (3) revisit whether v1's "supply only" framing is
+still right once there's real usage — wiring capacity into Projects/Goals
+as an actual allocation/demand view is the natural next payoff, same as how
+role-scoped views are the flagged next step for `org_units`. Also worth a
+second look once there's a real second manager: today's department/org
+rollup has no real cross-manager data to prove itself against yet.
+
+---
+
 ## Session 13 — 2026-08-02
 
 **Goal:** Activate `projects` — the dormant table flagged as "the next

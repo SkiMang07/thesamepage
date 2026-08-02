@@ -335,6 +335,115 @@ export const deleteOrgUnit = (id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/org-units/${id}`, { method: "DELETE" });
 
 // ---------------------------------------------------------------------------
+// Capacity (Session 14) — how much bandwidth each person/team/department
+// has. v1 is supply only (no allocation/demand tracking against Projects or
+// Goals yet). Hours are the shared currency; work_unit_configs is an
+// optional per-role-level display translation on top (tickets/points/
+// campaigns). Own top-level page (/app/capacity); org-wide defaults + work
+// unit setup live in Settings > Capacity ("configured once"); per-person
+// overrides + time off logging live on the DR detail page (used regularly).
+// See docs/SESSION_HISTORY.md and the capacity_scoping project memory note.
+// ---------------------------------------------------------------------------
+
+export type CapacitySettings = {
+  default_hours_per_week: number;
+  default_target_utilization_pct: number;
+};
+
+export const getCapacitySettings = (): Promise<CapacitySettings> => authedFetch("/api/capacity/settings");
+
+export const updateCapacitySettings = (body: CapacitySettings): Promise<CapacitySettings> =>
+  authedFetch("/api/capacity/settings", { method: "PUT", body: JSON.stringify(body) });
+
+export type WorkUnitConfig = {
+  id: string;
+  role_level_id: string;
+  unit_name: string;
+  hours_per_unit: number;
+};
+
+export const getWorkUnitConfigs = (): Promise<WorkUnitConfig[]> => authedFetch("/api/capacity/work-units");
+
+export const upsertWorkUnitConfig = (body: { role_level_id: string; unit_name: string; hours_per_unit: number }): Promise<WorkUnitConfig> =>
+  authedFetch("/api/capacity/work-units", { method: "POST", body: JSON.stringify(body) });
+
+export const deleteWorkUnitConfig = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/capacity/work-units/${id}`, { method: "DELETE" });
+
+// null fields = inherit the org default (capacity_settings).
+export const getCapacityProfile = (
+  directReportId: string
+): Promise<{ contracted_hours_per_week: number | null; target_utilization_pct: number | null }> =>
+  authedFetch(`/api/capacity/profiles/${directReportId}`);
+
+// null = inherit the org default (capacity_settings) for that field.
+export const setCapacityProfile = (
+  directReportId: string,
+  body: { contracted_hours_per_week: number | null; target_utilization_pct: number | null }
+): Promise<{ contracted_hours_per_week: number | null; target_utilization_pct: number | null }> =>
+  authedFetch(`/api/capacity/profiles/${directReportId}`, { method: "PUT", body: JSON.stringify(body) });
+
+export type TimeOffType = "pto" | "sick" | "holiday" | "other";
+
+export type TimeOffEntry = {
+  id: string;
+  direct_report_id: string;
+  start_date: string;
+  end_date: string;
+  type: TimeOffType;
+  hours_per_day: number | null;
+  notes: string | null;
+};
+
+export const getTimeOff = (directReportId?: string): Promise<TimeOffEntry[]> =>
+  authedFetch(`/api/capacity/time-off${directReportId ? `?direct_report_id=${directReportId}` : ""}`);
+
+export const createTimeOff = (body: {
+  direct_report_id: string;
+  start_date: string;
+  end_date: string;
+  type: TimeOffType;
+  hours_per_day?: number | null;
+  notes?: string | null;
+}): Promise<TimeOffEntry> => authedFetch("/api/capacity/time-off", { method: "POST", body: JSON.stringify(body) });
+
+export const deleteTimeOff = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/capacity/time-off/${id}`, { method: "DELETE" });
+
+// A resolved available-hours figure for one direct report over a period —
+// contracted hours/utilization already have profile overrides and org
+// defaults applied server-side; time off in the period already subtracted.
+export type CapacityOverviewItem = {
+  direct_report_id: string;
+  name: string;
+  role_title: string | null;
+  role_level_id: string | null;
+  org_unit_id: string | null;
+  contracted_hours_per_week: number;
+  target_utilization_pct: number;
+  time_off_hours: number;
+  available_hours: number;
+};
+
+export const getCapacityOverview = (periodStart: string, periodEnd: string): Promise<CapacityOverviewItem[]> =>
+  authedFetch(`/api/capacity/overview?period_start=${periodStart}&period_end=${periodEnd}`);
+
+// Aggregate-only rollup per org unit — never a named individual outside
+// your own team. The frontend walks the org_units tree and sums bottom-up
+// for department/company totals, same pattern as the Org page's chart.
+export type CapacityRollupItem = {
+  org_unit_id: string;
+  name: string;
+  unit_type: OrgUnitType;
+  parent_unit_id: string | null;
+  direct_report_count: number;
+  available_hours: number;
+};
+
+export const getCapacityRollup = (periodStart: string, periodEnd: string): Promise<CapacityRollupItem[]> =>
+  authedFetch(`/api/capacity/rollup?period_start=${periodStart}&period_end=${periodEnd}`);
+
+// ---------------------------------------------------------------------------
 // 1:1s
 // ---------------------------------------------------------------------------
 

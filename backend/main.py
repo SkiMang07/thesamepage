@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from config import settings
-from routes import commitments, direct_reports, goals, one_on_ones, org_units, projects, settings as settings_routes
+from routes import capacity, commitments, direct_reports, goals, one_on_ones, org_units, projects, settings as settings_routes
 
 app = FastAPI(title="The Same Page API")
 
@@ -23,6 +23,7 @@ app.include_router(commitments.router, prefix="/api/commitments", tags=["commitm
 app.include_router(goals.router, prefix="/api/goals", tags=["goals"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(org_units.router, prefix="/api/org-units", tags=["org-units"])
+app.include_router(capacity.router, prefix="/api/capacity", tags=["capacity"])
 app.include_router(settings_routes.router, prefix="/api/settings", tags=["settings"])
 
 

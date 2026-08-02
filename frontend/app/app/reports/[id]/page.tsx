@@ -9,6 +9,12 @@ import {
   getCommitments,
   getGoals,
   getProjects,
+  getCapacityProfile,
+  getCapacitySettings,
+  getTimeOff,
+  setCapacityProfile,
+  createTimeOff,
+  deleteTimeOff,
   updateCommitment,
   deleteOneOnOne,
   expectationName,
@@ -19,7 +25,17 @@ import {
   Goal,
   GoalStatus,
   Project,
+  CapacitySettings,
+  TimeOffEntry,
+  TimeOffType,
 } from "@/lib/api";
+
+const TIME_OFF_LABELS: Record<TimeOffType, string> = {
+  pto: "PTO",
+  sick: "Sick",
+  holiday: "Holiday",
+  other: "Other",
+};
 
 // Projects reuses Goals' status enum/styles — same shape (active/on_track/
 // at_risk/completed/cancelled).
@@ -86,6 +102,21 @@ export default function ReportDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Capacity (Session 14) — per-person override of the org baseline, plus
+  // this person's time off log. Read surface + edit both live here; there's
+  // no separate "manage capacity" page for a single person the way Goals/
+  // Projects have one, since this data is specific to this report.
+  const [capacitySettings, setCapacitySettings] = useState<CapacitySettings | null>(null);
+  const [contractedHours, setContractedHours] = useState<string>("");
+  const [utilizationPct, setUtilizationPct] = useState<string>("");
+  const [savingCapacity, setSavingCapacity] = useState(false);
+  const [capacitySaved, setCapacitySaved] = useState(false);
+  const [timeOff, setTimeOff] = useState<TimeOffEntry[]>([]);
+  const [addingTimeOff, setAddingTimeOff] = useState(false);
+  const [toStart, setToStart] = useState("");
+  const [toEnd, setToEnd] = useState("");
+  const [toType, setToType] = useState<TimeOffType>("pto");
+
   useEffect(() => {
     Promise.all([
       getDirectReport(id),
@@ -93,17 +124,68 @@ export default function ReportDetailPage() {
       getCommitments({ directReportId: id }),
       getGoals({ directReportId: id }),
       getProjects({ directReportId: id }),
+      getCapacityProfile(id),
+      getCapacitySettings(),
+      getTimeOff(id),
     ])
-      .then(([dr, h, c, g, p]) => {
+      .then(([dr, h, c, g, p, cp, cs, to]) => {
         setReport(dr);
         setHistory(h);
         setCommitments(c);
         setGoals(g);
         setProjects(p);
+        setContractedHours(cp.contracted_hours_per_week?.toString() ?? "");
+        setUtilizationPct(cp.target_utilization_pct?.toString() ?? "");
+        setCapacitySettings(cs);
+        setTimeOff(to);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  async function saveCapacityProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingCapacity(true);
+    setCapacitySaved(false);
+    try {
+      await setCapacityProfile(id, {
+        contracted_hours_per_week: contractedHours.trim() ? parseFloat(contractedHours) : null,
+        target_utilization_pct: utilizationPct.trim() ? parseFloat(utilizationPct) : null,
+      });
+      setCapacitySaved(true);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save capacity");
+    } finally {
+      setSavingCapacity(false);
+    }
+  }
+
+  async function addTimeOff(e: React.FormEvent) {
+    e.preventDefault();
+    if (!toStart || !toEnd || addingTimeOff) return;
+    setAddingTimeOff(true);
+    try {
+      const created = await createTimeOff({ direct_report_id: id, start_date: toStart, end_date: toEnd, type: toType });
+      setTimeOff((ts) => [created, ...ts]);
+      setToStart("");
+      setToEnd("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add time off");
+    } finally {
+      setAddingTimeOff(false);
+    }
+  }
+
+  async function removeTimeOff(entryId: string) {
+    try {
+      await deleteTimeOff(entryId);
+      setTimeOff((ts) => ts.filter((t) => t.id !== entryId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove time off");
+    }
+  }
 
   async function setStatus(commitmentId: string, status: Commitment["status"]) {
     setUpdatingId(commitmentId);
@@ -211,6 +293,125 @@ export default function ReportDetailPage() {
           )}
         </div>
       )}
+
+      {/* Capacity — always shown, same pattern as Goals/Projects. Baseline
+          hours/utilization override + this person's time off log. The
+          resolved week-by-week number lives on the Capacity page; this is
+          where you set the inputs that feed it. */}
+      <div className="mt-10">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Capacity</h2>
+          <Link href="/app/capacity" className="text-xs text-gray-400 hover:text-gray-600">
+            View capacity →
+          </Link>
+        </div>
+
+        <form onSubmit={saveCapacityProfile} className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Contracted hours / week</label>
+            <input
+              type="number"
+              min={1}
+              max={80}
+              step={0.5}
+              value={contractedHours}
+              onChange={(e) => setContractedHours(e.target.value)}
+              placeholder={capacitySettings ? `${capacitySettings.default_hours_per_week} (default)` : ""}
+              className="w-44 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Target utilization %</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={utilizationPct}
+              onChange={(e) => setUtilizationPct(e.target.value)}
+              placeholder={capacitySettings ? `${capacitySettings.default_target_utilization_pct} (default)` : ""}
+              className="w-44 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={savingCapacity}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {savingCapacity ? "Saving..." : "Save"}
+          </button>
+          {capacitySaved && <span className="text-sm text-green-600">Saved</span>}
+        </form>
+        <p className="mt-1.5 text-xs text-gray-400">Leave blank to use your Settings &gt; Capacity defaults.</p>
+
+        <div className="mt-6">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            Time off{timeOff.length > 0 && ` (${timeOff.length})`}
+          </h3>
+          {timeOff.length === 0 ? (
+            <p className="mt-2 text-sm text-gray-500">No time off logged.</p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {timeOff.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                  <span className="text-gray-700">
+                    {formatDate(t.start_date + "T00:00:00")}
+                    {t.end_date !== t.start_date && ` – ${formatDate(t.end_date + "T00:00:00")}`}
+                    <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                      {TIME_OFF_LABELS[t.type]}
+                    </span>
+                  </span>
+                  <button onClick={() => removeTimeOff(t.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form onSubmit={addTimeOff} className="mt-3 flex flex-wrap items-end gap-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Start</label>
+              <input
+                type="date"
+                value={toStart}
+                onChange={(e) => setToStart(e.target.value)}
+                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">End</label>
+              <input
+                type="date"
+                value={toEnd}
+                onChange={(e) => setToEnd(e.target.value)}
+                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Type</label>
+              <select
+                value={toType}
+                onChange={(e) => setToType(e.target.value as TimeOffType)}
+                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                {(Object.keys(TIME_OFF_LABELS) as TimeOffType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {TIME_OFF_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={addingTimeOff}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {addingTimeOff ? "Adding..." : "Add"}
+            </button>
+          </form>
+        </div>
+      </div>
 
       {/* Goals — always shown (unlike Expectations, not gated behind a
           Settings prerequisite). Summary/read surface only: creating and

@@ -47,6 +47,7 @@ or UX patterns. Starts minimal — add decisions here as they get locked.
 /app/goals                  frontend/app/app/goals/page.tsx
 /app/projects               frontend/app/app/projects/page.tsx
 /app/org                    frontend/app/app/org/page.tsx
+/app/capacity                frontend/app/app/capacity/page.tsx
 /app/settings               frontend/app/app/settings/page.tsx
 ```
 
@@ -83,5 +84,9 @@ SEO. Do not add client-side-only patterns to these pages.
 | 2026-08-02 | Projects list groups by assignee ("Your initiatives" first, then one group per direct report), same visual pattern as Goals' individual-level grouping | Keeps the list from turning into one flat wall once a manager has projects both of their own and delegated to reports |
 | 2026-08-02 | DR detail "Projects" section is always shown, with a one-line empty state + link when there are none — same pattern as Goals | Session 13 also resolves Goals' Session 10 open question ("hidden if empty" vs. always-visible) the same direction, since both are first-class objects like Commitments with no Settings prerequisite |
 | 2026-08-02 | Commitments → project linking (`source_type='project'`, already in schema.sql's check constraint) stays deferred | Same scope discipline as Goals shipping Session 10 without rollup calculation — activate the core object first, dogfood it, then decide if the cross-link earns its complexity |
+| 2026-08-02 | Capacity gets its own top-level page (`/app/capacity`), not a Settings section | Session 14, same reasoning as Goals/Projects/Org — the resolved week-by-week numbers and time off log get checked/updated regularly; only the org-wide baseline defaults and work-unit setup are "configured once" and live in Settings |
+| 2026-08-02 | Capacity v1 shows available hours only — no bar/meter comparing available vs. allocated | Andrew's explicit scoping call: supply only this pass, no demand/allocation tracking. A progress-bar visual implies something to fill it against; showing one before there's real allocation data would overstate what the page currently answers |
+| 2026-08-02 | Capacity page's "By department" section shows aggregate numbers only (count + total hours per org unit), never a named individual outside the viewer's own direct reports | Andrew's explicit privacy call in Session 14 scoping — matches the existing privacy boundary (a manager's own reports stay private) while still answering the department-level bandwidth question |
+| 2026-08-02 | Per-person capacity override (contracted hours, target utilization) and time off logging live on the DR detail page, not the Capacity page itself | Same "config that changes per-person lives next to the person" reasoning as Expectations — the Capacity page is the read/rollup surface, the DR detail page is where the underlying numbers get set |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_

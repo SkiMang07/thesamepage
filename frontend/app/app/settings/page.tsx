@@ -14,35 +14,43 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  CapacitySettings,
   DirectReport,
   Expectation,
   ExpectationKind,
   OrgUnit,
   Profile,
   RoleLevel,
+  WorkUnitConfig,
   assignReportOrgUnit,
   assignReportRole,
   createExpectation,
   createRoleLevel,
   deleteExpectation,
   deleteRoleLevel,
+  deleteWorkUnitConfig,
   expectationName,
+  getCapacitySettings,
   getDirectReports,
   getExpectations,
   getOrgUnits,
   getProfile,
   getRoleLevels,
+  getWorkUnitConfigs,
+  updateCapacitySettings,
   updateProfile,
   updateRoleLevel,
+  upsertWorkUnitConfig,
 } from "@/lib/api";
 
-type SectionId = "profile" | "roles" | "team" | "expectations";
+type SectionId = "profile" | "roles" | "team" | "expectations" | "capacity";
 
 const SECTIONS: { id: SectionId; label: string; blurb: string }[] = [
   { id: "profile", label: "Profile & Company", blurb: "You and your company" },
   { id: "roles", label: "Roles & Levels", blurb: "The jobs on your team" },
   { id: "team", label: "Team", blurb: "Who's on which team" },
   { id: "expectations", label: "Expectations", blurb: "What good looks like" },
+  { id: "capacity", label: "Capacity", blurb: "Baseline hours & utilization" },
 ];
 
 const KIND_TABS: { id: ExpectationKind; label: string }[] = [
@@ -127,6 +135,7 @@ export default function SettingsPage() {
           {section === "expectations" && (
             <ExpectationsSection roleLevels={roleLevels} onError={setError} />
           )}
+          {section === "capacity" && <CapacitySection roleLevels={roleLevels} onError={setError} />}
         </div>
       </div>
     </main>
@@ -709,6 +718,222 @@ function ExpectationsSection({
           {adding ? "Adding..." : `Add ${kind === "metrics" ? "metric" : kind === "skills" ? "skill" : "value"}`}
         </button>
       </form>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section — Capacity (Session 14): org-wide baseline defaults + optional
+// per-role work-unit translation. "Configured once" like Roles & Levels /
+// Expectations — per-person overrides and time off logging happen on the
+// Capacity page and each report's detail page instead, since those change
+// far more often than a baseline does.
+// ---------------------------------------------------------------------------
+
+function CapacitySection({
+  roleLevels,
+  onError,
+}: {
+  roleLevels: RoleLevel[];
+  onError: (m: string | null) => void;
+}) {
+  const [settings, setSettings] = useState<CapacitySettings | null>(null);
+  const [hoursPerWeek, setHoursPerWeek] = useState(40);
+  const [utilizationPct, setUtilizationPct] = useState(75);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const [workUnits, setWorkUnits] = useState<WorkUnitConfig[]>([]);
+  const [wuRoleLevelId, setWuRoleLevelId] = useState("");
+  const [wuUnitName, setWuUnitName] = useState("");
+  const [wuHoursPerUnit, setWuHoursPerUnit] = useState(0.5);
+  const [addingWorkUnit, setAddingWorkUnit] = useState(false);
+
+  useEffect(() => {
+    Promise.all([getCapacitySettings(), getWorkUnitConfigs()])
+      .then(([s, wu]) => {
+        setSettings(s);
+        setHoursPerWeek(s.default_hours_per_week);
+        setUtilizationPct(s.default_target_utilization_pct);
+        setWorkUnits(wu);
+      })
+      .catch((e) => onError(e.message));
+  }, [onError]);
+
+  useEffect(() => {
+    if (!wuRoleLevelId && roleLevels.length > 0) setWuRoleLevelId(roleLevels[0].id);
+  }, [roleLevels, wuRoleLevelId]);
+
+  async function saveDefaults(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    try {
+      const s = await updateCapacitySettings({
+        default_hours_per_week: hoursPerWeek,
+        default_target_utilization_pct: utilizationPct,
+      });
+      setSettings(s);
+      setSaved(true);
+      onError(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addWorkUnit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!wuRoleLevelId || !wuUnitName.trim() || addingWorkUnit) return;
+    setAddingWorkUnit(true);
+    try {
+      const created = await upsertWorkUnitConfig({
+        role_level_id: wuRoleLevelId,
+        unit_name: wuUnitName.trim(),
+        hours_per_unit: wuHoursPerUnit,
+      });
+      setWorkUnits((wus) => [...wus.filter((w) => w.role_level_id !== wuRoleLevelId), created]);
+      setWuUnitName("");
+      onError(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to add");
+    } finally {
+      setAddingWorkUnit(false);
+    }
+  }
+
+  async function removeWorkUnit(id: string) {
+    try {
+      await deleteWorkUnitConfig(id);
+      setWorkUnits((wus) => wus.filter((w) => w.id !== id));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to delete");
+    }
+  }
+
+  if (!settings) return <p className="text-gray-500">Loading...</p>;
+
+  const roleLevelsWithoutUnit = roleLevels.filter((rl) => !workUnits.some((w) => w.role_level_id === rl.id));
+
+  return (
+    <div>
+      <h2 className="font-medium text-gray-900">Baseline capacity</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        The default working week for everyone on your team, before time off. Target utilization is deliberately
+        under 100% — it reserves room for meetings, admin, and the unexpected. Override either number for a specific
+        person on their report page.
+      </p>
+
+      <form onSubmit={saveDefaults} className="mt-4 max-w-md space-y-4">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className={labelCls}>Contracted hours / week</label>
+            <input
+              type="number"
+              min={1}
+              max={80}
+              step={0.5}
+              value={hoursPerWeek}
+              onChange={(e) => setHoursPerWeek(parseFloat(e.target.value || "0"))}
+              className={inputCls}
+            />
+          </div>
+          <div className="flex-1">
+            <label className={labelCls}>Target utilization %</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={utilizationPct}
+              onChange={(e) => setUtilizationPct(parseFloat(e.target.value || "0"))}
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button type="submit" disabled={saving} className={primaryBtnCls}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+          {saved && <span className="text-sm text-green-600">Saved</span>}
+        </div>
+      </form>
+
+      <h2 className="mt-10 font-medium text-gray-900">Work units by role</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Optional. If a role thinks in tickets, story points, or campaigns rather than hours, set the conversion here
+        — the Capacity page will show both.
+      </p>
+
+      {roleLevels.length === 0 ? (
+        <p className="mt-4 text-sm text-gray-500">
+          Work units attach to a role — set up your first role in{" "}
+          <span className="font-medium text-gray-700">Roles &amp; Levels</span> and come back here.
+        </p>
+      ) : (
+        <>
+          <ul className="mt-4 space-y-2">
+            {workUnits.map((wu) => {
+              const rl = roleLevels.find((r) => r.id === wu.role_level_id);
+              return (
+                <li key={wu.id} className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{rl ? roleLabel(rl) : "Unknown role"}</p>
+                    <p className="text-xs text-gray-500">
+                      1 {wu.unit_name} &asymp; {wu.hours_per_unit}h
+                    </p>
+                  </div>
+                  <button onClick={() => removeWorkUnit(wu.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+                    Remove
+                  </button>
+                </li>
+              );
+            })}
+            {workUnits.length === 0 && <p className="py-2 text-sm text-gray-500">No work units set yet — hours are shown as-is.</p>}
+          </ul>
+
+          {roleLevelsWithoutUnit.length > 0 && (
+            <form onSubmit={addWorkUnit} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className={labelCls}>Role</label>
+                  <select value={wuRoleLevelId} onChange={(e) => setWuRoleLevelId(e.target.value)} className={inputCls}>
+                    {roleLevelsWithoutUnit.map((rl) => (
+                      <option key={rl.id} value={rl.id}>
+                        {roleLabel(rl)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className={labelCls}>Unit name</label>
+                  <input
+                    value={wuUnitName}
+                    onChange={(e) => setWuUnitName(e.target.value)}
+                    className={inputCls}
+                    placeholder="e.g. ticket"
+                  />
+                </div>
+                <div className="w-32">
+                  <label className={labelCls}>Hours / unit</label>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step={0.05}
+                    value={wuHoursPerUnit}
+                    onChange={(e) => setWuHoursPerUnit(parseFloat(e.target.value || "0"))}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <button type="submit" disabled={addingWorkUnit} className={primaryBtnCls}>
+                {addingWorkUnit ? "Adding..." : "Add work unit"}
+              </button>
+            </form>
+          )}
+        </>
+      )}
     </div>
   );
 }

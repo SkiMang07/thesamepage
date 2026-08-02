@@ -437,6 +437,69 @@ create table projects (
 alter table projects enable row level security;
 
 -- ============================================================
+-- CAPACITY MODEL
+-- Session 14 (2026-08-02) — see docs/SESSION_HISTORY.md and the
+-- capacity_scoping project memory note for the full scoping conversation.
+--
+-- v1 is supply-only: how much capacity exists, not what's consuming it.
+-- Hours are the shared currency; work_unit_configs is an optional
+-- per-role-level display translation (tickets/points/campaigns) on top,
+-- so no single native unit has to generalize across every kind of team.
+-- capacity_profiles/time_off_entries stay manager-scoped like the rest of
+-- a manager's private data — the department/org rollup function further
+-- down (see RLS POLICIES section) is the one deliberate exception, and it
+-- only ever returns aggregates, never a named individual's numbers.
+-- ============================================================
+
+create table capacity_settings (
+  id                              uuid primary key default uuid_generate_v4(),
+  org_id                          uuid not null unique references organizations(id) on delete cascade,
+  default_hours_per_week          numeric not null default 40,
+  default_target_utilization_pct  numeric not null default 75,
+  created_at                      timestamptz not null default now(),
+  updated_at                      timestamptz not null default now()
+);
+
+alter table capacity_settings enable row level security;
+
+create table capacity_profiles (
+  id                          uuid primary key default uuid_generate_v4(),
+  direct_report_id            uuid not null unique references direct_reports(id) on delete cascade,
+  contracted_hours_per_week   numeric,  -- null = inherit capacity_settings default
+  target_utilization_pct      numeric,  -- null = inherit capacity_settings default
+  created_at                  timestamptz not null default now(),
+  updated_at                  timestamptz not null default now()
+);
+
+alter table capacity_profiles enable row level security;
+
+create table time_off_entries (
+  id                uuid primary key default uuid_generate_v4(),
+  direct_report_id  uuid not null references direct_reports(id) on delete cascade,
+  start_date        date not null,
+  end_date          date not null,
+  type              text not null default 'pto' check (type in ('pto', 'sick', 'holiday', 'other')),
+  hours_per_day     numeric,  -- null = a full contracted day at calculation time
+  notes             text,
+  created_at        timestamptz not null default now()
+);
+
+alter table time_off_entries enable row level security;
+
+create index time_off_entries_range_idx on time_off_entries (direct_report_id, start_date, end_date);
+
+create table work_unit_configs (
+  id              uuid primary key default uuid_generate_v4(),
+  org_id          uuid references organizations(id) on delete cascade,
+  role_level_id   uuid not null unique references role_levels(id) on delete cascade,
+  unit_name       text not null,
+  hours_per_unit  numeric not null check (hours_per_unit > 0),
+  created_at      timestamptz not null default now()
+);
+
+alter table work_unit_configs enable row level security;
+
+-- ============================================================
 -- DEVELOPMENT PLANS
 -- ============================================================
 
@@ -721,3 +784,97 @@ create policy "dev_plan_manager_notes_all_own" on dev_plan_manager_notes
 -- subscriptions — read-only for the user; backend service-role handles writes
 create policy "subscriptions_select_own" on subscriptions
   for select using (user_id = auth.uid());
+
+-- capacity_settings — org-scoped like role_levels/assessment_levels
+create policy "capacity_settings_all_own_org" on capacity_settings
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+-- capacity_profiles — manager-scoped through direct_reports, same pattern
+-- as dev_plan_* above
+create policy "capacity_profiles_all_own" on capacity_profiles
+  for all using (
+    direct_report_id in (select id from direct_reports where manager_id = auth.uid())
+  )
+  with check (
+    direct_report_id in (select id from direct_reports where manager_id = auth.uid())
+  );
+
+-- time_off_entries — same manager-scoped pattern
+create policy "time_off_entries_all_own" on time_off_entries
+  for all using (
+    direct_report_id in (select id from direct_reports where manager_id = auth.uid())
+  )
+  with check (
+    direct_report_id in (select id from direct_reports where manager_id = auth.uid())
+  );
+
+-- work_unit_configs — org-scoped like metric_configs/skill_configs
+create policy "work_unit_configs_all_own_org" on work_unit_configs
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+-- ============================================================
+-- CAPACITY ROLLUP (department/org level)
+-- SECURITY DEFINER so it can read across managers, but its return shape is
+-- aggregate-only by construction (org_unit_id + count + summed hours, never
+-- a named individual) — see database/migrations/2026-08-02_capacity.sql for
+-- the full reasoning. direct_reports/capacity_profiles/time_off_entries stay
+-- manager-scoped per the policies above; this is the one deliberate
+-- exception, mirroring current_org_id()'s pattern.
+-- ============================================================
+
+create or replace function public.org_unit_capacity_rollup(p_period_start date, p_period_end date)
+returns table (
+  org_unit_id uuid,
+  direct_report_count integer,
+  available_hours numeric
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_org_id uuid := public.current_org_id();
+  v_period_weeks numeric := greatest((p_period_end - p_period_start) + 1, 0) / 7.0;
+begin
+  if v_org_id is null or p_period_end < p_period_start then
+    return;
+  end if;
+
+  return query
+  select
+    dr.org_unit_id,
+    count(*)::integer as direct_report_count,
+    sum(
+      greatest(
+        coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40)
+          * v_period_weeks
+          * (coalesce(cp.target_utilization_pct, cs.default_target_utilization_pct, 75) / 100.0)
+        - coalesce((
+            select sum(
+              (least(t.end_date, p_period_end) - greatest(t.start_date, p_period_start) + 1)
+              * coalesce(
+                  t.hours_per_day,
+                  coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40) / 5.0
+                )
+            )
+            from time_off_entries t
+            where t.direct_report_id = dr.id
+              and t.start_date <= p_period_end
+              and t.end_date >= p_period_start
+          ), 0),
+        0
+      )
+    ) as available_hours
+  from direct_reports dr
+  join org_units ou on ou.id = dr.org_unit_id and ou.org_id = v_org_id
+  left join capacity_profiles cp on cp.direct_report_id = dr.id
+  left join capacity_settings cs on cs.org_id = v_org_id
+  group by dr.org_unit_id;
+end;
+$$;
+
+revoke all on function public.org_unit_capacity_rollup(date, date) from public;
+grant execute on function public.org_unit_capacity_rollup(date, date) to authenticated;

@@ -100,6 +100,8 @@ goals                -- activated Session 10; parent_goal_id self-ref; level: co
                         org_unit_id (Session 11) names which specific team/department a team/dept goal is for
 projects             -- activated Session 13; goal_id (optional, on delete set null) + direct_report_id (optional,
                         on delete cascade). No level/org_unit_id of its own — "goals=what, projects=how"
+capacity_profiles    -- activated Session 14; per-direct-report override of capacity_settings' org defaults
+time_off_entries     -- activated Session 14; PTO/sick/holiday/other per direct report, subtracted per-period
 subscriptions        -- Stripe billing
 ```
 
@@ -118,6 +120,10 @@ skill_configs               -- same shape as metric_configs
 skill_scale_definitions     -- same shape as metric_scale_definitions
 value_configs               -- adds value_type: team/company/department
 value_scale_definitions     -- same shape
+capacity_settings           -- activated Session 14; one row per org — default_hours_per_week,
+                                default_target_utilization_pct (never 100 — see Capacity model section below)
+work_unit_configs           -- activated Session 14; per role_level, optional — unit_name + hours_per_unit,
+                                the display translation layer (tickets/points/campaigns) on top of hours
 ```
 
 **Performance / assessment tables:**
@@ -142,6 +148,50 @@ dev_plan_manager_notes  -- private to manager
 - `one_on_ones.notes` — visible to writing manager only
 - Everything else (assessments, performance reviews, metrics, development plans,
   goals) — visible to the direct manager and up the hierarchy chain
+
+---
+
+## Capacity model (Session 14)
+
+v1 is **supply only** — how much capacity exists, not what's consuming it.
+No allocation/demand wiring into Projects/Goals yet; that's an explicit
+follow-up, not an oversight.
+
+**Hours are the shared currency.** `capacity_settings` (org-wide defaults)
+and `capacity_profiles` (per-report override) resolve to a baseline: `hours =
+contracted_hours_per_week × weeks_in_period × (target_utilization_pct /
+100)`, then `time_off_entries` overlapping the period subtract from that.
+Target utilization defaults to 75, not 100 — "max capacity" reserves room for
+meetings/admin/the unexpected, a knowledge-work rule of thumb, not a fixed
+rule. `work_unit_configs` is an optional per-role_level display translation
+on top (e.g. `hours_per_unit` for "ticket") so a team can see its native unit
+without a second parallel data model.
+
+**Two computation paths, kept in sync by hand:**
+- `backend/routes/capacity.py`'s `get_overview()` — the caller's own
+  `direct_reports`, RLS-scoped, computed in Python.
+- `org_unit_capacity_rollup()` (schema.sql) — department/org rollup via the
+  `org_units` tree, computed in SQL because it has to run SECURITY DEFINER
+  across every manager in the org.
+
+If the formula changes, change it in **both** places — there's a
+cross-reference comment at each site, but nothing enforces they stay
+identical.
+
+**Why the rollup function is SECURITY DEFINER (and why that's safe today):**
+`direct_reports`/`capacity_profiles`/`time_off_entries` all stay
+manager-scoped (`manager_id = auth.uid()`, same as everywhere else in the
+app) — there's still no cross-manager read policy on the base tables.
+`org_unit_capacity_rollup()` is the one deliberate exception, mirroring
+`current_org_id()`'s existing pattern: it bypasses RLS internally to sum
+across managers, but its **return shape is aggregate-only by construction**
+(`org_unit_id`, a count, a summed hours figure — never a row identifying a
+person). There's no code path from this function back to a named individual,
+so a department head/VP can see "Team A: 82 hrs available" without ever
+seeing another manager's reports by name. This was Andrew's explicit call
+(Session 14 scoping): full org rollup now, but aggregate-only outside your
+own team. Revisit if/when there's a real per-org-unit permissions system to
+build — there's no second manager yet to test one against.
 
 ---
 
@@ -176,6 +226,14 @@ Things explicitly not yet built:
   guards a unit becoming its own direct parent, not a deeper cycle (A's
   parent set to B when B's parent is already A). Fine for a solo manager
   hand-building a small tree; revisit if this becomes multi-editor.
+- Capacity demand/allocation (Session 14) — v1 ships supply only (how much
+  capacity exists). Wiring it into Projects/Goals as an actual allocation
+  view (how much of that capacity is spoken for) is the natural next step,
+  explicitly deferred this pass.
+- Per-org-unit rollup permissions (Session 14) — `org_unit_capacity_rollup()`
+  is currently readable by any authenticated org member (aggregate numbers
+  only); a real "who's allowed to see which department's rollup" system
+  wasn't built because there's no second manager yet to test one against.
 
 ---
 
@@ -194,6 +252,7 @@ backend/
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10)
     projects.py          GET/POST/PUT/PATCH/DELETE /api/projects — goal_id + direct_report_id, no level (Session 13)
     org_units.py         GET/POST/PUT/DELETE /api/org-units — team/department tree (Session 11)
+    capacity.py          /api/capacity — settings, work-units, profiles, time-off, /overview, /rollup (Session 14)
     settings.py         /api/settings — profile, role-levels, expectations
 
 frontend/
@@ -204,6 +263,7 @@ frontend/
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
     app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)
     app/org/            Org builder — own top-level page, tree (build/edit) + read-only chart (Session 11)
+    app/capacity/       Capacity page — period selector, "your team" + org-unit rollup (Session 14)
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client

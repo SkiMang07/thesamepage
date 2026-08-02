@@ -71,6 +71,9 @@ export default function DashboardPage() {
           <Link href="/app/projects" className="hover:text-gray-900">
             Projects
           </Link>
+          <Link href="/app/capacity" className="hover:text-gray-900">
+            Capacity
+          </Link>
           <Link href="/app/org" className="hover:text-gray-900">
             Org
           </Link>
