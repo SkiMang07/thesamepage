@@ -106,12 +106,20 @@ export default function ReportDetailPage() {
             <p className="mt-1 text-gray-500">{report.role_title}</p>
           )}
         </div>
-        <Link
-          href={`/app/reports/${id}/prep`}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
-        >
-          Start 1:1 prep →
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href={`/app/reports/${id}/log`}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Log a 1:1
+          </Link>
+          <Link
+            href={`/app/reports/${id}/prep`}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+          >
+            Start 1:1 prep →
+          </Link>
+        </div>
       </div>
 
       {/* Notes */}
@@ -180,7 +188,14 @@ export default function ReportDetailPage() {
                   className="mt-1 h-4 w-4 cursor-pointer rounded border-gray-300"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-gray-800">{c.description}</p>
+                  <p className="text-gray-800">
+                    {c.description}
+                    {c.committed_by === "direct_report" && (
+                      <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                        {report.name.split(" ")[0]}
+                      </span>
+                    )}
+                  </p>
                   <p className="mt-0.5 text-xs text-gray-400">
                     {c.due_date ? (
                       <span className={isOverdue(c.due_date) ? "font-medium text-red-500" : ""}>

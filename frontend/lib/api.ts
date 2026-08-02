@@ -53,11 +53,15 @@ export type OneOnOne = {
   created_at: string;
 };
 
+// Who owes a commitment — both sides of a 1:1 can make them (Session 8).
+export type CommittedBy = "manager" | "direct_report";
+
 export type Commitment = {
   id: string;
   description: string;
   due_date: string | null;
   status: "open" | "done" | "dropped";
+  committed_by?: CommittedBy;
   created_at: string;
   completed_at: string | null;
   direct_report_id: string;
@@ -73,8 +77,21 @@ export type AgendaItem = {
 export type PrepResponse = {
   situation_summary: string;
   agenda_items: AgendaItem[];
-  // The prep endpoint returns only these two fields per commitment.
-  open_commitments_to_check: Pick<Commitment, "description" | "due_date">[];
+  // The prep endpoint returns only these fields per commitment.
+  open_commitments_to_check: Pick<Commitment, "description" | "due_date" | "committed_by">[];
+};
+
+// AI-drafted wrap-up of a 1:1 — reviewed and edited by the manager before
+// anything is saved via logOneOnOne.
+export type WrapUpCommitment = {
+  description: string;
+  committed_by: CommittedBy;
+  due_date: string | null;
+};
+
+export type WrapUpDraft = {
+  summary: string;
+  commitments: WrapUpCommitment[];
 };
 
 // ---------------------------------------------------------------------------
@@ -126,7 +143,17 @@ export const getOneOnOneHistory = (directReportId: string): Promise<OneOnOne[]> 
 export const prepOneOnOne = (body: { direct_report_id: string; raw_notes: string }): Promise<PrepResponse> =>
   authedFetch("/api/one-on-ones/prep", { method: "POST", body: JSON.stringify(body) });
 
-export const logOneOnOne = (body: { direct_report_id: string; summary: string; new_commitments?: string[] }): Promise<OneOnOne> =>
+// Raw call notes → AI-drafted summary + commitments (both sides). Draft only —
+// nothing is saved until logOneOnOne.
+export const wrapUpOneOnOne = (body: { direct_report_id: string; raw_notes: string }): Promise<WrapUpDraft> =>
+  authedFetch("/api/one-on-ones/wrapup", { method: "POST", body: JSON.stringify(body) });
+
+export const logOneOnOne = (body: {
+  direct_report_id: string;
+  summary: string;
+  notes?: string;
+  new_commitments?: WrapUpCommitment[];
+}): Promise<OneOnOne> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 
 // ---------------------------------------------------------------------------

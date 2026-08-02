@@ -149,7 +149,7 @@ backend/
   ai_core.py      generate_text() — the only place Anthropic SDK is called
   routes/
     direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview)
-    one_on_ones.py      GET/POST /api/one-on-ones, POST /api/one-on-ones/prep
+    one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet), POST /wrapup (notes → draft log)
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     settings.py         /api/settings — profile, role-levels, expectations
 

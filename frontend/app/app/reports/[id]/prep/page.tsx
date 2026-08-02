@@ -1,9 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { prepOneOnOne, logOneOnOne, PrepResponse, AgendaItem } from "@/lib/api";
+import {
+  getDirectReport,
+  prepOneOnOne,
+  wrapUpOneOnOne,
+  PrepResponse,
+  AgendaItem,
+  WrapUpDraft,
+} from "@/lib/api";
+import WrapUpReview from "../wrap-up-review";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -45,25 +53,32 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
 }
 
 // ---------------------------------------------------------------------------
-// Main prep flow
+// Main prep flow: notes → prep sheet + live notes → review → saved
 // ---------------------------------------------------------------------------
 
 type Step = 1 | 2 | 3;
 
 export default function PrepPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [step, setStep] = useState<Step>(1);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prep, setPrep] = useState<PrepResponse | null>(null);
+  const [reportName, setReportName] = useState("");
 
-  // Step 3 fields
-  const [summary, setSummary] = useState("");
-  const [rawCommitments, setRawCommitments] = useState("");
-  const [saving, setSaving] = useState(false);
+  // Step 2 — notes taken during the call (typed live or pasted afterward)
+  const [callNotes, setCallNotes] = useState("");
+  const [wrappingUp, setWrappingUp] = useState(false);
+  const [draft, setDraft] = useState<WrapUpDraft | null>(null);
+
+  useEffect(() => {
+    // Name only — used for the "who owes this" toggle on the review screen.
+    getDirectReport(id)
+      .then((dr) => setReportName(dr.name))
+      .catch(() => {});
+  }, [id]);
 
   // Step 1 → 2: call AI prep endpoint
   async function handleGenerate(e: React.FormEvent) {
@@ -82,21 +97,19 @@ export default function PrepPage() {
     }
   }
 
-  // Step 3: log the 1:1
-  async function handleLog(e: React.FormEvent) {
-    e.preventDefault();
-    if (!summary.trim()) return;
-    setSaving(true);
+  // Step 2 → 3: distill call notes into a draft log for review
+  async function handleWrapUp() {
+    if (!callNotes.trim()) return;
+    setWrappingUp(true);
+    setError(null);
     try {
-      const new_commitments = rawCommitments
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      await logOneOnOne({ direct_report_id: id, summary, new_commitments });
-      router.push(`/app/reports/${id}`);
+      const result = await wrapUpOneOnOne({ direct_report_id: id, raw_notes: callNotes });
+      setDraft(result);
+      setStep(3);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not save. Try again.");
-      setSaving(false);
+      setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
+    } finally {
+      setWrappingUp(false);
     }
   }
 
@@ -111,8 +124,8 @@ export default function PrepPage() {
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Prep for 1:1</h1>
         <p className="mt-2 text-gray-500">
-          Jot down what's on your mind before the meeting — what's going on with
-          this person, anything you're worried about, anything you want to celebrate.
+          Jot down what&apos;s on your mind before the meeting — what&apos;s going on with
+          this person, anything you&apos;re worried about, anything you want to celebrate.
           The more specific, the better the prep sheet.
         </p>
 
@@ -138,129 +151,106 @@ export default function PrepPage() {
   }
 
   // ---------------------------------------------------------------------------
-  // Step 2 — Prep sheet
+  // Step 2 — Prep sheet (left) + live call notes (right)
   // ---------------------------------------------------------------------------
   if (step === 2 && prep) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
-        <div className="flex items-center justify-between">
-          <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:underline">
-            ← Edit notes
-          </button>
-          <button
-            onClick={() => setStep(3)}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
-          >
-            Log this 1:1 →
-          </button>
-        </div>
-
-        <h1 className="mt-6 text-2xl font-semibold">Your prep sheet</h1>
-
-        {/* Situation summary */}
-        <div className="mt-6 rounded-lg border border-blue-100 bg-blue-50 px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-400">
-            Where things stand
-          </p>
-          <p className="mt-2 text-gray-800">{prep.situation_summary}</p>
-        </div>
-
-        {/* Open commitments reminder */}
-        {prep.open_commitments_to_check.length > 0 && (
-          <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-500">
-              Open commitments — follow up today
-            </p>
-            <ul className="mt-2 space-y-1">
-              {prep.open_commitments_to_check.map((c, i) => (
-                <li key={i} className="flex gap-2 text-sm text-gray-700">
-                  <span className="text-amber-400">•</span>
-                  <span>
-                    {c.description}
-                    {c.due_date && (
-                      <span className="ml-1 text-gray-400">(due {c.due_date})</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Agenda items */}
-        <div className="mt-8 space-y-3">
-          <p className="text-sm font-medium uppercase tracking-wide text-gray-400">
-            Agenda — {prep.agenda_items.length} items
-          </p>
-          {prep.agenda_items.map((item, i) => (
-            <AgendaCard key={i} item={item} index={i} />
-          ))}
-        </div>
-
-        <button
-          onClick={() => setStep(3)}
-          className="mt-8 w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700"
-        >
-          Log this 1:1 →
+      <main className="mx-auto max-w-6xl px-6 py-16">
+        <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:underline">
+          ← Edit prep notes
         </button>
+
+        <div className="mt-6 grid gap-10 lg:grid-cols-2">
+          {/* Left — the prep sheet, what you planned to talk about */}
+          <div>
+            <h1 className="text-2xl font-semibold">Your prep sheet</h1>
+
+            {/* Situation summary */}
+            <div className="mt-6 rounded-lg border border-blue-100 bg-blue-50 px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-400">
+                Where things stand
+              </p>
+              <p className="mt-2 text-gray-800">{prep.situation_summary}</p>
+            </div>
+
+            {/* Open commitments reminder */}
+            {prep.open_commitments_to_check.length > 0 && (
+              <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-500">
+                  Open commitments — follow up today
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {prep.open_commitments_to_check.map((c, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-gray-700">
+                      <span className="text-amber-400">•</span>
+                      <span>
+                        {c.description}
+                        <span className="ml-1 text-gray-400">
+                          {c.committed_by === "direct_report"
+                            ? `(${reportName.split(" ")[0] || "theirs"})`
+                            : "(yours)"}
+                          {c.due_date && ` · due ${c.due_date}`}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Agenda items */}
+            <div className="mt-8 space-y-3">
+              <p className="text-sm font-medium uppercase tracking-wide text-gray-400">
+                Agenda — {prep.agenda_items.length} items
+              </p>
+              {prep.agenda_items.map((item, i) => (
+                <AgendaCard key={i} item={item} index={i} />
+              ))}
+            </div>
+          </div>
+
+          {/* Right — what's actually happening on the call */}
+          <div className="lg:sticky lg:top-8 lg:self-start">
+            <h2 className="text-2xl font-semibold">Call notes</h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Type as you talk, or paste your notes afterward — from Granola or
+              whatever you record with. When you&apos;re done, we&apos;ll draft the
+              summary and pull out the commitments for you to review.
+            </p>
+            <textarea
+              value={callNotes}
+              onChange={(e) => setCallNotes(e.target.value)}
+              placeholder={"– Pipeline looking thin for Q4, she's worried about the Acme renewal\n– I'll intro her to Sam on the design team\n– She'll draft the QBR deck by Friday"}
+              rows={18}
+              className="mt-4 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 placeholder-gray-400 focus:border-gray-900 focus:outline-none"
+            />
+            {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+            <button
+              onClick={handleWrapUp}
+              disabled={wrappingUp || !callNotes.trim()}
+              className="mt-4 w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+            >
+              {wrappingUp ? "Drafting your log…" : "Wrap up & log →"}
+            </button>
+          </div>
+        </div>
       </main>
     );
   }
 
   // ---------------------------------------------------------------------------
-  // Step 3 — Log the meeting
+  // Step 3 — Review the drafted log, then save
   // ---------------------------------------------------------------------------
-  if (step === 3) {
+  if (step === 3 && draft) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
-        <button onClick={() => setStep(2)} className="text-sm text-gray-500 hover:underline">
-          ← Back to prep sheet
-        </button>
-        <h1 className="mt-4 text-2xl font-semibold">Log the 1:1</h1>
-        <p className="mt-2 text-gray-500">
-          Write a quick summary of what you actually discussed, and note any new
-          commitments you made. You'll see these next time you prep.
-        </p>
-
-        <form onSubmit={handleLog} className="mt-8 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Meeting summary
-            </label>
-            <textarea
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="What did you talk about? Any decisions made, concerns raised, wins celebrated?"
-              rows={5}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 placeholder-gray-400 focus:border-gray-900 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              New commitments{" "}
-              <span className="font-normal text-gray-400">(one per line)</span>
-            </label>
-            <textarea
-              value={rawCommitments}
-              onChange={(e) => setRawCommitments(e.target.value)}
-              placeholder={"Send intro to the design team by Friday\nShare onboarding doc template"}
-              rows={4}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 placeholder-gray-400 focus:border-gray-900 focus:outline-none"
-            />
-          </div>
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={saving || !summary.trim()}
-            className="w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700 disabled:opacity-40"
-          >
-            {saving ? "Saving…" : "Save and finish"}
-          </button>
-        </form>
-      </main>
+      <WrapUpReview
+        directReportId={id}
+        reportName={reportName}
+        rawNotes={callNotes}
+        draft={draft}
+        onBack={() => setStep(2)}
+        backLabel="Back to the call"
+      />
     );
   }
 

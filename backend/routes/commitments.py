@@ -31,7 +31,7 @@ async def list_commitments(
 
     query = (
         supabase.table("commitments")
-        .select("id,description,due_date,status,created_at,completed_at,direct_report_id,direct_reports(name)")
+        .select("id,description,due_date,status,committed_by,created_at,completed_at,direct_report_id,direct_reports(name)")
         .eq("owner_id", user_id)
     )
     if direct_report_id:

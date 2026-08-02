@@ -135,7 +135,9 @@ alter table one_on_ones enable row level security;
 
 -- -------------------------
 -- COMMITMENTS
--- owner_id = the manager who made the commitment.
+-- owner_id = the manager keeping the record (RLS scopes through it).
+-- committed_by = who owes the item: the manager or the direct report
+-- (both sides of a 1:1 can make commitments — Session 8).
 -- title nullable for MVP (description carries the content).
 -- org_id nullable for MVP.
 -- -------------------------
@@ -146,6 +148,7 @@ create table commitments (
   description      text,
   owner_id         uuid references auth.users(id),
   direct_report_id uuid references direct_reports(id) on delete cascade,
+  committed_by     text not null default 'manager' check (committed_by in ('manager', 'direct_report')),
   source_type      text check (source_type in ('one_on_one', 'goal', 'project', 'manual')),
   source_id        uuid,
   due_date         date,

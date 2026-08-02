@@ -61,5 +61,7 @@ SEO. Do not add client-side-only patterns to these pages.
 | 2026-08-01 | Settings uses left-nav sections (Profile & Company / Roles & Levels / Expectations), not tabs or one long page | Three distinct setup jobs; nav keeps each screen answering one question |
 | 2026-08-01 | Deferred settings sections get no placeholder/"coming soon" nav entries | Calm > roadmap-signaling; empty locked sections add noise for a solo manager |
 | 2026-08-01 | DR detail "Expectations" section is hidden entirely when no role is assigned (no empty-state card); a role with zero configs gets a one-line Settings nudge | Calm degradation — an empty section answers no question; the nudge only appears once the manager has signaled intent by assigning a role |
+| 2026-08-01 | In-call screen is two-column on desktop: prep sheet left, live "Call notes" pane right (sticky) | The screen the manager has open DURING the 1:1 must answer both "what should we cover" and "what's actually happening" without navigation |
+| 2026-08-01 | AI wrap-up is always draft-then-review — extracted summary/commitments render on an editable review screen before anything saves | Commitments are accountability records; a hallucinated one costs trust in the entire product |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_

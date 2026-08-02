@@ -42,10 +42,36 @@ class PrepResponse(BaseModel):
     open_commitments_to_check: list[dict]
 
 
+class NewCommitmentIn(BaseModel):
+    description: str
+    committed_by: str = "manager"  # 'manager' | 'direct_report'
+    due_date: str | None = None  # ISO date or None
+
+
 class LogOneOnOneIn(BaseModel):
     direct_report_id: str
     summary: str
-    new_commitments: list[str] = []  # freeform strings; parsed into commitments rows
+    # Raw in-call notes (typed live or pasted from a recorder like Granola).
+    # Stored on one_on_ones.notes — private to the writing manager (RLS).
+    notes: str | None = None
+    new_commitments: list[NewCommitmentIn] = []
+
+
+class WrapUpRequest(BaseModel):
+    direct_report_id: str
+    raw_notes: str  # what actually happened on the call — typed live or pasted
+
+
+class WrapUpCommitment(BaseModel):
+    description: str
+    committed_by: str  # 'manager' | 'direct_report'
+    due_date: str | None = None
+
+
+class WrapUpDraft(BaseModel):
+    """AI-drafted log for the manager to review — nothing is saved yet."""
+    summary: str
+    commitments: list[WrapUpCommitment]
 
 
 # ---------------------------------------------------------------------------
@@ -141,10 +167,13 @@ def _build_prep_prompt(
     else:
         history_block = "  (No prior 1:1 notes on record.)"
 
-    # --- Open commitments ---
+    # --- Open commitments (either side can owe one — committed_by) ---
+    def _owner_label(c: dict) -> str:
+        return report_name if c.get("committed_by") == "direct_report" else "manager"
+
     if open_commitments:
         commitments_block = "\n".join(
-            f"  • {c['description']} (due: {c.get('due_date', 'unspecified')})"
+            f"  • [{_owner_label(c)} owes] {c['description']} (due: {c.get('due_date') or 'unspecified'})"
             for c in open_commitments
         )
     else:
@@ -161,7 +190,7 @@ RELATIONSHIP CONTEXT
 RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
 {history_block}
 
-OPEN COMMITMENTS (things the manager promised to follow up on, still unresolved):
+OPEN COMMITMENTS (unresolved — each is marked with who owes it):
 {commitments_block}
 {_format_expectations_block(report_name, role_expectations)}
 MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
@@ -172,9 +201,10 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
 
 1. COMMITMENT REVIEW
    If any open commitments exist, the first agenda item must address them.
-   Frame questions to create accountability without defensiveness:
+   For items {report_name} owes, frame questions to create accountability without defensiveness:
    ✓ "Where did you land on X?" or "What happened with Y?"
    ✗ "Did you do X?" (accusatory) or ignoring them entirely (sends the wrong signal)
+   For items the manager owes, prompt the manager to proactively give a status — modeling accountability is how the standard gets set.
 
 2. SITUATIONAL QUESTION LOGIC — scan the manager's notes for these signals:
    - OBSTACLES / BLOCKERS → use GROW coaching questions:
@@ -220,6 +250,33 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
 Generate 3–5 agenda items total (including the commitment review if applicable and always the closing). Quality over quantity."""
 
 
+def _build_wrapup_prompt(report_name: str, raw_notes: str, today_iso: str) -> str:
+    """Distill raw in-call notes (typed live or pasted from a recorder) into a
+    draft summary + commitments from BOTH sides. The manager reviews and edits
+    the draft before anything is saved — err toward precision, not coverage."""
+    return f"""You are helping a manager log a 1:1 they just had with {report_name}. Distill the raw call notes below into a clean, reviewable record. The manager will edit your draft before saving — be precise, not exhaustive.
+
+Today's date: {today_iso} (use it to resolve relative deadlines like "by Friday" or "end of month").
+
+RAW CALL NOTES (typed during the call, or pasted from a transcript/recording tool — may be messy, fragmentary, or verbatim):
+{raw_notes}
+
+Produce:
+
+1. summary — 2–4 sentences capturing what was actually discussed: decisions made, concerns raised, wins, changes in the situation. Write it so that reading it three weeks from now instantly restores context. State the substance directly — no "we discussed X" padding.
+
+2. commitments — every explicit commitment made by either person. Rules:
+   - Include only things someone actually agreed to DO. Topics discussed, open questions, and vague intentions ("we should think about...") are NOT commitments unless clearly accepted as an action.
+   - committed_by: "manager" if the manager owes it, "direct_report" if {report_name} owes it.
+   - due_date: ISO date (YYYY-MM-DD) only when a deadline was stated or clearly implied — resolve relative dates from today's date. Otherwise null. Never guess a date.
+   - Phrase each as one short actionable sentence starting with a verb ("Send intro to the design team").
+   - Do NOT invent commitments. An empty list is a valid answer.
+
+Return ONLY valid JSON. No commentary, no markdown, no code fences.
+
+{{"summary": "...", "commitments": [{{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}}]}}"""
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -247,7 +304,7 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
     # Fetch open commitments for this report
     open_commitments = (
         supabase.table("commitments")
-        .select("description,due_date")
+        .select("description,due_date,committed_by")
         .eq("direct_report_id", body.direct_report_id)
         .eq("status", "open")
         .execute()
@@ -322,6 +379,69 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
     )
 
 
+@router.post("/wrapup", response_model=WrapUpDraft)
+async def wrap_up_one_on_one(body: WrapUpRequest, auth=Depends(get_authenticated_client)):
+    """Distill raw in-call notes into a DRAFT summary + commitments (both
+    sides). Pure AI-call route — nothing is saved; the manager reviews the
+    draft and then POST / logs it."""
+    user_id, supabase = auth
+
+    try:
+        report_result = (
+            supabase.table("direct_reports")
+            .select("name")
+            .eq("id", body.direct_report_id)
+            .eq("manager_id", user_id)
+            .single()
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    if not report_result.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+
+    prompt = _build_wrapup_prompt(
+        report_name=report_result.data["name"],
+        raw_notes=body.raw_notes,
+        today_iso=date.today().isoformat(),
+    )
+    raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=1500)
+
+    # Strip markdown code fences — model sometimes wraps JSON in ```json...```
+    raw_clean = raw.strip()
+    if raw_clean.startswith("```"):
+        start = raw_clean.find("{")
+        end = raw_clean.rfind("}") + 1
+        raw_clean = raw_clean[start:end] if start != -1 else raw_clean
+
+    try:
+        parsed = json.loads(raw_clean)
+    except json.JSONDecodeError:
+        # Empty draft — the review screen requires a summary before saving,
+        # so the manager writes one by hand instead of getting an error.
+        parsed = {"summary": "", "commitments": []}
+
+    commitments: list[WrapUpCommitment] = []
+    for item in parsed.get("commitments", []):
+        description = (item.get("description") or "").strip()
+        if not description:
+            continue
+        committed_by = item.get("committed_by")
+        if committed_by not in ("manager", "direct_report"):
+            committed_by = "manager"
+        due_date = item.get("due_date") or None
+        if due_date:
+            try:
+                date.fromisoformat(due_date)
+            except ValueError:
+                due_date = None
+        commitments.append(
+            WrapUpCommitment(description=description, committed_by=committed_by, due_date=due_date)
+        )
+
+    return WrapUpDraft(summary=parsed.get("summary", "") or "", commitments=commitments)
+
+
 @router.post("")
 async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
@@ -332,18 +452,25 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
             "manager_id": user_id,
             "direct_report_id": body.direct_report_id,
             "summary": body.summary,
+            # Raw call notes — private to the writing manager (RLS).
+            "notes": body.notes,
         })
         .execute()
         .data[0]
     )
 
-    for description in body.new_commitments:
+    for c in body.new_commitments:
+        description = c.description.strip()
+        if not description:
+            continue
         supabase.table("commitments").insert({
             "owner_id": user_id,
             "direct_report_id": body.direct_report_id,
+            "committed_by": c.committed_by if c.committed_by in ("manager", "direct_report") else "manager",
             "source_type": "one_on_one",
             "source_id": meeting["id"],
             "description": description,
+            "due_date": c.due_date or None,
             "status": "open",
         }).execute()
 

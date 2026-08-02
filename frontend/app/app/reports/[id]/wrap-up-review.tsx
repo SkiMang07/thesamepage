@@ -1,0 +1,178 @@
+"use client";
+
+// Shared wrap-up review screen — used by the prep flow (after the call) and
+// the standalone Log a 1:1 page. The AI drafts a summary + commitments from
+// raw call notes; nothing is saved until the manager reviews and hits save.
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
+
+type EditableCommitment = WrapUpCommitment & { key: number };
+
+export default function WrapUpReview({
+  directReportId,
+  reportName,
+  rawNotes,
+  draft,
+  onBack,
+  backLabel,
+}: {
+  directReportId: string;
+  reportName: string;
+  rawNotes: string;
+  draft: WrapUpDraft;
+  onBack: () => void;
+  backLabel: string;
+}) {
+  const router = useRouter();
+  const [summary, setSummary] = useState(draft.summary);
+  const [commitments, setCommitments] = useState<EditableCommitment[]>(
+    draft.commitments.map((c, i) => ({ ...c, key: i }))
+  );
+  const [nextKey, setNextKey] = useState(draft.commitments.length);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const firstName = reportName.split(" ")[0] || "Them";
+
+  function updateCommitment(key: number, patch: Partial<WrapUpCommitment>) {
+    setCommitments((cs) => cs.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+  }
+
+  function addCommitment() {
+    setCommitments((cs) => [
+      ...cs,
+      { key: nextKey, description: "", committed_by: "manager", due_date: null },
+    ]);
+    setNextKey((k) => k + 1);
+  }
+
+  async function handleSave() {
+    if (!summary.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await logOneOnOne({
+        direct_report_id: directReportId,
+        summary: summary.trim(),
+        notes: rawNotes,
+        new_commitments: commitments
+          .map(({ key: _key, ...c }) => ({ ...c, description: c.description.trim() }))
+          .filter((c) => c.description),
+      });
+      router.push(`/app/reports/${directReportId}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save. Try again.");
+      setSaving(false);
+    }
+  }
+
+  function WhoToggle({ c }: { c: EditableCommitment }) {
+    const base = "rounded-full px-3 py-1 text-xs font-medium";
+    const on = "bg-gray-900 text-white";
+    const off = "bg-gray-100 text-gray-500 hover:bg-gray-200";
+    const set = (committed_by: CommittedBy) => updateCommitment(c.key, { committed_by });
+    return (
+      <div className="flex gap-1">
+        <button type="button" onClick={() => set("manager")} className={`${base} ${c.committed_by === "manager" ? on : off}`}>
+          You
+        </button>
+        <button type="button" onClick={() => set("direct_report")} className={`${base} ${c.committed_by === "direct_report" ? on : off}`}>
+          {firstName}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-16">
+      <button onClick={onBack} className="text-sm text-gray-500 hover:underline">
+        ← {backLabel}
+      </button>
+      <h1 className="mt-4 text-2xl font-semibold">Review before saving</h1>
+      <p className="mt-2 text-gray-500">
+        Drafted from your notes — fix anything that&apos;s off. The summary shows up in
+        history and next time you prep; commitments get tracked until resolved.
+      </p>
+
+      <div className="mt-8">
+        <label className="block text-sm font-medium text-gray-700">Summary</label>
+        {!draft.summary && (
+          <p className="mt-1 text-sm text-amber-600">
+            Couldn&apos;t draft a summary from these notes — write a quick one below.
+          </p>
+        )}
+        <textarea
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          rows={5}
+          className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 focus:border-gray-900 focus:outline-none"
+        />
+      </div>
+
+      <div className="mt-8">
+        <p className="block text-sm font-medium text-gray-700">
+          Commitments{" "}
+          <span className="font-normal text-gray-400">— who owes what by when</span>
+        </p>
+
+        {commitments.length === 0 && (
+          <p className="mt-3 text-sm text-gray-500">
+            None picked up from the notes. Add one below if something was agreed.
+          </p>
+        )}
+
+        <ul className="mt-3 space-y-3">
+          {commitments.map((c) => (
+            <li key={c.key} className="rounded-lg border border-gray-200 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <input
+                  value={c.description}
+                  onChange={(e) => updateCommitment(c.key, { description: e.target.value })}
+                  placeholder="What was agreed?"
+                  className="min-w-0 flex-1 border-0 p-0 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCommitments((cs) => cs.filter((x) => x.key !== c.key))}
+                  className="text-gray-300 hover:text-gray-500"
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <WhoToggle c={c} />
+                <input
+                  type="date"
+                  value={c.due_date ?? ""}
+                  onChange={(e) => updateCommitment(c.key, { due_date: e.target.value || null })}
+                  className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 focus:border-gray-400 focus:outline-none"
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <button
+          type="button"
+          onClick={addCommitment}
+          className="mt-3 text-sm text-gray-500 hover:underline"
+        >
+          + Add commitment
+        </button>
+      </div>
+
+      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !summary.trim()}
+        className="mt-8 w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+      >
+        {saving ? "Saving…" : "Save and finish"}
+      </button>
+    </main>
+  );
+}

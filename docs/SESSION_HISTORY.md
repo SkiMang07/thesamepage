@@ -11,6 +11,62 @@ Format per entry:
 
 ---
 
+## Session 8 — 2026-08-01
+
+**Goal:** Capture what actually happens on the call. Andrew's observation:
+the prep sheet existed and logging existed, but there was nowhere to take
+notes DURING the 1:1 — and the log step asked him to re-type everything from
+memory.
+
+**What was done:**
+- Prep step 2 is now a two-column screen (desktop): prep sheet on the left,
+  a "Call notes" pane on the right — type live during the call, or paste
+  notes/transcript from Granola or any recorder afterward.
+- New `POST /api/one-on-ones/wrapup` (`_build_wrapup_prompt()`): raw call
+  notes → AI-drafted `{summary, commitments[]}`. Pure draft — nothing saved.
+  Commitments are extracted for BOTH sides (`committed_by`: manager /
+  direct_report), phrased verb-first, with ISO due dates only when stated
+  (relative dates resolved from today's date). Explicit rule: topics
+  discussed ≠ commitments; empty list is valid; never invent.
+- New review screen (`wrap-up-review.tsx`, shared component): editable
+  summary, commitment rows with You/{firstName} owner toggle, optional due
+  date, remove/add. Save → `POST /api/one-on-ones` which now also stores the
+  raw notes on `one_on_ones.notes` (column already existed; private to the
+  writing manager per RLS).
+- Standalone log flow (closes the Session 5b roadmap item):
+  `/app/reports/[id]/log` — same notes → wrap-up → review, no prep needed.
+  "Log a 1:1" secondary button added next to "Start 1:1 prep" on DR detail.
+- `committed_by` threaded through: migration
+  `2026-08-01_commitments_committed_by.sql` (default 'manager' backfills old
+  rows), schema.sql patched, commitments list endpoint selects it, prep
+  prompt marks each open commitment with who owes it ("[Leah owes] ..."),
+  framework #1 now tells the manager to proactively give status on their own
+  items. DR detail + prep sheet show a name chip on report-owned commitments.
+- `LogOneOnOneIn.new_commitments` changed from `list[str]` to structured
+  `{description, committed_by, due_date}` objects (frontend is the only
+  caller; updated in the same change).
+
+**Decisions locked:**
+- Wrap-up is draft-then-review: AI output never enters the record without
+  the manager seeing it. Review screen requires a non-empty summary (an
+  extraction failure yields an empty draft + a "write one below" nudge, not
+  an error).
+- Commitments are two-sided (`committed_by`); `owner_id` stays the manager
+  (record-keeper) so RLS is untouched.
+- Notes capture is paste-or-type only for now. **Deferred integration:**
+  Google Drive meeting-notes import (search by manager + rep name, match on
+  date, pull the doc) — revisit when core loop is validated; Granola et al.
+  covered by paste in the meantime.
+- Manual one-per-line commitment entry is gone — the review screen's
+  structured rows replace it.
+
+**Next step:**
+Run the migration in Supabase, deploy, and dogfood a real 1:1 end to end
+(prep → live notes → wrap-up → check the DR page). Then back to the
+dashboard/roadmap — or Stripe-gating conversations if dogfooding feels solid.
+
+---
+
 ## Session 7 — 2026-08-01
 
 **Goal:** Make the Settings backbone pay off — surface each DR's role
