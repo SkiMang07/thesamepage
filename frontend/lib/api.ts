@@ -348,6 +348,12 @@ export const deleteOrgUnit = (id: string): Promise<{ deleted: boolean }> =>
 export type CapacitySettings = {
   default_hours_per_week: number;
   default_target_utilization_pct: number;
+  // Separate from target_utilization_pct — whole days off (vacation/sick/
+  // holiday) per year, not within-day overhead. Default 21 (15 vacation +
+  // 6 sick). Prorated into the period math when a report has no actual
+  // time_off_entries logged for that period — see CapacityOverviewItem's
+  // off_hours_source.
+  default_off_days_per_year: number;
 };
 
 export const getCapacitySettings = (): Promise<CapacitySettings> => authedFetch("/api/capacity/settings");
@@ -370,17 +376,18 @@ export const upsertWorkUnitConfig = (body: { role_level_id: string; unit_name: s
 export const deleteWorkUnitConfig = (id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/capacity/work-units/${id}`, { method: "DELETE" });
 
+export type CapacityProfileFields = {
+  contracted_hours_per_week: number | null;
+  target_utilization_pct: number | null;
+  off_days_per_year: number | null;
+};
+
 // null fields = inherit the org default (capacity_settings).
-export const getCapacityProfile = (
-  directReportId: string
-): Promise<{ contracted_hours_per_week: number | null; target_utilization_pct: number | null }> =>
+export const getCapacityProfile = (directReportId: string): Promise<CapacityProfileFields> =>
   authedFetch(`/api/capacity/profiles/${directReportId}`);
 
 // null = inherit the org default (capacity_settings) for that field.
-export const setCapacityProfile = (
-  directReportId: string,
-  body: { contracted_hours_per_week: number | null; target_utilization_pct: number | null }
-): Promise<{ contracted_hours_per_week: number | null; target_utilization_pct: number | null }> =>
+export const setCapacityProfile = (directReportId: string, body: CapacityProfileFields): Promise<CapacityProfileFields> =>
   authedFetch(`/api/capacity/profiles/${directReportId}`, { method: "PUT", body: JSON.stringify(body) });
 
 export type TimeOffType = "pto" | "sick" | "holiday" | "other";
@@ -412,7 +419,11 @@ export const deleteTimeOff = (id: string): Promise<{ deleted: boolean }> =>
 
 // A resolved available-hours figure for one direct report over a period —
 // contracted hours/utilization already have profile overrides and org
-// defaults applied server-side; time off in the period already subtracted.
+// defaults applied server-side. off_hours is whichever source won for this
+// period: real logged time_off_entries ("logged") if any overlap it,
+// otherwise a prorated share of off_days_per_year ("assumed") — never both,
+// to avoid double-counting. See backend/routes/capacity.py's
+// _effective_off_hours().
 export type CapacityOverviewItem = {
   direct_report_id: string;
   name: string;
@@ -421,7 +432,9 @@ export type CapacityOverviewItem = {
   org_unit_id: string | null;
   contracted_hours_per_week: number;
   target_utilization_pct: number;
-  time_off_hours: number;
+  off_days_per_year: number;
+  off_hours: number;
+  off_hours_source: "logged" | "assumed";
   available_hours: number;
 };
 

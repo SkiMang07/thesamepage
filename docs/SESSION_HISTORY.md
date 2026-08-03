@@ -108,6 +108,49 @@ full frontend project in the sandbox (`npm install`), `npx tsc --noEmit`
 clean, `npx next build` clean — `/app/capacity` compiles and prerenders
 alongside all 14 routes.
 
+**Follow-up, same session:** Andrew reviewed the v1 formula and flagged a
+real gap — target utilization only buffers within-a-day overhead, nothing
+accounted for whole days off (vacation/sick/holiday) unless a manager had
+already logged specific dates. He proposed a second, separate customizable
+default: `off_days_per_year` (org-wide default, per-person override), named
+after some back-and-forth, defaulting to 21 (15 vacation + 6 sick — his
+numbers). He flagged the real risk himself before Claude could: this number
+has to blend with `time_off_entries` without double-counting anyone who
+actually logs their PTO.
+
+**Resolution (stated by Claude, not re-scoped via AskUserQuestion — small
+enough addition to an already-agreed model to just build):** for whatever
+period is being calculated, ACTUAL LOGGED TIME OFF WINS if any overlaps that
+period; otherwise the calculation falls back to a prorated share of the
+annual default (`off_days_per_year × hours/day × period_weeks / 52`). This
+means a period with no logged time off still shows a realistic number (not
+optimistically assuming zero time off just because nothing's been logged
+yet), and logging real dates for a person immediately takes over for the
+periods those dates fall in — no manual toggle, no double subtraction.
+
+**What changed (same session, before the original migration ever ran
+live):**
+- `database/migrations/2026-08-02_capacity.sql` + `database/schema.sql` —
+  amended in place (safe since neither had been run against live Supabase
+  yet) to add `capacity_settings.default_off_days_per_year` (default 21)
+  and `capacity_profiles.off_days_per_year` (nullable override).
+  `org_unit_capacity_rollup()` restructured to compute actual logged hours
+  once via a `LATERAL` join and apply the win/fallback precedence in a
+  `CASE`.
+- `backend/routes/capacity.py` — new `_effective_off_hours()` helper
+  (mirrors the SQL `CASE`), `/settings` and `/profiles/{id}` GET/PUT now
+  include the new field, `/overview`'s response replaces `time_off_hours`
+  with `off_hours` + `off_hours_source: "logged" | "assumed"` so the
+  frontend can label which one it's showing.
+- `frontend/lib/api.ts`, `frontend/app/app/settings/page.tsx` (new "Default
+  days off / year" field, explained inline as separate from target
+  utilization), `frontend/app/app/reports/[id]/page.tsx` (per-person
+  override field), `frontend/app/app/capacity/page.tsx` (shows "logged"
+  vs. "assumed" time off per report) — all updated to match.
+- Re-verified: `py_compile` clean, `main.py` imports with all
+  `/api/capacity/*` routes registering, `npx tsc --noEmit` clean, `npx next
+  build` clean (14/14 routes).
+
 **How to apply:** next session should (1) confirm Andrew ran
 `2026-08-02_capacity.sql` against live Supabase, (2) once live, set org
 defaults in Settings > Capacity and try the per-report override + time-off

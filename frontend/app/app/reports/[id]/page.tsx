@@ -109,6 +109,7 @@ export default function ReportDetailPage() {
   const [capacitySettings, setCapacitySettings] = useState<CapacitySettings | null>(null);
   const [contractedHours, setContractedHours] = useState<string>("");
   const [utilizationPct, setUtilizationPct] = useState<string>("");
+  const [offDaysPerYear, setOffDaysPerYear] = useState<string>("");
   const [savingCapacity, setSavingCapacity] = useState(false);
   const [capacitySaved, setCapacitySaved] = useState(false);
   const [timeOff, setTimeOff] = useState<TimeOffEntry[]>([]);
@@ -136,6 +137,7 @@ export default function ReportDetailPage() {
         setProjects(p);
         setContractedHours(cp.contracted_hours_per_week?.toString() ?? "");
         setUtilizationPct(cp.target_utilization_pct?.toString() ?? "");
+        setOffDaysPerYear(cp.off_days_per_year?.toString() ?? "");
         setCapacitySettings(cs);
         setTimeOff(to);
       })
@@ -151,6 +153,7 @@ export default function ReportDetailPage() {
       await setCapacityProfile(id, {
         contracted_hours_per_week: contractedHours.trim() ? parseFloat(contractedHours) : null,
         target_utilization_pct: utilizationPct.trim() ? parseFloat(utilizationPct) : null,
+        off_days_per_year: offDaysPerYear.trim() ? parseFloat(offDaysPerYear) : null,
       });
       setCapacitySaved(true);
       setError(null);
@@ -330,6 +333,19 @@ export default function ReportDetailPage() {
               value={utilizationPct}
               onChange={(e) => setUtilizationPct(e.target.value)}
               placeholder={capacitySettings ? `${capacitySettings.default_target_utilization_pct} (default)` : ""}
+              className="w-44 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Days off / year</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={offDaysPerYear}
+              onChange={(e) => setOffDaysPerYear(e.target.value)}
+              placeholder={capacitySettings ? `${capacitySettings.default_off_days_per_year} (default)` : ""}
               className="w-44 rounded-md border border-gray-300 px-3 py-2 text-sm"
             />
           </div>

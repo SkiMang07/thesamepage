@@ -449,6 +449,14 @@ alter table projects enable row level security;
 -- a manager's private data — the department/org rollup function further
 -- down (see RLS POLICIES section) is the one deliberate exception, and it
 -- only ever returns aggregates, never a named individual's numbers.
+--
+-- off_days_per_year (added same session, before this ever ran live):
+-- target_utilization buffers the within-a-day overhead; off_days_per_year
+-- is a separate annual whole-days-off buffer (vacation/sick/holiday).
+-- Precedence vs. time_off_entries to avoid double-counting: actual logged
+-- time off wins for whatever period it overlaps; otherwise the calculation
+-- falls back to a prorated share of the annual default. See
+-- org_unit_capacity_rollup() below and capacity.py's _effective_off_hours().
 -- ============================================================
 
 create table capacity_settings (
@@ -456,6 +464,7 @@ create table capacity_settings (
   org_id                          uuid not null unique references organizations(id) on delete cascade,
   default_hours_per_week          numeric not null default 40,
   default_target_utilization_pct  numeric not null default 75,
+  default_off_days_per_year       numeric not null default 21,
   created_at                      timestamptz not null default now(),
   updated_at                      timestamptz not null default now()
 );
@@ -467,6 +476,7 @@ create table capacity_profiles (
   direct_report_id            uuid not null unique references direct_reports(id) on delete cascade,
   contracted_hours_per_week   numeric,  -- null = inherit capacity_settings default
   target_utilization_pct      numeric,  -- null = inherit capacity_settings default
+  off_days_per_year           numeric,  -- null = inherit capacity_settings default
   created_at                  timestamptz not null default now(),
   updated_at                  timestamptz not null default now()
 );
@@ -843,6 +853,10 @@ begin
     return;
   end if;
 
+  -- Off-days precedence: actual logged time off (actual_off, computed once
+  -- per report via LATERAL) wins for the period it overlaps; otherwise fall
+  -- back to a prorated share of off_days_per_year. Mirrors capacity.py's
+  -- _effective_off_hours() — keep both in sync if this changes.
   return query
   select
     dr.org_unit_id,
@@ -852,19 +866,15 @@ begin
         coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40)
           * v_period_weeks
           * (coalesce(cp.target_utilization_pct, cs.default_target_utilization_pct, 75) / 100.0)
-        - coalesce((
-            select sum(
-              (least(t.end_date, p_period_end) - greatest(t.start_date, p_period_start) + 1)
-              * coalesce(
-                  t.hours_per_day,
-                  coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40) / 5.0
-                )
-            )
-            from time_off_entries t
-            where t.direct_report_id = dr.id
-              and t.start_date <= p_period_end
-              and t.end_date >= p_period_start
-          ), 0),
+        - (
+            case
+              when coalesce(actual_off.hours, 0) > 0 then actual_off.hours
+              else
+                coalesce(cp.off_days_per_year, cs.default_off_days_per_year, 21)
+                  * (coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40) / 5.0)
+                  * (v_period_weeks / 52.0)
+            end
+          ),
         0
       )
     ) as available_hours
@@ -872,6 +882,19 @@ begin
   join org_units ou on ou.id = dr.org_unit_id and ou.org_id = v_org_id
   left join capacity_profiles cp on cp.direct_report_id = dr.id
   left join capacity_settings cs on cs.org_id = v_org_id
+  left join lateral (
+    select sum(
+      (least(t.end_date, p_period_end) - greatest(t.start_date, p_period_start) + 1)
+      * coalesce(
+          t.hours_per_day,
+          coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40) / 5.0
+        )
+    ) as hours
+    from time_off_entries t
+    where t.direct_report_id = dr.id
+      and t.start_date <= p_period_end
+      and t.end_date >= p_period_start
+  ) actual_off on true
   group by dr.org_unit_id;
 end;
 $$;

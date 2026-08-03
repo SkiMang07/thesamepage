@@ -256,8 +256,16 @@ export default function CapacityPage() {
                       </div>
                       <p className="mt-1.5 text-xs text-gray-400">
                         {o.contracted_hours_per_week}h/wk contracted &middot; {o.target_utilization_pct}% target
-                        {o.time_off_hours > 0 && ` · ${formatHours(o.time_off_hours)} time off this period`}
+                        {o.off_hours > 0 &&
+                          ` · ${formatHours(o.off_hours)} ${
+                            o.off_hours_source === "logged" ? "logged time off" : "assumed time off"
+                          } this period`}
                       </p>
+                      {o.off_hours_source === "assumed" && o.off_hours > 0 && (
+                        <p className="text-xs text-gray-300">
+                          No time off logged for this period — assuming a share of {o.off_days_per_year} default days/year.
+                        </p>
+                      )}
                     </li>
                   );
                 })}

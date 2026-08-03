@@ -160,12 +160,24 @@ follow-up, not an oversight.
 **Hours are the shared currency.** `capacity_settings` (org-wide defaults)
 and `capacity_profiles` (per-report override) resolve to a baseline: `hours =
 contracted_hours_per_week × weeks_in_period × (target_utilization_pct /
-100)`, then `time_off_entries` overlapping the period subtract from that.
-Target utilization defaults to 75, not 100 — "max capacity" reserves room for
-meetings/admin/the unexpected, a knowledge-work rule of thumb, not a fixed
-rule. `work_unit_configs` is an optional per-role_level display translation
+100)`. `work_unit_configs` is an optional per-role_level display translation
 on top (e.g. `hours_per_unit` for "ticket") so a team can see its native unit
 without a second parallel data model.
+
+**"Max capacity" is never 100% — two separate buffers, not one blended
+number** (the second one added same session, after Andrew flagged the gap
+live):
+1. `target_utilization_pct` (default 75) — within-a-day overhead: meetings,
+   admin, the unexpected. A knowledge-work rule of thumb, not a fixed rule.
+2. `off_days_per_year` (default 21 — 15 vacation + 6 sick) — whole days not
+   worked at all. **Precedence vs. `time_off_entries`, to avoid
+   double-counting anyone who logs real dates:** for whatever period is
+   being calculated, actual logged time off wins if any overlaps that
+   period; otherwise the calculation falls back to a prorated share of the
+   annual default (`off_days_per_year × hours/day × period_weeks / 52`).
+   See `_effective_off_hours()` in `capacity.py` and the matching `CASE` in
+   `org_unit_capacity_rollup()`. The `/overview` response surfaces which one
+   won via `off_hours_source: "logged" | "assumed"` so the UI can label it.
 
 **Two computation paths, kept in sync by hand:**
 - `backend/routes/capacity.py`'s `get_overview()` — the caller's own

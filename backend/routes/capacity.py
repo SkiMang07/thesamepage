@@ -11,11 +11,21 @@ Decisions locked before this file was written:
   - Hours are the shared currency under the hood. work_unit_configs is an
     optional per-role-level display layer on top (tickets/points/campaigns),
     so a team can see its native unit without breaking cross-team rollup.
-  - "Max capacity" is never 100% — capacity_settings.default_target_
-    utilization_pct (default 75) reserves room for meetings/admin/the
-    unexpected, same as a services-org billable-utilization target. Time off
-    further reduces availability for whatever period is being viewed;
-    capacity is computed per-period, not stored as one static number.
+  - "Max capacity" is never 100% — two SEPARATE buffers, not one blended
+    number:
+      1. capacity_settings.default_target_utilization_pct (default 75) —
+         the WITHIN-a-day overhead (meetings, admin, the unexpected), same
+         as a services-org billable-utilization target.
+      2. capacity_settings.default_off_days_per_year (default 21 — 15
+         vacation + 6 sick, Andrew's own default) — WHOLE DAYS not worked
+         at all. Added same session, before this ever ran live, after
+         Andrew flagged that the original formula had no answer for "how
+         many days off per year should we assume". Precedence vs. actual
+         time_off_entries (to avoid double-counting someone who logs real
+         dates): ACTUAL LOGGED TIME OFF WINS for whatever period it
+         overlaps; otherwise the calculation falls back to a prorated
+         share of the annual default (off_days_per_year × hours/day ×
+         period_weeks / 52). See _effective_off_hours() below.
   - Rollup goes to department/org level via the org_units tree (Session 11),
     not just "my own team" — but a viewer outside their own team only ever
     sees AGGREGATE numbers per org unit, never another manager's individual
@@ -28,10 +38,10 @@ Two computation paths exist and must be kept in sync:
   - "My team" (get_overview below): the caller's own direct_reports, RLS
     already scopes this so it's computed here in Python.
   - Department/org rollup (get_rollup below): calls the org_unit_capacity_
-    rollup() SQL function, which duplicates this same formula because it
-    needs to run SECURITY DEFINER across managers. If the formula changes,
-    change it in both places — see database/schema.sql's comment on that
-    function.
+    rollup() SQL function, which duplicates this same formula (including the
+    off-days precedence rule) because it needs to run SECURITY DEFINER
+    across managers. If the formula changes, change it in both places — see
+    database/schema.sql's comment on that function.
 """
 from datetime import date
 
@@ -46,6 +56,7 @@ _TIME_OFF_TYPES = ("pto", "sick", "holiday", "other")
 
 _DEFAULT_HOURS_PER_WEEK = 40.0
 _DEFAULT_TARGET_UTILIZATION_PCT = 75.0
+_DEFAULT_OFF_DAYS_PER_YEAR = 21.0  # 15 vacation + 6 sick, Andrew's own default
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +80,21 @@ def _time_off_hours(entries: list[dict], start: date, end: date, fallback_daily_
     return total
 
 
-def _available_hours(contracted_hours_per_week: float, target_utilization_pct: float, weeks: float, time_off_hours: float) -> float:
+def _effective_off_hours(
+    actual_time_off_hours: float, off_days_per_year: float, hours_per_day: float, weeks: float
+) -> tuple[float, str]:
+    """Actual logged time off wins for the period it overlaps ("logged");
+    otherwise fall back to a prorated share of the annual off_days_per_year
+    default ("assumed"). Mirrors org_unit_capacity_rollup()'s CASE — keep
+    both in sync if this changes."""
+    if actual_time_off_hours > 0:
+        return actual_time_off_hours, "logged"
+    return off_days_per_year * hours_per_day * (weeks / 52.0), "assumed"
+
+
+def _available_hours(contracted_hours_per_week: float, target_utilization_pct: float, weeks: float, off_hours: float) -> float:
     baseline = contracted_hours_per_week * weeks * (target_utilization_pct / 100.0)
-    return max(baseline - time_off_hours, 0.0)
+    return max(baseline - off_hours, 0.0)
 
 
 def _get_org_id(user_id: str, supabase) -> str | None:
@@ -89,6 +112,7 @@ def _get_org_id(user_id: str, supabase) -> str | None:
 class CapacitySettingsIn(BaseModel):
     default_hours_per_week: float = _DEFAULT_HOURS_PER_WEEK
     default_target_utilization_pct: float = _DEFAULT_TARGET_UTILIZATION_PCT
+    default_off_days_per_year: float = _DEFAULT_OFF_DAYS_PER_YEAR
 
 
 @router.get("/settings")
@@ -104,6 +128,7 @@ async def get_capacity_settings(auth=Depends(get_authenticated_client)):
         "default_target_utilization_pct": (row or {}).get(
             "default_target_utilization_pct", _DEFAULT_TARGET_UTILIZATION_PCT
         ),
+        "default_off_days_per_year": (row or {}).get("default_off_days_per_year", _DEFAULT_OFF_DAYS_PER_YEAR),
     }
 
 
@@ -168,6 +193,7 @@ async def delete_work_unit_config(config_id: str, auth=Depends(get_authenticated
 class CapacityProfileIn(BaseModel):
     contracted_hours_per_week: float | None = None
     target_utilization_pct: float | None = None
+    off_days_per_year: float | None = None
 
 
 @router.get("/profiles/{direct_report_id}")
@@ -183,14 +209,14 @@ async def get_capacity_profile(direct_report_id: str, auth=Depends(get_authentic
         raise HTTPException(status_code=404, detail="Direct report not found")
     rows = (
         supabase.table("capacity_profiles")
-        .select("contracted_hours_per_week,target_utilization_pct")
+        .select("contracted_hours_per_week,target_utilization_pct,off_days_per_year")
         .eq("direct_report_id", direct_report_id)
         .execute()
         .data
     )
     if rows:
         return rows[0]
-    return {"contracted_hours_per_week": None, "target_utilization_pct": None}
+    return {"contracted_hours_per_week": None, "target_utilization_pct": None, "off_days_per_year": None}
 
 
 @router.put("/profiles/{direct_report_id}")
@@ -289,6 +315,7 @@ async def get_overview(period_start: date, period_end: date, auth=Depends(get_au
     org_defaults = settings_rows[0] if settings_rows else {}
     default_hours = org_defaults.get("default_hours_per_week", _DEFAULT_HOURS_PER_WEEK)
     default_utilization = org_defaults.get("default_target_utilization_pct", _DEFAULT_TARGET_UTILIZATION_PCT)
+    default_off_days = org_defaults.get("default_off_days_per_year", _DEFAULT_OFF_DAYS_PER_YEAR)
 
     report_ids = [r["id"] for r in reports]
     profiles = (
@@ -319,9 +346,12 @@ async def get_overview(period_start: date, period_end: date, auth=Depends(get_au
         profile = profile_by_report.get(r["id"], {})
         contracted_hours = profile.get("contracted_hours_per_week") or default_hours
         target_utilization = profile.get("target_utilization_pct") or default_utilization
+        off_days_per_year = profile.get("off_days_per_year") or default_off_days
         entries = time_off_by_report.get(r["id"], [])
-        time_off_hours = _time_off_hours(entries, period_start, period_end, contracted_hours / 5.0)
-        available_hours = _available_hours(contracted_hours, target_utilization, weeks, time_off_hours)
+        hours_per_day = contracted_hours / 5.0
+        actual_time_off_hours = _time_off_hours(entries, period_start, period_end, hours_per_day)
+        off_hours, off_hours_source = _effective_off_hours(actual_time_off_hours, off_days_per_year, hours_per_day, weeks)
+        available_hours = _available_hours(contracted_hours, target_utilization, weeks, off_hours)
         out.append(
             {
                 "direct_report_id": r["id"],
@@ -331,7 +361,12 @@ async def get_overview(period_start: date, period_end: date, auth=Depends(get_au
                 "org_unit_id": r["org_unit_id"],
                 "contracted_hours_per_week": contracted_hours,
                 "target_utilization_pct": target_utilization,
-                "time_off_hours": round(time_off_hours, 1),
+                "off_days_per_year": off_days_per_year,
+                # off_hours: the figure actually subtracted this period — either
+                # real logged time off ("logged") or a prorated share of
+                # off_days_per_year ("assumed"). See _effective_off_hours().
+                "off_hours": round(off_hours, 1),
+                "off_hours_source": off_hours_source,
                 "available_hours": round(available_hours, 1),
             }
         )

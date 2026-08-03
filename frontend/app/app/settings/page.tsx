@@ -740,6 +740,7 @@ function CapacitySection({
   const [settings, setSettings] = useState<CapacitySettings | null>(null);
   const [hoursPerWeek, setHoursPerWeek] = useState(40);
   const [utilizationPct, setUtilizationPct] = useState(75);
+  const [offDaysPerYear, setOffDaysPerYear] = useState(21);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -755,6 +756,7 @@ function CapacitySection({
         setSettings(s);
         setHoursPerWeek(s.default_hours_per_week);
         setUtilizationPct(s.default_target_utilization_pct);
+        setOffDaysPerYear(s.default_off_days_per_year);
         setWorkUnits(wu);
       })
       .catch((e) => onError(e.message));
@@ -772,6 +774,7 @@ function CapacitySection({
       const s = await updateCapacitySettings({
         default_hours_per_week: hoursPerWeek,
         default_target_utilization_pct: utilizationPct,
+        default_off_days_per_year: offDaysPerYear,
       });
       setSettings(s);
       setSaved(true);
@@ -851,6 +854,24 @@ function CapacitySection({
               className={inputCls}
             />
           </div>
+        </div>
+        <div>
+          <label className={labelCls}>Default days off / year</label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            value={offDaysPerYear}
+            onChange={(e) => setOffDaysPerYear(parseFloat(e.target.value || "0"))}
+            className={`${inputCls} max-w-[9rem]`}
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Vacation, sick, and holiday days assumed per year (e.g. 15 vacation + 6 sick = 21). This is a separate
+            buffer from target utilization — target utilization covers the daily overhead of a working day; this
+            covers whole days not worked at all. It&apos;s used to smooth out capacity for a period until you log
+            someone&apos;s actual time off — once you do, the real dates take over for that period instead.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button type="submit" disabled={saving} className={primaryBtnCls}>
