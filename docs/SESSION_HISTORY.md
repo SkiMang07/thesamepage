@@ -128,15 +128,26 @@ optimistically assuming zero time off just because nothing's been logged
 yet), and logging real dates for a person immediately takes over for the
 periods those dates fall in — no manual toggle, no double subtraction.
 
-**What changed (same session, before the original migration ever ran
-live):**
-- `database/migrations/2026-08-02_capacity.sql` + `database/schema.sql` —
-  amended in place (safe since neither had been run against live Supabase
-  yet) to add `capacity_settings.default_off_days_per_year` (default 21)
-  and `capacity_profiles.off_days_per_year` (nullable override).
-  `org_unit_capacity_rollup()` restructured to compute actual logged hours
-  once via a `LATERAL` join and apply the win/fallback precedence in a
-  `CASE`.
+**What changed:**
+- `database/schema.sql` updated in place (it's the canonical end-state, not
+  a migration) to add `capacity_settings.default_off_days_per_year`
+  (default 21) and `capacity_profiles.off_days_per_year` (nullable
+  override). `org_unit_capacity_rollup()` restructured to compute actual
+  logged hours once via a `LATERAL` join and apply the win/fallback
+  precedence in a `CASE`.
+- **Migration correction:** Claude initially amended
+  `2026-08-02_capacity.sql` in place to add these columns, wrongly assuming
+  it hadn't been run live yet — Andrew had already run it. Re-running the
+  amended file against live Supabase failed with `42P07: relation
+  "capacity_settings" already exists` (the file's `CREATE TABLE` tried to
+  recreate an existing table). Fixed by reverting `2026-08-02_capacity.sql`
+  to exactly match what Andrew actually ran, and moving the off-days
+  addition into a new, separate migration —
+  `database/migrations/2026-08-02_capacity_off_days.sql` — same convention
+  as `2026-08-02_goals_success_metrics.sql` shipping separately from the
+  base goals table. **Lesson:** never amend a migration file in place on
+  the assumption it hasn't run live yet — when in doubt, always ship a new
+  migration file instead.
 - `backend/routes/capacity.py` — new `_effective_off_hours()` helper
   (mirrors the SQL `CASE`), `/settings` and `/profiles/{id}` GET/PUT now
   include the new field, `/overview`'s response replaces `time_off_hours`
@@ -151,12 +162,14 @@ live):**
   `/api/capacity/*` routes registering, `npx tsc --noEmit` clean, `npx next
   build` clean (14/14 routes).
 
-**How to apply:** next session should (1) confirm Andrew ran
-`2026-08-02_capacity.sql` against live Supabase, (2) once live, set org
-defaults in Settings > Capacity and try the per-report override + time-off
-flow on a real report, (3) revisit whether v1's "supply only" framing is
-still right once there's real usage — wiring capacity into Projects/Goals
-as an actual allocation/demand view is the natural next payoff, same as how
+**How to apply:** Andrew has already run `2026-08-02_capacity.sql` against
+live Supabase; next session should (1) confirm he's also run
+`2026-08-02_capacity_off_days.sql` (the off-days columns + updated rollup
+function), (2) once live, set org defaults in Settings > Capacity and try
+the per-report override + time-off flow on a real report, (3) revisit
+whether v1's "supply only" framing is still right once there's real usage —
+wiring capacity into Projects/Goals as an actual allocation/demand view is
+the natural next payoff, same as how
 role-scoped views are the flagged next step for `org_units`. Also worth a
 second look once there's a real second manager: today's department/org
 rollup has no real cross-manager data to prove itself against yet.

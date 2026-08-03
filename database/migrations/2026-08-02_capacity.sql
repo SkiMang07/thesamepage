@@ -16,22 +16,18 @@
 --     tree (Session 11), not just a manager's own team — see the
 --     org_unit_capacity_rollup() function below for how that's scoped
 --     safely without a new permissions system.
---   - Off days per year (added same session, before this file was ever run
---     live — see the capacity_scoping project memory note): target
---     utilization buffers the WITHIN-a-day overhead (meetings, admin);
---     off_days_per_year is a separate, orthogonal buffer for whole days
---     someone isn't working at all (vacation/sick/holiday), expressed as an
---     annual day count so it reads the same way an HR PTO policy does
---     ("21 days/year" = 15 vacation + 6 sick, the org-wide default).
---     Precedence rule to avoid double-counting against time_off_entries:
---     for whatever period is being calculated, ACTUAL LOGGED TIME OFF WINS
---     if any overlaps that period; otherwise the calculation falls back to
---     a prorated share of the annual default. See org_unit_capacity_rollup()
---     and backend/routes/capacity.py's _effective_off_hours() for the
---     shared formula — both must move together if this changes.
 --
 -- Run this file in the Supabase SQL editor before the Capacity feature
 -- will work. Nothing here is destructive — pure additions.
+--
+-- NOTE: this file matches exactly what Andrew ran against live Supabase on
+-- 2026-08-02. The off_days_per_year addition (same session, but after this
+-- had already been run) lives in a separate follow-up migration —
+-- database/migrations/2026-08-02_capacity_off_days.sql — same pattern as
+-- goals' success_metrics column shipping as its own migration after the
+-- base goals table. Don't fold that change back into this file; it would
+-- make "run this file in the SQL editor" fail with "relation already
+-- exists" for anyone who already ran this one.
 -- ============================================================
 
 -- -------------------------
@@ -40,17 +36,14 @@
 -- capacity_profiles override inherits these. "Max capacity" is
 -- deliberately not 100%: default_target_utilization_pct reserves room for
 -- meetings, admin, and the unexpected — a knowledge-work rule of thumb,
--- not a hard rule. default_off_days_per_year is a second, separate buffer
--- for whole days off (vacation/sick/holiday) — see the header comment
--- above for how it combines with actual logged time off. All three
--- defaults are editable per org in Settings > Capacity.
+-- not a hard rule. Both defaults are editable per org in
+-- Settings > Capacity.
 -- -------------------------
 create table capacity_settings (
   id                              uuid primary key default uuid_generate_v4(),
   org_id                          uuid not null unique references organizations(id) on delete cascade,
   default_hours_per_week          numeric not null default 40,
   default_target_utilization_pct  numeric not null default 75,
-  default_off_days_per_year       numeric not null default 21,
   created_at                      timestamptz not null default now(),
   updated_at                      timestamptz not null default now()
 );
@@ -60,18 +53,15 @@ alter table capacity_settings enable row level security;
 -- -------------------------
 -- CAPACITY PROFILES
 -- Per-direct-report override of the org defaults above — e.g. a part-time
--- report's contracted_hours_per_week, a manager-heavy role's lower
--- target_utilization_pct, or someone whose actual PTO policy differs from
--- the org default off_days_per_year. Null columns mean "inherit the org
--- default"; this table doesn't need a row at all for someone who's fully
--- standard.
+-- report's contracted_hours_per_week, or a manager-heavy role's lower
+-- target_utilization_pct. Null columns mean "inherit the org default";
+-- this table doesn't need a row at all for someone who's fully standard.
 -- -------------------------
 create table capacity_profiles (
   id                          uuid primary key default uuid_generate_v4(),
   direct_report_id            uuid not null unique references direct_reports(id) on delete cascade,
   contracted_hours_per_week   numeric,
   target_utilization_pct      numeric,
-  off_days_per_year           numeric,
   created_at                  timestamptz not null default now(),
   updated_at                  timestamptz not null default now()
 );
@@ -185,13 +175,9 @@ create policy "work_unit_configs_all_own_org" on work_unit_configs
 -- Reports with no org_unit_id assigned are not included in any row; that's
 -- an existing precondition of the org chart too, not new to capacity.
 --
--- Off-days precedence (added same session, see header comment above): each
--- report's "hours off" for the period is actual logged time_off_entries if
--- any overlap the period, else a prorated share of off_days_per_year
--- (annual days × hours/day × period_weeks / 52). Computed once per report
--- via a LATERAL join (actual_off) and reused in the CASE below — mirrors
--- backend/routes/capacity.py's _effective_off_hours(), which must be kept
--- in sync if this changes.
+-- NOTE: this version is superseded by the CREATE OR REPLACE FUNCTION in
+-- 2026-08-02_capacity_off_days.sql, which adds the off-days precedence
+-- logic. Left as-is here since it matches what actually ran live first.
 -- ============================================================
 
 create or replace function public.org_unit_capacity_rollup(p_period_start date, p_period_end date)
@@ -222,15 +208,19 @@ begin
         coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40)
           * v_period_weeks
           * (coalesce(cp.target_utilization_pct, cs.default_target_utilization_pct, 75) / 100.0)
-        - (
-            case
-              when coalesce(actual_off.hours, 0) > 0 then actual_off.hours
-              else
-                coalesce(cp.off_days_per_year, cs.default_off_days_per_year, 21)
-                  * (coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40) / 5.0)
-                  * (v_period_weeks / 52.0)
-            end
-          ),
+        - coalesce((
+            select sum(
+              (least(t.end_date, p_period_end) - greatest(t.start_date, p_period_start) + 1)
+              * coalesce(
+                  t.hours_per_day,
+                  coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40) / 5.0
+                )
+            )
+            from time_off_entries t
+            where t.direct_report_id = dr.id
+              and t.start_date <= p_period_end
+              and t.end_date >= p_period_start
+          ), 0),
         0
       )
     ) as available_hours
@@ -238,19 +228,6 @@ begin
   join org_units ou on ou.id = dr.org_unit_id and ou.org_id = v_org_id
   left join capacity_profiles cp on cp.direct_report_id = dr.id
   left join capacity_settings cs on cs.org_id = v_org_id
-  left join lateral (
-    select sum(
-      (least(t.end_date, p_period_end) - greatest(t.start_date, p_period_start) + 1)
-      * coalesce(
-          t.hours_per_day,
-          coalesce(cp.contracted_hours_per_week, cs.default_hours_per_week, 40) / 5.0
-        )
-    ) as hours
-    from time_off_entries t
-    where t.direct_report_id = dr.id
-      and t.start_date <= p_period_end
-      and t.end_date >= p_period_start
-  ) actual_off on true
   group by dr.org_unit_id;
 end;
 $$;
