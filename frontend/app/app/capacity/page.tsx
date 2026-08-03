@@ -14,8 +14,14 @@
 //     private data, same as everywhere else in the app).
 //   - "By department" — rolled up through the org_units tree, AGGREGATE
 //     ONLY (count + hours per unit, never a named individual outside your
-//     own team) — see backend/routes/capacity.py's get_rollup for why
-//     that's safe today with no second manager in the org yet.
+//     own team).
+//
+// Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md
+// and the role_scoped_views project memory note): "By department" now only
+// shows units the signed-in user leads (org_units.leader_user_id), plus
+// everything under them — previously any authenticated org member could see
+// the whole org's rollup, a known gap flagged in Session 14. Assign leaders
+// on the Org page's Build tab.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -27,6 +33,7 @@ import {
   WorkUnitConfig,
   getCapacityOverview,
   getCapacityRollup,
+  getLedOrgUnits,
   getOrgUnits,
   getProfile,
   getWorkUnitConfigs,
@@ -86,21 +93,21 @@ function formatRange(start: Date, end: Date): string {
 
 type OrgNode = OrgUnit & { children: OrgNode[] };
 
-function buildTree(units: OrgUnit[]): OrgNode[] {
+// Node-by-id map, not a full rooted tree — "By department" anchors each
+// subtree at a unit the caller leads (which may itself be nested deep
+// under units they don't lead), so it doesn't need a single company-rooted
+// tree the way the Org page's Build/Chart tabs do.
+function buildNodeMap(units: OrgUnit[]): Map<string, OrgNode> {
   const nodes = new Map<string, OrgNode>();
   units.forEach((u) => nodes.set(u.id, { ...u, children: [] }));
-  const roots: OrgNode[] = [];
   nodes.forEach((node) => {
-    const parent = node.parent_unit_id ? nodes.get(node.parent_unit_id) : undefined;
-    if (parent) parent.children.push(node);
-    else roots.push(node);
+    if (node.parent_unit_id) {
+      const parent = nodes.get(node.parent_unit_id);
+      if (parent) parent.children.push(node);
+    }
   });
-  const sortNodes = (list: OrgNode[]) => {
-    list.sort((a, b) => a.name.localeCompare(b.name));
-    list.forEach((n) => sortNodes(n.children));
-  };
-  sortNodes(roots);
-  return roots;
+  nodes.forEach((node) => node.children.sort((a, b) => a.name.localeCompare(b.name)));
+  return nodes;
 }
 
 // Bottom-up sum of a unit's own rollup row plus every descendant's — the
@@ -131,6 +138,7 @@ export default function CapacityPage() {
   const [overview, setOverview] = useState<CapacityOverviewItem[]>([]);
   const [rollup, setRollup] = useState<CapacityRollupItem[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  const [ledUnits, setLedUnits] = useState<OrgUnit[]>([]);
   const [workUnits, setWorkUnits] = useState<WorkUnitConfig[]>([]);
   const [companyName, setCompanyName] = useState("Your company");
   const [loading, setLoading] = useState(true);
@@ -143,11 +151,12 @@ export default function CapacityPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([getOrgUnits(), getWorkUnitConfigs(), getProfile()])
-      .then(([ou, wu, p]) => {
+    Promise.all([getOrgUnits(), getWorkUnitConfigs(), getProfile(), getLedOrgUnits()])
+      .then(([ou, wu, p, led]) => {
         setOrgUnits(ou);
         setWorkUnits(wu);
         setCompanyName(p.company_name || "Your company");
+        setLedUnits(led);
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -168,7 +177,7 @@ export default function CapacityPage() {
       .finally(() => setLoading(false));
   }, [range]);
 
-  const tree = useMemo(() => buildTree(orgUnits), [orgUnits]);
+  const nodesById = useMemo(() => buildNodeMap(orgUnits), [orgUnits]);
   const rollupByUnit = useMemo(() => new Map(rollup.map((r) => [r.org_unit_id, r])), [rollup]);
   const workUnitByRole = useMemo(() => new Map(workUnits.map((w) => [w.role_level_id, w])), [workUnits]);
 
@@ -288,10 +297,10 @@ export default function CapacityPage() {
           <div className="mt-10">
             <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">By department</h2>
             <p className="mt-1 text-xs text-gray-400">
-              Rolled up across everyone in {companyName}&apos;s org chart, regardless of who manages them — aggregate
-              numbers only.
+              Rolled up across every unit you lead in {companyName}&apos;s org chart, regardless of who manages
+              them — aggregate numbers only, never a named individual outside your own team.
             </p>
-            {tree.length === 0 ? (
+            {orgUnits.length === 0 ? (
               <p className="mt-4 text-gray-500">
                 No departments or teams yet.{" "}
                 <Link href="/app/org" className="underline hover:text-gray-700">
@@ -299,11 +308,21 @@ export default function CapacityPage() {
                 </Link>{" "}
                 to see rollups here.
               </p>
+            ) : ledUnits.length === 0 ? (
+              <p className="mt-4 text-gray-500">
+                You don&apos;t lead any departments or teams yet.{" "}
+                <Link href="/app/org" className="underline hover:text-gray-700">
+                  Assign a leader
+                </Link>{" "}
+                on the Build tab to see a rollup here.
+              </p>
             ) : (
               <ul className="mt-4 space-y-2">
-                {tree.map((node) => (
-                  <RollupNode key={node.id} node={node} depth={0} rollupByUnit={rollupByUnit} />
-                ))}
+                {ledUnits.map((led) => {
+                  const node = nodesById.get(led.id);
+                  if (!node) return null;
+                  return <RollupNode key={led.id} node={node} depth={0} rollupByUnit={rollupByUnit} />;
+                })}
               </ul>
             )}
           </div>

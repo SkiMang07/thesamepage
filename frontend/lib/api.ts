@@ -315,12 +315,17 @@ export type OrgUnit = {
   name: string;
   unit_type: OrgUnitType;
   parent_unit_id: string | null;
+  // Session 15: who leads this unit — drives role-scoped rollup views
+  // (People/Goals/Projects/Capacity). Null = no leader assigned yet, so this
+  // unit contributes nothing to anyone's rollup.
+  leader_user_id: string | null;
 };
 
 export type OrgUnitIn = {
   name: string;
   unit_type: OrgUnitType;
   parent_unit_id?: string | null;
+  leader_user_id?: string | null;
 };
 
 export const getOrgUnits = (): Promise<OrgUnit[]> => authedFetch("/api/org-units");
@@ -333,6 +338,59 @@ export const updateOrgUnit = (id: string, body: OrgUnitIn): Promise<OrgUnit> =>
 
 export const deleteOrgUnit = (id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/org-units/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Role-scoped views (Session 15) — org-unit leader assignment + aggregate
+// rollups across the units a manager leads (own unit + every descendant).
+// Aggregate-only outside your own team, same precedent as Capacity's rollup
+// (Session 14). See docs/SESSION_HISTORY.md and the role_scoped_views
+// project memory note for the scoping conversation.
+// ---------------------------------------------------------------------------
+
+export type OrgMember = {
+  id: string;
+  full_name: string;
+  email: string;
+};
+
+export const getOrgMembers = (): Promise<OrgMember[]> => authedFetch("/api/org-units/members");
+
+// Units the caller DIRECTLY leads (not the full descendant scope the
+// backend computes for rollups) — used to know which subtrees to render a
+// rollup for, and to show an empty state when the caller leads nothing yet.
+export const getLedOrgUnits = (): Promise<OrgUnit[]> => authedFetch("/api/org-units/led");
+
+export type GoalsRollupItem = {
+  org_unit_id: string;
+  org_unit_name: string | null;
+  unit_type: OrgUnitType | null;
+  status: GoalStatus;
+  goal_count: number;
+};
+
+// Department/team-level goals only (org_unit_id set directly) — individual
+// goals aren't rolled up here, see goals.py's get_goals_rollup comment.
+export const getGoalsRollup = (): Promise<GoalsRollupItem[]> => authedFetch("/api/goals/rollup");
+
+export type ProjectsRollupItem = {
+  org_unit_id: string;
+  org_unit_name: string | null;
+  unit_type: OrgUnitType | null;
+  status: ProjectStatus;
+  project_count: number;
+};
+
+export const getProjectsRollup = (): Promise<ProjectsRollupItem[]> => authedFetch("/api/projects/rollup");
+
+export type PeopleRollupItem = {
+  org_unit_id: string;
+  org_unit_name: string | null;
+  unit_type: OrgUnitType | null;
+  direct_report_count: number;
+  role_breakdown: { job_role: string; count: number }[];
+};
+
+export const getPeopleRollup = (): Promise<PeopleRollupItem[]> => authedFetch("/api/direct-reports/rollup");
 
 // ---------------------------------------------------------------------------
 // Capacity (Session 14) — how much bandwidth each person/team/department
@@ -442,8 +500,11 @@ export const getCapacityOverview = (periodStart: string, periodEnd: string): Pro
   authedFetch(`/api/capacity/overview?period_start=${periodStart}&period_end=${periodEnd}`);
 
 // Aggregate-only rollup per org unit — never a named individual outside
-// your own team. The frontend walks the org_units tree and sums bottom-up
-// for department/company totals, same pattern as the Org page's chart.
+// your own team. As of Session 15, only returns units within the caller's
+// led scope (org_unit_leaders) — empty when the caller leads nothing yet.
+// The frontend walks each led unit's subtree and sums bottom-up, same
+// pattern as the Org page's chart, just anchored at led roots instead of
+// the company root.
 export type CapacityRollupItem = {
   org_unit_id: string;
   name: string;

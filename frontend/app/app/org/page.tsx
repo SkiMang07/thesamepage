@@ -13,16 +13,34 @@
 // rendered from the same data. "Company" is not a stored org_unit — it's
 // Settings' organization name, shown as the chart's root; a department with
 // no parent sits directly under it.
+//
+// Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md
+// and the role_scoped_views project memory note): a third "Rollup" tab
+// shows, for each unit the signed-in user leads, an aggregate-only summary
+// (headcount + role breakdown, goal/project status counts) across that
+// unit's whole subtree — never a named individual outside your own team,
+// same precedent as Capacity's rollup (Session 14). Build/Chart also gained
+// a leader picker per unit (any org member; same permissiveness org_units
+// CRUD already had).
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  GoalsRollupItem,
+  OrgMember,
   OrgUnit,
   OrgUnitType,
+  PeopleRollupItem,
+  ProjectsRollupItem,
   createOrgUnit,
   deleteOrgUnit,
+  getGoalsRollup,
+  getLedOrgUnits,
+  getOrgMembers,
   getOrgUnits,
+  getPeopleRollup,
   getProfile,
+  getProjectsRollup,
   updateOrgUnit,
 } from "@/lib/api";
 
@@ -34,17 +52,23 @@ const TYPE_LABEL: Record<OrgUnitType, string> = { department: "Department", team
 
 type OrgNode = OrgUnit & { children: OrgNode[] };
 
-function buildTree(units: OrgUnit[]): OrgNode[] {
+function buildNodeMap(units: OrgUnit[]): Map<string, OrgNode> {
   const nodes = new Map<string, OrgNode>();
   units.forEach((u) => nodes.set(u.id, { ...u, children: [] }));
+  nodes.forEach((node) => {
+    if (node.parent_unit_id) {
+      const parent = nodes.get(node.parent_unit_id);
+      if (parent) parent.children.push(node);
+    }
+  });
+  return nodes;
+}
+
+function buildTree(units: OrgUnit[]): OrgNode[] {
+  const nodes = buildNodeMap(units);
   const roots: OrgNode[] = [];
   nodes.forEach((node) => {
-    const parent = node.parent_unit_id ? nodes.get(node.parent_unit_id) : undefined;
-    if (parent) {
-      parent.children.push(node);
-    } else {
-      roots.push(node);
-    }
+    if (!node.parent_unit_id || !nodes.has(node.parent_unit_id)) roots.push(node);
   });
   const sortNodes = (list: OrgNode[]) => {
     list.sort((a, b) => a.name.localeCompare(b.name));
@@ -54,24 +78,37 @@ function buildTree(units: OrgUnit[]): OrgNode[] {
   return roots;
 }
 
-type UnitInput = { name: string; unit_type: OrgUnitType; parent_unit_id: string | null };
+function memberName(id: string | null, members: OrgMember[]): string | null {
+  if (!id) return null;
+  const m = members.find((m) => m.id === id);
+  return m ? m.full_name || m.email : null;
+}
+
+type UnitInput = {
+  name: string;
+  unit_type: OrgUnitType;
+  parent_unit_id: string | null;
+  leader_user_id: string | null;
+};
 
 export default function OrgPage() {
   const [units, setUnits] = useState<OrgUnit[]>([]);
+  const [members, setMembers] = useState<OrgMember[]>([]);
   const [companyName, setCompanyName] = useState("Your company");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"build" | "chart">("build");
+  const [view, setView] = useState<"build" | "chart" | "rollup">("build");
   // "root" = the add-form pinned under the company node; a unit id = the
   // add-child form nested under that node; null = no add-form open.
   const [addParentId, setAddParentId] = useState<string | "root" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getOrgUnits(), getProfile()])
-      .then(([u, p]) => {
+    Promise.all([getOrgUnits(), getProfile(), getOrgMembers()])
+      .then(([u, p, m]) => {
         setUnits(u);
         setCompanyName(p.company_name || "Your company");
+        setMembers(m);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -143,6 +180,12 @@ export default function OrgPage() {
           >
             Chart
           </button>
+          <button
+            onClick={() => setView("rollup")}
+            className={`rounded px-3 py-1.5 text-sm ${view === "rollup" ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+          >
+            Rollup
+          </button>
         </div>
         {view === "build" && (
           <button
@@ -160,12 +203,15 @@ export default function OrgPage() {
       {loading ? (
         <p className="mt-8 text-gray-500">Loading...</p>
       ) : view === "chart" ? (
-        <OrgChart tree={tree} companyName={companyName} />
+        <OrgChart tree={tree} companyName={companyName} members={members} />
+      ) : view === "rollup" ? (
+        <RollupView units={units} />
       ) : (
         <div className="mt-6">
           {addParentId === "root" && (
             <UnitForm
               units={units}
+              members={members}
               companyName={companyName}
               defaultParentId={null}
               onCancel={() => setAddParentId(null)}
@@ -184,6 +230,7 @@ export default function OrgPage() {
                   node={node}
                   depth={0}
                   units={units}
+                  members={members}
                   companyName={companyName}
                   editingId={editingId}
                   addParentId={addParentId}
@@ -214,6 +261,7 @@ function TreeNode({
   node,
   depth,
   units,
+  members,
   companyName,
   editingId,
   addParentId,
@@ -228,6 +276,7 @@ function TreeNode({
   node: OrgNode;
   depth: number;
   units: OrgUnit[];
+  members: OrgMember[];
   companyName: string;
   editingId: string | null;
   addParentId: string | "root" | null;
@@ -241,12 +290,14 @@ function TreeNode({
 }) {
   const isEditing = editingId === node.id;
   const isAddingChild = addParentId === node.id;
+  const leader = memberName(node.leader_user_id, members);
 
   return (
     <li style={{ marginLeft: depth * 24 }}>
       {isEditing ? (
         <UnitForm
           units={units.filter((u) => u.id !== node.id)}
+          members={members}
           companyName={companyName}
           initial={node}
           onCancel={onCancelEdit}
@@ -260,6 +311,7 @@ function TreeNode({
             <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
               {TYPE_LABEL[node.unit_type]}
             </span>
+            {leader && <span className="ml-2 text-xs font-normal text-gray-400">Led by {leader}</span>}
           </p>
           <div className="flex shrink-0 items-center gap-3">
             <button onClick={() => onStartAddChild(node.id)} className="text-xs text-gray-400 hover:text-gray-700">
@@ -277,7 +329,14 @@ function TreeNode({
 
       {isAddingChild && (
         <div className="mt-2" style={{ marginLeft: 24 }}>
-          <UnitForm units={units} companyName={companyName} defaultParentId={node.id} onCancel={onCancelAdd} onSubmit={onAdd} />
+          <UnitForm
+            units={units}
+            members={members}
+            companyName={companyName}
+            defaultParentId={node.id}
+            onCancel={onCancelAdd}
+            onSubmit={onAdd}
+          />
         </div>
       )}
 
@@ -289,6 +348,7 @@ function TreeNode({
               node={child}
               depth={depth + 1}
               units={units}
+              members={members}
               companyName={companyName}
               editingId={editingId}
               addParentId={addParentId}
@@ -309,6 +369,7 @@ function TreeNode({
 
 function UnitForm({
   units,
+  members,
   companyName,
   initial,
   defaultParentId,
@@ -319,6 +380,7 @@ function UnitForm({
   // Candidates for the parent dropdown — callers already exclude the unit
   // being edited so it can't become its own parent.
   units: OrgUnit[];
+  members: OrgMember[];
   companyName: string;
   initial?: OrgUnit;
   defaultParentId?: string | null;
@@ -329,6 +391,7 @@ function UnitForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [unitType, setUnitType] = useState<OrgUnitType>(initial?.unit_type ?? "department");
   const [parentId, setParentId] = useState(initial?.parent_unit_id ?? defaultParentId ?? "");
+  const [leaderId, setLeaderId] = useState(initial?.leader_user_id ?? "");
   const [saving, setSaving] = useState(false);
 
   const isEdit = !!initial;
@@ -338,7 +401,12 @@ function UnitForm({
     if (!name.trim() || saving) return;
     setSaving(true);
     try {
-      await onSubmit({ name: name.trim(), unit_type: unitType, parent_unit_id: parentId || null });
+      await onSubmit({
+        name: name.trim(),
+        unit_type: unitType,
+        parent_unit_id: parentId || null,
+        leader_user_id: leaderId || null,
+      });
       if (!isEdit) {
         setName("");
       }
@@ -362,17 +430,34 @@ function UnitForm({
           </select>
         </div>
       </div>
-      <div>
-        <label className={labelCls}>Parent</label>
-        <select value={parentId} onChange={(e) => setParentId(e.target.value)} className={inputCls}>
-          <option value="">{companyName} (top-level)</option>
-          {units.map((u) => (
-            <option key={u.id} value={u.id}>
-              [{TYPE_LABEL[u.unit_type]}] {u.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className={labelCls}>Parent</label>
+          <select value={parentId} onChange={(e) => setParentId(e.target.value)} className={inputCls}>
+            <option value="">{companyName} (top-level)</option>
+            {units.map((u) => (
+              <option key={u.id} value={u.id}>
+                [{TYPE_LABEL[u.unit_type]}] {u.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className={labelCls}>Leader</label>
+          <select value={leaderId} onChange={(e) => setLeaderId(e.target.value)} className={inputCls}>
+            <option value="">No leader assigned</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.full_name || m.email}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+      <p className="text-xs text-gray-400">
+        The leader sees an aggregate rollup (people, goals, projects, capacity) across this unit and everything
+        under it — never a named individual outside their own team. See the Rollup tab.
+      </p>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={saving} className={primaryBtnCls}>
           {saving ? "Saving..." : submitLabel}
@@ -388,7 +473,7 @@ function UnitForm({
 // Read-only visual chart, rendered from the same org_units data as Build.
 // Pure-CSS nested-list org chart (no charting/diagramming dependency) —
 // styled-jsx ships with Next.js, so this adds nothing new to package.json.
-function OrgChart({ tree, companyName }: { tree: OrgNode[]; companyName: string }) {
+function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName: string; members: OrgMember[] }) {
   return (
     <div className="org-chart mt-8 overflow-x-auto pb-6">
       <ul className="flex justify-center">
@@ -399,7 +484,7 @@ function OrgChart({ tree, companyName }: { tree: OrgNode[]; companyName: string 
           {tree.length > 0 && (
             <ul>
               {tree.map((node) => (
-                <ChartNode key={node.id} node={node} />
+                <ChartNode key={node.id} node={node} members={members} />
               ))}
             </ul>
           )}
@@ -470,7 +555,8 @@ function OrgChart({ tree, companyName }: { tree: OrgNode[]; companyName: string 
   );
 }
 
-function ChartNode({ node }: { node: OrgNode }) {
+function ChartNode({ node, members }: { node: OrgNode; members: OrgMember[] }) {
+  const leader = memberName(node.leader_user_id, members);
   return (
     <li>
       <div className="inline-block rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 shadow-sm">
@@ -478,14 +564,201 @@ function ChartNode({ node }: { node: OrgNode }) {
         <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
           {TYPE_LABEL[node.unit_type]}
         </span>
+        {leader && <div className="mt-1 text-xs text-gray-400">Led by {leader}</div>}
       </div>
       {node.children.length > 0 && (
         <ul>
           {node.children.map((child) => (
-            <ChartNode key={child.id} node={child} />
+            <ChartNode key={child.id} node={child} members={members} />
           ))}
         </ul>
       )}
     </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rollup — for each unit the signed-in user leads, an aggregate-only summary
+// (headcount + role breakdown, goal/project status counts) across that
+// unit's whole subtree. Capacity hours live on their own page (Capacity's
+// "By department" section, gated the same way) rather than duplicated here.
+// ---------------------------------------------------------------------------
+
+type SubtreeTotals = {
+  people: number;
+  roleBreakdown: Map<string, number>;
+  goals: number;
+  goalsAtRisk: number;
+  projects: number;
+  projectsAtRisk: number;
+};
+
+function emptyTotals(): SubtreeTotals {
+  return { people: 0, roleBreakdown: new Map(), goals: 0, goalsAtRisk: 0, projects: 0, projectsAtRisk: 0 };
+}
+
+function subtreeRollup(
+  node: OrgNode,
+  peopleByUnit: Map<string, PeopleRollupItem>,
+  goalsByUnit: Map<string, GoalsRollupItem[]>,
+  projectsByUnit: Map<string, ProjectsRollupItem[]>
+): SubtreeTotals {
+  const totals = emptyTotals();
+  const own = peopleByUnit.get(node.id);
+  if (own) {
+    totals.people += own.direct_report_count;
+    for (const r of own.role_breakdown) {
+      totals.roleBreakdown.set(r.job_role, (totals.roleBreakdown.get(r.job_role) ?? 0) + r.count);
+    }
+  }
+  for (const g of goalsByUnit.get(node.id) ?? []) {
+    totals.goals += g.goal_count;
+    if (g.status === "at_risk") totals.goalsAtRisk += g.goal_count;
+  }
+  for (const p of projectsByUnit.get(node.id) ?? []) {
+    totals.projects += p.project_count;
+    if (p.status === "at_risk") totals.projectsAtRisk += p.project_count;
+  }
+  for (const child of node.children) {
+    const sub = subtreeRollup(child, peopleByUnit, goalsByUnit, projectsByUnit);
+    totals.people += sub.people;
+    totals.goals += sub.goals;
+    totals.goalsAtRisk += sub.goalsAtRisk;
+    totals.projects += sub.projects;
+    totals.projectsAtRisk += sub.projectsAtRisk;
+    sub.roleBreakdown.forEach((count, role) => {
+      totals.roleBreakdown.set(role, (totals.roleBreakdown.get(role) ?? 0) + count);
+    });
+  }
+  return totals;
+}
+
+function RollupNode({
+  node,
+  depth,
+  peopleByUnit,
+  goalsByUnit,
+  projectsByUnit,
+}: {
+  node: OrgNode;
+  depth: number;
+  peopleByUnit: Map<string, PeopleRollupItem>;
+  goalsByUnit: Map<string, GoalsRollupItem[]>;
+  projectsByUnit: Map<string, ProjectsRollupItem[]>;
+}) {
+  const totals = subtreeRollup(node, peopleByUnit, goalsByUnit, projectsByUnit);
+  const roles = Array.from(totals.roleBreakdown.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  return (
+    <li style={{ marginLeft: depth * 24 }}>
+      <div className="rounded-lg border border-gray-200 px-4 py-3">
+        <p className="text-sm font-medium text-gray-900">
+          {node.name}
+          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
+            {TYPE_LABEL[node.unit_type]}
+          </span>
+        </p>
+        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
+          <span>
+            {totals.people} {totals.people === 1 ? "person" : "people"}
+            {roles.length > 0 && ` (${roles.map(([role, count]) => `${role} ${count}`).join(", ")})`}
+          </span>
+          <span>
+            {totals.goals} goal{totals.goals === 1 ? "" : "s"}
+            {totals.goalsAtRisk > 0 && `, ${totals.goalsAtRisk} at risk`}
+          </span>
+          <span>
+            {totals.projects} project{totals.projects === 1 ? "" : "s"}
+            {totals.projectsAtRisk > 0 && `, ${totals.projectsAtRisk} at risk`}
+          </span>
+        </div>
+      </div>
+      {node.children.length > 0 && (
+        <ul className="mt-2 space-y-2">
+          {node.children.map((child) => (
+            <RollupNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              peopleByUnit={peopleByUnit}
+              goalsByUnit={goalsByUnit}
+              projectsByUnit={projectsByUnit}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function RollupView({ units }: { units: OrgUnit[] }) {
+  const [ledUnits, setLedUnits] = useState<OrgUnit[] | null>(null);
+  const [peopleByUnit, setPeopleByUnit] = useState<Map<string, PeopleRollupItem>>(new Map());
+  const [goalsByUnit, setGoalsByUnit] = useState<Map<string, GoalsRollupItem[]>>(new Map());
+  const [projectsByUnit, setProjectsByUnit] = useState<Map<string, ProjectsRollupItem[]>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([getLedOrgUnits(), getPeopleRollup(), getGoalsRollup(), getProjectsRollup()])
+      .then(([led, people, goals, projects]) => {
+        setLedUnits(led);
+        setPeopleByUnit(new Map(people.map((p) => [p.org_unit_id, p])));
+        const gMap = new Map<string, GoalsRollupItem[]>();
+        goals.forEach((g) => gMap.set(g.org_unit_id, [...(gMap.get(g.org_unit_id) ?? []), g]));
+        setGoalsByUnit(gMap);
+        const pMap = new Map<string, ProjectsRollupItem[]>();
+        projects.forEach((p) => pMap.set(p.org_unit_id, [...(pMap.get(p.org_unit_id) ?? []), p]));
+        setProjectsByUnit(pMap);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const nodeMap = useMemo(() => buildNodeMap(units), [units]);
+
+  if (loading) return <p className="mt-8 text-gray-500">Loading...</p>;
+  if (error) return <p className="mt-4 text-sm text-red-500">{error}</p>;
+
+  if (!ledUnits || ledUnits.length === 0) {
+    return (
+      <div className="mt-8 rounded-lg border border-dashed border-gray-300 p-6 text-center">
+        <p className="text-gray-500">
+          You don&apos;t lead any departments or teams yet — rollups only show for units you&apos;re assigned to
+          lead.
+        </p>
+        <p className="mt-2 text-sm text-gray-400">
+          Assign yourself (or anyone) as a leader on any unit in the Build tab to see its rollup here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8">
+      <p className="text-xs text-gray-400">
+        Aggregate numbers only — for units outside your own direct team, you never see a named individual, only
+        counts. Capacity hours live on the{" "}
+        <Link href="/app/capacity" className="underline hover:text-gray-600">
+          Capacity page
+        </Link>
+        , gated the same way.
+      </p>
+      <ul className="mt-4 space-y-3">
+        {ledUnits.map((led) => {
+          const node = nodeMap.get(led.id);
+          if (!node) return null;
+          return (
+            <RollupNode
+              key={led.id}
+              node={node}
+              depth={0}
+              peopleByUnit={peopleByUnit}
+              goalsByUnit={goalsByUnit}
+              projectsByUnit={projectsByUnit}
+            />
+          );
+        })}
+      </ul>
+    </div>
   );
 }

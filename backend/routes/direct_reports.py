@@ -5,6 +5,13 @@ hangs off a direct_report_id.
 Schema column: manager_id (the logged-in manager's auth.uid()).
 RLS enforces this automatically, but we also pass it explicitly for
 defense-in-depth. Matches direct_reports.manager_id in schema.sql.
+
+Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md and
+the role_scoped_views project memory note): GET /rollup returns headcount +
+a role-label/count breakdown per org unit the caller leads — never a named
+report outside your own team, same aggregate-only contract as capacity's
+rollup. Calls org_unit_people_rollup() (SECURITY DEFINER, gated by
+led_org_unit_ids()).
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -141,6 +148,30 @@ async def get_team_overview(auth=Depends(get_authenticated_client)):
             "open_commitment_count": commitment_counts.get(r["id"], 0),
         }
         for r in reports
+    ]
+
+
+# NOTE: declared before /{report_id} so FastAPI doesn't match "rollup" as an id.
+@router.get("/rollup")
+async def get_people_rollup(auth=Depends(get_authenticated_client)):
+    """Headcount + role breakdown across the org units the caller leads —
+    aggregate-only, never a named individual outside your own team."""
+    user_id, supabase = auth
+    rollup_rows = supabase.rpc("org_unit_people_rollup", {}).execute().data
+    unit_ids = sorted({row["org_unit_id"] for row in rollup_rows})
+    units_by_id: dict = {}
+    if unit_ids:
+        units = supabase.table("org_units").select("id,name,unit_type").in_("id", unit_ids).execute().data
+        units_by_id = {u["id"]: u for u in units}
+    return [
+        {
+            "org_unit_id": row["org_unit_id"],
+            "org_unit_name": units_by_id.get(row["org_unit_id"], {}).get("name"),
+            "unit_type": units_by_id.get(row["org_unit_id"], {}).get("unit_type"),
+            "direct_report_count": row["direct_report_count"],
+            "role_breakdown": row["role_breakdown"] or [],
+        }
+        for row in rollup_rows
     ]
 
 

@@ -111,7 +111,8 @@ org_units                   -- activated Session 11; team/department entities, s
                                 "company" is NOT a row here — the organizations row is the chart root.
                                 Org-scoped (current_org_id()), replaces role_levels.functional_team as the
                                 source of truth for "which team" — that column stays in schema, UI stopped
-                                writing/showing it.
+                                writing/showing it. leader_user_id (Session 15) — the role-scoped-views
+                                scoping mechanism, see that section below.
 role_levels                 -- central concept; links metrics/skills/values to a role+level
 assessment_levels           -- stable ordinal (1-5) + configurable label per org
 metric_configs              -- per role_level; order_type: primary/secondary/tertiary
@@ -202,8 +203,84 @@ person). There's no code path from this function back to a named individual,
 so a department head/VP can see "Team A: 82 hrs available" without ever
 seeing another manager's reports by name. This was Andrew's explicit call
 (Session 14 scoping): full org rollup now, but aggregate-only outside your
-own team. Revisit if/when there's a real per-org-unit permissions system to
-build — there's no second manager yet to test one against.
+own team.
+
+**Session 15 update:** the "no second manager yet to build a real
+permissions system against" gap is now closed — see Role-scoped views
+below. `org_unit_capacity_rollup()` is gated by `led_org_unit_ids()` as of
+that session; it's no longer readable by any authenticated org member.
+
+---
+
+## Role-scoped views (Session 15, 2026-08-03)
+
+Closes the gap flagged in ENGINEERING.md since Session 10/11 ("role-scoped
+views — schema supports it, UI doesn't exist yet") and the permissions gap
+flagged in Session 14's Capacity section. See docs/SESSION_HISTORY.md and
+the role_scoped_views project memory note for the full scoping conversation.
+
+**Scoping mechanism — an explicit leader per org unit, not `users.role` or
+the `manager_id` chain.** `org_units.leader_user_id` (nullable) names who
+leads that unit. `public.led_org_unit_ids()` (SECURITY DEFINER, in
+schema.sql) is the one shared gate every rollup function filters through:
+units the caller directly leads, plus every descendant walked down the
+`org_units` tree. Chosen over `users.role` (director/vp tiers — too coarse,
+not tied to a specific unit) and over `users.manager_id` (the
+people-reporting chain — Capacity already chose the `org_units` tree over
+this same chain in Session 14; using two different scoping sources between
+features would make them disagree). Any org member can assign any org
+member as a unit's leader — same permissiveness `org_units` CRUD already
+had; no admin/owner concept exists to gate it further yet.
+
+**Visibility depth — aggregate-only outside your own team, no exceptions.**
+Same contract as Capacity's Session 14 rollup: every rollup function
+returns counts/sums per org unit, never a named individual. Four rollup
+functions exist, all SECURITY DEFINER, all gated by `led_org_unit_ids()`:
+- `org_unit_capacity_rollup(period_start, period_end)` — pre-existing
+  (Session 14), now gated. **Behavior change:** previously any authenticated
+  org member could read the whole org's rollup; now a caller who leads
+  nothing gets nothing. `capacity.py`'s `get_rollup` also had to stop
+  cross-joining against *every* org_unit (which would zero-fill units
+  outside the caller's scope, misreading as "this team has 0 capacity"
+  instead of "you can't see this team") — it now cross-joins only against
+  `led_org_unit_ids()`.
+- `org_unit_goals_rollup()` — status counts for department/team-level goals
+  (`org_unit_id` set directly). Individual-level goals aren't included — a
+  deliberate v1 scope limit.
+- `org_unit_projects_rollup()` — status counts, scope derived the same way
+  Projects derives scope everywhere else: its goal's `org_unit_id` first,
+  falling back to its assigned direct report's `org_unit_id`.
+- `org_unit_people_rollup()` — headcount + a `job_role`/count breakdown
+  (never a name) per unit.
+
+**Backend routes:** `GET /api/org-units/led` (units the caller *directly*
+leads — distinct from the full descendant scope `led_org_unit_ids()`
+computes), `GET /api/org-units/members` (org member list for the leader
+picker, via the existing `users_select_own_org` RLS policy — no new policy
+needed), `GET /api/goals/rollup`, `GET /api/projects/rollup`,
+`GET /api/direct-reports/rollup` (declared before `/{report_id}`, same
+convention as `/overview`).
+
+**Frontend:** the Org page gained a third "Rollup" tab (alongside
+Build/Chart) showing, for each unit the signed-in user leads, a
+subtree-aggregated summary (people + role breakdown, goal/project status
+counts, with "at risk" called out). Build/Chart gained a leader picker per
+unit and a "Led by X" badge. Capacity hours stay on their own page
+(Capacity's existing "By department" section) rather than being duplicated
+into Org's Rollup tab — that section now walks each led unit's subtree
+instead of the whole company tree, with an empty state distinguishing "no
+org units built yet" from "you don't lead any units yet."
+
+**Verification note:** built ahead of real data, same posture as
+`org_units` (Session 11) and Capacity (Session 14) — verified build-clean
+(backend `py_compile` + sandboxed `main.py` import confirming all 6 new
+routes register; frontend `tsc --noEmit` and `next build` both clean,
+14/14 routes). Not live-tested against a second manager — none exists yet.
+**Andrew needs to assign himself (or anyone) as a leader on at least one
+unit in Org > Build before any rollup shows anything** — a caller who leads
+nothing gets an empty scope everywhere, including Capacity's "By
+department," which previously showed org-wide data with no gate at all.
+That's an intentional behavior change, not a bug.
 
 ---
 
@@ -218,12 +295,11 @@ flow was working and in Andrew's hands first, per the original rule).
 Things explicitly not yet built:
 - Stripe webhook handler + subscription-gating middleware
 - Blog content pipeline (start with MDX in-repo when the time comes)
-- Role-scoped views (individual/manager/dept-head) — schema supports it, UI
-  doesn't exist yet. Notably relevant to Goals: company/department-level
-  goals exist and are usable (Session 10) but don't yet have a distinct
-  dept-head/VP audience until this ships. Also relevant to the new org
-  hierarchy (Session 11) — role-scoped views are the natural next payoff for
-  having real org_units, but weren't built this pass.
+- ~~Role-scoped views~~ — **built Session 15** (org-unit leader assignment +
+  aggregate rollup across People/Goals/Projects/Capacity; see the Role-scoped
+  views section above). Still open: individual-level goals aren't rolled up
+  (department/team only), and there's no admin/owner concept gating who can
+  assign a leader (any org member can, today).
 - IC login (user_id on direct_reports is nullable as a future hook)
 - Commitments → project linking (`source_type='project'`, already in
   schema.sql's check constraint) — Projects (Session 13) shipped CRUD only,
@@ -242,10 +318,9 @@ Things explicitly not yet built:
   capacity exists). Wiring it into Projects/Goals as an actual allocation
   view (how much of that capacity is spoken for) is the natural next step,
   explicitly deferred this pass.
-- Per-org-unit rollup permissions (Session 14) — `org_unit_capacity_rollup()`
-  is currently readable by any authenticated org member (aggregate numbers
-  only); a real "who's allowed to see which department's rollup" system
-  wasn't built because there's no second manager yet to test one against.
+- ~~Per-org-unit rollup permissions~~ — **built Session 15** via
+  `org_units.leader_user_id` + `led_org_unit_ids()`; see the Role-scoped
+  views section above.
 
 ---
 
@@ -258,13 +333,13 @@ backend/
   utils.py        get_authenticated_client(), ensure_org()/get_email_from_token() (Session 11), shared helpers
   ai_core.py      generate_text() — the only place Anthropic SDK is called
   routes/
-    direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview)
+    direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview, /rollup — Session 15)
     one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet), POST /wrapup (notes → draft log)
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
-    goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10)
-    projects.py          GET/POST/PUT/PATCH/DELETE /api/projects — goal_id + direct_report_id, no level (Session 13)
-    org_units.py         GET/POST/PUT/DELETE /api/org-units — team/department tree (Session 11)
-    capacity.py          /api/capacity — settings, work-units, profiles, time-off, /overview, /rollup (Session 14)
+    goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10) + /rollup (Session 15)
+    projects.py          GET/POST/PUT/PATCH/DELETE /api/projects — goal_id + direct_report_id, no level (Session 13) + /rollup (Session 15)
+    org_units.py         GET/POST/PUT/DELETE /api/org-units — team/department tree (Session 11) + leader_user_id, /led, /members (Session 15)
+    capacity.py          /api/capacity — settings, work-units, profiles, time-off, /overview, /rollup (Session 14; /rollup gated by led scope as of Session 15)
     settings.py         /api/settings — profile, role-levels, expectations
 
 frontend/
@@ -274,8 +349,8 @@ frontend/
     app/login/          Login page
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
     app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)
-    app/org/            Org builder — own top-level page, tree (build/edit) + read-only chart (Session 11)
-    app/capacity/       Capacity page — period selector, "your team" + org-unit rollup (Session 14)
+    app/org/            Org builder — own top-level page, tree (build/edit) + chart (Session 11) + Rollup tab (Session 15)
+    app/capacity/       Capacity page — period selector, "your team" + led-scope org-unit rollup (Session 14; gated Session 15)
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client

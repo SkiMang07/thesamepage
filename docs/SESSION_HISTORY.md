@@ -11,6 +11,138 @@ Format per entry:
 
 ---
 
+## Session 15 — 2026-08-03
+
+**Goal:** Role-scoped views — Andrew picked this off the running list of
+"what's next" options (surfaced at the top of this session by reviewing
+[[capacity_scoping]], [[org_hierarchy_scoping]], [[projects_scoping]], and
+[[goals_scoping]]'s "how to apply" notes plus ENGINEERING.md's scope
+discipline section). Mid-session, Andrew also floated a separate "team
+space" concept (members + projects + priorities + eventual messaging) —
+captured as its own brainstorm note ([[team_space_brainstorm]]), explicitly
+NOT conflated with this session's work.
+
+**What was done:**
+- Read `docs/ENGINEERING.md`, `database/schema.sql`, `backend/utils.py`,
+  `backend/routes/org_units.py`, `backend/routes/direct_reports.py` before
+  proposing anything, to ground the scoping questions in what already
+  exists (`users.role` unused for permissions, `org_units` tree already
+  the source of truth for structure, Capacity's Session 14 rollup as the
+  only existing cross-manager precedent).
+- Scoped with Andrew via one round of AskUserQuestion (4 questions) before
+  building:
+  1. **Scoping mechanism:** an explicit per-unit "leader"
+     (`org_units.leader_user_id`) — not `users.role` tiers, not the
+     `users.manager_id` reporting chain. Matches Capacity's Session 14
+     choice of the `org_units` tree over the manager chain.
+  2. **Visibility depth:** aggregate-only outside your own team, everywhere,
+     no per-data-type exception — extends Capacity's existing precedent
+     uniformly.
+  3. **Scope of work:** Andrew picked all four candidate surfaces (People,
+     Projects, Capacity's permission gate, Goals), not a narrower first
+     slice.
+  4. **Verification approach:** build ahead of real data, same posture as
+     `org_units` (Session 11) and Capacity (Session 14) — no second real
+     manager exists yet to test cross-manager visibility against.
+- Built the same session, right after scoping:
+  - `database/migrations/2026-08-03_org_unit_leaders.sql` (new) +
+    `database/schema.sql` updated to match — `org_units.leader_user_id`
+    column; `led_org_unit_ids()` (SECURITY DEFINER, recursive walk down
+    from units the caller leads); `org_unit_capacity_rollup()` updated
+    in place to gate through it (previously readable by any authenticated
+    org member — a known gap flagged in Session 14, now closed); three new
+    SECURITY DEFINER functions — `org_unit_goals_rollup()` (department/
+    team-level goals only, by design — individual goals aren't included),
+    `org_unit_projects_rollup()` (scope derived the same way Projects
+    derives scope everywhere else: goal's org_unit_id first, falling back
+    to the assigned report's), `org_unit_people_rollup()` (headcount + a
+    job_role/count breakdown, never a name). **Not yet run against live
+    Supabase** — nothing in this feature works until Andrew runs it.
+  - `backend/routes/org_units.py` — `leader_user_id` added to `OrgUnitIn`;
+    new `GET /led` (units the caller directly leads) and `GET /members`
+    (org member list for the leader picker, via the existing
+    `users_select_own_org` RLS policy — no new policy needed).
+  - `backend/routes/goals.py`, `backend/routes/projects.py`,
+    `backend/routes/direct_reports.py` — each gained a `GET /rollup`
+    calling its new SQL function and joining `org_units` for display
+    names, mirroring `capacity.py`'s existing `get_rollup`.
+    `direct_reports.py`'s is declared before `/{report_id}`, same
+    convention as `/overview`.
+  - `backend/routes/capacity.py` — `get_rollup` now also fetches
+    `led_org_unit_ids()` and cross-joins only against that scope instead
+    of every `org_unit` in the org; returning early with `[]` when the
+    caller leads nothing. (Cross-joining the full org list here would have
+    zero-filled units outside the caller's scope, misreading as "this team
+    has 0 capacity" instead of "you can't see this team.")
+  - `frontend/lib/api.ts` — `OrgUnit`/`OrgUnitIn` gained `leader_user_id`;
+    new `OrgMember`/`getOrgMembers`, `getLedOrgUnits`,
+    `GoalsRollupItem`/`getGoalsRollup`,
+    `ProjectsRollupItem`/`getProjectsRollup`,
+    `PeopleRollupItem`/`getPeopleRollup`.
+  - `frontend/app/app/org/page.tsx` — `UnitForm` gained a leader picker
+    (org members dropdown); Build/Chart nodes show a "Led by X" badge.
+    New third "Rollup" tab: for each unit the signed-in user directly
+    leads, renders its whole subtree with aggregate people/goal/project
+    counts (goals/projects call out an "at risk" count specifically).
+    Empty state when the caller leads nothing, pointing back to Build to
+    self-assign.
+  - `frontend/app/app/capacity/page.tsx` — "By department" section now
+    walks each led unit's subtree (via the new `/led` endpoint) instead of
+    the whole company tree from root. Empty state distinguishes "no org
+    units built yet" from "you don't lead any units yet" — the latter is a
+    deliberate, intentional behavior change from previously showing the
+    whole org's rollup to any member.
+  - Docs updated: `docs/ENGINEERING.md` (new "Role-scoped views" section;
+    both previously-open scope-discipline items marked built),
+    `docs/DESIGN.md` (4 new decisions log rows), this file.
+- **Verified in sandbox (no live Supabase access):** assembled the full
+  repo (backend + frontend) from a device snapshot, overlaid the session's
+  edits. Backend: `python3 -m py_compile` clean on all touched files;
+  imported `main.py` in a sandboxed venv against the pinned
+  `requirements.txt`, confirmed all 6 new routes register
+  (`/api/org-units/led`, `/api/org-units/members`, `/api/goals/rollup`,
+  `/api/projects/rollup`, `/api/direct-reports/rollup`,
+  `/api/capacity/rollup`) and that the wildcard-vs-static-path ordering is
+  correct. Frontend: fresh `npm install` (no lockfile to pin against, same
+  situation as Session 11), `npx tsc --noEmit` clean, `npx next build`
+  clean — 14/14 routes including `/app/org` and `/app/capacity` compile and
+  prerender.
+
+**Decisions locked:**
+- See the four AskUserQuestion answers above — all confirmed with Andrew,
+  not defaulted.
+- **My call, flagged not re-asked** (same pattern as prior sessions' scope
+  notes): any org member can assign any org member as a unit's leader — no
+  admin/owner concept exists to gate this further, and org_units CRUD
+  already had this same permissiveness level before this session.
+- **My call, flagged not re-asked:** individual-level goals are NOT
+  included in the goals rollup (only goals with `org_unit_id` set directly
+  — department/team level). Folding individual goals in via
+  `direct_reports.org_unit_id` is a reasonable follow-up but adds real
+  query complexity for a v1 that's already covering the exact gap
+  ENGINEERING.md flagged (department/team goals with no distinct
+  dept-head/VP audience).
+- Capacity hours were deliberately kept off the Org page's new Rollup tab
+  (they stay on Capacity's own page) to avoid duplicating the same data on
+  two pages with two maintenance sites.
+
+**Next step:**
+1. Confirm Andrew ran `2026-08-03_org_unit_leaders.sql` against live
+   Supabase — nothing in this feature does anything until he does.
+2. Once live, assign a leader (himself, most likely) to at least one org
+   unit in Org > Build, then check the Rollup tab and Capacity's "By
+   department" section both populate correctly — this is also the first
+   real exercise of `led_org_unit_ids()`'s recursive descent, still only
+   verified by reading the SQL, not by running it.
+3. Revisit whether individual-level goals should roll up too, once there's
+   a real leader using this and finding department/team-only goals
+   incomplete.
+4. The "team space" idea Andrew floated mid-session ([[team_space_brainstorm]])
+   is unscoped — pick it up as its own scoping conversation, not bundled
+   into this feature.
+
+---
+
 ## Session 14 — 2026-08-02
 
 **Goal:** Capacity model and planning — Andrew's own framing: help managers/

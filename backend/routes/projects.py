@@ -23,6 +23,14 @@ Decisions locked before this file was written (mirrors the Goals/Org/Team
 RLS note: schema.sql's goals/projects policies are named "*_all_own_org" but
 actually scope by `owner_id = auth.uid()`, not org_id — same gotcha
 documented in goals.py. This router does not populate org_id.
+
+Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md and
+the role_scoped_views project memory note): GET /rollup returns status
+counts across the org units the caller leads, scoped the same way a
+project's own scope is derived elsewhere (its goal's org_unit_id first,
+falling back to its assigned direct report's org_unit_id). Calls
+org_unit_projects_rollup() (SECURITY DEFINER, gated by led_org_unit_ids()),
+mirroring capacity.py's get_rollup.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -87,6 +95,29 @@ async def list_projects(
         query = query.eq("status", status)
     rows = query.order("created_at", desc=True).execute().data
     return _shape_rows(rows)
+
+
+@router.get("/rollup")
+async def get_projects_rollup(auth=Depends(get_authenticated_client)):
+    """Project status counts across the org units the caller leads —
+    aggregate-only, same contract as capacity's rollup."""
+    user_id, supabase = auth
+    rollup_rows = supabase.rpc("org_unit_projects_rollup", {}).execute().data
+    unit_ids = sorted({row["org_unit_id"] for row in rollup_rows})
+    units_by_id: dict = {}
+    if unit_ids:
+        units = supabase.table("org_units").select("id,name,unit_type").in_("id", unit_ids).execute().data
+        units_by_id = {u["id"]: u for u in units}
+    return [
+        {
+            "org_unit_id": row["org_unit_id"],
+            "org_unit_name": units_by_id.get(row["org_unit_id"], {}).get("name"),
+            "unit_type": units_by_id.get(row["org_unit_id"], {}).get("unit_type"),
+            "status": row["status"],
+            "project_count": row["project_count"],
+        }
+        for row in rollup_rows
+    ]
 
 
 @router.post("")

@@ -18,6 +18,16 @@ Decisions locked before this file was written:
     children) is explicitly NOT built. `status` is a plain manually-set
     field; PRODUCT_VISION.md's rollup concept is future work.
 
+Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md and
+the role_scoped_views project memory note): this closes the "distinct
+audience" gap called out above. GET /rollup returns status counts for
+department/team-level goals (org_unit_id set) within the org units the
+caller leads — never a named goal, just counts. Calls the
+org_unit_goals_rollup() SQL function (SECURITY DEFINER, gated by
+led_org_unit_ids()), mirroring capacity.py's get_rollup. Individual-level
+goals aren't included — a deliberate v1 scope limit, see the SQL function's
+comment in schema.sql.
+
 Follow-up (same session, 2026-08-02): added `success_metrics` — a single
 free-text field, the SMART-framework "Measurable" anchor (title/description
 already cover Specific; due_date covers Time-bound). Deliberately
@@ -117,6 +127,31 @@ async def list_goals(
         query = query.eq("status", status)
     rows = query.order("created_at", desc=True).execute().data
     return _shape_rows(rows)
+
+
+@router.get("/rollup")
+async def get_goals_rollup(auth=Depends(get_authenticated_client)):
+    """Department/team goal status counts across the org units the caller
+    leads (see led_org_unit_ids()) — aggregate-only, same contract as
+    capacity's rollup. Joined here with org_units purely to attach display
+    names, same pattern as capacity.py's get_rollup."""
+    user_id, supabase = auth
+    rollup_rows = supabase.rpc("org_unit_goals_rollup", {}).execute().data
+    unit_ids = sorted({row["org_unit_id"] for row in rollup_rows})
+    units_by_id: dict = {}
+    if unit_ids:
+        units = supabase.table("org_units").select("id,name,unit_type").in_("id", unit_ids).execute().data
+        units_by_id = {u["id"]: u for u in units}
+    return [
+        {
+            "org_unit_id": row["org_unit_id"],
+            "org_unit_name": units_by_id.get(row["org_unit_id"], {}).get("name"),
+            "unit_type": units_by_id.get(row["org_unit_id"], {}).get("unit_type"),
+            "status": row["status"],
+            "goal_count": row["goal_count"],
+        }
+        for row in rollup_rows
+    ]
 
 
 @router.post("")

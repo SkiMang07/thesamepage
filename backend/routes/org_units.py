@@ -21,6 +21,14 @@ Known limitation: update_org_unit only guards against a unit being its own
 direct parent. It does not walk the tree to reject a deeper cycle (A's
 parent set to B when B's parent is already A). Acceptable for a solo
 manager building a small tree by hand; revisit if this becomes multi-editor.
+
+Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md and
+the role_scoped_views project memory note): leader_user_id on OrgUnitIn is
+new. Any org member can assign any other org member as a unit's leader —
+same permissiveness level org_units CRUD already had (no owner/admin check
+existed before this either); revisit if that ever needs tightening.
+GET /led and GET /members below exist to support the leader picker and the
+"which units can I see rollups for" UI on the Org and Capacity pages.
 """
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
@@ -36,6 +44,10 @@ class OrgUnitIn(BaseModel):
     name: str
     unit_type: str
     parent_unit_id: str | None = None
+    # Session 15: who leads this unit — the scoping mechanism for role-scoped
+    # rollup views (People/Goals/Projects/Capacity). None = no leader
+    # assigned yet, so this unit contributes nothing to anyone's rollup.
+    leader_user_id: str | None = None
 
 
 def _validate_unit_type(unit_type: str):
@@ -53,6 +65,41 @@ async def list_org_units(auth=Depends(get_authenticated_client)):
         .select("*")
         .order("unit_type")
         .order("name")
+        .execute()
+        .data
+    )
+
+
+@router.get("/led")
+async def list_led_org_units(auth=Depends(get_authenticated_client)):
+    """Units the caller DIRECTLY leads (not the descendant scope
+    led_org_unit_ids() computes server-side for the rollup functions) — the
+    Org and Capacity pages use this to know which subtrees to render a
+    rollup for, and to show an empty state when the caller leads nothing
+    yet."""
+    user_id, supabase = auth
+    return (
+        supabase.table("org_units")
+        .select("*")
+        .eq("leader_user_id", user_id)
+        .order("unit_type")
+        .order("name")
+        .execute()
+        .data
+    )
+
+
+@router.get("/members")
+async def list_org_members(auth=Depends(get_authenticated_client)):
+    """Org members for the leader picker. Relies on the existing
+    users_select_own_org RLS policy (id = auth.uid() or same org_id) —
+    no manual org_id filter needed, same pattern noted throughout
+    ENGINEERING.md's RLS conventions."""
+    user_id, supabase = auth
+    return (
+        supabase.table("users")
+        .select("id,full_name,email")
+        .order("full_name")
         .execute()
         .data
     )

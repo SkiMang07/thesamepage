@@ -94,14 +94,23 @@ alter table role_levels enable row level security;
 -- team" — that free-text column stays in the schema for now (not dropped,
 -- data not migrated) but the UI stops writing/showing it in favor of
 -- direct_reports.org_unit_id below.
+--
+-- leader_user_id (Session 15, 2026-08-03): the person who leads this unit —
+-- the scoping mechanism for role-scoped rollup views (People/Goals/
+-- Projects/Capacity). See led_org_unit_ids() and the four org_unit_*_rollup
+-- functions near the bottom of this file, and the role_scoped_views project
+-- memory note for the scoping conversation. A leader's rollup covers this
+-- unit plus every descendant walked down the tree; nothing named, only
+-- aggregates.
 -- -------------------------
 create table org_units (
-  id             uuid primary key default uuid_generate_v4(),
-  org_id         uuid references organizations(id) on delete cascade,
-  name           text not null,
-  unit_type      text not null check (unit_type in ('department', 'team')),
-  parent_unit_id uuid references org_units(id) on delete set null,
-  created_at     timestamptz not null default now()
+  id              uuid primary key default uuid_generate_v4(),
+  org_id          uuid references organizations(id) on delete cascade,
+  name            text not null,
+  unit_type       text not null check (unit_type in ('department', 'team')),
+  parent_unit_id  uuid references org_units(id) on delete set null,
+  leader_user_id  uuid references auth.users(id) on delete set null,
+  created_at      timestamptz not null default now()
 );
 
 alter table org_units enable row level security;
@@ -825,6 +834,37 @@ create policy "work_unit_configs_all_own_org" on work_unit_configs
   with check (org_id = public.current_org_id());
 
 -- ============================================================
+-- ROLE-SCOPED ROLLUP VIEWS (Session 15, 2026-08-03)
+-- See database/migrations/2026-08-03_org_unit_leaders.sql for the full
+-- reasoning and the role_scoped_views project memory note for the scoping
+-- conversation. led_org_unit_ids() is the one shared gate: units the caller
+-- directly leads (org_units.leader_user_id = auth.uid()) plus every
+-- descendant walked down the tree. Every rollup function below — including
+-- the pre-existing capacity one — filters through it, so there's a single
+-- place that defines "what can this person see."
+-- ============================================================
+
+create or replace function public.led_org_unit_ids()
+returns table (unit_id uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with recursive led as (
+    select id from org_units where leader_user_id = auth.uid()
+    union all
+    select ou.id
+    from org_units ou
+    join led on ou.parent_unit_id = led.id
+  )
+  select id from led
+$$;
+
+revoke all on function public.led_org_unit_ids() from public;
+grant execute on function public.led_org_unit_ids() to authenticated;
+
+-- ------------------------------------------------------------
 -- CAPACITY ROLLUP (department/org level)
 -- SECURITY DEFINER so it can read across managers, but its return shape is
 -- aggregate-only by construction (org_unit_id + count + summed hours, never
@@ -832,7 +872,13 @@ create policy "work_unit_configs_all_own_org" on work_unit_configs
 -- the full reasoning. direct_reports/capacity_profiles/time_off_entries stay
 -- manager-scoped per the policies above; this is the one deliberate
 -- exception, mirroring current_org_id()'s pattern.
--- ============================================================
+--
+-- Gated by led_org_unit_ids() as of Session 15 — previously any
+-- authenticated org member could read the whole org's rollup (a known gap
+-- flagged in Session 14, "no second manager yet to test a real permission
+-- system against"). Now it only returns units the caller leads (or
+-- descends from a unit they lead).
+-- ------------------------------------------------------------
 
 create or replace function public.org_unit_capacity_rollup(p_period_start date, p_period_end date)
 returns table (
@@ -895,9 +941,106 @@ begin
       and t.start_date <= p_period_end
       and t.end_date >= p_period_start
   ) actual_off on true
+  where dr.org_unit_id in (select unit_id from public.led_org_unit_ids())
   group by dr.org_unit_id;
 end;
 $$;
 
 revoke all on function public.org_unit_capacity_rollup(date, date) from public;
 grant execute on function public.org_unit_capacity_rollup(date, date) to authenticated;
+
+-- ------------------------------------------------------------
+-- GOALS ROLLUP — status counts for department/team-level goals directly
+-- tagged with an org_unit_id. Individual-level goals (tied via
+-- direct_report_id, no org_unit_id of their own) are NOT included — a
+-- deliberate v1 scope limit; revisit if a leader also wants individual
+-- goals folded into the same view.
+-- ------------------------------------------------------------
+
+create or replace function public.org_unit_goals_rollup()
+returns table (
+  org_unit_id uuid,
+  status text,
+  goal_count integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select g.org_unit_id, g.status, count(*)::integer as goal_count
+  from goals g
+  where g.org_unit_id in (select unit_id from public.led_org_unit_ids())
+  group by g.org_unit_id, g.status
+$$;
+
+revoke all on function public.org_unit_goals_rollup() from public;
+grant execute on function public.org_unit_goals_rollup() to authenticated;
+
+-- ------------------------------------------------------------
+-- PROJECTS ROLLUP — status counts, scoped the same way Projects derives
+-- its scope everywhere else: its goal's org_unit_id first, falling back to
+-- its assigned direct report's org_unit_id. A standalone project with
+-- neither never resolves to a unit and is excluded.
+-- ------------------------------------------------------------
+
+create or replace function public.org_unit_projects_rollup()
+returns table (
+  org_unit_id uuid,
+  status text,
+  project_count integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(g.org_unit_id, dr.org_unit_id) as org_unit_id, p.status, count(*)::integer as project_count
+  from projects p
+  left join goals g on g.id = p.goal_id
+  left join direct_reports dr on dr.id = p.direct_report_id
+  where coalesce(g.org_unit_id, dr.org_unit_id) in (select unit_id from public.led_org_unit_ids())
+  group by coalesce(g.org_unit_id, dr.org_unit_id), p.status
+$$;
+
+revoke all on function public.org_unit_projects_rollup() from public;
+grant execute on function public.org_unit_projects_rollup() to authenticated;
+
+-- ------------------------------------------------------------
+-- PEOPLE ROLLUP — headcount + a role-label/count breakdown per unit.
+-- Aggregate-only by construction: job_role + a count, never a name, same
+-- contract as the capacity rollup. Reports with no role_level_id assigned
+-- are grouped under 'Unassigned' rather than dropped.
+-- ------------------------------------------------------------
+
+create or replace function public.org_unit_people_rollup()
+returns table (
+  org_unit_id uuid,
+  direct_report_count integer,
+  role_breakdown jsonb
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with per_role as (
+    select
+      dr.org_unit_id,
+      coalesce(rl.job_role, 'Unassigned') as job_role,
+      count(*) as cnt
+    from direct_reports dr
+    left join role_levels rl on rl.id = dr.role_level_id
+    where dr.org_unit_id in (select unit_id from public.led_org_unit_ids())
+    group by dr.org_unit_id, coalesce(rl.job_role, 'Unassigned')
+  )
+  select
+    org_unit_id,
+    sum(cnt)::integer as direct_report_count,
+    jsonb_agg(jsonb_build_object('job_role', job_role, 'count', cnt) order by job_role) as role_breakdown
+  from per_role
+  group by org_unit_id
+$$;
+
+revoke all on function public.org_unit_people_rollup() from public;
+grant execute on function public.org_unit_people_rollup() to authenticated;

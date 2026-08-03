@@ -30,9 +30,16 @@ Decisions locked before this file was written:
     not just "my own team" — but a viewer outside their own team only ever
     sees AGGREGATE numbers per org unit, never another manager's individual
     reports. See org_unit_capacity_rollup() in the schema/migration for how
-    that's enforced (SECURITY DEFINER, aggregate-only return shape) without
-    a new permissions system — there's no second manager yet to build one
-    against.
+    that's enforced (SECURITY DEFINER, aggregate-only return shape).
+
+Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md and
+the role_scoped_views project memory note): get_rollup below is now gated by
+led_org_unit_ids() — the caller only sees units they lead (org_units.
+leader_user_id = them) plus every descendant. This closes the gap flagged
+above ("no second manager yet to build a real permissions system against")
+by adding an explicit per-unit leader instead. Before this, any
+authenticated org member could read the whole org's rollup; now a caller who
+leads nothing gets an empty list.
 
 Two computation paths exist and must be kept in sync:
   - "My team" (get_overview below): the caller's own direct_reports, RLS
@@ -377,8 +384,18 @@ async def get_overview(period_start: date, period_end: date, auth=Depends(get_au
 # Rollup — department/org level via the org_units tree. Calls the
 # SECURITY DEFINER SQL function so it can aggregate across every manager in
 # the org; the response is aggregate-only (org_unit_id + count + hours),
-# joined here with org_units (itself org-scoped, readable by anyone in the
-# org) purely to attach display names — never a named individual.
+# joined here with org_units purely to attach display names — never a named
+# individual.
+#
+# Gated by led_org_unit_ids() as of Session 15 (see docs/SESSION_HISTORY.md
+# and the role_scoped_views project memory note): previously this cross-
+# joined every org_unit in the org (readable by any org member) and
+# zero-filled units with no data. Now the org_units side of the join is
+# ALSO restricted to the caller's led scope — cross-joining against the
+# full org list here would zero-fill units outside that scope, which would
+# misread as "this team has 0 capacity" instead of "you can't see this
+# team." A caller who leads nothing gets an empty list, not a wall of
+# zeros — see the frontend's empty state for that case.
 # ---------------------------------------------------------------------------
 
 @router.get("/rollup")
@@ -386,6 +403,10 @@ async def get_rollup(period_start: date, period_end: date, auth=Depends(get_auth
     user_id, supabase = auth
     if period_end < period_start:
         raise HTTPException(status_code=422, detail="period_end must be on or after period_start")
+
+    led_scope = [row["unit_id"] for row in supabase.rpc("led_org_unit_ids", {}).execute().data]
+    if not led_scope:
+        return []
 
     rollup_rows = (
         supabase.rpc(
@@ -397,7 +418,7 @@ async def get_rollup(period_start: date, period_end: date, auth=Depends(get_auth
     )
     rollup_by_unit = {row["org_unit_id"]: row for row in rollup_rows}
 
-    org_units = supabase.table("org_units").select("*").execute().data
+    org_units = supabase.table("org_units").select("*").in_("id", led_scope).execute().data
     return [
         {
             "org_unit_id": ou["id"],
