@@ -65,6 +65,9 @@ export default function DashboardPage() {
       <div className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">Your team</h1>
         <div className="flex items-center gap-4 text-sm text-gray-500">
+          <Link href="/app/assessments" className="hover:text-gray-900">
+            Assessments
+          </Link>
           <Link href="/app/goals" className="hover:text-gray-900">
             Goals
           </Link>

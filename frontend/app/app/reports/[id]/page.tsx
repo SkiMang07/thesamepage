@@ -18,6 +18,7 @@ import {
   updateCommitment,
   deleteOneOnOne,
   expectationName,
+  getScorecard,
   DirectReport,
   OneOnOne,
   Commitment,
@@ -28,6 +29,7 @@ import {
   CapacitySettings,
   TimeOffEntry,
   TimeOffType,
+  Scorecard,
 } from "@/lib/api";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
@@ -118,6 +120,11 @@ export default function ReportDetailPage() {
   const [toEnd, setToEnd] = useState("");
   const [toType, setToType] = useState<TimeOffType>("pto");
 
+  // Assessments (Session 16) — read-only summary here; scoring happens on
+  // the dedicated scorecard page, same "summary here, edit there" pattern
+  // as Goals/Projects.
+  const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+
   useEffect(() => {
     Promise.all([
       getDirectReport(id),
@@ -128,8 +135,9 @@ export default function ReportDetailPage() {
       getCapacityProfile(id),
       getCapacitySettings(),
       getTimeOff(id),
+      getScorecard(id),
     ])
-      .then(([dr, h, c, g, p, cp, cs, to]) => {
+      .then(([dr, h, c, g, p, cp, cs, to, sc]) => {
         setReport(dr);
         setHistory(h);
         setCommitments(c);
@@ -140,6 +148,7 @@ export default function ReportDetailPage() {
         setOffDaysPerYear(cp.off_days_per_year?.toString() ?? "");
         setCapacitySettings(cs);
         setTimeOff(to);
+        setScorecard(sc);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -296,6 +305,37 @@ export default function ReportDetailPage() {
           )}
         </div>
       )}
+
+      {/* Assessment — read-only summary; scoring happens on the dedicated
+          scorecard page (Session 16). Always shown, same pattern as
+          Goals/Projects/Capacity below. */}
+      <div className="mt-10">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Assessment</h2>
+          <Link href={`/app/assessments/${id}`} className="text-xs text-gray-400 hover:text-gray-600">
+            {scorecard?.overall ? "Assess again →" : "Assess now →"}
+          </Link>
+        </div>
+        {scorecard?.overall ? (
+          <p className="mt-3 text-gray-700">
+            Currently rated{" "}
+            <span className="font-medium">
+              {scorecard.levels.find((l) => l.ordinal === scorecard.overall!.level_ordinal)?.label}
+            </span>{" "}
+            <span className="text-sm text-gray-400">
+              (set {formatDate(scorecard.overall.created_at)})
+            </span>
+          </p>
+        ) : (
+          <p className="mt-3 text-gray-500">
+            Not yet assessed.{" "}
+            <Link href={`/app/assessments/${id}`} className="underline hover:text-gray-700">
+              Score them against their role&apos;s expectations
+            </Link>
+            , or let AI draft a first pass from recent 1:1 notes.
+          </p>
+        )}
+      </div>
 
       {/* Capacity — always shown, same pattern as Goals/Projects. Baseline
           hours/utilization override + this person's time off log. The

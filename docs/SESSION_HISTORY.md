@@ -11,6 +11,121 @@ Format per entry:
 
 ---
 
+## Session 16 — 2026-08-04
+
+**Goal:** Asked what the best next step for the app was, given
+PRODUCT_VISION.md and everything built so far. Read PRODUCT_VISION.md,
+ENGINEERING.md, and every project-memory note back through Session 6 before
+answering. The read: Goals/Org/Projects/Capacity/Role-scoped views cover
+most of the scaffolding the vision calls for, but the **ratings/assessment
+layer** — the piece PRODUCT_VISION.md calls load-bearing ("a mission
+control... that removes ambiguity about how someone is performing against
+explicit expectations") — was still completely untouched. `assessments`,
+`performance_reviews`, `skill_assessments`, `value_assessments`, and
+`metric_entries` were dormant tables; Settings' expectations framework
+(Session 6) existed only to feed this layer, and nothing did yet. Andrew
+agreed and asked to scope and build it in the same session.
+
+**Scoped with Andrew via one round of AskUserQuestion (4 questions) before
+building — he picked the larger option on 3 of 4:**
+1. **Assessment type:** rolling assessment (`assessments` +
+   `skill_assessments` + `value_assessments`, ongoing) — not
+   `performance_reviews` (formal periodic). That table stays dormant.
+2. **Scoring input:** AI-assisted draft, manager reviews before anything
+   saves — same draft-then-review rule as the 1:1 wrap-up flow (Session 8).
+3. **Placement:** own top-level page (`/app/assessments`) + a summary
+   section on DR detail — same two-tier pattern as Capacity.
+4. **Scope:** **all three** expectation types together — skills, values,
+   AND metrics (`metric_entries`) in the same pass, not skills/values first
+   with metrics deferred (the recommended default). Bigger scope, one pass.
+
+**What got built (same session, right after scoping):**
+- `backend/routes/assessments.py` (new, 6 routes, registered in `main.py`
+  under `/api/assessments`):
+  - `GET/PUT /levels` — org's `assessment_levels` (1-5 scale for the overall
+    rating); auto-seeds 5 defaults ("Needs Improvement" → "Outstanding") on
+    first use per org, same on-demand-bootstrap idea as `ensure_org()`.
+    Labels renameable via PUT.
+  - `GET ""` — team list: every direct report + their latest overall
+    rating, for the `/app/assessments` list page.
+  - `GET /{direct_report_id}` — the full scorecard: role expectations
+    (metrics/skills/values + their scale definitions from Settings) each
+    paired with the latest recorded score.
+  - `POST /{direct_report_id}/draft` — pure AI-call route, nothing saved.
+    Prompt pulls recent completed 1:1 summaries, open + recently-done
+    commitments, and individual goals as evidence; explicitly instructed to
+    leave an item unscored rather than force coverage — same restraint
+    already proven in the 1:1 prep prompt's expectations block. Drafted
+    `config_id`s are filtered against the report's actual configured items
+    server-side before returning, so a hallucinated id can't reach the save
+    step.
+  - `POST /{direct_report_id}` — writes whatever the manager kept/edited:
+    inserts into `assessments` (overall), `skill_assessments`,
+    `value_assessments`, `metric_entries` as applicable.
+- `frontend/lib/api.ts` — `AssessmentLevel`, `TeamAssessmentItem`,
+  `ScoredItem`, `Scorecard`, `AssessmentDraft` types + client functions.
+- `frontend/app/app/assessments/page.tsx` (new) — team list, current rating
+  badge per report.
+- `frontend/app/app/assessments/[reportId]/page.tsx` (new) — the scorecard:
+  overall rating picker, per-skill/value scale-point buttons (rendered from
+  each config's own `scale_definitions` when configured, else a bounded
+  number range), per-metric value+period inputs, "Draft with AI" button.
+  Pending inputs start empty (not pre-filled from the latest score) so
+  Save only logs what was actually touched this pass — the latest score
+  shows alongside each item as read-only context, not as a silent default.
+- `frontend/app/app/reports/[id]/page.tsx` — new read-only Assessment
+  summary section (current rating + date, link to the scorecard page),
+  same "summary here, edit there" pattern as Goals/Projects.
+- `frontend/app/app/dashboard/page.tsx` — "Assessments" nav link.
+- Docs: this entry, `docs/ENGINEERING.md`, `docs/DESIGN.md`.
+
+**Schema note — no new migration for table structure.** All 6 base tables
+(`assessment_levels`, `assessments`, `performance_reviews`,
+`skill_assessments`, `value_assessments`, `metric_entries`) plus their RLS
+policies were already present in `database/schema.sql`, dated 2026-07-21 —
+the same "already dormant in the original scaffold, just needed activating"
+pattern as Goals/Org/Projects/Capacity's base tables. Unlike those features,
+nothing in any session-memory note or migration file ever separately
+created these tables, which is why this reads as pre-Session-6 scaffold
+rather than something built along the way. **Not independently confirmed
+against live Supabase from the sandbox** — if `GET /api/assessments/levels`
+404s or errors instead of returning 5 default rows on first real use, that
+means these tables never actually landed in the live database and need a
+migration after all; flag it back here if so.
+
+**Verification:** backend `py_compile` clean on all touched files; sandboxed
+`main.py` import in a fresh venv confirms all 6 new `/api/assessments`
+routes register alongside the other 61 (no collisions from the `/levels`
+vs. `/{direct_report_id}` path-ordering, same care as Direct Reports'
+`/overview`/`/rollup`). Frontend: fresh `npm install` (no lockfile to pin
+against, same as every prior session), `npx tsc --noEmit` clean, `npx next
+build` clean — 15/15 routes including both new `/app/assessments` routes.
+No live Supabase run from the sandbox itself.
+
+**Not built / deferred:**
+- `performance_reviews` (formal periodic review) — Andrew explicitly chose
+  rolling assessment first.
+- Rolling up assessment scores into the goals/projects/capacity rollups or
+  a real "Mission Control" dashboard that ties everything together —
+  PRODUCT_VISION.md's endgame, not attempted this pass. This session
+  activates the data layer the dashboard would eventually read from.
+- Server-side validation that a drafted/saved `config_id` actually belongs
+  to the direct report's assigned role (currently trusts the frontend to
+  only submit ids it received from the scorecard endpoint) — same level of
+  trust the rest of the app extends elsewhere (e.g. goals.py's PUT).
+- Settings UI for renaming assessment levels — the PUT endpoint exists but
+  nothing in Settings calls it yet; defaults are usable as-is.
+
+**Next step:** confirm the schema note above (first real
+`GET /api/assessments/levels` call either seeds 5 defaults cleanly or
+surfaces a missing-table error), then dogfood the AI draft flow on a real
+report with real 1:1 history to see whether the evidence-only restraint
+produces useful drafts or mostly empty ones. If it's mostly empty, the
+prompt likely needs more/better evidence sources (e.g. pulling private
+`one_on_ones.notes`, not just summaries) rather than a scoping change.
+
+---
+
 ## Session 15 — 2026-08-03
 
 **Goal:** Role-scoped views — Andrew picked this off the running list of

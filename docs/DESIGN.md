@@ -49,6 +49,8 @@ or UX patterns. Starts minimal — add decisions here as they get locked.
 /app/org                    frontend/app/app/org/page.tsx
 /app/capacity                frontend/app/app/capacity/page.tsx
 /app/settings               frontend/app/app/settings/page.tsx
+/app/assessments             frontend/app/app/assessments/page.tsx
+/app/assessments/[reportId]  frontend/app/app/assessments/[reportId]/page.tsx
 ```
 
 Marketing pages (`(marketing)/`) are public and need to be SSG-renderable for
@@ -94,5 +96,9 @@ SEO. Do not add client-side-only patterns to these pages.
 | 2026-08-03 | Scoping mechanism is an explicit per-unit "leader" (`org_units.leader_user_id`, any org member can be assigned), not `users.role` tiers and not the manager-reporting chain | Andrew's explicit call — mirrors Capacity's Session 14 choice to walk the `org_units` tree rather than the manager chain, so there's one consistent source of truth for "who sees what" across every rollup |
 | 2026-08-03 | Rollup views are aggregate-only everywhere, with no exception for any of the four surfaces (People/Goals/Projects/Capacity) | Andrew's explicit call, extending Capacity's Session 14 precedent uniformly rather than allowing named drill-down for some data types and not others |
 | 2026-08-03 | Capacity's "By department" section now shows an empty state ("you don't lead any units yet") instead of the whole org's rollup by default | Closes the permission gap flagged in Session 14 — previously any authenticated org member could see the whole org's aggregate rollup with no assignment step; this is an intentional behavior change, not a bug, and needs Andrew to assign a leader before the section shows anything |
+| 2026-08-04 | Assessments gets its own top-level page (`/app/assessments` + `/app/assessments/[reportId]`), not folded into DR detail | Session 16, same reasoning as Goals/Projects/Org/Capacity — scoring happens regularly, not once; DR detail gets a read-only summary + link, same "summary here, edit there" pattern as Goals/Projects/Capacity |
+| 2026-08-04 | Scorecard inputs start empty rather than pre-filled with the direct report's latest recorded score; the latest score shows alongside each item as read-only context instead | Pre-filling would make an untouched "Save" silently re-log every unchanged score as a new timestamped row. Empty-by-default means only what the manager (or an AI draft) actually set this pass gets written — consistent with the draft-then-review rule elsewhere in the app |
+| 2026-08-04 | Skill/value scores render as a row of scale-point buttons (labeled with each point's configured qualitative/quantitative output when available) rather than a free-number input or dropdown | The scale definitions already carry meaning per point (Settings > Expectations, Session 6) — buttons surface that meaning directly instead of making the manager cross-reference a legend elsewhere |
+| 2026-08-04 | AI draft prompt is explicitly told to leave an item unscored rather than force coverage of every configured metric/skill/value, and to return a null overall if there isn't enough evidence | Same restraint already proven in the 1:1 prep prompt's expectations block (Session 7) — a fabricated complete draft would erode trust in the assessment record faster than an honest partial one |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_

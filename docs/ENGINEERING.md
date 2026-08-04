@@ -129,11 +129,17 @@ work_unit_configs           -- activated Session 14; per role_level, optional �
 
 **Performance / assessment tables:**
 ```
-assessments          -- rolling assessment per direct report
-performance_reviews  -- formal periodic review
-skill_assessments    -- per-skill score per direct report
-value_assessments    -- per-value score per direct report
-metric_entries       -- time-series metric data per direct report
+assessments          -- activated Session 16; rolling overall rating per direct report,
+                        level_ordinal scored against assessment_levels (org-configured 1-5 scale)
+assessment_levels    -- activated Session 16; org-scoped 1-5 scale + label, auto-seeded with
+                        5 defaults on first use (see _ensure_levels in assessments.py)
+performance_reviews  -- still dormant; formal periodic review, deferred in favor of the
+                        rolling assessment (Session 16 scoping decision with Andrew)
+skill_assessments    -- activated Session 16; per-skill score per direct report, scored
+                        against that skill_config's own evaluation_scale_min/max
+value_assessments    -- activated Session 16; same shape as skill_assessments, per value
+metric_entries       -- activated Session 16; time-series metric value + period per direct
+                        report, scored against that metric_config's own scale
 ```
 
 **Development plans (still dormant):**
@@ -284,6 +290,60 @@ That's an intentional behavior change, not a bug.
 
 ---
 
+## Assessments (Session 16, 2026-08-04)
+
+The ratings/status layer PRODUCT_VISION.md calls the load-bearing piece of
+"Mission Control" — scoring a direct report against their role's configured
+expectations (Settings > Expectations, Session 6), not just having those
+expectations on record. See docs/SESSION_HISTORY.md and the
+assessments_scoping project memory note for the full scoping conversation.
+
+**Scope, decided with Andrew:** rolling assessment (not `performance_reviews`,
+which stays dormant), all three expectation types together (metrics via
+`metric_entries`, skills via `skill_assessments`, values via
+`value_assessments`) plus an overall `level_ordinal` snapshot scored against
+org-configured `assessment_levels`. AI-assisted draft, manager reviews
+before anything saves — same draft-then-review rule as `one_on_ones.py`'s
+wrap-up flow (Session 8).
+
+**`backend/routes/assessments.py`** (6 routes under `/api/assessments`):
+`GET/PUT /levels` (auto-seeds 5 default labels per org on first use, same
+on-demand-bootstrap idea as `ensure_org()`), `GET ""` (team list with latest
+overall rating, for the list page), `GET /{direct_report_id}` (the full
+scorecard — role expectations + latest score per item, via
+`_fetch_scorecard()`), `POST /{direct_report_id}/draft` (pure AI call,
+nothing saved), `POST /{direct_report_id}` (writes the reviewed result).
+`/levels` is declared before `/{direct_report_id}` so FastAPI doesn't match
+it as a direct-report id, same convention as Direct Reports'
+`/overview`/`/rollup`.
+
+**Draft prompt restraint:** the AI is instructed to only score an item when
+recent 1:1 summaries, commitments, or goals actually support a judgment —
+never to force coverage of every configured metric/skill/value. Same
+restraint already proven in the 1:1 prep prompt's expectations block
+(`_format_expectations_block` in `one_on_ones.py`: "do NOT audit every
+expectation in one 1:1"). Drafted `config_id`s are filtered against the
+report's real configured items server-side before returning to the
+frontend, so a hallucinated id from the model can't reach the save step.
+
+**Frontend pending-state design:** the scorecard page
+(`/app/assessments/[reportId]`) starts every input EMPTY rather than
+pre-filled with the latest recorded score. The latest score still displays
+next to each item as read-only context. This means clicking Save only logs
+what the manager (or the AI draft) actually touched this pass, instead of
+silently re-logging every unchanged score as a fresh timestamped row every
+time the page is saved.
+
+**Schema note — no new migration.** All 6 base tables and their RLS
+policies were already present in `database/schema.sql` (dated 2026-07-21) —
+same "already dormant in the original scaffold" pattern as Goals/Org/
+Projects/Capacity's base tables, just never independently confirmed live
+before this session. If `GET /api/assessments/levels` doesn't cleanly
+return 5 seeded rows on first real use, these tables never actually landed
+in Supabase and need a migration after all.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -321,6 +381,17 @@ Things explicitly not yet built:
 - ~~Per-org-unit rollup permissions~~ — **built Session 15** via
   `org_units.leader_user_id` + `led_org_unit_ids()`; see the Role-scoped
   views section above.
+- ~~Ratings/assessment layer~~ — **built Session 16** (rolling assessment:
+  overall rating + per-metric/skill/value scores, AI-assisted draft); see
+  the Assessments section above. `performance_reviews` (formal periodic
+  review) is still dormant — deferred in favor of the rolling assessment.
+- Assessment scores aren't wired into the goals/projects/capacity rollups
+  or a real "Mission Control" dashboard — PRODUCT_VISION.md's endgame.
+  Session 16 activates the data layer that dashboard would eventually read
+  from; the dashboard itself is unbuilt.
+- Settings UI for renaming `assessment_levels` — `PUT
+  /api/assessments/levels/{ordinal}` exists but nothing in Settings calls
+  it yet; the 5 auto-seeded default labels are usable as-is.
 
 ---
 
@@ -341,6 +412,7 @@ backend/
     org_units.py         GET/POST/PUT/DELETE /api/org-units — team/department tree (Session 11) + leader_user_id, /led, /members (Session 15)
     capacity.py          /api/capacity — settings, work-units, profiles, time-off, /overview, /rollup (Session 14; /rollup gated by led scope as of Session 15)
     settings.py         /api/settings — profile, role-levels, expectations
+    assessments.py       /api/assessments — levels, team list, per-report scorecard, AI draft, save (Session 16)
 
 frontend/
   app/
@@ -351,6 +423,7 @@ frontend/
     app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)
     app/org/            Org builder — own top-level page, tree (build/edit) + chart (Session 11) + Rollup tab (Session 15)
     app/capacity/       Capacity page — period selector, "your team" + led-scope org-unit rollup (Session 14; gated Session 15)
+    app/assessments/    Team list + [reportId] scorecard — overall rating, per-item scores, AI draft (Session 16)
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client

@@ -646,3 +646,121 @@ export const assignReportRole = (reportId: string, report: DirectReport, roleLev
       org_unit_id: report.org_unit_id,
     }),
   });
+
+// ---------------------------------------------------------------------------
+// Assessments (Session 16, 2026-08-04) — the ratings/status layer
+// PRODUCT_VISION.md calls the load-bearing piece of "Mission Control":
+// scoring a direct report against their role's configured expectations
+// (Settings > Expectations), not just having them on record.
+//
+// v1 is the ROLLING assessment (not performance_reviews, which stays
+// dormant): an overall level_ordinal snapshot (assessments, scored against
+// org-configured assessment_levels) plus per-item scores against every
+// configured metric/skill/value. AI can draft scores from recent 1:1s/
+// commitments/goals — draft-then-review, same rule as the wrap-up flow
+// (Session 8): nothing saves until the manager reviews it. Own top-level
+// page (/app/assessments) + a summary on DR detail.
+// ---------------------------------------------------------------------------
+
+export type AssessmentLevel = {
+  id: string;
+  ordinal: number;
+  label: string;
+};
+
+export const getAssessmentLevels = (): Promise<AssessmentLevel[]> =>
+  authedFetch("/api/assessments/levels");
+
+export const renameAssessmentLevel = (ordinal: number, label: string): Promise<AssessmentLevel> =>
+  authedFetch(`/api/assessments/levels/${ordinal}`, { method: "PUT", body: JSON.stringify({ label }) });
+
+export type TeamAssessmentItem = {
+  id: string;
+  name: string;
+  role_title: string | null;
+  latest_level_ordinal: number | null;
+  latest_level_label: string | null;
+  assessed_at: string | null;
+};
+
+export const getTeamAssessments = (): Promise<TeamAssessmentItem[]> => authedFetch("/api/assessments");
+
+export type ScaleDefinition = {
+  evaluation_point: number;
+  evaluation_name: string | null;
+  description: string | null;
+  quantitative_output: string | null;
+  qualitative_output: string | null;
+};
+
+// Shape of the latest recorded score for a skill/value config.
+export type LatestSkillValueScore = {
+  evaluation_point: number;
+  notes: string | null;
+  assessed_at: string;
+};
+
+// Shape of the latest recorded entry for a metric config.
+export type LatestMetricEntry = {
+  value: number;
+  period: string | null;
+  recorded_at: string;
+};
+
+export type ScoredItem = {
+  config_id: string;
+  name: string;
+  order_type: "primary" | "secondary" | "tertiary" | null;
+  description: string | null;
+  expectation: string | null; // skills/metrics
+  measurement_period: string | null; // metrics only
+  value_type: "team" | "company" | "department" | null; // values only
+  scale_min: number;
+  scale_max: number;
+  scale_definitions: ScaleDefinition[];
+  // null for metrics (no prior entry), or a skill/value score, or a metric
+  // entry — narrow on which array this item came from to know the shape.
+  latest: (LatestSkillValueScore | LatestMetricEntry) | null;
+};
+
+export type OverallAssessment = {
+  id: string;
+  level_ordinal: number;
+  notes: string | null;
+  created_at: string;
+};
+
+export type Scorecard = {
+  direct_report: { id: string; name: string; role_title: string | null; role_level_id: string | null };
+  role: Pick<RoleLevel, "id" | "job_role" | "job_level" | "functional_team" | "job_responsibilities"> | null;
+  skills: ScoredItem[];
+  values: ScoredItem[];
+  metrics: ScoredItem[];
+  overall: OverallAssessment | null;
+  levels: AssessmentLevel[];
+};
+
+export const getScorecard = (directReportId: string): Promise<Scorecard> =>
+  authedFetch(`/api/assessments/${directReportId}`);
+
+// AI-drafted scores — reviewed/edited by the manager before saveAssessment.
+// Sparse by design: the AI only includes items the evidence supports.
+export type AssessmentDraft = {
+  overall: { level_ordinal: number; notes: string } | null;
+  skills: { config_id: string; evaluation_point: number; notes: string }[];
+  values: { config_id: string; evaluation_point: number; notes: string }[];
+  metrics: { config_id: string; value: number; period: string | null; notes: string }[];
+};
+
+export const draftAssessment = (directReportId: string): Promise<AssessmentDraft> =>
+  authedFetch(`/api/assessments/${directReportId}/draft`, { method: "POST" });
+
+export type SaveAssessmentBody = {
+  overall?: { level_ordinal: number; notes?: string | null } | null;
+  skills?: { config_id: string; evaluation_point: number; notes?: string | null }[];
+  values?: { config_id: string; evaluation_point: number; notes?: string | null }[];
+  metrics?: { config_id: string; value: number; period?: string | null }[];
+};
+
+export const saveAssessment = (directReportId: string, body: SaveAssessmentBody): Promise<unknown> =>
+  authedFetch(`/api/assessments/${directReportId}`, { method: "POST", body: JSON.stringify(body) });
