@@ -355,6 +355,36 @@ in Supabase and need a migration after all.
 
 ---
 
+## Mission Control (Session 18, 2026-08-06)
+
+`frontend/app/app/dashboard/page.tsx` replaces the old "team + 1:1 cadence" landing page with
+PRODUCT_VISION.md's "mission control" surface — see docs/SESSION_HISTORY.md and the
+mission_control project memory note for the scoping conversation.
+
+**Scope, decided with Andrew (all four recommended defaults):** replaces `/app/dashboard` outright
+rather than living as a separate page; only cards backed by real data today (no placeholders for Team
+Health, Team/Dept Operations, or People Operations); manager view only (no Department Head rollup
+toggle this pass, though Session 15's infrastructure supports one); Individual Performance shows each
+report's latest rating as-is, no synthesized team score.
+
+**Four sections, each a client-side merge of existing endpoints — no new backend routes, no schema
+changes:**
+- Individual Performance: `getTeamOverview()` + `getTeamAssessments()`, merged by `direct_report_id`.
+- Goals: `getGoals()` filtered to non-individual levels, grouped into Organization/Department/Team.
+- Key Initiatives: `getProjects()` filtered to active/on_track/at_risk.
+- Capacity — this week: `getCapacityOverview()` for the current Mon–Sun week, computed with a local
+  (smaller) copy of `capacity/page.tsx`'s period-range helpers.
+
+Every section follows the "summary here, edit there" pattern already established on DR detail
+(Goals/Projects/Assessment/Capacity) — a compact read view with a link to the full page for editing.
+
+**Not built this pass:** Department Head / Team / Individual (IC) role-scoped versions of this page
+(see PRODUCT_VISION.md's 4-dashboard concept); any card type without a real data model yet (Team
+Health KPIs, Customer Demand/Staffing/Forecasting/Budget/Compensation, Recruiting/Employee Feedback/
+Improvement Plans/formal Performance Reviews); a synthesized team-level rating rollup.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -396,10 +426,12 @@ Things explicitly not yet built:
   overall rating + per-metric/skill/value scores, AI-assisted draft); see
   the Assessments section above. `performance_reviews` (formal periodic
   review) is still dormant — deferred in favor of the rolling assessment.
-- Assessment scores aren't wired into the goals/projects/capacity rollups
-  or a real "Mission Control" dashboard — PRODUCT_VISION.md's endgame.
-  Session 16 activates the data layer that dashboard would eventually read
-  from; the dashboard itself is unbuilt.
+- ~~Mission Control dashboard~~ — **built Session 18** (manager-view-only:
+  Individual Performance, Organization/Department/Team Goals, Key
+  Initiatives, a Capacity snapshot; see the Mission Control section above).
+  Department Head / Team / Individual (IC) role-scoped versions of this same
+  page are still unbuilt, and there's no synthesized team-level rating
+  rollup — just each report's latest score as-is.
 - Settings UI for renaming `assessment_levels` — `PUT
   /api/assessments/levels/{ordinal}` exists but nothing in Settings calls
   it yet; the 5 auto-seeded default labels are usable as-is.
@@ -428,7 +460,7 @@ backend/
 frontend/
   app/
     (marketing)/        Public SSG pages (home, pricing, blog) — need to be indexable
-    app/dashboard/      Auth-gated app shell
+    app/dashboard/      Mission Control — landing page (Session 18): Individual Performance, Goals, Key Initiatives, Capacity snapshot
     app/login/          Login page
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
     app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)

@@ -11,6 +11,70 @@ Format per entry:
 
 ---
 
+## Session 18 — 2026-08-06
+
+**Goal:** Andrew asked for a few options for next steps given everything built so far. Recommended
+options: (1) dogfood what's already shipped rather than build more, (2) build the "Mission Control"
+dashboard PRODUCT_VISION.md calls the product's endgame, (3) scope the "team space" idea from Session
+3, (4) revisit the manager-agent-hierarchy brainstorm now that Capacity/Projects data models exist,
+(5) smaller cleanup items. Andrew picked Mission Control and asked to scope it.
+
+**Scoped via one round of AskUserQuestion (4 questions) before building — Andrew picked the
+recommended default on all four:**
+1. **Placement:** Mission Control replaces `/app/dashboard` as the landing page, rather than living as
+   a separate new page. Today's "who needs a 1:1" list doesn't get its own page anymore — it folds
+   into the new Individual Performance card.
+2. **Card scope:** only cards backed by real data today (Organization/Department/Team Goals,
+   Individual Performance, Key Initiatives, a Capacity snapshot). No placeholder/"coming soon" cards
+   for Team Health, Team/Dept Operations, or People Operations — matches the existing precedent from
+   Settings (deferred sections get no placeholder nav entries).
+3. **View scope:** manager view only. Department Head rollups (Session 15's `led_org_unit_ids()` +
+   the 4 rollup functions) exist but aren't wired into this page this pass. Team/Individual (IC)
+   views stay out of scope entirely — IC login was explicitly deferred in Session 3.
+4. **Ratings rollup:** Individual Performance lists each report's latest assessment rating as-is (name
+   + rating + last-assessed date). No synthesized team-level score — matches the app's existing
+   pattern of surfacing real records rather than derived numbers.
+
+**What got built (same session, right after scoping):** `frontend/app/app/dashboard/page.tsx`
+rewritten in place (route unchanged, content replaced) as the Mission Control page — four sections,
+each following the "summary here, edit there" pattern already used on DR detail's Goals/Projects/
+Assessment/Capacity sections:
+- **Individual Performance** — merges `getTeamOverview()` (1:1 cadence, open commitments — what the
+  old dashboard already showed) with `getTeamAssessments()` (latest rating) client-side by
+  `direct_report_id`. Keeps the existing "add a direct report" quick-add form and the "N people due
+  for a 1:1" line.
+- **Goals** — `getGoals()` filtered to `level !== "individual"`, grouped into Organization/Department/
+  Team subsections. Individual-level goals stay off this page; they're on the report's own page.
+- **Key Initiatives** — `getProjects()` filtered to `status` in (active, on_track, at_risk) — a status
+  board, not an archive.
+- **Capacity — this week** — `getCapacityOverview()` for the current Monday–Sunday week (local
+  `startOfWeek`/`addDays`/`toISODate` helpers, a minimal subset of `capacity/page.tsx`'s period logic
+  since Mission Control only ever needs "this week"). Shows total available hours across the team +
+  a per-person line.
+
+**No new backend routes and no schema changes.** Every card is a client-side merge of endpoints that
+already existed — `getTeamOverview`, `getTeamAssessments`, `getGoals`, `getProjects`,
+`getCapacityOverview`. This is the first feature session with zero backend changes.
+
+**My call, flagged not re-asked:** the "add a direct report" form stays on Mission Control (where it
+lived on the old dashboard) rather than moving into Settings → Team — out of scope for this pass, and
+it's a working pattern already.
+
+**Verification:** frontend-only change. Fresh `npm install`, `npx tsc --noEmit` clean, `npx next
+build` clean — 15/15 routes including `/app/dashboard` at 4.31 kB. No backend verification needed
+(no backend files touched). File committed to Andrew's local TheSamePage folder via
+`device_commit_files`.
+
+**Decisions made / locked:** see the 4 scoping answers above — all now reflected in the page's header
+comment block in `dashboard/page.tsx` and in `docs/ENGINEERING.md`'s new Mission Control section.
+
+**Next step:** Andrew should dogfood the new landing page and confirm it reads well with real data,
+then `git push`. Natural follow-ons once there's live usage: wiring in the Department Head rollup
+toggle (Session 15's infrastructure already supports it), and revisiting whether Individual
+Performance should surface anything from Team Health once that data model exists.
+
+---
+
 ## Session 17 — 2026-08-06
 
 **Goal:** Andrew reported the Team settings page had visually overlapping text (screenshot), and
