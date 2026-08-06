@@ -72,6 +72,18 @@ export default function SettingsPage() {
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
 
+  // Expectations' selected role + kind live here, not inside
+  // ExpectationsSection, so they survive switching to another section and
+  // back. Previously this state lived inside ExpectationsSection itself,
+  // which unmounts whenever `section` changes — every trip to another tab
+  // (e.g. Team) and back reset the role picker to the first role and the
+  // kind tab to Metrics. The data was never actually lost (still safely in
+  // the DB, confirmed via network inspection), but landing back on the
+  // first role's empty list looked exactly like data loss. Bug reported by
+  // Andrew 2026-08-06 after filling out expectations for every role.
+  const [expRoleLevelId, setExpRoleLevelId] = useState<string>("");
+  const [expKind, setExpKind] = useState<ExpectationKind>("metrics");
+
   useEffect(() => {
     Promise.all([getRoleLevels(), getDirectReports(), getOrgUnits()])
       .then(([rls, drs, ous]) => {
@@ -133,7 +145,14 @@ export default function SettingsPage() {
             />
           )}
           {section === "expectations" && (
-            <ExpectationsSection roleLevels={roleLevels} onError={setError} />
+            <ExpectationsSection
+              roleLevels={roleLevels}
+              roleLevelId={expRoleLevelId}
+              setRoleLevelId={setExpRoleLevelId}
+              kind={expKind}
+              setKind={setExpKind}
+              onError={setError}
+            />
           )}
           {section === "capacity" && <CapacitySection roleLevels={roleLevels} onError={setError} />}
         </div>
@@ -481,15 +500,15 @@ function TeamSection({
       <ul className="mt-4 space-y-2">
         {reports.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900">{r.name}</p>
-              {r.role_title && <p className="text-xs text-gray-500">{r.role_title}</p>}
+            <div className="min-w-0 flex-1 truncate">
+              <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
+              {r.role_title && <p className="truncate text-xs text-gray-500">{r.role_title}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <select
                 value={r.role_level_id ?? ""}
                 onChange={(e) => assign(r, e.target.value)}
-                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                className="w-48 truncate rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               >
                 <option value="">No role assigned</option>
                 {roleLevels.map((rl) => (
@@ -501,7 +520,7 @@ function TeamSection({
               <select
                 value={r.org_unit_id ?? ""}
                 onChange={(e) => assignOrgUnit(r, e.target.value)}
-                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                className="w-44 truncate rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               >
                 <option value="">No team assigned</option>
                 {orgUnits.map((ou) => (
@@ -529,13 +548,19 @@ function TeamSection({
 
 function ExpectationsSection({
   roleLevels,
+  roleLevelId,
+  setRoleLevelId,
+  kind,
+  setKind,
   onError,
 }: {
   roleLevels: RoleLevel[];
+  roleLevelId: string;
+  setRoleLevelId: (id: string) => void;
+  kind: ExpectationKind;
+  setKind: (k: ExpectationKind) => void;
   onError: (m: string | null) => void;
 }) {
-  const [roleLevelId, setRoleLevelId] = useState<string>("");
-  const [kind, setKind] = useState<ExpectationKind>("metrics");
   const [items, setItems] = useState<Expectation[]>([]);
   const [loading, setLoading] = useState(false);
 

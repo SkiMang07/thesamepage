@@ -11,6 +11,44 @@ Format per entry:
 
 ---
 
+## Session 17 — 2026-08-06
+
+**Goal:** Andrew reported the Team settings page had visually overlapping text (screenshot), and
+separately — a much bigger concern — that he'd gone through and set expectations for every role on
+the team, saved them, and they were all gone when he navigated away and back.
+
+**What was done:**
+- Reproduced the "lost expectations" report live against the deployed app (Chrome automation):
+  added a test metric, confirmed via network inspection the `POST /api/settings/expectations/{kind}`
+  call returned 200 and the row genuinely persisted (visible again after reselecting the same role,
+  and after a full page reload). The data was never lost — it was a UI state bug. `ExpectationsSection`
+  owned its own `roleLevelId`/`kind` state; Settings renders exactly one section at a time and
+  unmounts the rest, so switching to another Settings tab (e.g. Team) and back reset the role picker
+  to the first role alphabetically and the kind tab to Metrics — which, after filling out many roles
+  in sequence, looked exactly like everything had been wiped.
+- Fix: lifted `expRoleLevelId`/`expKind` state up to `SettingsPage`, passed down as props — same
+  lifted-state pattern already used for `roleLevels`/`reports`/`orgUnits`. Selection now survives
+  switching sections; only a hard page reload resets it.
+- Fixed the Team section overlap from the screenshot: the role/team `<select>`s had no width
+  constraint, so a long selected option (e.g. "Enterprise Producer CSM · L2") could balloon the
+  select's rendered width and squeeze the sibling name/role_title column down to near-zero, wrapping
+  it into unreadable slivers. Added fixed widths (`w-48`/`w-44`) + `truncate` to both selects, and
+  `truncate` to the name/role_title text.
+- Cleaned up test data (`TEST DEBUG METRIC`, `TEST DEBUG METRIC 2`, `TEST ROLE2 METRIC`) created
+  during live reproduction before handing back to Andrew.
+- Created a new skill (`tsp-push`, delivered as a file — not yet confirmed saved) that combines a
+  paste-ready git command with this same doc-sync step, triggered by "let's push this."
+
+**Decisions made / locked:**
+- Any Settings sub-section with its own "currently selected X" state should default to lifting that
+  state to `SettingsPage`, not owning it locally — see ENGINEERING.md → Conventions.
+
+**Next step:** None outstanding from this session — fix is written to
+`frontend/app/app/settings/page.tsx`, awaiting Andrew's `git push`. Confirm the `tsp-push` skill got
+saved (delivered via file, no save confirmation available) before relying on it next session.
+
+---
+
 ## Session 16 — 2026-08-04
 
 **Goal:** Asked what the best next step for the app was, given

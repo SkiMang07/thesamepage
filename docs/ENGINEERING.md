@@ -53,6 +53,17 @@ All calls from the Next.js frontend to the FastAPI backend go through
 `frontend/lib/api.ts`. Components never call `fetch()` directly. When you add a
 new backend endpoint, add the corresponding client function to `api.ts` first.
 
+### Settings section state
+
+Settings (`frontend/app/app/settings/page.tsx`) renders exactly one section component at a time,
+conditionally (`section === "expectations" && <ExpectationsSection .../>`), so switching sections
+unmounts the previous one. Any state a section needs to survive switching away and back — a selected
+role, a selected tab, a filter — must live in `SettingsPage` itself and be passed down as props, not
+declared locally inside the section component. `roleLevels`/`reports`/`orgUnits` already followed
+this pattern; `ExpectationsSection`'s role/kind picker didn't until Session 17, when the reset-on-
+switch looked exactly like data loss to Andrew (the underlying DB rows were fine — confirmed via live
+network inspection).
+
 ### RLS
 
 Every table has RLS enabled. Core tables scope by `auth.uid()` directly
