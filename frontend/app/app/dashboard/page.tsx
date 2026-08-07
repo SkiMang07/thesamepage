@@ -1,46 +1,46 @@
 "use client";
 
-// Mission Control — replaces the old dashboard as the landing page (Session
-// 18, 2026-08-06; scoped via AskUserQuestion with Andrew before building —
-// see docs/SESSION_HISTORY.md and the mission_control project memory note).
+// Mission Control v2 — grid layout (Session 19; scoped after reviewing a
+// static HTML mockup with Andrew — see docs/SESSION_HISTORY.md and the
+// mission_control_grid project memory note). Restructures Session 18's
+// single-column stack into 3 columns across the top (Individual
+// Performance / Goals / Key Initiatives) + a full-width Capacity strip
+// below, adds a stat ribbon, a real AI insight banner, worst-first sorting
+// on Individual Performance, and a "quick add" modal.
 //
-// PRODUCT_VISION.md's load-bearing sentence: a single "mission control"
-// surface that answers top-level questions about the team without digging
-// through separate dashboards. Four cards below, each a summary with a link
-// to the full page — same "summary here, edit there" pattern already used
-// on the DR detail page for Goals/Projects/Assessment/Capacity.
+// Scope locked with Andrew before building:
+//   - AI insight is real AI-generated (new GET /api/dashboard/insight,
+//     backend/routes/dashboard.py) — not a rule-based string. The model is
+//     told to return null when nothing crosses a real threshold, and the
+//     banner simply doesn't render on days with nothing noteworthy.
+//   - Quick add is a single modal (type picker + minimal form), not a
+//     global ⌘K command palette. No new dependency.
+//   - Individual Performance's status is still only the binary the data
+//     actually supports (due for a 1:1, or not) plus a raw commitment
+//     count — NOT a synthesized 3-tier on-track/needs-check-in/at-risk
+//     status. The reviewed mockup used 3 tiers for visual variety, but
+//     building that for real would mean inventing a status the data
+//     doesn't back — this app has consistently avoided that (see
+//     Assessments' "leave unscored rather than force coverage", Session 16).
 //
-// v1 scope, confirmed with Andrew (all four recommended defaults):
-//   - Replaces /app/dashboard outright. Today's "who needs a 1:1" list
-//     doesn't get its own page anymore — it folds into Individual
-//     Performance below.
-//   - Only cards backed by real data today. No placeholders for Team
-//     Health, Team/Dept Operations (demand/staffing/forecasting/budget/
-//     compensation), or People Operations (recruiting/feedback/improvement
-//     plans/formal reviews) — matches the existing "no coming-soon
-//     placeholders" precedent from Settings.
-//   - Manager view only. Session 15's led-org-unit rollup infrastructure
-//     exists but isn't wired in here — no Department Head toggle this pass.
-//   - Individual Performance lists each report's latest assessment rating
-//     as-is. No synthesized team-level score.
-//
-// No new backend routes. Every card is a client-side merge of endpoints
-// that already exist: getTeamOverview + getTeamAssessments for Individual
-// Performance, getGoals + getProjects for Goals/Key Initiatives,
-// getCapacityOverview for the Capacity snapshot.
+// Still four client-side merges of existing endpoints, same as Session 18
+// — the only new backend route is the insight endpoint. No new dependency;
+// no schema changes.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import QuickAddModal from "@/components/QuickAddModal";
 import {
   CapacityOverviewItem,
+  DashboardInsight,
   Goal,
   GoalLevel,
   GoalStatus,
   Project,
   TeamAssessmentItem,
   TeamOverviewItem,
-  createDirectReport,
   getCapacityOverview,
+  getDashboardInsight,
   getGoals,
   getProjects,
   getTeamAssessments,
@@ -133,23 +133,34 @@ type PerformanceRow = TeamOverviewItem & {
   assessed_at: string | null;
 };
 
+const NAV_LINKS = [
+  { href: "/app/assessments", label: "Assessments" },
+  { href: "/app/goals", label: "Goals" },
+  { href: "/app/projects", label: "Projects" },
+  { href: "/app/capacity", label: "Capacity" },
+  { href: "/app/org", label: "Org" },
+  { href: "/app/settings", label: "Settings" },
+];
+
 export default function DashboardPage() {
   const [team, setTeam] = useState<PerformanceRow[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [capacity, setCapacity] = useState<CapacityOverviewItem[]>([]);
-  const [name, setName] = useState("");
-  const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [insight, setInsight] = useState<DashboardInsight | null>(null);
+  const [insightDismissed, setInsightDismissed] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const weekRange = useMemo(() => {
     const start = startOfWeek(new Date());
     return { start, end: addDays(start, 6) };
   }, []);
 
-  useEffect(() => {
-    Promise.all([
+  const loadDashboard = useCallback(() => {
+    setLoading(true);
+    return Promise.all([
       getTeamOverview(),
       getTeamAssessments(),
       getGoals(),
@@ -158,291 +169,332 @@ export default function DashboardPage() {
     ])
       .then(([overview, assessments, allGoals, allProjects, capacityRows]) => {
         const ratingByReport = new Map<string, TeamAssessmentItem>(assessments.map((a) => [a.id, a]));
-        setTeam(
-          overview.map((r) => ({
-            ...r,
-            latest_level_label: ratingByReport.get(r.id)?.latest_level_label ?? null,
-            assessed_at: ratingByReport.get(r.id)?.assessed_at ?? null,
-          }))
-        );
+        const merged: PerformanceRow[] = overview.map((r) => ({
+          ...r,
+          latest_level_label: ratingByReport.get(r.id)?.latest_level_label ?? null,
+          assessed_at: ratingByReport.get(r.id)?.assessed_at ?? null,
+        }));
+        // Worst-first: due for a 1:1 sorts before everyone who isn't, then
+        // by open commitment count within each group. This is the single
+        // highest-leverage change in the grid redesign — a manager scanning
+        // three columns should see problems before people who are fine.
+        merged.sort((a, b) => {
+          const aDue = needsOneOnOne(a.last_one_on_one_at) ? 0 : 1;
+          const bDue = needsOneOnOne(b.last_one_on_one_at) ? 0 : 1;
+          if (aDue !== bDue) return aDue - bDue;
+          return b.open_commitment_count - a.open_commitment_count;
+        });
+        setTeam(merged);
         setGoals(allGoals.filter((g) => g.level !== "individual"));
         setProjects(allProjects.filter((p) => ACTIVE_PROJECT_STATUSES.has(p.status)));
         setCapacity(capacityRows);
+        setLoadError(null);
       })
-      .catch((e) => setLoadError(e.message))
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, [weekRange]);
 
-  async function addReport(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || adding) return;
-    setAdding(true);
-    try {
-      const created = await createDirectReport({ name: name.trim() });
-      setTeam((t) => [
-        ...t,
-        {
-          id: created.id,
-          name: created.name,
-          role_title: created.role_title,
-          last_one_on_one_at: null,
-          open_commitment_count: 0,
-          latest_level_label: null,
-          assessed_at: null,
-        },
-      ]);
-      setName("");
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Failed to add");
-    } finally {
-      setAdding(false);
-    }
-  }
+  useEffect(() => {
+    loadDashboard();
+    // The insight call is separate and allowed to fail quietly — it's a
+    // nice-to-have banner, not core dashboard data, and a bad AI call
+    // shouldn't block or error out the rest of the page.
+    getDashboardInsight()
+      .then(setInsight)
+      .catch(() => setInsight(null));
+  }, [loadDashboard]);
 
   const dueCount = team.filter((r) => needsOneOnOne(r.last_one_on_one_at)).length;
+  const atRiskGoalCount = goals.filter((g) => g.status === "at_risk").length;
   const totalAvailableHours = capacity.reduce((sum, c) => sum + c.available_hours, 0);
+  const maxCapacityHours = Math.max(1, ...capacity.map((c) => c.available_hours));
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
+    <main className="mx-auto max-w-7xl px-6 py-10 sm:px-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Mission Control</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Mission Control</h1>
           <p className="mt-1 text-sm text-gray-500">Your team, at a glance.</p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-500">
-          <Link href="/app/assessments" className="hover:text-gray-900">
-            Assessments
-          </Link>
-          <Link href="/app/goals" className="hover:text-gray-900">
-            Goals
-          </Link>
-          <Link href="/app/projects" className="hover:text-gray-900">
-            Projects
-          </Link>
-          <Link href="/app/capacity" className="hover:text-gray-900">
-            Capacity
-          </Link>
-          <Link href="/app/org" className="hover:text-gray-900">
-            Org
-          </Link>
-          <Link href="/app/settings" className="hover:text-gray-900">
-            Settings
-          </Link>
+        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+          {NAV_LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className="hover:text-gray-900">
+              {l.label}
+            </Link>
+          ))}
+          <button
+            onClick={() => setQuickAddOpen(true)}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+          >
+            + Quick add
+          </button>
         </div>
       </div>
 
       {loadError && <p className="mt-4 text-sm text-red-500">{loadError}</p>}
+
+      {/* Stat ribbon — answers "how's my team right now" before a single
+          card is read. All four numbers come from data already fetched
+          above; no extra endpoint. */}
+      {!loading && team.length > 0 && (
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xl font-semibold text-gray-900">{team.length}</p>
+            <p className="mt-0.5 text-xs text-gray-500">Direct reports</p>
+          </div>
+          <div className={`rounded-lg border px-4 py-3 ${dueCount > 0 ? "border-amber-200 bg-amber-50/60" : "border-gray-200 bg-white"}`}>
+            <p className={`text-xl font-semibold ${dueCount > 0 ? "text-amber-700" : "text-gray-900"}`}>{dueCount}</p>
+            <p className={`mt-0.5 text-xs ${dueCount > 0 ? "text-amber-700/80" : "text-gray-500"}`}>Due for a 1:1</p>
+          </div>
+          <div className={`rounded-lg border px-4 py-3 ${atRiskGoalCount > 0 ? "border-red-200 bg-red-50/60" : "border-gray-200 bg-white"}`}>
+            <p className={`text-xl font-semibold ${atRiskGoalCount > 0 ? "text-red-700" : "text-gray-900"}`}>{atRiskGoalCount}</p>
+            <p className={`mt-0.5 text-xs ${atRiskGoalCount > 0 ? "text-red-700/80" : "text-gray-500"}`}>
+              Goal{atRiskGoalCount === 1 ? "" : "s"} at risk
+            </p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xl font-semibold text-gray-900">{Math.round(totalAvailableHours)}h</p>
+            <p className="mt-0.5 text-xs text-gray-500">Available this week</p>
+          </div>
+        </div>
+      )}
+
+      {/* AI insight — real endpoint, null most days by design. */}
+      {insight && insight.insight && !insightDismissed && (
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600">
+            <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <p className="text-sm text-indigo-900">{insight.insight}</p>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {insight.cta_label && insight.cta_direct_report_id && (
+              <Link
+                href={`/app/reports/${insight.cta_direct_report_id}`}
+                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+              >
+                {insight.cta_label} →
+              </Link>
+            )}
+            <button onClick={() => setInsightDismissed(true)} className="text-indigo-400 hover:text-indigo-600" aria-label="Dismiss">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading && <p className="mt-8 text-gray-500">Loading...</p>}
 
-      {/* Individual Performance — the board's per-person status card. Folds
-          in what the old dashboard already did (1:1 cadence, open
-          commitments) alongside each report's latest assessment rating. */}
-      <div className="mt-10">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
-            Individual Performance{team.length > 0 && ` (${team.length})`}
-          </h2>
-          <Link href="/app/assessments" className="text-xs text-gray-400 hover:text-gray-600">
-            Assessments →
-          </Link>
-        </div>
-        {!loading && team.length > 0 && (
-          <p className="mt-3 text-sm text-gray-500">
-            {dueCount === 0
-              ? "You're up to date with everyone."
-              : `${dueCount} ${dueCount === 1 ? "person is" : "people are"} due for a 1:1.`}
-          </p>
-        )}
-
-        <form onSubmit={addReport} className="mt-4 flex gap-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Add a direct report"
-            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={adding}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
-            Add
-          </button>
-        </form>
-
-        <ul className="mt-4 space-y-3">
-          {team.map((r) => {
-            const due = needsOneOnOne(r.last_one_on_one_at);
-            return (
-              <li key={r.id}>
-                <Link
-                  href={`/app/reports/${r.id}`}
-                  className="block rounded-lg border border-gray-200 px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="font-medium text-gray-900">{r.name}</p>
-                      {r.role_title && <p className="text-sm text-gray-500">{r.role_title}</p>}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {r.latest_level_label && (
-                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600">
-                          {r.latest_level_label}
-                        </span>
-                      )}
-                      {due && (
-                        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-600">
-                          Time for a 1:1
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex gap-4 text-xs text-gray-400">
-                    <span className={due ? "text-amber-600" : ""}>{lastOneOnOneLabel(r.last_one_on_one_at)}</span>
-                    {r.open_commitment_count > 0 && (
-                      <span>
-                        {r.open_commitment_count} open commitment{r.open_commitment_count === 1 ? "" : "s"}
-                      </span>
-                    )}
-                    {!r.latest_level_label && <span>Not yet assessed</span>}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-          {!loading && team.length === 0 && (
-            <p className="py-3 text-gray-500">No one added yet. Add your first direct report above to get started.</p>
-          )}
-        </ul>
-      </div>
-
-      {/* Organization / Department / Team Goals */}
-      <div className="mt-10">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
-            Goals{goals.length > 0 && ` (${goals.length})`}
-          </h2>
-          <Link href="/app/goals" className="text-xs text-gray-400 hover:text-gray-600">
-            View all →
-          </Link>
-        </div>
-        {!loading && goals.length === 0 ? (
-          <p className="mt-4 text-gray-500">
-            No organization, department, or team goals yet.{" "}
-            <Link href="/app/goals" className="underline hover:text-gray-700">
-              Add one from the Goals page
-            </Link>
-            .
-          </p>
-        ) : (
-          <div className="mt-4 space-y-5">
-            {GOAL_CARD_LEVELS.map(({ id, label }) => {
-              const rows = goals.filter((g) => g.level === id);
-              if (rows.length === 0) return null;
-              return (
-                <div key={id}>
-                  <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</h3>
-                  <ul className="mt-2 space-y-2">
-                    {rows.map((g) => (
-                      <li key={g.id} className="rounded-lg border border-gray-200 px-4 py-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900">{g.title}</p>
-                            {g.org_unit_name && <p className="mt-0.5 text-xs text-gray-400">{g.org_unit_name}</p>}
-                          </div>
-                          <span
-                            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[g.status]}`}
+      {/* THE GRID — 3 sections across the top. Capacity is deliberately NOT
+          a fourth column: it's a snapshot stat per person, not a triage
+          list, so it reads better as a wide strip below than a narrow
+          column competing for the same vertical space. */}
+      {!loading && (
+        <div className="mt-8 grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+          {/* Individual Performance */}
+          <section className="rounded-xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+                Individual Performance{team.length > 0 && ` (${team.length})`}
+              </h2>
+              <Link href="/app/assessments" className="text-xs text-gray-400 hover:text-gray-600">
+                Assessments →
+              </Link>
+            </div>
+            {team.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-gray-500">
+                No one added yet.{" "}
+                <button onClick={() => setQuickAddOpen(true)} className="underline hover:text-gray-700">
+                  Add your first direct report
+                </button>
+                .
+              </p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {team.map((r) => {
+                  const due = needsOneOnOne(r.last_one_on_one_at);
+                  const initials = r.name
+                    .split(" ")
+                    .map((p) => p[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase();
+                  return (
+                    <li key={r.id}>
+                      <Link href={`/app/reports/${r.id}`} className="block px-5 py-3.5 hover:bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                              due ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
+                            }`}
                           >
-                            {STATUS_LABELS[g.status]}
-                          </span>
+                            {initials}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
+                              {r.latest_level_label && (
+                                <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">
+                                  {r.latest_level_label}
+                                </span>
+                              )}
+                            </div>
+                            <p className={`mt-0.5 text-xs ${due ? "text-amber-600" : "text-gray-400"}`}>
+                              {lastOneOnOneLabel(r.last_one_on_one_at)}
+                              {r.open_commitment_count > 0 &&
+                                ` · ${r.open_commitment_count} open commitment${r.open_commitment_count === 1 ? "" : "s"}`}
+                            </p>
+                          </div>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {/* Goals */}
+          <section className="rounded-xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+                Goals{goals.length > 0 && ` (${goals.length})`}
+              </h2>
+              <Link href="/app/goals" className="text-xs text-gray-400 hover:text-gray-600">
+                View all →
+              </Link>
+            </div>
+            {goals.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-gray-500">
+                No organization, department, or team goals yet.{" "}
+                <Link href="/app/goals" className="underline hover:text-gray-700">
+                  Add one from the Goals page
+                </Link>
+                .
+              </p>
+            ) : (
+              <div className="space-y-4 px-5 py-4">
+                {GOAL_CARD_LEVELS.map(({ id, label }) => {
+                  const rows = goals.filter((g) => g.level === id);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div key={id}>
+                      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
+                      <ul className="space-y-2">
+                        {rows.map((g) => (
+                          <li key={g.id} className="rounded-lg border border-gray-200 px-3.5 py-2.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="min-w-0 truncate text-sm font-medium text-gray-900">{g.title}</p>
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
+                                {STATUS_LABELS[g.status]}
+                              </span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Key Initiatives */}
+          <section className="rounded-xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+                Key Initiatives{projects.length > 0 && ` (${projects.length})`}
+              </h2>
+              <Link href="/app/projects" className="text-xs text-gray-400 hover:text-gray-600">
+                View all →
+              </Link>
+            </div>
+            {projects.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-gray-500">
+                No active projects.{" "}
+                <Link href="/app/projects" className="underline hover:text-gray-700">
+                  Add one from the Projects page
+                </Link>
+                .
+              </p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {projects.map((p) => (
+                  <li key={p.id} className="px-5 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-900">{p.title}</p>
+                        <p className="mt-0.5 text-xs text-gray-400">
+                          {p.direct_report_name ?? "Your initiative"}
+                          {p.due_date && ` · Due ${formatDate(p.due_date + "T00:00:00")}`}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
+                        {STATUS_LABELS[p.status]}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* Capacity — full-width strip, this week's available hours (supply
+          only, per capacity.py). Full breakdown + department rollup live on
+          /app/capacity. */}
+      {!loading && (
+        <section className="mt-5 rounded-xl border border-gray-200 bg-white">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Capacity — this week</h2>
+            <Link href="/app/capacity" className="text-xs text-gray-400 hover:text-gray-600">
+              View full breakdown →
+            </Link>
           </div>
-        )}
-      </div>
-
-      {/* Key Initiatives — active projects only (active/on_track/at_risk) */}
-      <div className="mt-10">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
-            Key Initiatives{projects.length > 0 && ` (${projects.length})`}
-          </h2>
-          <Link href="/app/projects" className="text-xs text-gray-400 hover:text-gray-600">
-            View all →
-          </Link>
-        </div>
-        {!loading && projects.length === 0 ? (
-          <p className="mt-4 text-gray-500">
-            No active projects.{" "}
-            <Link href="/app/projects" className="underline hover:text-gray-700">
-              Add one from the Projects page
-            </Link>
-            .
-          </p>
-        ) : (
-          <ul className="mt-4 space-y-2">
-            {projects.map((p) => (
-              <li key={p.id} className="rounded-lg border border-gray-200 px-4 py-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{p.title}</p>
-                    <p className="mt-0.5 text-xs text-gray-400">
-                      {p.direct_report_name ?? "Your initiative"}
-                      {p.due_date && ` · Due ${formatDate(p.due_date + "T00:00:00")}`}
-                    </p>
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[p.status]}`}>
-                    {STATUS_LABELS[p.status]}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Capacity — this week's available hours, supply only (capacity.py).
-          Full breakdown + department rollup live on /app/capacity. */}
-      <div className="mt-10">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Capacity — this week</h2>
-          <Link href="/app/capacity" className="text-xs text-gray-400 hover:text-gray-600">
-            View full breakdown →
-          </Link>
-        </div>
-        {!loading && capacity.length === 0 ? (
-          <p className="mt-4 text-gray-500">
-            No one to show capacity for yet.{" "}
-            <Link href="/app/capacity" className="underline hover:text-gray-700">
-              Set up capacity defaults
-            </Link>
-            .
-          </p>
-        ) : (
-          <>
-            <p className="mt-3 text-gray-700">
-              <span className="font-medium">{Math.round(totalAvailableHours)} hours</span> available across your
-              team this week.
+          {capacity.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-gray-500">
+              No one to show capacity for yet.{" "}
+              <Link href="/app/capacity" className="underline hover:text-gray-700">
+                Set up capacity defaults
+              </Link>
+              .
             </p>
-            <ul className="mt-3 space-y-1.5">
-              {capacity.map((c) => (
-                <li
-                  key={c.direct_report_id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                >
-                  <span className="text-gray-700">{c.name}</span>
-                  <span className="text-gray-500">{c.available_hours}h</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
+          ) : (
+            <div className="px-5 py-4">
+              <p className="mb-4 text-sm text-gray-700">
+                <span className="font-medium">{Math.round(totalAvailableHours)} hours</span> available across your team this
+                week.
+              </p>
+              <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                {capacity.map((c) => (
+                  <div key={c.direct_report_id} className="flex items-center gap-3">
+                    <span className="w-28 shrink-0 truncate text-sm text-gray-700">{c.name}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full bg-gray-400"
+                        style={{ width: `${Math.min(100, (c.available_hours / maxCapacityHours) * 100)}%` }}
+                      />
+                    </div>
+                    {/* Labeled logged vs assumed (Session 14 decision) — two
+                        different sources feed this number, and showing which
+                        one won avoids it reading as more precise than it is. */}
+                    <span className="w-24 shrink-0 text-right text-xs text-gray-500">
+                      {Math.round(c.available_hours)}h <span className="text-gray-300">·{c.off_hours_source}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      <QuickAddModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} directReports={team} onCreated={loadDashboard} />
     </main>
   );
 }

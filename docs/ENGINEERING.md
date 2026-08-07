@@ -383,6 +383,26 @@ Every section follows the "summary here, edit there" pattern already established
 Health KPIs, Customer Demand/Staffing/Forecasting/Budget/Compensation, Recruiting/Employee Feedback/
 Improvement Plans/formal Performance Reviews); a synthesized team-level rating rollup.
 
+**Session 19 grid redesign (2026-08-07):** reworked into a 3-column grid across the top (Individual
+Performance / Goals / Key Initiatives) with Capacity dropped to a full-width strip below —
+deliberately not a 4th column, since it's a snapshot stat per person, not a scrollable triage list.
+Added:
+- A stat ribbon (team size, due-for-1:1 count, at-risk goal count, available hours this week) — all
+  computed client-side from data the page already fetches.
+- Worst-first sorting on Individual Performance: due-for-1:1 sorts before everyone who isn't, then by
+  open commitment count.
+- `backend/routes/dashboard.py` (new) — `GET /api/dashboard/insight`. **This supersedes the Session
+  18 claim above that Mission Control has no backend routes of its own** — the AI insight banner is
+  real AI-generated text (`generate_text()`, `AI_DEFAULT_MODEL_LIGHT`), not a client-side
+  computation, and returns null most days by design (same restraint as Assessments' AI draft,
+  Session 16). Fails quiet on any AI/parse error rather than 500ing the endpoint.
+- `frontend/components/QuickAddModal.tsx` (new) — the app's first shared component (`components/` is
+  a new top-level directory under `frontend/`). A type picker (Direct report / Goal / Project) with a
+  minimal form per type, reusing the existing `createDirectReport`/`createGoal`/`createProject`
+  functions. Scoped as a simple modal, not a global ⌘K command palette — see DESIGN.md.
+- Individual Performance's inline "add a direct report" form (present since Session 18) was removed —
+  Quick Add is now the only add path from this page.
+
 ---
 
 ## Scope discipline
@@ -456,11 +476,12 @@ backend/
     capacity.py          /api/capacity — settings, work-units, profiles, time-off, /overview, /rollup (Session 14; /rollup gated by led scope as of Session 15)
     settings.py         /api/settings — profile, role-levels, expectations
     assessments.py       /api/assessments — levels, team list, per-report scorecard, AI draft, save (Session 16)
+    dashboard.py          GET /api/dashboard/insight — Mission Control's AI insight banner (Session 19)
 
 frontend/
   app/
     (marketing)/        Public SSG pages (home, pricing, blog) — need to be indexable
-    app/dashboard/      Mission Control — landing page (Session 18): Individual Performance, Goals, Key Initiatives, Capacity snapshot
+    app/dashboard/      Mission Control — landing page (Session 18; grid layout Session 19): Individual Performance, Goals, Key Initiatives, Capacity strip, AI insight banner, Quick Add
     app/login/          Login page
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
     app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)
@@ -470,6 +491,8 @@ frontend/
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client
+  components/
+    QuickAddModal.tsx   Mission Control's quick-add — type picker + minimal create form (Session 19)
 ```
 
 ---

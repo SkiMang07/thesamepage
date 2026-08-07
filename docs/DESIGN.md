@@ -8,8 +8,9 @@ or UX patterns. Starts minimal — add decisions here as they get locked.
 ## Framework & tooling
 
 - **CSS:** Tailwind CSS (configured in `frontend/tailwind.config.js`)
-- **Components:** No component library yet — plain Tailwind. Add shadcn/ui
-  if component complexity warrants it; confirm before pulling it in.
+- **Components:** No component library yet — plain Tailwind. `frontend/components/` was introduced
+  Session 19 for the first shared component (`QuickAddModal.tsx`); still no external library — add
+  shadcn/ui only if complexity warrants it, confirm before pulling it in.
 - **Icons:** Not yet decided.
 - **Fonts:** Not yet decided.
 
@@ -106,5 +107,10 @@ SEO. Do not add client-side-only patterns to these pages.
 | 2026-08-06 | Mission Control ships only cards backed by real data today (Individual Performance, Organization/Department/Team Goals, Key Initiatives, a Capacity snapshot) — no placeholder cards for Team Health, Team/Dept Operations, or People Operations | Andrew's explicit call, extending Settings' existing "no coming-soon placeholders" precedent (2026-08-01) to this page |
 | 2026-08-06 | Mission Control is manager-view only this pass — no Department Head toggle, no Team/Individual (IC) views | Session 15's rollup infrastructure could support a Dept Head toggle later; IC views need IC login, deferred since Session 3. Andrew picked the smaller scope over building all four of the board's role-scoped dashboards now |
 | 2026-08-06 | Individual Performance lists each report's latest assessment rating as-is — no synthesized team-average or distribution | Andrew's explicit call — matches the app's existing pattern of surfacing real records rather than introducing a new derived calculation |
+| 2026-08-07 | Mission Control reworked from a single-column stack into a 3-column grid (Individual Performance / Goals / Key Initiatives) with Capacity as a full-width strip below, not a 4th column | Andrew's original design intent, confirmed via a static mockup reviewed before building; Capacity is a snapshot stat per person, not a scrollable triage list, so it doesn't fit the same column shape as the other three |
+| 2026-08-07 | AI insight banner is real AI-generated text (new `GET /api/dashboard/insight`), not a rule-based string computed client-side | Andrew's explicit call — the insight is meant to be the page's "magic," and a synthesized take can weigh multiple signals together in a way a fixed rule can't |
+| 2026-08-07 | Quick add is a single modal (type picker + minimal form), not a global ⌘K command palette | Andrew's explicit call — not enough surface area in the app yet to justify a global command palette or its likely new dependency (e.g. `cmdk`) |
+| 2026-08-07 | Individual Performance's status stays binary (due for a 1:1, or not) + a raw commitment count, not a synthesized 3-tier on-track/needs-check-in/at-risk status | The reviewed mockup used 3 tiers for visual variety, but the real data doesn't back a 3-tier status — same restraint as Assessments' "leave unscored rather than force coverage" (Session 16) |
+| 2026-08-07 | `frontend/components/` introduced as the app's first shared-component directory (`QuickAddModal.tsx`) | First UI piece reused across more than one create-flow (direct report / goal / project) in a single modal — still no external component library |
 
 _(Add new decisions here as they get made — date, what was decided, why.)_

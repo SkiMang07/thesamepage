@@ -11,6 +11,73 @@ Format per entry:
 
 ---
 
+## Session 19 — 2026-08-07
+
+**Goal:** Andrew reviewed Session 18's Mission Control page and wanted it reworked into a grid —
+three sections across the top, per his original design intent — plus best-practice UX/design ideas
+from apps that have broken through. Asked for a static mockup first (no code changes), reviewed and
+approved it, then scoped and asked to build it for real.
+
+**What was done:**
+- Delivered a static HTML mockup (sent directly to Andrew, not committed to the repo) showing a
+  3-column grid, a stat ribbon, one AI insight banner, worst-first sorting, and a ⌘K quick-add
+  placeholder, with a "design notes" section explaining each UX choice (Linear/Attio/Notion-style
+  patterns: worst-first ordering, progressive disclosure, dot-vs-pill status, one insight not two).
+- Scoped the real build via two rounds of AskUserQuestion: (1) the AI insight banner should be real
+  AI-generated text, not a rule-based string; (2) quick add should be a simple modal, not a global
+  ⌘K command palette.
+- Built `backend/routes/dashboard.py` (new) — `GET /api/dashboard/insight`, registered in `main.py`.
+  Gathers per-report days-since-last-1:1, open/overdue commitment counts, and at-risk goals
+  (company/department/team level), then asks `generate_text()` (`AI_DEFAULT_MODEL_LIGHT`) to name at
+  most ONE noteworthy thing or return null. Fails quiet on any AI/parse error — returns an empty
+  insight rather than a 500, since this should never be the reason a dashboard load breaks.
+- Added `getDashboardInsight()` + `DashboardInsight` type to `lib/api.ts`.
+- Built `frontend/components/QuickAddModal.tsx` (new) — the app's first shared component and first
+  `components/` directory. A type picker (Direct report / Goal / Project) with a minimal form per
+  type, reusing the existing `createDirectReport`/`createGoal`/`createProject` functions. No new
+  dependency.
+- Rewrote `frontend/app/app/dashboard/page.tsx`: 3-column grid (Individual Performance / Goals / Key
+  Initiatives) + a full-width Capacity strip below (deliberately not a 4th column — it's a snapshot
+  stat, not a triage list); a stat ribbon (team size, due-for-1:1, at-risk goals, available hours);
+  worst-first sort on Individual Performance (due-for-1:1 first, then by open commitment count); the
+  AI insight banner wired to the new endpoint, dismissible; the full nav link row
+  (Assessments/Goals/Projects/Capacity/Org/Settings) restored in the new header — the reviewed
+  mockup had dropped it, which Andrew caught before any code was written.
+- Removed the inline "add a direct report" form from Individual Performance (Session 18's location)
+  — Quick Add is now the single way to create a direct report, goal, or project from Mission Control.
+
+**Decisions made / locked:**
+- AI insight is real AI-generated, not rule-based — Andrew's explicit call, since the insight is
+  meant to be the page's "magic." Uses `AI_DEFAULT_MODEL_LIGHT` (haiku), not HEAVY — one sentence of
+  triage, not a structured sheet.
+- Quick add is a single modal, not a global command palette — Andrew's explicit call, matching the
+  app's current size (not enough surface area yet to justify a ⌘K palette or a new dependency).
+- Individual Performance's status stays binary (due for a 1:1, or not) plus a raw commitment count —
+  NOT the mockup's 3-tier on-track/needs-check-in/at-risk status. Building that for real would mean
+  inventing a status the data doesn't back; same restraint as Assessments' "leave unscored rather
+  than force coverage" (Session 16).
+- Capacity stays a full-width strip below the grid, not a 4th column — it's a snapshot number per
+  person, not a scrollable triage list.
+
+**Verification:** Full copy of backend + frontend staged and mirrored into a scratch build.
+`python3 -m py_compile` clean on `main.py` + `routes/dashboard.py`. Fresh `npm install`,
+`npx tsc --noEmit` clean, `npx next build` clean — 15/15 routes, `/app/dashboard` at 5.87 kB. All 5
+changed/new files written to Andrew's local repo via `device_commit_files`.
+
+**Also flagged (not fixed this session):** a prioritized list of foundation/scalability weaknesses
+spotted while building — saved to project memory (`foundation_weaknesses.md`), not this doc, since
+none of them are Mission-Control-specific. Highlights: the new insight endpoint has no response
+caching (fires a real AI call on every dashboard load); no rate limiting on any AI-calling endpoint;
+the client-side-merge pattern doesn't paginate; the owner-scoped vs org-scoped RLS split (already
+partly documented in ENGINEERING.md) will need resolving before Department Head/Team rollups can
+share goals/projects data; no automated tests anywhere in the codebase.
+
+**Next step:** Andrew should dogfood the new grid, then push. Natural follow-ons: add a lightweight
+cache/TTL on the insight endpoint before real usage; if Quick Add proves useful, consider whether
+it's worth extending to Commitments or graduating to a real command palette later.
+
+---
+
 ## Session 18 — 2026-08-06
 
 **Goal:** Andrew asked for a few options for next steps given everything built so far. Recommended

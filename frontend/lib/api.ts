@@ -518,6 +518,22 @@ export const getCapacityRollup = (periodStart: string, periodEnd: string): Promi
   authedFetch(`/api/capacity/rollup?period_start=${periodStart}&period_end=${periodEnd}`);
 
 // ---------------------------------------------------------------------------
+// Dashboard (Session 19) — Mission Control's AI insight banner. One optional
+// insight per load; all-null fields mean nothing crossed the noteworthy bar
+// today — a valid, expected, and common response, not an error state (see
+// backend/routes/dashboard.py).
+// ---------------------------------------------------------------------------
+
+export type DashboardInsight = {
+  insight: string | null;
+  cta_label: string | null;
+  cta_direct_report_id: string | null;
+};
+
+export const getDashboardInsight = (): Promise<DashboardInsight> =>
+  authedFetch("/api/dashboard/insight");
+
+// ---------------------------------------------------------------------------
 // 1:1s
 // ---------------------------------------------------------------------------
 
