@@ -14,14 +14,44 @@ import base64
 import json
 import uuid
 from fastapi import HTTPException, Header
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from supabase import create_client, Client
 
 from config import settings
+
+# Shared rate limiter (added Session 20 — flagged Session 19, see
+# foundation_weaknesses project memory note item #4). Lives here rather than
+# in main.py so route modules can import it without a circular import on
+# main. Keyed by remote IP, not by authenticated user — slowapi's key_func
+# runs before FastAPI resolves get_authenticated_client, so it can't see
+# user_id without re-parsing the bearer token itself. IP-based is coarser
+# (e.g. an office NAT shares one bucket) but is what stops a runaway loop or
+# script, which is the actual risk today. Revisit if that coarseness ever
+# causes a real false-positive complaint.
+limiter = Limiter(key_func=get_remote_address)
 
 # token -> (user_data, cached_until_epoch_seconds)
 _token_cache: dict[str, tuple[dict, float]] = {}
 
 _CACHE_SAFETY_BUFFER_SECONDS = 60
+
+# Fixed Session 20 (flagged Session 19, see foundation_weaknesses project
+# memory note item #3): entries used to sit here forever once their token
+# expired — only overwritten if that exact token was ever seen again. Now
+# swept opportunistically on every call, so the cache's size is always
+# bounded by the number of currently-unexpired tokens, not by how many
+# distinct tokens have ever been issued.
+#
+# Still per-process / in-memory — not shared across instances. That's
+# unchanged and NOT fixed here: the moment this runs on more than one
+# Railway instance, each instance keeps its own cache and re-verifies
+# independently. Fine at today's single-instance scale; revisit (e.g. a
+# shared cache like Redis) before horizontal scaling.
+def _evict_expired_tokens(now: float) -> None:
+    expired = [t for t, (_, until) in _token_cache.items() if until <= now]
+    for t in expired:
+        del _token_cache[t]
 
 
 def _decode_exp_unverified(token: str) -> float | None:
@@ -38,6 +68,8 @@ def _decode_exp_unverified(token: str) -> float | None:
 
 def verify_token_with_supabase(token: str) -> dict:
     now = time.time()
+    _evict_expired_tokens(now)
+
     cached = _token_cache.get(token)
     if cached and cached[1] > now:
         return cached[0]

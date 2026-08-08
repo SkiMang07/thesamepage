@@ -16,13 +16,13 @@ without summary (only prep_guide) is "planned". See _serialize_session().
 import json
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.direct_reports import fetch_role_expectations
-from utils import get_authenticated_client
+from utils import get_authenticated_client, limiter
 
 router = APIRouter()
 
@@ -331,7 +331,8 @@ def _find_planned_session(supabase, user_id: str, direct_report_id: str) -> dict
 # ---------------------------------------------------------------------------
 
 @router.post("/prep", response_model=PrepResponse)
-async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_client)):
+@limiter.limit("10/minute")
+async def prep_one_on_one(request: Request, body: PrepRequest, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
 
     # Fetch direct report name
@@ -468,7 +469,8 @@ async def prep_one_on_one(body: PrepRequest, auth=Depends(get_authenticated_clie
 
 
 @router.post("/wrapup", response_model=WrapUpDraft)
-async def wrap_up_one_on_one(body: WrapUpRequest, auth=Depends(get_authenticated_client)):
+@limiter.limit("10/minute")
+async def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_authenticated_client)):
     """Distill raw in-call notes into a DRAFT summary + commitments (both
     sides). Pure AI-call route — nothing is saved; the manager reviews the
     draft and then POST / logs it."""

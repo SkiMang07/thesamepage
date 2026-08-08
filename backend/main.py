@@ -1,9 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from routes import assessments, capacity, commitments, dashboard, direct_reports, goals, one_on_ones, org_units, projects, settings as settings_routes
+from utils import limiter
 
 app = FastAPI(title="The Same Page API")
 
@@ -16,6 +20,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting (added Session 20 — see foundation_weaknesses project memory
+# note item #4). `slowapi` was already a dependency, unused, since before
+# this session. Limits are set per-route (see the @limiter.limit decorators
+# on the AI-calling endpoints in routes/one_on_ones.py, routes/assessments.py,
+# and routes/dashboard.py) — nothing else in the app is throttled.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(direct_reports.router, prefix="/api/direct-reports", tags=["direct-reports"])
 app.include_router(one_on_ones.router, prefix="/api/one-on-ones", tags=["one-on-ones"])

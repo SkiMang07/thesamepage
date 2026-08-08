@@ -11,6 +11,68 @@ Format per entry:
 
 ---
 
+## Session 20 — 2026-08-08
+
+**Goal:** Andrew asked to work through `foundation_weaknesses.md` (the 6 structural weaknesses flagged
+in Session 19) and confirm they're all still active given how the app is doing, deciding fix-now vs.
+keep-flagging one item at a time.
+
+**What was done:**
+- Verified all 6 items against the current code before triaging any of them — none had changed since
+  Session 19 wrote them (confirmed via file mtimes + `git log`).
+- **#1 fixed:** `backend/routes/dashboard.py` — in-memory cache on `/insight`, keyed by `user_id`,
+  20-min TTL. A cache hit skips all 4 DB queries AND the AI call, not just the AI call. Deliberately
+  NOT cached: the "no reports yet" and AI-failure early returns (so those retry next load instead of
+  sticking empty for the TTL), and no invalidation on writes (flat TTL — up to 20 min of staleness
+  after logging a 1:1 or resolving a commitment is accepted).
+- **#3 fixed, partially:** `backend/utils.py` — `_token_cache` now evicts expired entries on every
+  call (`_evict_expired_tokens()`), bounded by currently-valid tokens instead of leaking forever.
+  Still per-process/in-memory, NOT shared across instances if this ever runs on more than one Railway
+  dyno — that half of the flag is unchanged, would need something like Redis, not worth it at today's
+  single-instance scale.
+- **#4 fixed:** wired up `slowapi` — a `requirements.txt` dependency since before this session, never
+  actually used. Shared `limiter` now lives in `utils.py` (avoids a circular import with `main.py`),
+  registered via `app.state.limiter` + `SlowAPIMiddleware`. `@limiter.limit("10/minute")` added to the
+  4 AI-calling endpoints: `/api/one-on-ones/prep`, `/api/one-on-ones/wrapup`,
+  `/api/assessments/{direct_report_id}/draft`, `/api/dashboard/insight`. Per-remote-IP, not per-user —
+  slowapi's `key_func` runs before `get_authenticated_client()` resolves `user_id`.
+- **#2, #5, #6 kept flagged** — Andrew's explicit call on each. All three remain gated on real user
+  growth (a second manager in the org, more report/history volume) rather than anything code-level
+  changing since Session 19. Full reasoning per item in the `foundation_weaknesses` project memory
+  note, which was updated with the fixed/still-flagged outcome for all 6.
+- Updated `docs/ENGINEERING.md`: a new "Rate limiting" convention under Conventions → Auth, a token-
+  cache note in the same section, a Session 20 addendum under the Mission Control section documenting
+  the insight cache, File map updates for `main.py`/`utils.py`/`dashboard.py`, and two new Open
+  Questions bullets (`sentry-sdk` and `pytest` are both installed-but-unused dependencies, same pattern
+  `slowapi` was in before today).
+
+**Verification:** `py_compile` clean on all 5 changed backend files (`main.py`, `utils.py`,
+`routes/dashboard.py`, `routes/one_on_ones.py`, `routes/assessments.py`), plus a full import-time
+smoke test — fresh venv, installed `requirements.txt`, imported `main` with dummy Supabase env vars,
+confirmed no circular-import or decorator-ordering errors, confirmed all 4 rate-limited routes
+registered and `app.state.limiter` attached. One step beyond the usual py_compile-only pass, since this
+changed request wiring across multiple files rather than one function body. Not live-tested against
+real Supabase/Anthropic credentials or an actual 429 response — would need mocking the Supabase auth
+call, judged disproportionate for this pass.
+
+**Decisions made / locked:**
+- Rate limiting is per-IP, not per-user, going forward — see the Rate limiting convention in
+  ENGINEERING.md. Revisit only if IP-sharing (e.g. an office NAT) causes a real false-positive
+  complaint.
+- The insight cache uses a flat TTL, not write-path invalidation — accepted tradeoff rather than
+  threading cache invalidation into every route that touches 1:1/commitment/goal signals.
+- #2 (client-side merge / no pagination), #5 (owner- vs org-scoped RLS split), and #6 (no automated
+  tests) all stay flagged, not fixed. All three are either structural (span multiple files, or an
+  actual RLS migration) or open-ended (test scope/CI setup) rather than contained patches, and none has
+  a real trigger yet — still a single user on a single Railway instance.
+
+**Next step:** Andrew should dogfood the cache/rate-limit behavior (won't be visible day-to-day — it's
+infrastructure, not UI) and push. When #2/#5/#6 do get picked up later: #5 needs an actual RLS
+migration on `goals`/`projects` (not a quick patch); #6 would start with the cadence/overdue-date math
+and today's new cache/rate-limit logic as the highest-value first test targets.
+
+---
+
 ## Session 19 — 2026-08-07
 
 **Goal:** Andrew reviewed Session 18's Mission Control page and wanted it reworked into a grid —

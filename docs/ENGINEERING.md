@@ -37,6 +37,15 @@ and calls `get_authenticated_client(authorization)` from `utils.py`. This:
 **Never query user data with the service-role client from a request path.**
 Service-role is for background jobs and webhook handlers only.
 
+**Token verification cache:** `verify_token_with_supabase()` caches the verified
+user payload in `utils.py`'s `_token_cache` (keyed by raw token, TTL'd to the
+token's own `exp` claim) so a burst of requests on the same token doesn't hit
+Supabase's `/auth/v1/user` every time. As of Session 20, `_evict_expired_tokens()`
+sweeps expired entries on every call, so the cache stays bounded by
+currently-valid tokens rather than growing forever. Still per-process/in-memory —
+not shared across instances if this ever runs on more than one Railway dyno; fine
+at today's single-instance scale.
+
 ### AI calls
 
 All Anthropic calls go through `ai_core.py`'s `generate_text()`. Route modules
@@ -46,6 +55,22 @@ import and call that function — they never import the Anthropic SDK directly.
 be valid Anthropic model name strings. The fallback path in `ai_core.py` only
 triggers on 5xx errors, not 4xx — a bad model name will not gracefully degrade,
 it will error hard.
+
+### Rate limiting (Session 20, 2026-08-08)
+
+Every AI-calling endpoint must be rate-limited — `slowapi` was a `requirements.txt`
+dependency for several sessions before anything actually used it. The shared
+`limiter` lives in `utils.py` (not `main.py`, to avoid a circular import with the
+route modules) and is registered on the app in `main.py` via `app.state.limiter` +
+`SlowAPIMiddleware`. To add the limit to a new route: give the endpoint function a
+`request: Request` parameter and stack `@limiter.limit("10/minute")` directly above
+it, below the `@router.*` decorator — see `/prep`/`/wrapup` in `one_on_ones.py`,
+`/draft` in `assessments.py`, or `/insight` in `dashboard.py` for the pattern.
+Limiting is **per remote IP**, not per user — slowapi's `key_func` runs before
+`get_authenticated_client()` resolves `user_id`, so it can't key on the
+authenticated user without re-parsing the bearer token itself. Coarser (an office
+NAT shares one bucket) but sufficient to stop a runaway loop or script, which is
+the actual risk today.
 
 ### Frontend → Backend boundary
 
@@ -403,6 +428,15 @@ Added:
 - Individual Performance's inline "add a direct report" form (present since Session 18) was removed —
   Quick Add is now the only add path from this page.
 
+**Session 20 follow-up (2026-08-08):** `/api/dashboard/insight` now caches its full result
+(all 4 DB queries + the AI call) in-memory, keyed by `user_id`, 20-min TTL — a manager
+refreshing Mission Control repeatedly no longer re-runs any of it. Deliberately not
+invalidated on writes (logging a 1:1, resolving a commitment), so a stale insight can
+persist up to 20 min after an action; revisit only if that staleness causes a real
+complaint. The "no reports yet" and AI-failure paths are NOT cached, so those retry on
+the next load instead of sticking for the full TTL. Also now rate-limited — see
+Conventions → Rate limiting above.
+
 ---
 
 ## Scope discipline
@@ -462,9 +496,10 @@ Things explicitly not yet built:
 
 ```
 backend/
-  main.py         FastAPI app init, CORS, router registration
+  main.py         FastAPI app init, CORS, router registration, rate-limiter wiring (Session 20)
   config.py       Settings — reads .env, exposes AI model names + Supabase keys
-  utils.py        get_authenticated_client(), ensure_org()/get_email_from_token() (Session 11), shared helpers
+  utils.py        get_authenticated_client() (token cache now self-evicting, Session 20), ensure_org()/
+                  get_email_from_token() (Session 11), shared `limiter` (Session 20), shared helpers
   ai_core.py      generate_text() — the only place Anthropic SDK is called
   routes/
     direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview, /rollup — Session 15)
@@ -476,7 +511,8 @@ backend/
     capacity.py          /api/capacity — settings, work-units, profiles, time-off, /overview, /rollup (Session 14; /rollup gated by led scope as of Session 15)
     settings.py         /api/settings — profile, role-levels, expectations
     assessments.py       /api/assessments — levels, team list, per-report scorecard, AI draft, save (Session 16)
-    dashboard.py          GET /api/dashboard/insight — Mission Control's AI insight banner (Session 19)
+    dashboard.py          GET /api/dashboard/insight — Mission Control's AI insight banner (Session 19),
+                          cached + rate-limited (Session 20)
 
 frontend/
   app/
@@ -501,4 +537,10 @@ frontend/
 
 - Stripe webhook handler + subscription-gating middleware
 - Blog content pipeline (MDX in-repo is the default when we get there)
-- Error monitoring (Sentry, or Railway's built-in, or nothing for now)
+- Error monitoring (Sentry, or Railway's built-in, or nothing for now) — `sentry-sdk` is
+  in `requirements.txt`, unused, same "installed ahead of being wired up" state `slowapi`
+  was in before Session 20
+- Automated tests — `pytest` is in `requirements.txt`, unused. No test files, `tests/`
+  directory, or CI config anywhere in the repo as of Session 20. Andrew's explicit call
+  (Session 20 foundation-weaknesses triage): keep flagging rather than scope a first
+  pass now.

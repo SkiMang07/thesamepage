@@ -20,16 +20,25 @@ dashboard load.
 Fails quiet: any AI or parsing failure returns an empty DashboardInsight
 rather than a 500 — this endpoint should never be the reason a dashboard
 load breaks. See the try/except around the generate_text call below.
+
+Caching (added Session 20 — flagged in Session 19 as the natural next step,
+see foundation_weaknesses project memory note): a manager refreshing Mission
+Control repeatedly in one sitting was re-running the full query set AND a
+real Anthropic call every load, for a near-identical answer each time. Cache
+is a plain in-memory dict keyed by user_id, same shape as utils.py's
+_token_cache, with a flat TTL (not tied to any specific write path — see
+note on _INSIGHT_CACHE_TTL_SECONDS below for the tradeoff this accepts).
 """
 import json
+import time
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_LIGHT
-from utils import get_authenticated_client
+from utils import get_authenticated_client, limiter
 
 router = APIRouter()
 
@@ -37,6 +46,20 @@ router = APIRouter()
 # dashboard's CADENCE_DAYS constant — if one changes, change all three
 # (see CLAUDE.md).
 _CADENCE_DAYS = 21
+
+# user_id -> (DashboardInsight, cached_until_epoch_seconds). Unbounded like
+# utils.py's _token_cache — same accepted tradeoff (see foundation_weaknesses
+# memory note item #3): fine at today's single-instance, single-digit-user
+# scale, flag before horizontal scaling or real user growth.
+_insight_cache: dict[str, tuple["DashboardInsight", float]] = {}
+_INSIGHT_CACHE_TTL_SECONDS = 20 * 60
+
+# Deliberately NOT invalidated on writes (new 1:1 logged, commitment
+# resolved, etc.) — that would mean threading cache invalidation into every
+# route that touches these signals. A flat TTL means a stale insight can
+# persist up to 20 minutes after a manager acts on it; acceptable for a
+# once-a-day-ish dashboard glance, revisit if that staleness ever surprises
+# someone in practice.
 
 
 class DashboardInsight(BaseModel):
@@ -86,8 +109,14 @@ Or, when nothing is noteworthy:
 
 
 @router.get("/insight", response_model=DashboardInsight)
-async def get_dashboard_insight(auth=Depends(get_authenticated_client)):
+@limiter.limit("10/minute")
+async def get_dashboard_insight(request: Request, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
+
+    now = time.time()
+    cached = _insight_cache.get(user_id)
+    if cached and cached[1] > now:
+        return cached[0]
 
     reports = (
         supabase.table("direct_reports")
@@ -190,8 +219,13 @@ async def get_dashboard_insight(auth=Depends(get_authenticated_client)):
     if cta_id not in valid_report_ids:
         cta_id = None
 
-    return DashboardInsight(
+    result = DashboardInsight(
         insight=parsed.get("insight") or None,
         cta_label=parsed.get("cta_label") or None,
         cta_direct_report_id=cta_id,
     )
+    # Only cache a real, successfully-generated result — not the "no
+    # reports yet" or AI-failure early returns above, so those aren't stuck
+    # for the full TTL.
+    _insight_cache[user_id] = (result, time.time() + _INSIGHT_CACHE_TTL_SECONDS)
+    return result

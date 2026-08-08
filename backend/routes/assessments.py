@@ -28,13 +28,13 @@ untouched this pass.
 import json
 from datetime import date
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.direct_reports import fetch_role_expectations
-from utils import ensure_org, get_authenticated_client, get_email_from_token
+from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
 
 router = APIRouter()
 
@@ -445,7 +445,9 @@ async def get_scorecard(
 
 
 @router.post("/{direct_report_id}/draft", response_model=AssessmentDraft)
+@limiter.limit("10/minute")
 async def draft_assessment(
+    request: Request,
     direct_report_id: str,
     auth=Depends(get_authenticated_client),
     authorization: str = Header(None),
