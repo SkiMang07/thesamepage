@@ -534,6 +534,53 @@ export const getDashboardInsight = (): Promise<DashboardInsight> =>
   authedFetch("/api/dashboard/insight");
 
 // ---------------------------------------------------------------------------
+// Team View (Session 21) — the "team space" surface Andrew floated
+// 2026-08-03: a single home for "my team" as a unit (who's on it, what
+// they're working on), distinct from role-scoped views (who can see what as
+// the org grows). Own top-level page (/app/team). v1 scope: own direct
+// reports only. Roster/projects/priorities are assembled read-only from
+// data that already exists; messaging is the new piece — a free-text update
+// per report, STORE-ONLY (no delivery mechanism, IC login isn't built).
+// See docs/SESSION_HISTORY.md and the team_space_brainstorm project memory
+// note.
+// ---------------------------------------------------------------------------
+
+// A project or individual-level goal, as shown on Team View — Team View
+// only ever fetches the active/on_track/at_risk subset server-side (see
+// team.py's _ACTIVE_STATUSES), so this is a lighter shape than Project/Goal.
+export type TeamWorkItem = {
+  id: string;
+  title: string;
+  status: ProjectStatus;
+  due_date: string | null;
+};
+
+export type TeamMessage = {
+  id: string;
+  message: string;
+  created_at: string;
+};
+
+export type TeamMember = {
+  id: string;
+  name: string;
+  role_title: string | null;
+  projects: TeamWorkItem[];
+  priorities: TeamWorkItem[];
+  latest_message: TeamMessage | null;
+};
+
+export const getTeam = (): Promise<TeamMember[]> => authedFetch("/api/team");
+
+export const getTeamMessages = (reportId: string): Promise<TeamMessage[]> =>
+  authedFetch(`/api/team/${reportId}/messages`);
+
+// STORE-ONLY — see this section's header comment. Nothing is delivered
+// anywhere; this just adds a row to team_messages.
+export const sendTeamMessage = (reportId: string, message: string): Promise<TeamMessage> =>
+  authedFetch(`/api/team/${reportId}/messages`, { method: "POST", body: JSON.stringify({ message }) });
+
+// ---------------------------------------------------------------------------
 // 1:1s
 // ---------------------------------------------------------------------------
 

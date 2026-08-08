@@ -11,6 +11,69 @@ Format per entry:
 
 ---
 
+## Session 21 — 2026-08-08
+
+**Goal:** Andrew asked what's next; Claude's read of the project memory (the `team_space_brainstorm`
+note from 2026-08-03) suggested Team View was the most natural pick — the most recently flagged,
+unscoped item not gated on real user growth like Session 20's remaining foundation-weakness flags.
+Scoped via the usual AskUserQuestion round, then built same session.
+
+**What was done:**
+- Scoped via 6 total AskUserQuestion rounds (4 up front, 2 follow-up once messaging's IC-login
+  dependency surfaced): (1) build both the "team home" read surface AND messaging groundwork this
+  session, not defer messaging to a later pass as the brainstorm note had recommended; (2) v1 scope is
+  the caller's own direct reports only, not an org_unit rollup like role-scoped views; (3) show a
+  roster with each person's active projects + individual priorities; (4) own top-level nav item, not
+  folded into Mission Control; (5) since IC login isn't built, messaging is STORE-ONLY — a manager logs
+  a free-text update per report, nothing is delivered anywhere (no email dependency added); (6) message
+  shape is free text, not a structured priorities list.
+- **New table `team_messages`** (`manager_id`, `direct_report_id`, `message`, `created_at`) —
+  manager-scoped RLS (`manager_id = auth.uid()`), same pattern as `one_on_ones`/`assessments`, not the
+  `owner_id`-on-goals/projects naming gotcha. Added to `database/schema.sql` and as a standalone
+  migration, `database/migrations/2026-08-08_team_messages.sql`, **not yet run against the live
+  database** — same "build ahead of the migration" posture as every prior new-table session.
+- **`backend/routes/team.py`** (new) — `GET /api/team` (roster assembled from `direct_reports` +
+  each report's active/on_track/at_risk projects and individual-level goals, filtered the same way
+  Mission Control's Key Initiatives card filters — "what's happening now," not a full archive — plus
+  each report's latest logged message; three queries + a Python merge, same shape as
+  `direct_reports.py`'s `get_team_overview`), `GET /{report_id}/messages` (full update history,
+  newest first), `POST /{report_id}/messages` (log a new free-text update). Registered in `main.py`.
+- **`frontend/lib/api.ts`** — `TeamWorkItem`/`TeamMessage`/`TeamMember` types + `getTeam()`,
+  `getTeamMessages()`, `sendTeamMessage()`.
+- **`frontend/app/app/team/page.tsx`** (new) — roster of cards (name/role, priorities column, projects
+  column, both with status pills reusing Goals/Projects' existing style constants), each with a "Log
+  update" toggle that reveals a compose box + that person's update history. Copy is deliberately
+  explicit that nothing is delivered ("Not sent anywhere yet — just kept on record here until reports
+  can log in.") so the store-only nature doesn't read as a bug once IC login ships and someone asks
+  where their updates went.
+- Added a "Team" link to Mission Control's `NAV_LINKS` (first item, before Assessments).
+
+**Decisions made / locked:**
+- Team View v1 is scoped to the caller's own direct reports, matching Mission Control rather than
+  role-scoped views' org_unit rollup — the team_space_brainstorm note's original recommendation.
+- Messaging ships as store-only groundwork this session rather than deferred to a separate pass —
+  Andrew's explicit call, overriding the brainstorm note's original two-pass recommendation. Delivery
+  mechanism (email, or actual IC login) is unscoped follow-up work, not decided here.
+- Team View's roster shows active/on_track/at_risk work only, same "what's happening now" framing as
+  Mission Control's Key Initiatives card — full history stays on `/app/goals` and `/app/projects`.
+
+**Verification:** cloned the pushed repo into a scratch environment for a full check (not just
+`py_compile`, since this touched routing + a new frontend route): backend — fresh venv, installed
+`requirements.txt`, imported `main` with dummy Supabase env vars, confirmed `/api/team` and
+`/api/team/{report_id}/messages` both registered and `app.state.limiter` attached; frontend — fresh
+`npm install`, `tsc --noEmit` clean, `next build` clean, all 16 routes including the new `/app/team`
+built successfully. Not live-tested against real Supabase credentials — `team_messages` doesn't exist
+in the live database yet (see Next step).
+
+**Next step:** Andrew needs to run `database/migrations/2026-08-08_team_messages.sql` against the live
+Supabase database before `/app/team` will load without erroring (same "migration not yet run live" gap
+as every prior new-table session — Org units, Capacity, Role-scoped views all shipped this way).
+Follow-up candidates once he's dogfooded it: an actual delivery mechanism for messages (email, or wait
+for IC login), and whether Team View should eventually gain the same org_unit-rollup toggle Session 15
+gave People/Goals/Projects/Capacity.
+
+---
+
 ## Session 20 — 2026-08-08
 
 **Goal:** Andrew asked to work through `foundation_weaknesses.md` (the 6 structural weaknesses flagged

@@ -446,6 +446,37 @@ create table projects (
 alter table projects enable row level security;
 
 -- ============================================================
+-- TEAM MESSAGES
+-- Session 21 (2026-08-08) — the messaging half of the "team space" idea
+-- Andrew floated 2026-08-03 (see docs/SESSION_HISTORY.md and the
+-- team_space_brainstorm project memory note). Free-text, manager-authored,
+-- one row per update sent to a direct report.
+--
+-- STORE-ONLY for v1 — deliberate, not a gap. IC login isn't built yet
+-- (direct_reports.user_id above is a future hook, still unused), so there is
+-- no surface for a direct report to read this today. This table exists so a
+-- manager has somewhere to log updates/priorities per report now, ready to
+-- surface the moment IC login ships. Andrew's explicit call over building
+-- email delivery this session.
+--
+-- manager_id = the logged-in manager's auth.uid() (RLS scopes through it,
+-- same manager-scoped pattern as one_on_ones/assessments — NOT the
+-- owner_id-on-goals/projects naming gotcha documented elsewhere).
+-- ============================================================
+
+create table team_messages (
+  id                uuid primary key default uuid_generate_v4(),
+  manager_id        uuid not null references auth.users(id),
+  direct_report_id  uuid not null references direct_reports(id) on delete cascade,
+  message           text not null,
+  created_at        timestamptz not null default now()
+);
+
+alter table team_messages enable row level security;
+
+create index team_messages_report_idx on team_messages (direct_report_id, created_at desc);
+
+-- ============================================================
 -- CAPACITY MODEL
 -- Session 14 (2026-08-02) — see docs/SESSION_HISTORY.md and the
 -- capacity_scoping project memory note for the full scoping conversation.
@@ -771,6 +802,11 @@ create policy "goals_all_own_org" on goals
 create policy "projects_all_own_org" on projects
   for all using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
+
+-- team_messages — private to the manager who sent them, same manager-scoped
+-- pattern as one_on_ones/assessments
+create policy "team_messages_all_own" on team_messages
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
 -- development_plans
 create policy "dev_plans_all_own" on development_plans

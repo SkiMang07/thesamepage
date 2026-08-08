@@ -120,7 +120,7 @@ misleading, don't assume org-scoping from the policy name alone. Like
 
 ---
 
-## Database schema (29 tables — aligned with Miro board)
+## Database schema (30 tables — aligned with Miro board)
 
 Full schema with indexes and RLS policies: `database/schema.sql`.
 
@@ -138,6 +138,8 @@ projects             -- activated Session 13; goal_id (optional, on delete set n
                         on delete cascade). No level/org_unit_id of its own — "goals=what, projects=how"
 capacity_profiles    -- activated Session 14; per-direct-report override of capacity_settings' org defaults
 time_off_entries     -- activated Session 14; PTO/sick/holiday/other per direct report, subtracted per-period
+team_messages        -- new Session 21; free-text update log per direct report, manager-scoped. STORE-ONLY
+                        (no delivery mechanism) — IC login isn't built, see direct_reports.user_id above
 subscriptions        -- Stripe billing
 ```
 
@@ -439,6 +441,57 @@ Conventions → Rate limiting above.
 
 ---
 
+## Team View (Session 21, 2026-08-08)
+
+The "team space" surface Andrew floated 2026-08-03 — see docs/SESSION_HISTORY.md and the
+team_space_brainstorm project memory note for the original idea and the scoping conversation that
+turned it into this. Distinct from Role-scoped views above: that section is about *who can see what*
+as the org grows past one manager; Team View is about having *a single home for "my team" as a unit* at
+all, which mattered even before role-scoped views existed. Team data was scattered across
+direct_reports/projects/goals/capacity with no page tying them together — this is that page.
+
+**Scope, decided with Andrew:** own direct reports only (not an org_unit rollup like role-scoped
+views); a roster showing each person's active projects and individual-level priorities, assembled from
+data that already exists; plus a new piece, free-text messaging per report.
+
+**`backend/routes/team.py`** (3 routes under `/api/team`): `GET ""` (the roster — `direct_reports`
+joined client-side in Python with each report's active/on_track/at_risk projects and individual-level
+goals, plus their latest logged message; same "a few queries + a Python merge" shape as
+`direct_reports.py`'s `get_team_overview`), `GET /{report_id}/messages` (full update history, newest
+first), `POST /{report_id}/messages` (log a new update).
+
+**Why active/on_track/at_risk only:** same "what's happening now" framing as Mission Control's Key
+Initiatives card (Session 18/19) — completed/cancelled work stays off the roster. Full history is still
+on `/app/goals` and `/app/projects`; Team View isn't trying to replace either.
+
+**`team_messages` — store-only by design, not a gap.** IC login is still deferred (see
+`direct_reports.user_id` above and PRODUCT_VISION.md/Scope discipline below) — there is no surface for
+a direct report to read anything today. So a message logged here reaches nobody but the manager who
+wrote it; it's groundwork for whenever IC login ships, not a broken feature. Andrew's explicit call,
+made mid-scoping, over adding an email-delivery dependency this session. RLS is manager-scoped
+(`manager_id = auth.uid()`), the same pattern as `one_on_ones`/`assessments` — **not** the
+`owner_id`-on-goals/projects naming gotcha documented above.
+
+**Schema note — new migration, not yet run live.** Unlike Assessments (Session 16, tables already
+dormant in the original scaffold), `team_messages` is a genuinely new table this session.
+`database/migrations/2026-08-08_team_messages.sql` needs to run against Supabase before `/app/team`
+will load without a query error — same "build ahead of the migration" posture as every table activated
+since Org units (Session 11).
+
+**Frontend:** `frontend/app/app/team/page.tsx` (new top-level nav item, added to Mission Control's
+`NAV_LINKS`) — one card per direct report (priorities + projects columns, reusing Goals/Projects'
+existing status pill styles) with a "Log update" toggle that reveals a compose box and that person's
+message history. Copy is explicit that nothing is delivered, so the store-only behavior doesn't read as
+broken.
+
+**Verification note:** cloned the pushed repo into a scratch environment for a fuller check than the
+usual `py_compile`-only pass, since this added a new route module and a new frontend route: backend —
+fresh venv, `main` import with dummy Supabase env vars, confirmed both new routes register; frontend —
+fresh `npm install`, `tsc --noEmit` clean, `next build` clean (16/16 routes, `/app/team` included). Not
+live-tested against real Supabase — the migration hasn't run yet.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -455,7 +508,9 @@ Things explicitly not yet built:
   views section above). Still open: individual-level goals aren't rolled up
   (department/team only), and there's no admin/owner concept gating who can
   assign a leader (any org member can, today).
-- IC login (user_id on direct_reports is nullable as a future hook)
+- IC login (user_id on direct_reports is nullable as a future hook). `team_messages` (Session 21) is
+  the first feature to bump into this directly — it's built store-only specifically because there's no
+  IC-facing surface yet; see the Team View section above.
 - Commitments → project linking (`source_type='project'`, already in
   schema.sql's check constraint) — Projects (Session 13) shipped CRUD only,
   same scope discipline as Goals shipping without rollup calculation
@@ -513,6 +568,7 @@ backend/
     assessments.py       /api/assessments — levels, team list, per-report scorecard, AI draft, save (Session 16)
     dashboard.py          GET /api/dashboard/insight — Mission Control's AI insight banner (Session 19),
                           cached + rate-limited (Session 20)
+    team.py               /api/team — roster + active projects/priorities per report, message log (Session 21)
 
 frontend/
   app/
@@ -524,6 +580,7 @@ frontend/
     app/org/            Org builder — own top-level page, tree (build/edit) + chart (Session 11) + Rollup tab (Session 15)
     app/capacity/       Capacity page — period selector, "your team" + led-scope org-unit rollup (Session 14; gated Session 15)
     app/assessments/    Team list + [reportId] scorecard — overall rating, per-item scores, AI draft (Session 16)
+    app/team/            Team View — roster + active projects/priorities + store-only message log per report (Session 21)
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client

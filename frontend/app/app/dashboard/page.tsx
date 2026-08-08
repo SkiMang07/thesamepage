@@ -134,6 +134,7 @@ type PerformanceRow = TeamOverviewItem & {
 };
 
 const NAV_LINKS = [
+  { href: "/app/team", label: "Team" },
   { href: "/app/assessments", label: "Assessments" },
   { href: "/app/goals", label: "Goals" },
   { href: "/app/projects", label: "Projects" },
