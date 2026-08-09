@@ -148,6 +148,9 @@ direct_report_invites -- new Session 22; one-time magic-link invite token per di
                         scoped, 7-day TTL. Claimed via accept_direct_report_invite() (SECURITY DEFINER)
 team_meeting_notes   -- new Session 22; standalone team-wide meeting-notes log, manager-scoped, no
                         attendee tagging — separate from one_on_ones and team_messages
+team_callouts        -- new Session 24; ONE manager-authored text block per manager (unique on
+                        manager_id), overwritten in place on every edit — not a dated log like
+                        team_meeting_notes. "Key updates" revived, deliberately small
 subscriptions        -- Stripe billing
 ```
 
@@ -633,6 +636,50 @@ migration run itself.
 
 ---
 
+## Team Mission Control layout rework (Session 24, 2026-08-09)
+
+Full visual redesign of `/app/team`, Andrew's explicit call after dogfooding the Session 22/23 3-column
+grid — see the team_page_redesign_brief and team_page_redesign_options project memory notes for the
+scoping conversation (an AskUserQuestion round, four rounds of mockup review, then a build). No changes
+to anything above this section — Sessions 21-23's data model carries this rework as-is, with one new
+addition (team_callouts, below).
+
+**New page structure, top to bottom:** a KPI strip (goals on track, active initiatives, commitments due
+within 7 days, days until the next meeting — all computed client-side from data already being fetched);
+a "this week's focus" row pairing Initiatives, Goals, and Commitments as three cards; a Meetings row
+(Critical callouts to the left, Meetings on the right); the team roster, moved from a left column to a
+row of cards at the very bottom that expand into a shared detail panel on click. `frontend/lib/api.ts`
+gets no new types for Initiatives or the KPI strip — Initiatives reuses `getProjects()` filtered
+client-side to `active`/`on_track`/`at_risk`, the same subset Mission Control's Key Initiatives card uses
+(dashboard.py) — no backend change needed.
+
+**Critical callouts — "key updates," revived.** Scoped and explicitly deferred in both Session 22 and
+Session 23; Andrew revived it this session, deliberately small: ONE manager-authored text block
+(`team_callouts`, unique on `manager_id`), overwritten in place on every edit — not a dated log like
+`team_meeting_notes`. The frontend splits the message on newlines to render bullets; there's no per-line
+CRUD or history. New `GET`/`PUT /api/team/callout` in team.py — PUT upserts on `manager_id`
+(`on_conflict="manager_id"`), computing `updated_at` in Python rather than relying on the column default
+(which only fires on insert, not on an upsert's update path).
+
+**Schema note — new migration, confirmed run live by Andrew.**
+`database/migrations/2026-08-09_team_callouts.sql` creates `team_callouts` + its RLS policy. Depends on
+`2026-08-09_team_agenda_and_commitments.sql` already being live — confirmed with Andrew before writing
+it.
+
+**Verification note:** cloned the pushed repo (commit `94a0808`) into a scratch environment. Backend —
+fresh venv, `main` import with dummy Supabase env vars confirmed `/api/team/callout` (GET+PUT)
+registered, `py_compile` clean. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean
+(all 17 routes, `/app/team` at 8.01 kB). Schema — spun up a local Postgres 16 with the same minimal
+Supabase `auth` schema stub as Sessions 22/23, this time also explicitly granting `anon`/`authenticated`
+table privileges to match real Supabase's defaults (the stub was missing this, caught by a
+permission-denied error on the first attempt — noted here since it'll matter for any future local RLS
+verification, not just this table). Ran the *entire* `schema.sql` end to end with zero errors, then
+functionally tested `team_callouts`: upsert-create, upsert-edit in place (confirmed one row, not a
+duplicate), a second manager saw zero rows under RLS, and a second manager's attempted `UPDATE` against
+the first manager's row affected zero rows and did not mutate it.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -712,7 +759,7 @@ backend/
                           cached + rate-limited (Session 20)
     team.py               /api/team — roster + active projects/priorities per report, message log (Session 21);
                           goals, meeting notes (+ meeting_date agenda surfacing, Session 23) (Session 22);
-                          commitments (Session 23)
+                          commitments (Session 23); callout (Session 24)
 
 frontend/
   app/
@@ -724,7 +771,9 @@ frontend/
     app/org/            Org builder — own top-level page, tree (build/edit) + chart (Session 11) + Rollup tab (Session 15)
     app/capacity/       Capacity page — period selector, "your team" + led-scope org-unit rollup (Session 14; gated Session 15)
     app/assessments/    Team list + [reportId] scorecard — overall rating, per-item scores, AI draft (Session 16)
-    app/team/            Team View — roster + active projects/priorities + store-only message log per report (Session 21)
+    app/team/            Team Mission Control — KPI strip, Initiatives/Goals/Commitments row, Critical
+                          callouts + Meetings row, roster row at bottom (Session 21; 3-column rework
+                          Session 22; layout rework Session 24)
   lib/
     api.ts              All fetch() calls live here
     supabase.ts         createClientComponentClient() — browser-side auth client

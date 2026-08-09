@@ -548,6 +548,28 @@ create table team_meeting_notes (
 alter table team_meeting_notes enable row level security;
 
 -- ============================================================
+-- TEAM CALLOUTS
+-- Session 24 (2026-08-09) — /app/team layout rework. This is "key updates",
+-- the manager-authored broadcast idea scoped and then explicitly deferred in
+-- Sessions 22 and 23 — revived here deliberately small: ONE text block per
+-- manager (unique on manager_id), overwritten in place on every edit rather
+-- than a dated log like team_meeting_notes above. No history, no per-line
+-- CRUD — the frontend splits the message on newlines to render bullets. See
+-- the team_page_redesign_options project memory note for the scoping
+-- conversation (Andrew confirmed this shape via a mockup before it was
+-- built).
+-- ============================================================
+
+create table team_callouts (
+  id          uuid primary key default uuid_generate_v4(),
+  manager_id  uuid not null unique references auth.users(id),
+  message     text not null default '',
+  updated_at  timestamptz not null default now()
+);
+
+alter table team_callouts enable row level security;
+
+-- ============================================================
 -- CAPACITY MODEL
 -- Session 14 (2026-08-02) — see docs/SESSION_HISTORY.md and the
 -- capacity_scoping project memory note for the full scoping conversation.
@@ -896,6 +918,10 @@ create policy "direct_reports_select_own_as_ic" on direct_reports
 
 -- team_meeting_notes — manager-scoped, same pattern as team_messages
 create policy "team_meeting_notes_all_own" on team_meeting_notes
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
+-- team_callouts — manager-scoped, same pattern as team_messages/team_meeting_notes
+create policy "team_callouts_all_own" on team_callouts
   for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
 -- development_plans

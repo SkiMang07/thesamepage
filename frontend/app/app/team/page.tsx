@@ -1,42 +1,52 @@
 "use client";
 
 // Team Mission Control (Session 22, 2026-08-08) — expands Team View
-// (Session 21, session's roster-only /app/team) into a 3-column surface,
-// reworked in place at the same route/nav item per Andrew's explicit call.
-// See docs/SESSION_HISTORY.md and the team_mission_control project memory
-// note for the scoping conversation.
+// (Session 21, that session's roster-only /app/team) into a multi-surface
+// page, reworked in place at the same route/nav item per Andrew's explicit
+// call. See docs/SESSION_HISTORY.md and the team_mission_control project
+// memory note for the scoping conversation.
 //
-// Left column: the Session 21 roster (roster + active projects/priorities +
-// store-only per-report update log), now also carrying an "Invite to log
-// in" action per report — the one piece of IC login built this session
-// (see lib/api.ts's inviteDirectReport). Building what an IC actually sees
-// once logged in is deferred to a follow-up.
+// Session 23 (2026-08-09) follow-up: meeting-notes agenda surfacing
+// (meeting_date-derived "next meeting" hero) + past-meeting card/detail UI +
+// team-level commitments (commitments.is_team_commitment).
 //
-// Middle column: company- and team-level goal progress, read-only,
-// deliberately excluding department/individual (team.py's
-// get_team_goals docstring has the full reasoning).
+// Session 24 (2026-08-09) — full visual layout rework, Andrew's explicit
+// call after dogfooding the 3-column grid (see the team_page_redesign_brief
+// and team_page_redesign_options project memory notes for the scoping +
+// mockup-review conversation). New structure, top to bottom:
+//   1. A KPI strip — goals on track, active initiatives, commitments due
+//      this week, days until the next meeting.
+//   2. A "this week's focus" row pairing Initiatives (team-wide active
+//      projects, same active/on_track/at_risk framing as Mission Control's
+//      Key Initiatives card — see dashboard.py), Goals, and Commitments —
+//      goals+commitments paired was the one explicit structural ask in the
+//      brief; Initiatives joining them was Andrew's addition once he saw the
+//      first round of mockups.
+//   3. A Critical callouts + Meetings row. Callouts is "key updates" — the
+//      manager-authored broadcast idea scoped and then explicitly deferred
+//      in Sessions 22 and 23 — revived here deliberately small (one
+//      overwritten text block, not a dated log; see lib/api.ts's
+//      TeamCallout comment and team.py's get_team_callout/update_team_callout).
+//      Meetings keeps Session 23's hero-agenda + plan/log forms + detail
+//      modal, restyled from a 2-col grid to a horizontal card carousel.
+//   4. The team roster, now a row of compact cards at the very bottom
+//      (previously a left column) — click a card to expand priorities,
+//      projects, log-update, and invite actions in a detail panel below the
+//      row. Same data/actions as before, just relocated.
 //
-// Right column: a standalone team-wide meeting-notes log — free text, not
-// tied to any single 1:1 (one_on_ones.summary stays exactly where it is)
-// and distinct from the per-report team_messages log above.
-//
-// "Key updates" (a manager-authored broadcast feed) was scoped and then
-// explicitly deferred to a follow-up session — nothing for it here.
-//
-// Session 23 (2026-08-09) follow-up, two additions:
-//   - Notes column now surfaces a "next meeting's agenda" hero (the soonest
-//     note dated today or later) above a card grid of past meetings; a card
-//     opens a detail modal on click instead of the old flat reverse-chron
-//     text list. Status is derived client-side from meeting_date, not
-//     stored — see lib/api.ts's TeamNote comment.
-//   - Roster column gains a "Team commitments" section below it — existing
-//     commitments rows flagged is_team_commitment, assigned to one direct
-//     report but tracked here at the team level too (see backend/routes/
-//     team.py's list_team_commitments/create_team_commitment).
+// Scoping for this pass (AskUserQuestion round before the mockups, another
+// before writing the callouts migration): write access stays
+// manager-authored with the team just viewing — no new IC-facing write UI
+// here, matching where IC login actually is today (auth primitives only,
+// see direct_report_invites). Visual style leans more colorful/engaging
+// than the rest of the app on purpose, Andrew's explicit call over the
+// safer close-to-today option.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  Project,
+  TeamCallout,
   TeamCommitment,
   TeamGoal,
   TeamMember,
@@ -44,7 +54,9 @@ import {
   TeamNote,
   createTeamCommitment,
   createTeamNote,
+  getProjects,
   getTeam,
+  getTeamCallout,
   getTeamCommitments,
   getTeamGoals,
   getTeamMessages,
@@ -52,12 +64,10 @@ import {
   inviteDirectReport,
   sendTeamMessage,
   updateCommitment,
+  updateTeamCallout,
 } from "@/lib/api";
 
-// Same status vocabulary as Goals/Projects — Team View only ever receives
-// the active/on_track/at_risk subset (filtered server-side), but the
-// styles/labels still need all five keys since TypeScript can't narrow the
-// union from the fetch alone.
+// Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-gray-100 text-gray-600",
   on_track: "bg-green-50 text-green-600",
@@ -74,6 +84,64 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+// Left-border accent per status — Initiatives/Goals lean on this for the
+// more colorful Session 24 treatment; STATUS_STYLES pills stay too since
+// they still carry the text label.
+const STATUS_BORDER: Record<string, string> = {
+  active: "border-gray-300",
+  on_track: "border-green-500",
+  at_risk: "border-amber-500",
+  completed: "border-blue-300",
+  cancelled: "border-gray-200",
+};
+
+// Same subset Mission Control's Key Initiatives card uses (dashboard.py) —
+// "what's currently happening," full history stays on /app/projects.
+const ACTIVE_STATUSES = new Set(["active", "on_track", "at_risk"]);
+
+// A small fixed palette cycled by roster order, so a person's avatar color
+// on the roster row matches their commitment/initiative accent color
+// elsewhere on the page. Purely a display convenience — not stored anywhere.
+const AVATAR_PALETTE = [
+  "bg-indigo-500",
+  "bg-rose-500",
+  "bg-teal-500",
+  "bg-amber-500",
+  "bg-violet-500",
+  "bg-cyan-600",
+];
+const AVATAR_BORDER_PALETTE = [
+  "border-indigo-500",
+  "border-rose-500",
+  "border-teal-500",
+  "border-amber-500",
+  "border-violet-500",
+  "border-cyan-600",
+];
+
+function memberIndex(memberId: string | null | undefined, members: TeamMember[]) {
+  if (!memberId) return -1;
+  return members.findIndex((m) => m.id === memberId);
+}
+
+function avatarColor(memberId: string | null | undefined, members: TeamMember[]) {
+  const idx = memberIndex(memberId, members);
+  return AVATAR_PALETTE[idx >= 0 ? idx % AVATAR_PALETTE.length : 0];
+}
+
+function borderColor(memberId: string | null | undefined, members: TeamMember[]) {
+  const idx = memberIndex(memberId, members);
+  return AVATAR_BORDER_PALETTE[idx >= 0 ? idx % AVATAR_BORDER_PALETTE.length : 0];
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const first = parts[0][0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase();
+}
+
 function timeAgo(iso: string) {
   const ms = Date.now() - new Date(iso).getTime();
   const days = Math.floor(ms / (1000 * 60 * 60 * 24));
@@ -86,15 +154,30 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-// Local (not UTC) YYYY-MM-DD — meeting_date is a date-only column, and
-// comparing/parsing it via new Date(dateStr) treats it as UTC midnight,
-// which reads as "yesterday" in any timezone west of UTC. Everything below
-// that touches meeting_date goes through these two helpers instead.
+// Local (not UTC) YYYY-MM-DD — meeting_date/due_date are date-only columns;
+// parsing via new Date(dateStr) treats them as UTC midnight, which reads as
+// "yesterday" in any timezone west of UTC. Everything below that touches a
+// bare date string goes through these helpers instead.
 function localDateStr(d: Date = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function addDaysStr(dateStr: string, days: number) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return localDateStr(dt);
+}
+
+function daysBetweenTodayAnd(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const target = new Date(y, m - 1, d);
+  const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((target.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function formatMeetingDate(dateStr: string) {
@@ -111,21 +194,44 @@ function snippet(text: string, max = 110) {
   return trimmed.length > max ? `${trimmed.slice(0, max).trimEnd()}…` : trimmed;
 }
 
+// Soonest note dated today-or-later — the surfaced "next meeting" hero.
+// Shared by the KPI strip and the Meetings panel so both derive the same
+// answer from the same rule (see team_meeting_notes' meeting_date comment
+// in lib/api.ts).
+function deriveNextAgenda(notes: TeamNote[]): TeamNote | null {
+  const today = localDateStr();
+  const upcoming = notes
+    .filter((n) => n.meeting_date && n.meeting_date >= today)
+    .sort((a, b) => (a.meeting_date! < b.meeting_date! ? -1 : 1));
+  return upcoming[0] ?? null;
+}
+
 export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [goals, setGoals] = useState<TeamGoal[]>([]);
   const [notes, setNotes] = useState<TeamNote[]>([]);
   const [commitments, setCommitments] = useState<TeamCommitment[]>([]);
+  const [initiatives, setInitiatives] = useState<Project[]>([]);
+  const [callout, setCallout] = useState<TeamCallout>({ message: "", updated_at: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getTeam(), getTeamGoals(), getTeamNotes(), getTeamCommitments()])
-      .then(([m, g, n, c]) => {
+    Promise.all([
+      getTeam(),
+      getTeamGoals(),
+      getTeamNotes(),
+      getTeamCommitments(),
+      getProjects(),
+      getTeamCallout(),
+    ])
+      .then(([m, g, n, c, p, calloutRow]) => {
         setMembers(m);
         setGoals(g);
         setNotes(n);
         setCommitments(c);
+        setInitiatives(p.filter((proj) => ACTIVE_STATUSES.has(proj.status)));
+        setCallout(calloutRow);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -140,8 +246,8 @@ export default function TeamPage() {
         </Link>
       </div>
       <p className="mt-1 text-sm text-gray-500">
-        Who&apos;s on your team, how company and team goals are tracking, and a running log for
-        anything worth remembering.
+        Everything your team is working on, how goals and commitments are tracking, and a shared space
+        for meetings — this week&apos;s must-knows included.
       </p>
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
@@ -149,17 +255,35 @@ export default function TeamPage() {
       {loading ? (
         <p className="mt-8 text-gray-500">Loading...</p>
       ) : (
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="space-y-8">
-            <RosterColumn members={members} setMembers={setMembers} />
-            <TeamCommitmentsSection
-              members={members}
-              commitments={commitments}
-              setCommitments={setCommitments}
-            />
+        <div className="mt-8 space-y-10">
+          <KpiStrip goals={goals} initiatives={initiatives} commitments={commitments} notes={notes} />
+
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+              This week&apos;s focus
+            </h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <InitiativesCard initiatives={initiatives} members={members} />
+              <GoalsCard goals={goals} />
+              <CommitmentsCard
+                members={members}
+                commitments={commitments}
+                setCommitments={setCommitments}
+              />
+            </div>
           </div>
-          <GoalsColumn goals={goals} />
-          <NotesColumn notes={notes} setNotes={setNotes} />
+
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+              Meetings
+            </h2>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.3fr)]">
+              <CalloutsPanel callout={callout} setCallout={setCallout} />
+              <MeetingsPanel notes={notes} setNotes={setNotes} />
+            </div>
+          </div>
+
+          <RosterRow members={members} setMembers={setMembers} />
         </div>
       )}
     </main>
@@ -167,310 +291,290 @@ export default function TeamPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Left column — roster
+// KPI strip
 // ---------------------------------------------------------------------------
 
-function RosterColumn({
-  members,
-  setMembers,
+function KpiStrip({
+  goals,
+  initiatives,
+  commitments,
+  notes,
 }: {
-  members: TeamMember[];
-  setMembers: React.Dispatch<React.SetStateAction<TeamMember[]>>;
+  goals: TeamGoal[];
+  initiatives: Project[];
+  commitments: TeamCommitment[];
+  notes: TeamNote[];
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [history, setHistory] = useState<Record<string, TeamMessage[]>>({});
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [invitingId, setInvitingId] = useState<string | null>(null);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteResult, setInviteResult] = useState<Record<string, string>>({});
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSending, setInviteSending] = useState(false);
+  const scoredGoals = goals.filter((g) => g.status !== "cancelled");
+  const onTrackGoals = scoredGoals.filter((g) => g.status === "on_track").length;
+  const goalsLabel = scoredGoals.length > 0 ? `${onTrackGoals}/${scoredGoals.length}` : "—";
 
-  async function toggleExpand(member: TeamMember) {
-    if (expandedId === member.id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(member.id);
-    setDraft("");
-    if (!history[member.id]) {
-      try {
-        const msgs = await getTeamMessages(member.id);
-        setHistory((h) => ({ ...h, [member.id]: msgs }));
-      } catch {
-        // Non-fatal — the card still renders without history.
-      }
-    }
-  }
+  const today = localDateStr();
+  const weekOut = addDaysStr(today, 7);
+  const dueThisWeek = commitments.filter(
+    (c) => c.status === "open" && c.due_date && c.due_date >= today && c.due_date <= weekOut
+  ).length;
 
-  async function submitMessage(reportId: string) {
-    if (!draft.trim() || sending) return;
-    setSending(true);
-    try {
-      const created = await sendTeamMessage(reportId, draft.trim());
-      setHistory((h) => ({ ...h, [reportId]: [created, ...(h[reportId] ?? [])] }));
-      setMembers((ms) => ms.map((m) => (m.id === reportId ? { ...m, latest_message: created } : m)));
-      setDraft("");
-    } finally {
-      setSending(false);
-    }
-  }
+  const nextAgenda = deriveNextAgenda(notes);
+  const meetingLabel = nextAgenda ? `${Math.max(daysBetweenTodayAnd(nextAgenda.meeting_date!), 0)}d` : "—";
+  const meetingSubLabel = nextAgenda ? "Until next meeting" : "No meeting planned";
 
-  function openInvite(member: TeamMember) {
-    setInvitingId(member.id);
-    setInviteEmail(member.email ?? "");
-    setInviteError(null);
-  }
-
-  async function submitInvite(reportId: string) {
-    const email = inviteEmail.trim();
-    if (!email || inviteSending) return;
-    setInviteSending(true);
-    setInviteError(null);
-    try {
-      const { invite_url } = await inviteDirectReport(reportId, email);
-      setInviteResult((r) => ({ ...r, [reportId]: invite_url }));
-      setMembers((ms) => ms.map((m) => (m.id === reportId ? { ...m, email } : m)));
-    } catch (e) {
-      setInviteError(e instanceof Error ? e.message : "Failed to create invite");
-    } finally {
-      setInviteSending(false);
-    }
-  }
+  const tiles = [
+    { value: goalsLabel, label: "Goals on track", from: "from-green-500", to: "to-green-600" },
+    { value: String(initiatives.length), label: "Active initiatives", from: "from-sky-500", to: "to-sky-600" },
+    { value: String(dueThisWeek), label: "Commitments due this week", from: "from-amber-500", to: "to-amber-600" },
+    { value: meetingLabel, label: meetingSubLabel, from: "from-indigo-500", to: "to-indigo-600" },
+  ];
 
   return (
-    <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Your team</h2>
-
-      {members.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-500">
-          No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="underline hover:text-gray-700">
-            Add your first one
-          </Link>
-          .
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-4">
-          {members.map((m) => (
-            <li key={m.id} className="rounded-xl border border-gray-200 bg-white">
-              <div className="px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link href={`/app/reports/${m.id}`} className="font-medium text-gray-900 hover:underline">
-                      {m.name}
-                    </Link>
-                    {m.role_title && <p className="text-sm text-gray-500">{m.role_title}</p>}
-                  </div>
-                  <button
-                    onClick={() => toggleExpand(m)}
-                    className="shrink-0 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                  >
-                    {expandedId === m.id ? "Close" : "Log update"}
-                  </button>
-                </div>
-
-                <div className="mt-3 space-y-3">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      Priorities{m.priorities.length > 0 && ` (${m.priorities.length})`}
-                    </p>
-                    {m.priorities.length === 0 ? (
-                      <p className="mt-1 text-sm text-gray-400">None set.</p>
-                    ) : (
-                      <ul className="mt-1 space-y-1">
-                        {m.priorities.map((g) => (
-                          <li key={g.id} className="flex items-center justify-between gap-2 text-sm">
-                            <span className="truncate text-gray-700">{g.title}</span>
-                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
-                              {STATUS_LABELS[g.status]}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      Projects{m.projects.length > 0 && ` (${m.projects.length})`}
-                    </p>
-                    {m.projects.length === 0 ? (
-                      <p className="mt-1 text-sm text-gray-400">None active.</p>
-                    ) : (
-                      <ul className="mt-1 space-y-1">
-                        {m.projects.map((p) => (
-                          <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                            <span className="truncate text-gray-700">{p.title}</span>
-                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
-                              {STATUS_LABELS[p.status]}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-
-                {m.latest_message && (
-                  <p className="mt-3 text-xs text-gray-400">
-                    Last update {timeAgo(m.latest_message.created_at)}: &ldquo;{m.latest_message.message}&rdquo;
-                  </p>
-                )}
-
-                <div className="mt-3 border-t border-gray-100 pt-3">
-                  {m.user_id ? (
-                    <p className="text-xs text-gray-400">Account linked — they can log in.</p>
-                  ) : invitingId === m.id ? (
-                    <div>
-                      {inviteResult[m.id] ? (
-                        <div>
-                          <p className="text-xs text-gray-500">Share this link with them — it expires in 7 days:</p>
-                          <div className="mt-1 flex items-center gap-2">
-                            <input
-                              readOnly
-                              value={inviteResult[m.id]}
-                              onFocus={(e) => e.target.select()}
-                              className="w-full truncate rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-600"
-                            />
-                            <button
-                              onClick={() => navigator.clipboard?.writeText(inviteResult[m.id])}
-                              className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                            >
-                              Copy
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="email"
-                            value={inviteEmail}
-                            onChange={(e) => setInviteEmail(e.target.value)}
-                            placeholder="their@email.com"
-                            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs"
-                          />
-                          <button
-                            onClick={() => submitInvite(m.id)}
-                            disabled={inviteSending || !inviteEmail.trim()}
-                            className="shrink-0 rounded-md bg-gray-900 px-2.5 py-1 text-xs text-white disabled:opacity-50"
-                          >
-                            {inviteSending ? "Sending…" : "Send"}
-                          </button>
-                        </div>
-                      )}
-                      {inviteError && <p className="mt-1 text-xs text-red-500">{inviteError}</p>}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => openInvite(m)}
-                      className="text-xs font-medium text-gray-500 underline hover:text-gray-700"
-                    >
-                      Invite to log in
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {expandedId === m.id && (
-                <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-3">
-                  <label className="mb-1 block text-xs font-medium text-gray-500">Update for {m.name}</label>
-                  <textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    rows={2}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Not sent anywhere yet — just kept on record here until reports can log in."
-                  />
-                  <div className="mt-2 flex items-center gap-3">
-                    <button
-                      onClick={() => submitMessage(m.id)}
-                      disabled={sending || !draft.trim()}
-                      className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-                    >
-                      {sending ? "Saving..." : "Save update"}
-                    </button>
-                  </div>
-
-                  {history[m.id] && history[m.id].length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">History</p>
-                      <ul className="mt-1.5 space-y-1.5">
-                        {history[m.id].map((msg) => (
-                          <li key={msg.id} className="text-sm text-gray-600">
-                            <span className="text-xs text-gray-400">{timeAgo(msg.created_at)}</span> — {msg.message}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {tiles.map((t) => (
+        <div key={t.label} className={`rounded-xl bg-gradient-to-br ${t.from} ${t.to} px-4 py-3 text-white`}>
+          <p className="text-2xl font-semibold">{t.value}</p>
+          <p className="text-xs text-white/80">{t.label}</p>
+        </div>
+      ))}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Middle column — company/team goal progress
+// This week's focus row — Initiatives / Goals / Commitments
 // ---------------------------------------------------------------------------
 
-function GoalsColumn({ goals }: { goals: TeamGoal[] }) {
-  const company = goals.filter((g) => g.level === "company");
-  const team = goals.filter((g) => g.level === "team");
+function InitiativesCard({ initiatives, members }: { initiatives: Project[]; members: TeamMember[] }) {
+  const sorted = [...initiatives].sort((a, b) => {
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+    return a.due_date < b.due_date ? -1 : 1;
+  });
 
   return (
-    <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Goal progress</h2>
-
-      <GoalGroup title="Company" goals={company} emptyLabel="No company goals yet." />
-      <div className="mt-6">
-        <GoalGroup title="Team" goals={team} emptyLabel="No team goals yet." showUnit />
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Initiatives</p>
+        {initiatives.length > 0 && (
+          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-600">
+            {initiatives.length} active
+          </span>
+        )}
       </div>
+      {sorted.length === 0 ? (
+        <p className="text-sm text-gray-400">No active initiatives.</p>
+      ) : (
+        <ul className="space-y-2.5">
+          {sorted.map((p) => (
+            <li key={p.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[p.status]}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm text-gray-700">{p.title}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
+                  {STATUS_LABELS[p.status]}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">
+                {p.direct_report_name ?? "You"}
+                {p.due_date ? ` · Due ${formatDate(p.due_date)}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link href="/app/projects" className="mt-3 inline-block text-xs text-gray-500 underline hover:text-gray-700">
+        Manage projects
+      </Link>
+    </div>
+  );
+}
 
-      <Link href="/app/goals" className="mt-6 inline-block text-xs text-gray-500 underline hover:text-gray-700">
+function GoalsCard({ goals }: { goals: TeamGoal[] }) {
+  const scored = goals.filter((g) => g.status !== "cancelled");
+  const pct = scored.length > 0 ? Math.round((scored.filter((g) => g.status === "on_track").length / scored.length) * 100) : 0;
+  const dash = `${pct}, 100`;
+  const sorted = [...goals].sort((a, b) => (a.level === b.level ? 0 : a.level === "company" ? -1 : 1));
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">Goal progress</p>
+      {goals.length === 0 ? (
+        <p className="text-sm text-gray-400">No company or team goals yet.</p>
+      ) : (
+        <div className="flex items-start gap-4">
+          <svg width="52" height="52" viewBox="0 0 36 36" className="shrink-0">
+            <path
+              d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
+              fill="none"
+              stroke="#e5e7eb"
+              strokeWidth="3"
+            />
+            <path
+              d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
+              fill="none"
+              stroke="#22c55e"
+              strokeWidth="3"
+              strokeDasharray={dash}
+              strokeLinecap="round"
+            />
+            <text x="18" y="21" textAnchor="middle" fontSize="9" fill="#111827" fontWeight="600">
+              {pct}%
+            </text>
+          </svg>
+          <ul className="min-w-0 flex-1 space-y-1.5">
+            {sorted.map((g) => (
+              <li key={g.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="truncate text-gray-700" title={g.title}>
+                  {g.title}
+                </span>
+                <span
+                  className={`shrink-0 h-2 w-2 rounded-full ${
+                    g.status === "on_track" ? "bg-green-500" : g.status === "at_risk" ? "bg-amber-500" : "bg-gray-300"
+                  }`}
+                  title={STATUS_LABELS[g.status]}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <Link href="/app/goals" className="mt-3 inline-block text-xs text-gray-500 underline hover:text-gray-700">
         Manage goals
       </Link>
     </div>
   );
 }
 
-function GoalGroup({
-  title,
-  goals,
-  emptyLabel,
-  showUnit,
+function CommitmentsCard({
+  members,
+  commitments,
+  setCommitments,
 }: {
-  title: string;
-  goals: TeamGoal[];
-  emptyLabel: string;
-  showUnit?: boolean;
+  members: TeamMember[];
+  commitments: TeamCommitment[];
+  setCommitments: React.Dispatch<React.SetStateAction<TeamCommitment[]>>;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [reportId, setReportId] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
+
+  const open = commitments.filter((c) => c.status === "open");
+
+  async function submit() {
+    if (!reportId || !description.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createTeamCommitment({
+        directReportId: reportId,
+        description: description.trim(),
+        dueDate: dueDate || null,
+      });
+      setCommitments((c) => [created, ...c]);
+      setDescription("");
+      setDueDate("");
+      setReportId("");
+      setAdding(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add commitment");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function markDone(id: string) {
+    setCompletingId(id);
+    try {
+      const updated = await updateCommitment(id, "done");
+      setCommitments((c) => c.map((item) => (item.id === id ? updated : item)));
+    } finally {
+      setCompletingId(null);
+    }
+  }
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-        {title}
-        {goals.length > 0 && ` (${goals.length})`}
-      </p>
-      {goals.length === 0 ? (
-        <p className="mt-1.5 text-sm text-gray-400">{emptyLabel}</p>
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          Team commitments{open.length > 0 && ` (${open.length})`}
+        </p>
+        <button
+          onClick={() => setAdding((a) => !a)}
+          className="text-xs font-medium text-gray-500 underline hover:text-gray-700"
+        >
+          {adding ? "Cancel" : "Add"}
+        </button>
+      </div>
+
+      {adding && (
+        <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-3">
+          <label className="mb-1 block text-xs font-medium text-gray-500">Assigned to</label>
+          <select
+            value={reportId}
+            onChange={(e) => setReportId(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">Choose a person...</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <label className="mb-1 mt-2 block text-xs font-medium text-gray-500">Commitment</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          <label className="mb-1 mt-2 block text-xs font-medium text-gray-500">Due date (optional)</label>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          />
+          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+          <div className="mt-2 flex justify-end">
+            <button
+              onClick={submit}
+              disabled={saving || !reportId || !description.trim()}
+              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {open.length === 0 ? (
+        <p className="mt-3 text-sm text-gray-400">No open team commitments.</p>
       ) : (
-        <ul className="mt-1.5 space-y-2">
-          {goals.map((g) => (
-            <li key={g.id}>
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate text-gray-700">{g.title}</span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
-                  {STATUS_LABELS[g.status]}
-                </span>
+        <ul className="mt-3 space-y-2">
+          {open.map((c) => (
+            <li
+              key={c.id}
+              className={`flex items-center justify-between gap-2 border-l-4 py-1 pl-2.5 ${borderColor(
+                c.direct_report_id,
+                members
+              )}`}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm text-gray-700">{c.description}</p>
+                <p className="text-xs text-gray-400">
+                  {c.direct_report_name}
+                  {c.due_date ? ` · Due ${formatDate(c.due_date)}` : ""}
+                </p>
               </div>
-              <p className="text-xs text-gray-400">
-                {showUnit && g.org_unit_name ? `${g.org_unit_name} · ` : ""}
-                {g.due_date ? `Due ${formatDate(g.due_date)}` : "No due date"}
-              </p>
+              <button
+                onClick={() => markDone(c.id)}
+                disabled={completingId === c.id}
+                className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {completingId === c.id ? "Saving..." : "Done"}
+              </button>
             </li>
           ))}
         </ul>
@@ -480,10 +584,117 @@ function GoalGroup({
 }
 
 // ---------------------------------------------------------------------------
-// Right column — meeting notes
+// Critical callouts (Session 24) — "key updates," revived deliberately
+// small. One manager-authored text block, overwritten on each edit. Each
+// non-empty line renders as its own bullet.
 // ---------------------------------------------------------------------------
 
-function NotesColumn({
+function CalloutsPanel({
+  callout,
+  setCallout,
+}: {
+  callout: TeamCallout;
+  setCallout: React.Dispatch<React.SetStateAction<TeamCallout>>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(callout.message);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const lines = callout.message
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  function startEditing() {
+    setDraft(callout.message);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateTeamCallout(draft);
+      setCallout(updated);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col rounded-xl border border-gray-200 bg-white px-4 py-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Critical callouts</p>
+        {!editing && (
+          <button onClick={startEditing} className="text-xs text-gray-400 hover:text-gray-600">
+            Edit
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-gray-400">This week&apos;s must-knows — written by you, visible to the whole team.</p>
+
+      {editing ? (
+        <div className="mt-3">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={6}
+            placeholder={"One callout per line, e.g.\nEnterprise tier scope is cut this quarter.\nQ3 roadmap draft due Friday."}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      ) : lines.length === 0 ? (
+        <p className="mt-3 text-sm text-gray-400">
+          No callouts yet —{" "}
+          <button onClick={startEditing} className="underline hover:text-gray-600">
+            add what your team should know this week
+          </button>
+          .
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2.5 text-sm text-gray-700">
+          {lines.map((line, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="text-gray-300">•</span>
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Meetings — hero agenda + plan/log forms (unchanged from Session 23) with
+// the past-meetings list restyled from a 2-col grid to a horizontal
+// carousel; detail-on-click still opens the same modal.
+// ---------------------------------------------------------------------------
+
+function MeetingsPanel({
   notes,
   setNotes,
 }: {
@@ -501,16 +712,13 @@ function NotesColumn({
 
   const [selected, setSelected] = useState<TeamNote | null>(null);
 
-  // Derived, not stored — a note is "upcoming" if it has a meeting_date of
-  // today or later. Soonest wins the hero slot; everything else (including
-  // any other future-dated notes, an edge case v1 doesn't build a second UI
-  // for) falls into the past-meetings grid.
   const today = localDateStr();
-  const upcoming = notes
-    .filter((n) => n.meeting_date && n.meeting_date >= today)
-    .sort((a, b) => (a.meeting_date! < b.meeting_date! ? -1 : 1));
-  const nextAgenda = upcoming[0] ?? null;
+  const nextAgenda = deriveNextAgenda(notes);
   const past = notes.filter((n) => n.id !== nextAgenda?.id);
+
+  // Decorative only — cycles a color per card position so the carousel
+  // doesn't read as one flat gray strip. Not tied to any data.
+  const CARD_ACCENTS = ["bg-indigo-500", "bg-rose-500", "bg-teal-500", "bg-amber-500", "bg-violet-500"];
 
   async function submitLog() {
     if (!draft.trim() || saving) return;
@@ -545,20 +753,18 @@ function NotesColumn({
 
   return (
     <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Meeting notes</h2>
-      <p className="mt-1 text-xs text-gray-400">
-        A running log for staff meetings and team syncs — not tied to any single 1:1.
-      </p>
-
       {nextAgenda ? (
-        <div className="mt-3 rounded-xl border border-gray-900 bg-gray-900 px-4 py-3 text-white">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-300">
-            Next meeting · {formatMeetingDate(nextAgenda.meeting_date!)}
-          </p>
+        <div className="rounded-xl bg-gradient-to-br from-gray-900 via-indigo-950 to-gray-900 px-5 py-4 text-white">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-200">Next meeting</p>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium">
+              {formatMeetingDate(nextAgenda.meeting_date!)}
+            </span>
+          </div>
           <p className="mt-1 whitespace-pre-wrap text-sm">{nextAgenda.note}</p>
         </div>
       ) : (
-        <div className="mt-3 rounded-xl border border-dashed border-gray-200 px-4 py-3">
+        <div className="rounded-xl border border-dashed border-gray-200 px-4 py-3">
           <p className="text-xs text-gray-400">No upcoming meeting planned.</p>
         </div>
       )}
@@ -621,21 +827,23 @@ function NotesColumn({
       {past.length === 0 ? (
         <p className="mt-4 text-sm text-gray-400">No past meetings logged yet.</p>
       ) : (
-        <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {past.map((n) => (
-            <li key={n.id}>
-              <button
-                onClick={() => setSelected(n)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-gray-300 hover:shadow-sm"
-              >
+        <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+          {past.map((n, i) => (
+            <button
+              key={n.id}
+              onClick={() => setSelected(n)}
+              className="w-56 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white text-left hover:border-gray-300 hover:shadow-sm"
+            >
+              <div className={`h-1.5 ${CARD_ACCENTS[i % CARD_ACCENTS.length]}`} />
+              <div className="px-3 py-2.5">
                 <p className="text-xs text-gray-400">
                   {n.meeting_date ? formatMeetingDate(n.meeting_date) : timeAgo(n.created_at)}
                 </p>
-                <p className="mt-1 text-sm text-gray-700">{snippet(n.note)}</p>
-              </button>
-            </li>
+                <p className="mt-1 text-sm text-gray-700">{snippet(n.note, 90)}</p>
+              </div>
+            </button>
           ))}
-        </ul>
+        </div>
       )}
 
       {selected && (
@@ -665,145 +873,277 @@ function NotesColumn({
 }
 
 // ---------------------------------------------------------------------------
-// Team commitments (Session 23) — appended below the roster column.
+// Roster row (Session 24) — moved from a left column to a horizontal row at
+// the bottom. Same data/actions as the old RosterColumn (priorities,
+// projects, log-update, invite-to-log-in); clicking a card now opens a
+// shared detail panel below the row instead of expanding the card in place.
 // ---------------------------------------------------------------------------
 
-function TeamCommitmentsSection({
+function RosterRow({
   members,
-  commitments,
-  setCommitments,
+  setMembers,
 }: {
   members: TeamMember[];
-  commitments: TeamCommitment[];
-  setCommitments: React.Dispatch<React.SetStateAction<TeamCommitment[]>>;
+  setMembers: React.Dispatch<React.SetStateAction<TeamMember[]>>;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [reportId, setReportId] = useState("");
-  const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const open = commitments.filter((c) => c.status === "open");
+  function toggleExpand(memberId: string) {
+    setExpandedId((cur) => (cur === memberId ? null : memberId));
+  }
 
-  async function submit() {
-    if (!reportId || !description.trim() || saving) return;
-    setSaving(true);
-    setError(null);
+  const expanded = members.find((m) => m.id === expandedId) ?? null;
+
+  return (
+    <div>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Your team</h2>
+
+      {members.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          No direct reports yet.{" "}
+          <Link href="/app/dashboard" className="underline hover:text-gray-700">
+            Add your first one
+          </Link>
+          .
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {members.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => toggleExpand(m.id)}
+              className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left hover:border-gray-300 ${
+                expandedId === m.id ? "border-gray-900" : "border-gray-200"
+              }`}
+            >
+              <div
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(
+                  m.id,
+                  members
+                )}`}
+              >
+                {initials(m.name)}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-gray-900">{m.name}</p>
+                {m.role_title && <p className="truncate text-xs text-gray-500">{m.role_title}</p>}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {expanded && (
+        <div className="mt-3">
+          <MemberDetailPanel member={expanded} members={members} setMembers={setMembers} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemberDetailPanel({
+  member,
+  members,
+  setMembers,
+}: {
+  member: TeamMember;
+  members: TeamMember[];
+  setMembers: React.Dispatch<React.SetStateAction<TeamMember[]>>;
+}) {
+  const [history, setHistory] = useState<TeamMessage[] | null>(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const [inviting, setInviting] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState(member.email ?? "");
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+
+  useEffect(() => {
+    setHistory(null);
+    setDraft("");
+    setInviting(false);
+    setInviteEmail(member.email ?? "");
+    setInviteUrl(null);
+    setInviteError(null);
+    getTeamMessages(member.id)
+      .then(setHistory)
+      .catch(() => setHistory([]));
+  }, [member.id, member.email]);
+
+  async function submitMessage() {
+    if (!draft.trim() || sending) return;
+    setSending(true);
     try {
-      const created = await createTeamCommitment({
-        directReportId: reportId,
-        description: description.trim(),
-        dueDate: dueDate || null,
-      });
-      setCommitments((c) => [created, ...c]);
-      setDescription("");
-      setDueDate("");
-      setReportId("");
-      setAdding(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add commitment");
+      const created = await sendTeamMessage(member.id, draft.trim());
+      setHistory((h) => [created, ...(h ?? [])]);
+      setMembers((ms) => ms.map((m) => (m.id === member.id ? { ...m, latest_message: created } : m)));
+      setDraft("");
     } finally {
-      setSaving(false);
+      setSending(false);
     }
   }
 
-  async function markDone(id: string) {
-    setCompletingId(id);
+  async function submitInvite() {
+    const email = inviteEmail.trim();
+    if (!email || inviteSending) return;
+    setInviteSending(true);
+    setInviteError(null);
     try {
-      const updated = await updateCommitment(id, "done");
-      setCommitments((c) => c.map((item) => (item.id === id ? updated : item)));
+      const { invite_url } = await inviteDirectReport(member.id, email);
+      setInviteUrl(invite_url);
+      setMembers((ms) => ms.map((m) => (m.id === member.id ? { ...m, email } : m)));
+    } catch (e) {
+      setInviteError(e instanceof Error ? e.message : "Failed to create invite");
     } finally {
-      setCompletingId(null);
+      setInviteSending(false);
     }
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Team commitments{open.length > 0 && ` (${open.length})`}
-        </h2>
-        <button
-          onClick={() => setAdding((a) => !a)}
-          className="text-xs font-medium text-gray-500 underline hover:text-gray-700"
-        >
-          {adding ? "Cancel" : "Add"}
-        </button>
-      </div>
-      <p className="mt-1 text-xs text-gray-400">
-        Assigned to one person, tracked here for the whole team — also shows on their own page.
-      </p>
+    <div className="rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            Priorities{member.priorities.length > 0 && ` (${member.priorities.length})`}
+          </p>
+          {member.priorities.length === 0 ? (
+            <p className="mt-1 text-sm text-gray-400">None set.</p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {member.priorities.map((g) => (
+                <li key={g.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate text-gray-700">{g.title}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
+                    {STATUS_LABELS[g.status]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
 
-      {adding && (
-        <div className="mt-2 rounded-xl border border-gray-200 bg-white px-4 py-3">
-          <label className="mb-1 block text-xs font-medium text-gray-500">Assigned to</label>
-          <select
-            value={reportId}
-            onChange={(e) => setReportId(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          <p className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-400">
+            Projects{member.projects.length > 0 && ` (${member.projects.length})`}
+          </p>
+          {member.projects.length === 0 ? (
+            <p className="mt-1 text-sm text-gray-400">None active.</p>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {member.projects.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate text-gray-700">{p.title}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
+                    {STATUS_LABELS[p.status]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link
+            href={`/app/reports/${member.id}`}
+            className="mt-3 inline-block text-xs text-gray-500 underline hover:text-gray-700"
           >
-            <option value="">Choose a person...</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <label className="mb-1 mt-2 block text-xs font-medium text-gray-500">Commitment</label>
+            Open full profile
+          </Link>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">
+            Log update for {member.name}
+          </label>
           <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            placeholder="Not sent anywhere yet — just kept on record here until reports can log in."
           />
-          <label className="mb-1 mt-2 block text-xs font-medium text-gray-500">Due date (optional)</label>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-          />
-          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2">
             <button
-              onClick={submit}
-              disabled={saving || !reportId || !description.trim()}
+              onClick={submitMessage}
+              disabled={sending || !draft.trim()}
               className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save"}
+              {sending ? "Saving..." : "Save update"}
             </button>
           </div>
-        </div>
-      )}
 
-      {open.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-400">No open team commitments.</p>
-      ) : (
-        <ul className="mt-3 space-y-2">
-          {open.map((c) => (
-            <li key={c.id} className="rounded-xl border border-gray-200 bg-white px-4 py-2.5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-gray-700">{c.description}</p>
-                  <p className="text-xs text-gray-400">
-                    {c.direct_report_name}
-                    {c.due_date ? ` · Due ${formatDate(c.due_date)}` : ""}
-                  </p>
+          {history && history.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">History</p>
+              <ul className="mt-1.5 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                {history.map((msg) => (
+                  <li key={msg.id} className="text-sm text-gray-600">
+                    <span className="text-xs text-gray-400">{timeAgo(msg.created_at)}</span> — {msg.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Account</p>
+          {member.user_id ? (
+            <p className="mt-1 text-xs text-gray-500">Account linked — they can log in.</p>
+          ) : inviting ? (
+            <div className="mt-1">
+              {inviteUrl ? (
+                <div>
+                  <p className="text-xs text-gray-500">Share this link with them — it expires in 7 days:</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={inviteUrl}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full truncate rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600"
+                    />
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(inviteUrl)}
+                      className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-white"
+                    >
+                      Copy
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => markDone(c.id)}
-                  disabled={completingId === c.id}
-                  className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {completingId === c.id ? "Saving..." : "Done"}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="their@email.com"
+                    className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs"
+                  />
+                  <button
+                    onClick={submitInvite}
+                    disabled={inviteSending || !inviteEmail.trim()}
+                    className="shrink-0 rounded-md bg-gray-900 px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                  >
+                    {inviteSending ? "Sending…" : "Send"}
+                  </button>
+                </div>
+              )}
+              {inviteError && <p className="mt-1 text-xs text-red-500">{inviteError}</p>}
+            </div>
+          ) : (
+            <button
+              onClick={() => setInviting(true)}
+              className="mt-1 text-xs font-medium text-gray-500 underline hover:text-gray-700"
+            >
+              Invite to log in
+            </button>
+          )}
+
+          {member.latest_message && (
+            <p className="mt-4 text-xs text-gray-400">
+              Last update {timeAgo(member.latest_message.created_at)}: &ldquo;{member.latest_message.message}&rdquo;
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

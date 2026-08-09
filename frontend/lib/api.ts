@@ -653,6 +653,23 @@ export const createTeamCommitment = (body: {
     }),
   });
 
+// Team callouts (Session 24, 2026-08-09) — the "key updates" concept scoped
+// and deferred twice (Sessions 22/23), revived here in a deliberately small
+// form: one manager-authored text block, overwritten in place rather than a
+// dated history log (unlike team_meeting_notes). Each line the manager
+// writes renders as its own bullet on the page. See team.py's
+// get_team_callout/update_team_callout and the team_page_redesign_options
+// project memory note.
+export type TeamCallout = {
+  message: string;
+  updated_at: string | null;
+};
+
+export const getTeamCallout = (): Promise<TeamCallout> => authedFetch("/api/team/callout");
+
+export const updateTeamCallout = (message: string): Promise<TeamCallout> =>
+  authedFetch("/api/team/callout", { method: "PUT", body: JSON.stringify({ message }) });
+
 // Returns a link the manager copies and sends themselves — no email is sent
 // from the backend (same manual-delivery posture Session 21 chose for
 // team_messages).

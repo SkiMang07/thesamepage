@@ -55,7 +55,20 @@ team.py-scoped reads/writes on top of the Session 22 surface:
     still goes through the existing PATCH /api/commitments/{id} in
     commitments.py — the flag doesn't change how a commitment resolves,
     only where it's listed.
+
+Session 24 (2026-08-09) layout rework — visual redesign only, no changes
+above this point. One new piece: GET/PUT /callout, the "critical callouts"
+panel next to Meetings. This is "key updates" (deferred Sessions 22/23),
+revived deliberately small — a single manager-authored text block per
+manager (new team_callouts table, unique on manager_id), overwritten in
+place on each edit rather than a dated log like team_meeting_notes. No
+history, no per-line CRUD — the frontend just splits on newlines to render
+bullets. See the team_page_redesign_options project memory note for the
+scoping conversation (Andrew confirmed this shape via the mockup before it
+was built).
 """
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -93,6 +106,10 @@ class TeamCommitmentIn(BaseModel):
     direct_report_id: str
     description: str
     due_date: str | None = None
+
+
+class TeamCalloutIn(BaseModel):
+    message: str
 
 
 @router.get("")
@@ -337,3 +354,45 @@ async def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authen
     row = result.data[0]
     row["direct_report_name"] = report[0]["name"]
     return row
+
+
+@router.get("/callout")
+async def get_team_callout(auth=Depends(get_authenticated_client)):
+    """The single "critical callouts" block for this manager — see this
+    module's Session 24 docstring note. No row yet reads as an empty
+    callout, not a 404, so the frontend doesn't need a special first-load
+    case."""
+    user_id, supabase = auth
+    rows = (
+        supabase.table("team_callouts")
+        .select("message,updated_at")
+        .eq("manager_id", user_id)
+        .execute()
+        .data
+    )
+    if not rows:
+        return {"message": "", "updated_at": None}
+    return rows[0]
+
+
+@router.put("/callout")
+async def update_team_callout(body: TeamCalloutIn, auth=Depends(get_authenticated_client)):
+    """Upserts the manager's one callout row (unique on manager_id) — this is
+    a pinned block that gets overwritten, not a log, so there's no create
+    vs. update distinction for the caller. Empty string is a valid message
+    (clearing the panel), so no emptiness check here unlike the other
+    team.py POST endpoints."""
+    user_id, supabase = auth
+    result = (
+        supabase.table("team_callouts")
+        .upsert(
+            {
+                "manager_id": user_id,
+                "message": body.message.strip(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="manager_id",
+        )
+        .execute()
+    )
+    return result.data[0]

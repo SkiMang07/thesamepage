@@ -11,6 +11,31 @@ Format per entry:
 
 ---
 
+## Session 24 — 2026-08-09
+
+**Goal:** Visual/layout redesign of `/app/team` (Team Mission Control), Andrew's explicit ask after dogfooding Session 22/23's 3-column grid — captured at the end of Session 23 as its own follow-up session, not built straight from the brief. Requested as a design-exploration pass first: propose a few layout options and let Andrew pick before writing any code.
+
+**What was done:**
+- Read the brief (team_page_redesign_brief project memory note) and the current page.tsx/api.ts, then ran an AskUserQuestion scoping round: (1) write access — **manager-authored, team just views**, no new IC-facing write UI this pass (IC login still has no real view, only auth primitives); (2) visual style — **stay close to today's calm aesthetic for most options, but at least one pushed more visual/engaging** (Andrew wanted 4 options minimum, not the 2-4 range originally proposed).
+- Built and sent 4 static HTML mockups (fake data, tab-switcher, no live code): A · Refined Grid (closest to today), B · Unified Strip (merged goals+commitments card, accordion meetings list), C · Working Board (goals+commitments mixed into a status-grouped mini-kanban, meetings as a feed), D · Command Center (KPI stat strip, radial goal progress, gradient meeting hero + carousel — the requested "more visual" option).
+- Andrew picked **D**, then asked for three changes: move the roster from a left rail into a row at the very bottom; add a new "Initiatives" card into the top row alongside Goals and Commitments; add a "Critical callouts" panel to the left of Meetings, in the whitespace freed up once the roster moved. Sent a refined mockup reflecting all three, flagging two assumptions for confirmation: Initiatives = reusing Mission Control's existing "Key Initiatives" concept (`getProjects()` filtered to active/on_track/at_risk), Critical callouts = reviving "key updates" (deferred Sessions 22/23) as a small always-visible panel. Andrew confirmed both.
+- Built the approved layout in `frontend/app/app/team/page.tsx`: a KPI strip (goals on track, active initiatives, commitments due within 7 days, days until next meeting); a "this week's focus" row with Initiatives/Goals/Commitments cards; a Meetings row with Critical callouts to the left (past-meetings restyled from a 2-col grid to a horizontal carousel, detail modal kept); the roster as a row of cards at the bottom that expand into a shared detail panel on click.
+- **Critical callouts** needed one new piece: `team_callouts` table (unique on `manager_id`, RLS manager-scoped same pattern as `team_messages`/`team_meeting_notes`), new `GET`/`PUT /api/team/callout` in `team.py` (PUT upserts on `manager_id`), new `TeamCallout` type + `getTeamCallout()`/`updateTeamCallout()` in `lib/api.ts`. Before writing the migration, confirmed with Andrew via AskUserQuestion that Session 23's migration was already live (project convention — never touch schema further without checking).
+- New migration `database/migrations/2026-08-09_team_callouts.sql`. Andrew ran it against live Supabase after the build was verified.
+- Updated `docs/ENGINEERING.md` (new "Team Mission Control layout rework" section, core-tables list, file map) and `docs/DESIGN.md` (4 new decision rows).
+
+**Decisions made / locked:**
+- Write access stays manager-authored with the team viewing only — the brief's "team member adds their own agenda items" framing is deliberately not built this pass, not decided against, just deferred until IC login has a real view.
+- Initiatives reuses `getProjects()` filtered client-side to active/on_track/at_risk (Mission Control's existing Key Initiatives subset) rather than a new team-scoped endpoint — no new data source needed.
+- Critical callouts is ONE overwritten text block per manager, not a dated history log — deliberately smaller than the original "key updates" broadcast-feed idea that got deferred twice, to avoid the same rushed-verification concern that deferred it before.
+- Roster moved from a left column to a bottom row; clicking a card opens a shared detail panel below the row instead of expanding the card in place — same data/actions, different location, to make room for the new Initiatives card up top.
+
+**Verification:** cloned the pushed repo (commit `94a0808`) into a scratch environment, copied the 5 changed/new files in. Backend — fresh venv, `main` import with dummy Supabase env vars confirmed `/api/team/callout` (GET+PUT) registered, `py_compile` clean. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean (all 17 routes, `/app/team` at 8.01 kB). Schema — spun up a local Postgres 16 with the same minimal Supabase `auth` schema stub as Sessions 22/23, this time also explicitly granting `anon`/`authenticated` table privileges to match real Supabase's defaults (missing from the stub, caught by a permission-denied error on the first attempt); ran the *entire* `schema.sql` end to end with zero errors, then functionally tested `team_callouts` — upsert-create, upsert-edit in place (one row, not a duplicate), a second manager saw zero rows under RLS, and a second manager's attempted `UPDATE` against the first manager's row affected zero rows and didn't mutate it.
+
+**Next step:** Migration is confirmed live (Andrew ran it before this push). Highest-value next steps: (1) dogfood the new layout for real — KPI numbers, Initiatives card, Critical callouts, and the roster-as-row interaction all deserve real use before the next visual pass; (2) revisit whether Critical callouts should ever grow beyond one overwritten block (a short history, multiple pinned items) if the single-block version feels too limiting in practice — deliberately not built this session; (3) IC login still has no real view once someone logs in (`/app/ic` is a static placeholder) — the wider "team member adds their own agenda items" framing from the original brief stays blocked on that.
+
+---
+
 ## Session 23 — 2026-08-09
 
 **Goal:** Follow-up on Session 22's Team Mission Control — extend the meeting-notes column with a
