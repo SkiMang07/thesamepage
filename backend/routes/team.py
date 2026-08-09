@@ -40,6 +40,21 @@ deliberately separate from one_on_ones (stays per-report) and team_messages
 (stays per-report). "Key updates" (a manager-authored broadcast feed) was
 scoped and then explicitly deferred to a follow-up session — nothing for it
 here.
+
+Session 23 (2026-08-09) follow-up — two additions, same file since both are
+team.py-scoped reads/writes on top of the Session 22 surface:
+  - Meeting notes now carry an optional meeting_date. GET/POST /notes return
+    it as-is; the "is this the upcoming agenda or a logged past meeting"
+    split is derived client-side (today-or-future meeting_date = upcoming),
+    same derived-status discipline as one_on_ones' planned/completed split
+    — no stored status column here either.
+  - GET/POST /commitments — team-level commitments. Not a new table: any
+    commitments row can be flagged is_team_commitment (still assigned to
+    exactly one direct_report_id), and this pair of endpoints is the
+    team-wide read/write surface for that flag. Marking one done/dropped
+    still goes through the existing PATCH /api/commitments/{id} in
+    commitments.py — the flag doesn't change how a commitment resolves,
+    only where it's listed.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -68,6 +83,16 @@ class TeamMessageIn(BaseModel):
 
 class TeamNoteIn(BaseModel):
     note: str
+    # Optional YYYY-MM-DD. Set (to today or a future date) when this note is
+    # the agenda for an upcoming meeting; omitted/null for a same-day log of
+    # a meeting that already happened. See list_team_notes' docstring.
+    meeting_date: str | None = None
+
+
+class TeamCommitmentIn(BaseModel):
+    direct_report_id: str
+    description: str
+    due_date: str | None = None
 
 
 @router.get("")
@@ -211,11 +236,17 @@ async def get_team_goals(auth=Depends(get_authenticated_client)):
 @router.get("/notes")
 async def list_team_notes(auth=Depends(get_authenticated_client)):
     """Standalone team-wide meeting-notes log, newest first — Mission
-    Control's right column. See team_meeting_notes in schema.sql."""
+    Control's right column. See team_meeting_notes in schema.sql.
+
+    meeting_date rides along as-is (nullable). The frontend derives which
+    note is "the next meeting's agenda" (soonest meeting_date that's today
+    or later) vs. a logged past meeting — same derived-status discipline as
+    one_on_ones' planned/completed split (see the planned_sessions project
+    memory note), so there's no stored status column to keep in sync."""
     user_id, supabase = auth
     rows = (
         supabase.table("team_meeting_notes")
-        .select("id,note,created_at")
+        .select("id,note,meeting_date,created_at")
         .eq("manager_id", user_id)
         .order("created_at", desc=True)
         .execute()
@@ -230,9 +261,79 @@ async def create_team_note(body: TeamNoteIn, auth=Depends(get_authenticated_clie
     note = body.note.strip()
     if not note:
         raise HTTPException(status_code=422, detail="Note cannot be empty")
+    payload = {"manager_id": user_id, "note": note}
+    if body.meeting_date:
+        payload["meeting_date"] = body.meeting_date
     result = (
         supabase.table("team_meeting_notes")
-        .insert({"manager_id": user_id, "note": note})
+        .insert(payload)
         .execute()
     )
     return result.data[0]
+
+
+@router.get("/commitments")
+async def list_team_commitments(auth=Depends(get_authenticated_client)):
+    """Team-level commitments — commitments rows flagged is_team_commitment,
+    each still assigned to exactly one direct report. Same joined-name shape
+    as commitments.py's list_commitments, filtered to the team-wide subset."""
+    user_id, supabase = auth
+    rows = (
+        supabase.table("commitments")
+        .select(
+            "id,description,due_date,status,committed_by,created_at,completed_at,"
+            "direct_report_id,direct_reports(name)"
+        )
+        .eq("owner_id", user_id)
+        .eq("is_team_commitment", True)
+        .order("due_date")
+        .execute()
+        .data
+    )
+    for row in rows:
+        joined = row.pop("direct_reports", None) or {}
+        row["direct_report_name"] = joined.get("name")
+    return rows
+
+
+@router.post("/commitments")
+async def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authenticated_client)):
+    """Create a commitment assigned to one direct report, flagged so it also
+    shows up on this team-wide list (in addition to wherever commitments
+    already surface — dashboard, DR detail, prep). Manager-authored only, so
+    committed_by is always 'manager' here; source_type 'manual' matches the
+    existing convention for commitments not extracted from a 1:1 wrap-up."""
+    user_id, supabase = auth
+    description = body.description.strip()
+    if not description:
+        raise HTTPException(status_code=422, detail="Description cannot be empty")
+
+    report = (
+        supabase.table("direct_reports")
+        .select("id,name")
+        .eq("id", body.direct_report_id)
+        .eq("manager_id", user_id)
+        .execute()
+        .data
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+
+    result = (
+        supabase.table("commitments")
+        .insert(
+            {
+                "owner_id": user_id,
+                "direct_report_id": body.direct_report_id,
+                "description": description,
+                "due_date": body.due_date,
+                "committed_by": "manager",
+                "source_type": "manual",
+                "is_team_commitment": True,
+            }
+        )
+        .execute()
+    )
+    row = result.data[0]
+    row["direct_report_name"] = report[0]["name"]
+    return row

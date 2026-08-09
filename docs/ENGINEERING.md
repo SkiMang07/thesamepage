@@ -133,7 +133,9 @@ direct_reports       -- the manager's team; user_id nullable, now claimable via 
                         (Session 22) — see direct_report_invites below and the Team Mission Control
                         section. No IC-facing view consumes it yet.
 one_on_ones          -- 1:1 logs; notes private to writing manager (RLS)
-commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id
+commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id;
+                        is_team_commitment (Session 23) flags a commitment (still assigned to one
+                        direct_report_id) for Team Mission Control's team-wide commitments list
 goals                -- activated Session 10; parent_goal_id self-ref; level: company/department/team/individual;
                         org_unit_id (Session 11) names which specific team/department a team/dept goal is for
 projects             -- activated Session 13; goal_id (optional, on delete set null) + direct_report_id (optional,
@@ -589,6 +591,48 @@ Andrew's real Supabase project, which this sandbox doesn't have.
 
 ---
 
+## Team Mission Control follow-up (Session 23, 2026-08-09)
+
+Two additions on top of Session 22's surface, scoped via AskUserQuestion (one 4-question round, one
+2-question follow-up) before building — see the team_mission_control_followup project memory note.
+
+**Meeting-notes agenda surfacing.** `team_meeting_notes` gains a nullable `meeting_date`. Status is
+derived, never stored — a note dated today-or-later is the surfaced "next meeting's agenda" hero card;
+null or a past date means it's a logged past meeting, same discipline as `one_on_ones`' planned/
+completed split. `GET`/`POST /api/team/notes` (team.py) pass `meeting_date` through as-is; the frontend
+does the derivation. If more than one note has a future `meeting_date`, only the soonest becomes the
+hero — an accepted v1 edge case, not built out.
+
+**Past-meeting card/detail UI.** `frontend/app/app/team/page.tsx`'s `NotesColumn` replaced the flat
+reverse-chron text list with a card grid (date + snippet) that opens a full-text detail modal on click.
+No new endpoint — same `GET /notes` payload, client-side only.
+
+**Team-level commitments.** Andrew's explicit call: extend `commitments` with `is_team_commitment`
+(boolean, default false) rather than a new table. A commitment stays assigned to exactly one
+`direct_report_id`; the flag just also surfaces it on Team Mission Control's team-wide list. New
+`GET`/`POST /api/team/commitments` (team.py) — list filters `is_team_commitment = true`, create
+validates the direct report belongs to the manager before inserting. Marking done/dropped reuses the
+existing `PATCH /api/commitments/{id}` in commitments.py unchanged — the flag doesn't change how a
+commitment resolves, only where it's listed. Frontend: new `TeamCommitmentsSection` appended below the
+roster column in `page.tsx` (Andrew's explicit placement call over a 4th grid column or a separate
+`/app/commitments` page).
+
+**Schema note — new migration, not yet run live.**
+`database/migrations/2026-08-09_team_agenda_and_commitments.sql` adds both columns. Depends on
+`2026-08-08_team_messages.sql` and `2026-08-08_team_mission_control.sql` already being live — confirmed
+with Andrew at the start of this session before writing any code.
+
+**Verification note:** same scratch-clone pattern as Session 22 — backend `main` import with dummy
+Supabase env vars confirmed `/api/team/commitments` (GET+POST) registered, `py_compile` clean; frontend
+`tsc --noEmit` and `next build` both clean. Since this touched schema, went one step further: spun up a
+local Postgres 16 with the same minimal Supabase `auth` schema stub as Session 22, ran the *entire*
+`schema.sql` end to end with zero errors, then functionally inserted (as the `authenticated` role) a
+past note, a future-dated agenda note, and a team-flagged commitment — all succeeded under RLS, and a
+second manager's session correctly saw zero rows for either table. What's still unverified: the live
+migration run itself.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -666,7 +710,9 @@ backend/
     assessments.py       /api/assessments — levels, team list, per-report scorecard, AI draft, save (Session 16)
     dashboard.py          GET /api/dashboard/insight — Mission Control's AI insight banner (Session 19),
                           cached + rate-limited (Session 20)
-    team.py               /api/team — roster + active projects/priorities per report, message log (Session 21)
+    team.py               /api/team — roster + active projects/priorities per report, message log (Session 21);
+                          goals, meeting notes (+ meeting_date agenda surfacing, Session 23) (Session 22);
+                          commitments (Session 23)
 
 frontend/
   app/

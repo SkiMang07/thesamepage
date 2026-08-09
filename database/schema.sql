@@ -186,20 +186,26 @@ alter table one_on_ones enable row level security;
 -- title nullable for MVP (description carries the content).
 -- org_id nullable for MVP.
 -- -------------------------
+-- is_team_commitment (Session 23, 2026-08-09): false by default and for
+-- every pre-existing row. When true, this commitment (still assigned to one
+-- direct_report_id, unchanged) also surfaces on Team Mission Control's
+-- team-wide commitments list — purely additive, doesn't change how a
+-- commitment behaves anywhere else (dashboard, DR detail, prep).
 create table commitments (
-  id               uuid primary key default uuid_generate_v4(),
-  org_id           uuid references organizations(id),  -- nullable for MVP
-  title            text,   -- nullable for MVP
-  description      text,
-  owner_id         uuid references auth.users(id),
-  direct_report_id uuid references direct_reports(id) on delete cascade,
-  committed_by     text not null default 'manager' check (committed_by in ('manager', 'direct_report')),
-  source_type      text check (source_type in ('one_on_one', 'goal', 'project', 'manual')),
-  source_id        uuid,
-  due_date         date,
-  status           text not null default 'open' check (status in ('open', 'done', 'dropped')),
-  completed_at     timestamptz,
-  created_at       timestamptz not null default now()
+  id                  uuid primary key default uuid_generate_v4(),
+  org_id              uuid references organizations(id),  -- nullable for MVP
+  title               text,   -- nullable for MVP
+  description         text,
+  owner_id            uuid references auth.users(id),
+  direct_report_id    uuid references direct_reports(id) on delete cascade,
+  committed_by        text not null default 'manager' check (committed_by in ('manager', 'direct_report')),
+  source_type         text check (source_type in ('one_on_one', 'goal', 'project', 'manual')),
+  source_id           uuid,
+  due_date            date,
+  status              text not null default 'open' check (status in ('open', 'done', 'dropped')),
+  completed_at        timestamptz,
+  is_team_commitment  boolean not null default false,
+  created_at          timestamptz not null default now()
 );
 
 alter table commitments enable row level security;
@@ -525,12 +531,18 @@ create index direct_report_invites_report_idx on direct_report_invites (direct_r
 -- manager_id = the logged-in manager's auth.uid(), same manager-scoped
 -- pattern as team_messages/one_on_ones.
 -- ============================================================
-
+--
+-- meeting_date (Session 23, 2026-08-09): nullable — a note dated today or
+-- later is the surfaced "next meeting's agenda"; null or a past date means
+-- it's a logged past meeting. Derived, never a stored status column, same
+-- pattern as one_on_ones' planned/completed split (see the planned_sessions
+-- project memory note).
 create table team_meeting_notes (
-  id          uuid primary key default uuid_generate_v4(),
-  manager_id  uuid not null references auth.users(id),
-  note        text not null,
-  created_at  timestamptz not null default now()
+  id            uuid primary key default uuid_generate_v4(),
+  manager_id    uuid not null references auth.users(id),
+  note          text not null,
+  meeting_date  date,
+  created_at    timestamptz not null default now()
 );
 
 alter table team_meeting_notes enable row level security;

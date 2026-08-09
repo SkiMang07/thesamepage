@@ -612,16 +612,46 @@ export type TeamGoal = {
 
 export const getTeamGoals = (): Promise<TeamGoal[]> => authedFetch("/api/team/goals");
 
+// meeting_date (Session 23) is optional/nullable — set to today-or-later to
+// make this note the surfaced "next meeting's agenda"; null means it's a
+// logged past meeting. Derived client-side, not a stored status field.
 export type TeamNote = {
   id: string;
   note: string;
+  meeting_date: string | null;
   created_at: string;
 };
 
 export const getTeamNotes = (): Promise<TeamNote[]> => authedFetch("/api/team/notes");
 
-export const createTeamNote = (note: string): Promise<TeamNote> =>
-  authedFetch("/api/team/notes", { method: "POST", body: JSON.stringify({ note }) });
+export const createTeamNote = (note: string, meetingDate?: string | null): Promise<TeamNote> =>
+  authedFetch("/api/team/notes", {
+    method: "POST",
+    body: JSON.stringify({ note, meeting_date: meetingDate ?? null }),
+  });
+
+// Team-level commitments (Session 23) — same Commitment shape as the
+// Commitments section above; is_team_commitment is what puts a row on this
+// list, not a different table. Marking one done/dropped reuses
+// updateCommitment above — the flag doesn't change how a commitment
+// resolves, only where it's visible.
+export type TeamCommitment = Commitment;
+
+export const getTeamCommitments = (): Promise<TeamCommitment[]> => authedFetch("/api/team/commitments");
+
+export const createTeamCommitment = (body: {
+  directReportId: string;
+  description: string;
+  dueDate?: string | null;
+}): Promise<TeamCommitment> =>
+  authedFetch("/api/team/commitments", {
+    method: "POST",
+    body: JSON.stringify({
+      direct_report_id: body.directReportId,
+      description: body.description,
+      due_date: body.dueDate ?? null,
+    }),
+  });
 
 // Returns a link the manager copies and sends themselves — no email is sent
 // from the backend (same manual-delivery posture Session 21 chose for

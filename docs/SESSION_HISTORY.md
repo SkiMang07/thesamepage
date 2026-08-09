@@ -11,6 +11,75 @@ Format per entry:
 
 ---
 
+## Session 23 — 2026-08-09
+
+**Goal:** Follow-up on Session 22's Team Mission Control — extend the meeting-notes column with a
+surfaced "next meeting's agenda" distinct from logged past meetings, switch the past-meeting list from
+a flat reverse-chron text list to a card view that opens into a detail view on click, and add
+team-level commitments (assigned to individual direct reports but tracked at the team level too).
+Confirmed with Andrew first that both Session 21/22 migrations are live on Supabase before touching
+schema further.
+
+**What was done:**
+- Scoped via one AskUserQuestion round (4 questions: migration status, agenda-vs-log model,
+  past-meeting UI shape, commitments data model) plus a 2-question follow-up (commitments UI placement,
+  whether to fold in "key updates"): (1) migrations confirmed live; (2) agenda vs. logged past meeting —
+  **date-based, derived status**, mirroring `one_on_ones`' planned/completed split; (3) past-meeting UI —
+  **card + snippet, opens a detail modal**; (4) team commitments — **extend `commitments`** with a flag,
+  not a new table; (5) commitments UI — **new section in an existing column** (below the roster); (6)
+  "key updates" — **stayed deferred**.
+- **Meeting-notes agenda surfacing** — `team_meeting_notes` gains a nullable `meeting_date`.
+  `GET`/`POST /api/team/notes` (team.py) pass it through; the frontend derives "upcoming" (today or
+  later) vs. "past" client-side, no stored status column.
+- **Past-meeting card/detail UI** — `frontend/app/app/team/page.tsx`'s `NotesColumn` reworked: a hero
+  "Next meeting" card (soonest upcoming note) + a collapsible "Plan next meeting" form (date + agenda
+  text), the existing "Log a past meeting" compose box kept as-is, and past notes now render as a card
+  grid (date + snippet) opening a full-text detail modal on click.
+- **Team-level commitments** — `commitments` table gains `is_team_commitment` (boolean, default false).
+  New `GET`/`POST /api/team/commitments` (team.py): list filters the flag, create validates the direct
+  report belongs to the manager before inserting. Marking done/dropped reuses the existing
+  `PATCH /api/commitments/{id}` unchanged. Frontend: new `TeamCommitmentsSection` appended below
+  `RosterColumn` — open commitments list (assignee, due date, mark-done) + an inline add form.
+- **`frontend/lib/api.ts`** — `TeamNote` gains `meeting_date`; `createTeamNote` takes an optional
+  meeting-date arg; new `TeamCommitment` type + `getTeamCommitments()`/`createTeamCommitment()`.
+- New migration `database/migrations/2026-08-09_team_agenda_and_commitments.sql` (two additive
+  columns; depends on both `2026-08-08_team_messages.sql` and `2026-08-08_team_mission_control.sql`
+  already being live, confirmed with Andrew before writing any code).
+- Updated `docs/ENGINEERING.md` (new "Team Mission Control follow-up" section, core-tables list,
+  file map) and `docs/DESIGN.md` (5 new decision rows).
+
+**Decisions made / locked:**
+- Agenda vs. past meeting is derived from `meeting_date`, never a stored status field — same discipline
+  as `one_on_ones`, and avoids a second status column to keep in sync as dates pass.
+- Team commitments reuse the existing `commitments` table via a flag rather than a new table or true
+  multi-assignee model — a commitment already has exactly one `direct_report_id`; the flag only changes
+  where it's visible, not the underlying shape.
+- Team commitments live with the roster (per-person accountability), not as a 4th grid column or a new
+  top-level page — the 3-column grid already fits Mission Control's existing visual weight.
+- "Key updates" stayed deferred a second time — kept this session to three new pieces instead of four,
+  same rushed-verification concern that deferred it in Session 22.
+
+**Verification:** cloned the pushed repo into a scratch environment, same pattern as Session 22.
+Backend — fresh venv, `main` import with dummy Supabase env vars confirmed `/api/team/commitments`
+(GET+POST) registered; `py_compile` clean. Frontend — fresh `npm install`, `tsc --noEmit` clean,
+`next build` clean (all routes including `/app/team`). Since this touched schema, went one step
+further: spun up a local Postgres 16 with a minimal Supabase `auth` schema stub (`auth.users` with
+`raw_user_meta_data`, session-variable-backed `auth.uid()`/`auth.email()`, `anon`/`authenticated` roles
++ grants), ran the *entire* `schema.sql` end to end with zero errors, then functionally inserted as the
+`authenticated` role: a past note (no `meeting_date`), an upcoming agenda note (`meeting_date` =
+today+3), and a team-flagged commitment tied to a direct report — all succeeded under RLS. Confirmed
+RLS isolation: a second manager's session saw 0 rows for both tables. What's still unverified: the live
+migration run itself and real Supabase Auth integration (same gap every session's sandbox has).
+
+**Next step:** Andrew needs to run `database/migrations/2026-08-09_team_agenda_and_commitments.sql`
+against the live Supabase database (after confirming Session 21/22's migrations already ran, which he
+confirmed at the start of this session). Once live, the highest-value next steps are: (1) dogfood the
+agenda/card-detail/commitments UI for real, (2) pick up "key updates" as its own scoped pass if still
+wanted, (3) revisit team commitments as true multi-assignee (one commitment fanning out to several
+people) only if it's actually needed — this session's flag deliberately doesn't build that.
+
+---
+
 ## Session 22 — 2026-08-08
 
 **Goal:** Expand the `/app/team` page built Session 21 into "Team Mission Control" — a 3-column
