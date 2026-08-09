@@ -565,6 +565,12 @@ export type TeamMember = {
   id: string;
   name: string;
   role_title: string | null;
+  // Session 22: drive the Invite action on the roster card. email is null
+  // until a manager invites this report (see inviteDirectReport below);
+  // user_id is set once they've claimed an account — no further invite
+  // possible after that.
+  email: string | null;
+  user_id: string | null;
   projects: TeamWorkItem[];
   priorities: TeamWorkItem[];
   latest_message: TeamMessage | null;
@@ -579,6 +585,71 @@ export const getTeamMessages = (reportId: string): Promise<TeamMessage[]> =>
 // anywhere; this just adds a row to team_messages.
 export const sendTeamMessage = (reportId: string, message: string): Promise<TeamMessage> =>
   authedFetch(`/api/team/${reportId}/messages`, { method: "POST", body: JSON.stringify({ message }) });
+
+// ---------------------------------------------------------------------------
+// Team Mission Control (Session 22, 2026-08-08) — expands Team View into a
+// 3-column surface: the roster above (left), company/team goal progress
+// (middle), and a standalone meeting-notes log (right), plus the
+// direct-report invite flow (an "auth primitives now, IC view later" scope
+// call — an IC can now create an account and claim direct_reports.user_id,
+// but the IC-facing view itself is a follow-up session). "Key updates" (a
+// manager-authored broadcast feed) was scoped and then explicitly deferred.
+// See docs/SESSION_HISTORY.md and the team_mission_control project memory
+// note for the scoping conversation.
+// ---------------------------------------------------------------------------
+
+// Company/team goal progress only — see team.py's get_team_goals docstring
+// for why department/individual are excluded here.
+export type TeamGoal = {
+  id: string;
+  title: string;
+  level: GoalLevel;
+  status: GoalStatus;
+  due_date: string | null;
+  org_unit_id: string | null;
+  org_unit_name: string | null;
+};
+
+export const getTeamGoals = (): Promise<TeamGoal[]> => authedFetch("/api/team/goals");
+
+export type TeamNote = {
+  id: string;
+  note: string;
+  created_at: string;
+};
+
+export const getTeamNotes = (): Promise<TeamNote[]> => authedFetch("/api/team/notes");
+
+export const createTeamNote = (note: string): Promise<TeamNote> =>
+  authedFetch("/api/team/notes", { method: "POST", body: JSON.stringify({ note }) });
+
+// Returns a link the manager copies and sends themselves — no email is sent
+// from the backend (same manual-delivery posture Session 21 chose for
+// team_messages).
+export const inviteDirectReport = (
+  reportId: string,
+  email: string
+): Promise<{ invite_url: string; expires_at: string }> =>
+  authedFetch(`/api/direct-reports/${reportId}/invite`, { method: "POST", body: JSON.stringify({ email }) });
+
+export type InvitePreview = {
+  report_name: string;
+  invited_email: string;
+  manager_name: string | null;
+  expires_at: string;
+};
+
+// Unauthenticated — the visitor hasn't logged in yet on /invite/[token], so
+// there's no session for authedFetch to attach. Hits the same backend, just
+// without an Authorization header.
+export const getInvitePreview = (token: string): Promise<InvitePreview> =>
+  fetch(`${BACKEND_URL}/api/invites/${token}`).then((res) => {
+    if (!res.ok) throw new Error("This invite link is invalid or has expired");
+    return res.json();
+  });
+
+export const acceptInvite = (token: string): Promise<{ direct_report_id: string }> =>
+  authedFetch(`/api/invites/${token}/accept`, { method: "POST" });
 
 // ---------------------------------------------------------------------------
 // 1:1s

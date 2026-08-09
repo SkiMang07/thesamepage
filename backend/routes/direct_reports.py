@@ -12,11 +12,31 @@ a role-label/count breakdown per org unit the caller leads — never a named
 report outside your own team, same aggregate-only contract as capacity's
 rollup. Calls org_unit_people_rollup() (SECURITY DEFINER, gated by
 led_org_unit_ids()).
+
+Invites (Session 22, 2026-08-08 — Team Mission Control's "auth primitives
+now, IC view later" scoping call, see docs/SESSION_HISTORY.md and the
+team_mission_control project memory note): POST /{report_id}/invite
+generates a one-time magic-link invite that lets a report create their own
+account and claim direct_reports.user_id — see
+accept_direct_report_invite() in schema.sql for the claim side, and
+routes/invites.py for the public preview + accept endpoints an invited
+report actually hits. This route also activates direct_reports.email, a
+second dormant column (same "future hook" pattern as user_id) — there was
+previously no way to set it anywhere in the app, so the invite form is where
+a manager now enters/confirms it. No email is sent from the backend; the
+manager copies the returned link and shares it themselves, same
+manual-delivery posture Session 21 chose for team_messages.
 """
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from config import settings
 from utils import get_authenticated_client
+
+_INVITE_TTL_DAYS = 7
 
 router = APIRouter()
 
@@ -184,6 +204,58 @@ async def create_direct_report(body: DirectReportIn, auth=Depends(get_authentica
         .execute()
     )
     return result.data[0]
+
+
+class InviteIn(BaseModel):
+    email: str
+
+
+# NOTE: declared before /{report_id} so FastAPI doesn't match "{report_id}"
+# routes ahead of this — not actually a conflict here since this is a
+# two-segment path, but kept alongside overview/rollup's ordering note for
+# consistency.
+@router.post("/{report_id}/invite")
+async def invite_direct_report(report_id: str, body: InviteIn, auth=Depends(get_authenticated_client)):
+    """Generate a one-time invite link. Confirms the report belongs to this
+    manager, backfills direct_reports.email, soft-expires any prior pending
+    invite for this report (so an old copied link stops working once a
+    fresh one is issued), then creates the new invite row. Returns the
+    frontend URL for the manager to copy and send themselves."""
+    user_id, supabase = auth
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=422, detail="A valid email is required")
+
+    result = (
+        supabase.table("direct_reports")
+        .update({"email": email})
+        .eq("id", report_id)
+        .eq("manager_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    if result.data[0].get("user_id"):
+        raise HTTPException(status_code=400, detail="This person already has an account")
+
+    now = datetime.now(timezone.utc)
+    supabase.table("direct_report_invites").update({"expires_at": now.isoformat()}).eq(
+        "direct_report_id", report_id
+    ).is_("accepted_at", "null").execute()
+
+    token = secrets.token_urlsafe(32)
+    expires_at = now + timedelta(days=_INVITE_TTL_DAYS)
+    supabase.table("direct_report_invites").insert(
+        {
+            "manager_id": user_id,
+            "direct_report_id": report_id,
+            "invited_email": email,
+            "token": token,
+            "expires_at": expires_at.isoformat(),
+        }
+    ).execute()
+
+    return {"invite_url": f"{settings.FRONTEND_URL}/invite/{token}", "expires_at": expires_at.isoformat()}
 
 
 @router.get("/{report_id}")

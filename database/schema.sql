@@ -477,6 +477,65 @@ alter table team_messages enable row level security;
 create index team_messages_report_idx on team_messages (direct_report_id, created_at desc);
 
 -- ============================================================
+-- DIRECT REPORT INVITES
+-- Session 22 (2026-08-08) — Team Mission Control's "auth primitives now, IC
+-- view later" scoping call (see docs/SESSION_HISTORY.md and the
+-- team_mission_control project memory note). This is the account/claim
+-- mechanism that finally puts a real value into direct_reports.user_id
+-- (a future hook, unused since Session 3): a manager generates a one-time
+-- link, the report signs in via the same passwordless magic-link flow
+-- /app/login already uses, and accept_direct_report_invite() below claims
+-- their direct_reports row. Building what an IC actually SEES once logged
+-- in is deferred to a follow-up session — this table and its two functions
+-- are the whole of this session's IC-login scope.
+--
+-- manager_id = the inviting manager's auth.uid() (RLS scopes through it,
+-- same manager-scoped pattern as team_messages). invited_email is a
+-- snapshot at invite time, also backfilled onto direct_reports.email (a
+-- second dormant column this activates — see direct_reports.py's
+-- POST /{report_id}/invite). token is the single-use secret embedded in the
+-- invite URL; expires_at defaults to a 7-day TTL set by the backend.
+-- ============================================================
+
+create table direct_report_invites (
+  id                uuid primary key default uuid_generate_v4(),
+  manager_id        uuid not null references auth.users(id),
+  direct_report_id  uuid not null references direct_reports(id) on delete cascade,
+  invited_email     text not null,
+  token             text not null unique,
+  created_at        timestamptz not null default now(),
+  expires_at        timestamptz not null,
+  accepted_at       timestamptz
+);
+
+alter table direct_report_invites enable row level security;
+
+create index direct_report_invites_report_idx on direct_report_invites (direct_report_id);
+
+-- ============================================================
+-- TEAM MEETING NOTES
+-- Session 22 (2026-08-08) — Team Mission Control's right column. Deliberately
+-- standalone: one_on_ones.summary stays exactly where it is (per-report 1:1
+-- history); this is a separate running log for anything that isn't a 1:1 —
+-- staff meetings, team syncs, general observations — same "Standalone
+-- team-wide log" choice as team_messages was scoped as per-report. No
+-- attendee tagging in v1 (kept deliberately minimal, see the
+-- team_mission_control project memory note).
+--
+-- manager_id = the logged-in manager's auth.uid(), same manager-scoped
+-- pattern as team_messages/one_on_ones.
+-- ============================================================
+
+create table team_meeting_notes (
+  id          uuid primary key default uuid_generate_v4(),
+  manager_id  uuid not null references auth.users(id),
+  note        text not null,
+  created_at  timestamptz not null default now()
+);
+
+alter table team_meeting_notes enable row level security;
+
+-- ============================================================
 -- CAPACITY MODEL
 -- Session 14 (2026-08-02) — see docs/SESSION_HISTORY.md and the
 -- capacity_scoping project memory note for the full scoping conversation.
@@ -808,6 +867,25 @@ create policy "projects_all_own_org" on projects
 create policy "team_messages_all_own" on team_messages
   for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
+-- direct_report_invites — manager manages their own invites. The IC side
+-- (preview + accept) never touches this table directly — see
+-- get_invite_preview()/accept_direct_report_invite() near the bottom of this
+-- file, both SECURITY DEFINER so they can operate before/without a matching
+-- RLS-visible row for the IC.
+create policy "direct_report_invites_all_own" on direct_report_invites
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
+-- direct_reports — a claimed IC can read (only) their own row. Additive to
+-- direct_reports_all_own above (manager access unchanged); this is the one
+-- other piece of "auth primitives" scope this session — deliberately just a
+-- read policy, since there's no IC-facing view yet to exercise it.
+create policy "direct_reports_select_own_as_ic" on direct_reports
+  for select using (user_id = auth.uid());
+
+-- team_meeting_notes — manager-scoped, same pattern as team_messages
+create policy "team_meeting_notes_all_own" on team_meeting_notes
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
 -- development_plans
 create policy "dev_plans_all_own" on development_plans
   for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
@@ -1080,3 +1158,114 @@ $$;
 
 revoke all on function public.org_unit_people_rollup() from public;
 grant execute on function public.org_unit_people_rollup() to authenticated;
+
+-- ------------------------------------------------------------
+-- DIRECT REPORT INVITES — the two SECURITY DEFINER functions behind Team
+-- Mission Control's "auth primitives now, IC view later" scope (Session 22,
+-- see the direct_report_invites table comment above and the
+-- team_mission_control project memory note).
+--
+-- get_invite_preview() is the one function in this file granted to `anon`,
+-- not just `authenticated` — the visitor hasn't logged in yet when they
+-- land on /invite/{token}, so there is no JWT for RLS to key off. It
+-- returns only a minimal, non-sensitive projection (names + expiry), never
+-- the row itself, and only for a token the caller already knows (this
+-- table has no other anon-readable path). Called from backend/routes/
+-- invites.py using a plain anon-key client — NOT get_admin_client() — so
+-- the "never service-role for user data" rule stays intact even with no
+-- authenticated user in the request.
+-- ------------------------------------------------------------
+
+create or replace function public.get_invite_preview(p_token text)
+returns table (
+  report_name text,
+  invited_email text,
+  manager_name text,
+  expires_at timestamptz,
+  valid boolean
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    dr.name,
+    i.invited_email,
+    nullif(trim(coalesce(u.full_name, '')), '') as manager_name,
+    i.expires_at,
+    (i.accepted_at is null and i.expires_at > now()) as valid
+  from direct_report_invites i
+  join direct_reports dr on dr.id = i.direct_report_id
+  left join users u on u.id = i.manager_id
+  where i.token = p_token
+$$;
+
+revoke all on function public.get_invite_preview(text) from public;
+grant execute on function public.get_invite_preview(text) to anon, authenticated;
+
+-- accept_direct_report_invite() runs as the freshly-authenticated IC (their
+-- JWT is what auth.uid()/auth.email() resolve from), but needs to write to
+-- direct_reports/direct_report_invites/users rows they don't own via RLS —
+-- hence SECURITY DEFINER, same shape as the rollup functions above, just
+-- for a single-row claim instead of an aggregate read. auth.email() is
+-- re-checked against invited_email inside the function (not just at the
+-- Python layer in routes/invites.py) as defense in depth, matching this
+-- file's existing belt-and-suspenders posture (see utils.py's explicit
+-- manager_id checks alongside RLS).
+create or replace function public.accept_direct_report_invite(p_token text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite direct_report_invites%rowtype;
+  v_uid uuid := auth.uid();
+  v_email text := lower(coalesce(auth.email(), ''));
+  v_dr_name text;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_invite from direct_report_invites where token = p_token for update;
+
+  if not found then
+    raise exception 'Invite not found';
+  end if;
+  if v_invite.accepted_at is not null then
+    raise exception 'This invite has already been used';
+  end if;
+  if v_invite.expires_at <= now() then
+    raise exception 'This invite has expired';
+  end if;
+  if lower(v_invite.invited_email) is distinct from v_email then
+    raise exception 'This invite was sent to a different email address';
+  end if;
+
+  update direct_reports set user_id = v_uid
+    where id = v_invite.direct_report_id and user_id is null
+    returning name into v_dr_name;
+
+  if v_dr_name is null then
+    raise exception 'This direct report is already linked to an account';
+  end if;
+
+  update direct_report_invites set accepted_at = now() where id = v_invite.id;
+
+  -- users row already exists (handle_new_user() trigger fired on signup,
+  -- defaulting role to 'manager' — the check constraint anticipated 'ic'
+  -- since the original MVP simplification note at the top of this file).
+  -- Correct it now that we know this account is actually an invited IC.
+  update users
+    set role = 'ic',
+        full_name = case when trim(coalesce(full_name, '')) = '' then v_dr_name else full_name end
+    where id = v_uid;
+
+  return v_invite.direct_report_id;
+end;
+$$;
+
+revoke all on function public.accept_direct_report_invite(text) from public;
+grant execute on function public.accept_direct_report_invite(text) to authenticated;

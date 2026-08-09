@@ -11,6 +11,82 @@ Format per entry:
 
 ---
 
+## Session 22 — 2026-08-08
+
+**Goal:** Expand the `/app/team` page built Session 21 into "Team Mission Control" — a 3-column
+team-wide surface (roster/priorities left, company+team goal progress middle, a running meeting-notes
+log right), plus decide how much of IC login to build now. This is PRODUCT_VISION.md's "Team Mission
+Control" dashboard concept, picked up directly from the handoff at the end of Session 21.
+
+**What was done:**
+- Scoped via one AskUserQuestion round (4 questions) plus a follow-up clarification on the "key
+  updates" question: (1) IC login — **auth primitives now, IC view later**, not a full build and not
+  deferred again; (2) "key updates" (manager broadcast feed) — **deferred to a follow-up**, after Claude
+  flagged that a 4th new subsystem in one pass risked rushed verification on everything else; (3)
+  meeting notes — **standalone team-wide log**, not a unified feed pulling in `one_on_ones`; (4)
+  `/app/team` — **reworked in place**, not a new route.
+- **IC login auth primitives** — new `direct_report_invites` table (manager-scoped RLS, 7-day TTL
+  tokens) + two SECURITY DEFINER functions (`get_invite_preview`, granted to `anon` since the visitor
+  hasn't logged in yet; `accept_direct_report_invite`, which claims the `direct_reports` row and
+  corrects the `users` row's role to `'ic'`). `direct_reports.py` gets `POST /{report_id}/invite`
+  (also backfills `direct_reports.email`, a second dormant column with no prior UI to set it — the
+  invite form is now that UI). New `routes/invites.py` (`GET`/`POST /api/invites/{token}`). Frontend
+  reuses the existing passwordless magic-link flow (`supabase.auth.signInWithOtp`) end to end — no
+  changes needed to `auth/callback/route.ts`, which already supported a `next` param. New public page
+  `frontend/app/invite/[token]/page.tsx` and a minimal stub landing page `frontend/app/app/ic/page.tsx`
+  (protected by the existing `middleware.ts` gate). No email is sent from the backend — the manager
+  copies the generated link and sends it themselves, same manual-delivery posture Session 21 chose for
+  `team_messages`. Building what an IC actually sees once logged in is explicitly deferred.
+- **Goal progress column** — `GET /api/team/goals` (team.py), filtered to `level in ('company',
+  'team')` only. Goals are owner-scoped everywhere in this codebase already, so no new rollup function
+  was needed — just a level filter on the manager's own goals.
+- **Meeting notes column** — new `team_meeting_notes` table (manager-scoped RLS) + `GET`/`POST
+  /api/team/notes`. Standalone, no attendee tagging, deliberately separate from `one_on_ones` (stays
+  per-report) and `team_messages` (stays per-report).
+- **`/app/team` reworked in place** — Session 21's roster becomes the left column (condensed styling,
+  same data) with a new "Invite to log in" action per report; middle column renders goal progress;
+  right column renders the meeting-notes log with a compose box. Same route, same nav item.
+- **`frontend/lib/api.ts`** — `TeamGoal`/`TeamNote`/`InvitePreview` types + `getTeamGoals()`,
+  `getTeamNotes()`, `createTeamNote()`, `inviteDirectReport()`, `getInvitePreview()`, `acceptInvite()`;
+  extended `TeamMember` with `email`/`user_id`.
+- New migration `database/migrations/2026-08-08_team_mission_control.sql` (depends on Session 21's
+  `2026-08-08_team_messages.sql` already having run).
+- Updated `docs/ENGINEERING.md` (new Team Mission Control section, core-tables list, Open Questions'
+  IC-login line) and `docs/DESIGN.md` (7 new decision rows).
+
+**Decisions made / locked:**
+- IC login ships in two passes: the account/claim mechanism now, the IC-facing view as a follow-up.
+  Andrew's explicit prior rejection of a lighter no-login workaround ruled out skipping the real
+  mechanism, but scoping both a manager-facing rework AND a new IC view in one session risked doing
+  neither well.
+- "Key updates" is scoped conceptually (a manager-authored broadcast feed, distinct from
+  `team_messages`) but has no code yet — explicitly deferred, not built partially.
+- Meeting notes stays a separate table/feed from `one_on_ones`, not merged into one chronological view
+  — keeps 1:1 history exactly where managers already expect to find it.
+
+**Verification:** cloned the pushed repo into a scratch environment, same pattern as Session 20/21.
+Backend — fresh venv, installed `requirements.txt`, imported `main` with dummy Supabase env vars,
+confirmed all 5 new/changed routes registered and `app.state.limiter` attached; `py_compile` clean on
+every changed file. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean, 19/19
+routes including the two new ones (`/app/ic`, `/invite/[token]`). Went one step further than usual
+given the new SQL functions: spun up a local Postgres 16 with a minimal Supabase `auth` schema stub,
+ran the full `schema.sql` against it (zero errors, every table/policy/function — not just the new
+ones), then scripted the entire invite/claim flow with real SQL — preview as `anon`, IC signup firing
+`handle_new_user()` for real, claim via `accept_direct_report_invite()`, confirming
+`direct_reports.user_id`/`accepted_at`/`users.role` all land correctly, plus all three error paths
+(re-accept, wrong email, expired token) reject as expected. What's still unverified: the real Supabase
+Auth integration (actual magic-link email + JWT signing) and the live migration run — both need
+Andrew's real Supabase project.
+
+**Next step:** Andrew needs to run `database/migrations/2026-08-08_team_mission_control.sql` against
+the live Supabase database (after confirming `2026-08-08_team_messages.sql` from Session 21 already
+ran) before `/app/team`'s new columns or the invite flow will work. Once live, the highest-value next
+steps are: (1) walk the invite flow end to end with a real email to confirm the magic-link → claim
+path works outside dummy credentials, (2) build the actual IC-facing view now that accounts can be
+claimed, (3) pick up "key updates" as its own scoped pass.
+
+---
+
 ## Session 21 — 2026-08-08
 
 **Goal:** Andrew asked what's next; Claude's read of the project memory (the `team_space_brainstorm`

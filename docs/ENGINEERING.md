@@ -129,7 +129,9 @@ Full schema with indexes and RLS policies: `database/schema.sql`.
 organizations        -- org-level config
 users                -- manager_id self-ref for hierarchy; role: manager/director/vp/ic
 manager_report_connections  -- explicit join table for hierarchy traversal (was on Miro board)
-direct_reports       -- the manager's team; user_id nullable (IC login post-MVP)
+direct_reports       -- the manager's team; user_id nullable, now claimable via the invite flow
+                        (Session 22) — see direct_report_invites below and the Team Mission Control
+                        section. No IC-facing view consumes it yet.
 one_on_ones          -- 1:1 logs; notes private to writing manager (RLS)
 commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id
 goals                -- activated Session 10; parent_goal_id self-ref; level: company/department/team/individual;
@@ -139,7 +141,11 @@ projects             -- activated Session 13; goal_id (optional, on delete set n
 capacity_profiles    -- activated Session 14; per-direct-report override of capacity_settings' org defaults
 time_off_entries     -- activated Session 14; PTO/sick/holiday/other per direct report, subtracted per-period
 team_messages        -- new Session 21; free-text update log per direct report, manager-scoped. STORE-ONLY
-                        (no delivery mechanism) — IC login isn't built, see direct_reports.user_id above
+                        (no delivery mechanism) — no IC-facing view exists yet to read it
+direct_report_invites -- new Session 22; one-time magic-link invite token per direct report, manager-
+                        scoped, 7-day TTL. Claimed via accept_direct_report_invite() (SECURITY DEFINER)
+team_meeting_notes   -- new Session 22; standalone team-wide meeting-notes log, manager-scoped, no
+                        attendee tagging — separate from one_on_ones and team_messages
 subscriptions        -- Stripe billing
 ```
 
@@ -492,6 +498,97 @@ live-tested against real Supabase — the migration hasn't run yet.
 
 ---
 
+## Team Mission Control (Session 22, 2026-08-08)
+
+Expands the Team View above into a 3-column surface — reworked `/app/team` in place, same route and
+nav item, per Andrew's explicit call. See docs/SESSION_HISTORY.md and the team_mission_control project
+memory note for the full scoping conversation (which covered four dimensions: how much of IC login to
+build, whether "key updates" ships this pass, the meeting-notes data model, and whether to rework
+`/app/team` in place vs. a new page).
+
+**Layout:** left column is the Session 21 roster (unchanged data, condensed styling) plus a new
+"Invite to log in" action per report. Middle column is company/team goal progress. Right column is a
+standalone meeting-notes log. No fourth column for "key updates" — scoped, then explicitly deferred to
+a follow-up session (see the Decisions log in DESIGN.md for the full reasoning).
+
+**Goal progress (`GET /api/team/goals`, team.py):** goals filtered to `level in ('company', 'team')`
+only — department stays a role-scoped-views rollup concept, individual priorities are already the left
+column's per-report list. Goals are owner-scoped everywhere in this codebase (see goals.py's RLS note:
+the `*_all_own_org` policy names are misleading, it's actually `owner_id = auth.uid()`), so this is
+just the manager's own goals filtered by level — no org rollup function needed, unlike People/Goals/
+Projects/Capacity's leader-scoped rollups (Session 15).
+
+**Meeting notes (`GET`/`POST /api/team/notes`, new `team_meeting_notes` table):** standalone and
+team-wide — deliberately not tied to any single 1:1 (`one_on_ones.summary` stays exactly where it is)
+and distinct from `team_messages` (which stays a private per-report log). No attendee tagging in v1,
+kept deliberately minimal. Manager-scoped RLS, same pattern as `team_messages`.
+
+**IC login — "auth primitives now, IC view later."** Andrew explicitly rejected a lighter no-login
+workaround, so this had to be a real account/claim mechanism, not a stub — but building what an IC
+actually *sees* once logged in is deferred to a follow-up session. What shipped this pass:
+
+- **`direct_report_invites`** (new table) — `manager_id`, `direct_report_id`, `invited_email`, unique
+  `token`, `expires_at` (7-day TTL, set in `direct_reports.py`), `accepted_at`. Manager-scoped RLS. A
+  new invite soft-expires any prior pending invite for the same report first, so an old copied link
+  stops working once a fresh one is issued.
+- **`direct_reports.py` `POST /{report_id}/invite`** — confirms the report belongs to this manager,
+  backfills `direct_reports.email` (a second dormant column activated this session — there was
+  previously no way to set it anywhere in the app; the invite form is now where a manager enters it),
+  creates the invite row, returns a frontend URL. No email is sent from the backend — the manager
+  copies the link and shares it themselves, same manual-delivery posture Session 21 chose for
+  `team_messages`.
+- **`routes/invites.py`** (new router, `/api/invites`) — `GET /{token}` is intentionally
+  unauthenticated (the visitor hasn't logged in yet) and uses a plain anon-key Supabase client, NOT
+  `get_admin_client()`, calling `get_invite_preview()` (below) so the "never service-role for user
+  data" rule stays intact even with no authenticated user in the request. `POST /{token}/accept` runs
+  after login, through the normal `get_authenticated_client()` dependency, and calls
+  `accept_direct_report_invite()`.
+- **Two new SECURITY DEFINER functions in schema.sql**, same pattern as `current_org_id()`/
+  `led_org_unit_ids()`: `get_invite_preview(p_token)` — the one function in the schema granted to
+  `anon`, not just `authenticated`, returning only a minimal non-sensitive projection (names + expiry,
+  never the row itself). `accept_direct_report_invite(p_token)` — claims the `direct_reports` row for
+  `auth.uid()`, re-checking `auth.email()` against `invited_email` inside the function as defense in
+  depth (not just at the Python layer), and corrects the `users` row's `role` to `'ic'` (the
+  `handle_new_user()` trigger defaults every new signup to `'manager'`; the check constraint has
+  anticipated `'ic'` since the original schema).
+- **Auth flow reuses the existing passwordless magic-link mechanism** (`supabase.auth.signInWithOtp`)
+  rather than inventing password signup — no changes needed to `auth/callback/route.ts`, which already
+  supported a `next` query param. `frontend/app/invite/[token]/page.tsx` (new, public — NOT under
+  `/app`, so `middleware.ts`'s auth gate doesn't apply) fetches the preview and sends the magic link
+  with `emailRedirectTo` pointing at `/auth/callback?next=/app/ic?invite={token}`.
+  `frontend/app/app/ic/page.tsx` (new) is the landing target — protected by `middleware.ts` like every
+  other `/app/*` route, calls `POST /api/invites/{token}/accept` on load, then shows a static "you're
+  logged in, nothing here yet" message. Replace with a real IC view in a follow-up session.
+- **`direct_reports_select_own_as_ic` RLS policy** (new, additive) — lets a claimed IC read (only)
+  their own `direct_reports` row. No IC-facing view exercises this yet; included now since it's the
+  natural counterpart to `user_id` actually getting set.
+
+**Schema note — new migration, not yet run live.** `database/migrations/2026-08-08_team_mission_control.sql`
+adds `direct_report_invites`, `team_meeting_notes`, their RLS policies, and the two new functions.
+Depends on `2026-08-08_team_messages.sql` (Session 21) already having been run — same "build ahead of
+the migration" posture as every table activated since Org units (Session 11).
+
+**Verification note:** same scratch-clone pattern as Session 21 — backend: fresh venv, `main` import
+with dummy Supabase env vars, confirmed all 4 new/changed routes register (`POST
+/api/direct-reports/{report_id}/invite`, `GET /api/invites/{token}`, `POST
+/api/invites/{token}/accept`, `GET /api/team/goals`, `GET`/`POST /api/team/notes`) and
+`app.state.limiter` attached; `py_compile` clean on all changed files. Frontend: fresh `npm install`,
+`tsc --noEmit` clean, `next build` clean — 19/19 routes including the two new ones (`/app/ic`,
+`/invite/[token]`). **Also, one step beyond the usual pattern:** spun up a local Postgres 16 instance
+with a minimal stub of the Supabase `auth` schema (a bare `auth.users` table + session-variable-backed
+`auth.uid()`/`auth.email()`) and ran the *entire* `schema.sql` against it end to end — every table,
+policy, and function in the file, not just the new ones, applied with zero errors. Then scripted the
+full invite/claim flow with real SQL: created a manager + report + invite, previewed as `anon`,
+signed the IC up (`handle_new_user()` fired for real), claimed via `accept_direct_report_invite()` as
+`authenticated` with the IC's simulated JWT, and confirmed `direct_reports.user_id` got set,
+`direct_report_invites.accepted_at` got stamped, and `users.role` flipped to `'ic'`. Also confirmed all
+three error paths reject correctly: re-accepting an already-used token, accepting with a mismatched
+email, and accepting an expired token. What's still unverified is the actual Supabase Auth integration
+(real magic-link email delivery, real JWT signing/verification) and the live migration run — those need
+Andrew's real Supabase project, which this sandbox doesn't have.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -508,9 +605,10 @@ Things explicitly not yet built:
   views section above). Still open: individual-level goals aren't rolled up
   (department/team only), and there's no admin/owner concept gating who can
   assign a leader (any org member can, today).
-- IC login (user_id on direct_reports is nullable as a future hook). `team_messages` (Session 21) is
-  the first feature to bump into this directly — it's built store-only specifically because there's no
-  IC-facing surface yet; see the Team View section above.
+- IC login: the account/claim mechanism shipped Session 22 (invite → magic link →
+  `direct_reports.user_id` set — see the Team Mission Control section above), but there's still no
+  IC-facing view once someone logs in — `/app/ic` is a static placeholder. `team_messages` (Session 21)
+  remains store-only because of this; a real IC view is the natural next step to unlock it.
 - Commitments → project linking (`source_type='project'`, already in
   schema.sql's check constraint) — Projects (Session 13) shipped CRUD only,
   same scope discipline as Goals shipping without rollup calculation
