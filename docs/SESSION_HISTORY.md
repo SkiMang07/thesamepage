@@ -11,6 +11,43 @@ Format per entry:
 
 ---
 
+## Session 26 — 2026-08-11
+
+**Goal:** Started as an open brainstorm from Andrew — goals and initiatives feel inert on Mission Control (cards can't be interacted with, no visible progress, no sense of how they connect to the team), and the free-text `success_metrics` decision from Session 10 makes any rollup a "rollup of vibes." Diagnosed as three missing primitives: a computable progress signal, a freshness/trend signal, and visible goal↔initiative↔people linkage. Andrew said "I'll take your lead"; scoped via one AskUserQuestion round (all four recommendations accepted) and built same session.
+
+**What was done:**
+- New `check_ins` table (`database/migrations/2026-08-11_check_ins.sql` + schema.sql) — the temporal layer for goals AND projects: one shared table, each row status + optional manual progress % (0-100) + optional one-line note, exactly one parent (`num_nonnulls(goal_id, project_id) = 1` check), owner-scoped RLS, `(parent, created_at desc)` indexes. Depends only on the base goals/projects tables.
+- `backend/routes/check_ins.py` (new — shared helpers, not a router): `create_check_in()` (ownership 404 + **write-through of the check-in's status to the parent's `status` column**, so every pre-existing status-reading surface keeps working unchanged), `list_check_ins()`, `enrich_with_check_ins()` (decorates list responses with `progress` = latest non-null %, `trend` up/down/flat from the latest two non-null %s, `last_check_in_at`/`last_check_in_note`). goals.py and projects.py each mount `GET`/`POST /{id}/check-ins` and enrich their list endpoints.
+- `frontend/components/CheckInPanel.tsx` (new, shared by goal and project cards): progress bar + %, trend arrow, freshness label (amber past 14 days — a stale green is more dangerous than an honest yellow), inline quick check-in form (status defaults to current, % defaults to last asserted), lazy-loaded history. Wired into `/app/goals` and `/app/projects` per card; both pages mirror the write-through in list state without a refetch.
+- Goal cards on `/app/goals` now list the initiatives serving them (the `goal_id` link existed end-to-end since Session 13 — this session just made it visible; no schema change needed).
+- Mission Control's Goals + Key Initiatives cards reworked **exception-first** (new shared `TriageCard` in dashboard/page.tsx): attention rows first — at-risk, overdue / due within 14 days, stale (no check-in in 14 days / never), and for goals "No initiative" (a "what" with no "how") — each with status dot, %, trend arrow, and reason chips, clicking through to the owning page; healthy items collapse to a "Show N on track" toggle. Completed/cancelled goals sit out of triage.
+- `frontend/lib/api.ts` — `CheckIn`/`CheckInIn`/`CheckInDerived` types + the four check-in client functions; `Goal`/`Project` extended with the derived fields.
+
+**Decisions made / locked:**
+- Check-ins cover both goals and projects in ONE shared table — same status enum, same shape, and the COO-agent temporal layer (data gap #2 in `docs/COO_AGENT_QUESTION_SET.md`) wants one place to diff history. This closes that gap.
+- Progress is a manually-asserted % per check-in — honest about the judgment involved. Structured key results (metric/current/target rows with computed attainment) considered and deferred; a note-only check-in never wipes the last asserted %.
+- Write-through status (not derived-only) so zero existing surfaces needed changes — the migration is additive.
+- STALE_CHECK_IN_DAYS = 14, deliberately shorter than the dashboard's 21-day 1:1 cadence — goals drift faster than relationships. DUE_SOON_DAYS = 14.
+- AI-derived status/progress (reading `success_metrics` + check-in notes, draft-then-review) deferred to the agent layer — a COO-agent feature, not a blocker for this pass.
+
+**Verification:** backend — fresh venv, `main` import with dummy env vars confirmed all 4 new check-in routes registered, `py_compile` clean. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean (19/19 routes). Schema — local Postgres 16 + the Sessions 22-24 auth stub: full `schema.sql` end-to-end clean, then functional tests all PASS (exactly-one-parent and 0-100 constraints, RLS owner-sees-3 / other-manager-sees-0 / forged-owner insert rejected, goal-delete cascade, newest-first ordering); also verified the migration applies cleanly on top of the pre-session (HEAD) schema.
+
+**Next step:** Run `database/migrations/2026-08-11_check_ins.sql` against live Supabase BEFORE deploying — the Goals/Projects pages now query `check_ins` on load and will error until it runs (no dependency on any other pending migration). Then dogfood: the check-in cadence itself (is a weekly check-in per goal sustainable solo?), the exception-first cards, and the trend/staleness signals. Deferred ideas queued from the brainstorm: structured key results, AI-proposed check-ins, `/app/team`'s progress ring computing from real %s instead of status counts.
+
+---
+
+## Session 25 — 2026-08-09
+
+**Goal:** COO agent brainstorm round 2 (follow-up to the Session ~9 agent-hierarchy idea, whose "wait until the data models exist" objection is now resolved). No code.
+
+**What was done:** Drafted an 18-question eval suite for the agent layer, readiness-rated 🟢/🟡/🔴 against today's schema, saved to `docs/COO_AGENT_QUESTION_SET.md` (committed with Session 26's push). Identified and ranked 5 data gaps: (1) no demand-side capacity / person↔initiative assignment, (2) no temporal/history layer — closed by Session 26's check-ins, (3) no context-docs feature, (4) no structured career-aspiration field, (5) no team-health signal.
+
+**Decisions made / locked:** Agent roster (COO + culture/L&D/performance/strategy&ops) is brand, not architecture — one COO agent with per-domain context loaders, split only if quality degrades. Mode A (on-demand consultation) ships before Mode B (proactive background work). Context-docs agreed as a future first-class data model. Eval-suite-first: don't ship 🔴 questions until their gap closes.
+
+**Next step:** was "pick which gap to close first" — Session 26 closed gap #2 (temporal layer) via check-ins.
+
+---
+
 ## Session 24 — 2026-08-09
 
 **Goal:** Visual/layout redesign of `/app/team` (Team Mission Control), Andrew's explicit ask after dogfooding Session 22/23's 3-column grid — captured at the end of Session 23 as its own follow-up session, not built straight from the brief. Requested as a design-exploration pass first: propose a few layout options and let Andrew pick before writing any code.

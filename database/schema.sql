@@ -452,6 +452,49 @@ create table projects (
 alter table projects enable row level security;
 
 -- ============================================================
+-- CHECK-INS
+-- Session 26 (2026-08-11) — the temporal layer for goals and projects
+-- (initiatives). Each row is a timestamped assertion: status + optional
+-- progress % + optional one-line note, against exactly one goal OR one
+-- project. The parent's `status` column is write-through-updated by the
+-- backend on every check-in, so existing status-reading surfaces keep
+-- working unchanged; progress/trend/staleness are derived from this table
+-- (latest row = current progress, latest two rows = trend, latest
+-- created_at = freshness).
+--
+-- Deliberately one shared table rather than goal_updates + project_updates:
+-- goals and projects share the same status enum and the same check-in
+-- shape, and the COO-agent temporal layer (data gap #2 in
+-- docs/COO_AGENT_QUESTION_SET.md) wants one place to diff history.
+-- Progress is a manually-asserted 0-100 — honest about the judgment
+-- involved; structured key results were considered and deferred (Session
+-- 26 scoping with Andrew).
+-- ============================================================
+
+create table check_ins (
+  id          uuid primary key default uuid_generate_v4(),
+  owner_id    uuid not null references auth.users(id),
+  -- Exactly one of these two is set (enforced below).
+  goal_id     uuid references goals(id) on delete cascade,
+  project_id  uuid references projects(id) on delete cascade,
+  status      text not null
+              check (status in ('active', 'on_track', 'at_risk', 'completed', 'cancelled')),
+  -- Manually-asserted percent complete. Nullable — a check-in can be just a
+  -- status/note ("still blocked on legal") without re-asserting a number.
+  progress    integer check (progress >= 0 and progress <= 100),
+  note        text,
+  created_at  timestamptz not null default now(),
+  constraint check_ins_exactly_one_parent
+    check (num_nonnulls(goal_id, project_id) = 1)
+);
+
+-- Latest-N-per-parent is the only read pattern.
+create index check_ins_goal_idx on check_ins (goal_id, created_at desc);
+create index check_ins_project_idx on check_ins (project_id, created_at desc);
+
+alter table check_ins enable row level security;
+
+-- ============================================================
 -- TEAM MESSAGES
 -- Session 21 (2026-08-08) — the messaging half of the "team space" idea
 -- Andrew floated 2026-08-03 (see docs/SESSION_HISTORY.md and the
@@ -895,6 +938,11 @@ create policy "goals_all_own_org" on goals
 create policy "projects_all_own_org" on projects
   for all using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
+
+-- check_ins — owner-scoped, same pattern (and same actor) as the goals/
+-- projects rows they annotate
+create policy "check_ins_all_own" on check_ins
+  for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
 -- team_messages — private to the manager who sent them, same manager-scoped
 -- pattern as one_on_ones/assessments

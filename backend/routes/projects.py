@@ -35,6 +35,7 @@ mirroring capacity.py's get_rollup.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from routes.check_ins import CheckInIn, create_check_in, enrich_with_check_ins, list_check_ins
 from utils import get_authenticated_client
 
 router = APIRouter()
@@ -94,7 +95,24 @@ async def list_projects(
     if status:
         query = query.eq("status", status)
     rows = query.order("created_at", desc=True).execute().data
-    return _shape_rows(rows)
+    # Session 26: decorate with progress/trend/last_check_in_at from the
+    # check_ins temporal layer — see routes/check_ins.py.
+    return enrich_with_check_ins(supabase, user_id, _shape_rows(rows), "project_id")
+
+
+@router.get("/{project_id}/check-ins")
+async def get_project_check_ins(project_id: str, auth=Depends(get_authenticated_client)):
+    """Check-in history for one project, newest first (Session 26)."""
+    user_id, supabase = auth
+    return list_check_ins(supabase, user_id, "project_id", project_id)
+
+
+@router.post("/{project_id}/check-ins")
+async def create_project_check_in(project_id: str, body: CheckInIn, auth=Depends(get_authenticated_client)):
+    """Log a check-in (status + optional progress % + optional note). Writes
+    the status through to projects.status — see routes/check_ins.py."""
+    user_id, supabase = auth
+    return create_check_in(supabase, user_id, "projects", "project_id", project_id, body)
 
 
 @router.get("/rollup")

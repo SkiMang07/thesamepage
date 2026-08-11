@@ -206,7 +206,49 @@ export type Goal = {
   org_unit_id: string | null;
   org_unit_name?: string | null;
   created_at: string;
+} & CheckInDerived;
+
+// Session 26 — fields derived from the check_ins temporal layer, attached by
+// the backend's enrich_with_check_ins() on every goals/projects list call.
+// `progress` is the latest non-null % asserted in a check-in (manual, 0-100);
+// `trend` compares the latest two non-null %s; the last_check_in_* pair
+// drives staleness badges ("no check-in in N days").
+export type CheckInTrend = "up" | "down" | "flat";
+
+export type CheckInDerived = {
+  progress?: number | null;
+  trend?: CheckInTrend | null;
+  last_check_in_at?: string | null;
+  last_check_in_note?: string | null;
 };
+
+export type CheckIn = {
+  id: string;
+  goal_id: string | null;
+  project_id: string | null;
+  status: GoalStatus;
+  progress: number | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type CheckInIn = {
+  status: GoalStatus;
+  progress?: number | null;
+  note?: string | null;
+};
+
+export const getGoalCheckIns = (goalId: string): Promise<CheckIn[]> =>
+  authedFetch(`/api/goals/${goalId}/check-ins`);
+
+export const createGoalCheckIn = (goalId: string, body: CheckInIn): Promise<CheckIn> =>
+  authedFetch(`/api/goals/${goalId}/check-ins`, { method: "POST", body: JSON.stringify(body) });
+
+export const getProjectCheckIns = (projectId: string): Promise<CheckIn[]> =>
+  authedFetch(`/api/projects/${projectId}/check-ins`);
+
+export const createProjectCheckIn = (projectId: string, body: CheckInIn): Promise<CheckIn> =>
+  authedFetch(`/api/projects/${projectId}/check-ins`, { method: "POST", body: JSON.stringify(body) });
 
 export type GoalIn = {
   title: string;
@@ -267,7 +309,7 @@ export type Project = {
   // _shape_rows.
   goal_title?: string | null;
   created_at: string;
-};
+} & CheckInDerived;
 
 export type ProjectIn = {
   title: string;

@@ -1,0 +1,266 @@
+"use client";
+
+// Check-in panel (Session 26, 2026-08-11) — the shared progress strip + quick
+// check-in form + history used by both goal cards (/app/goals) and project
+// cards (/app/projects). One component because the two parents share the same
+// status enum and check-in shape (see backend/routes/check_ins.py).
+//
+// Renders three things:
+//   1. A summary strip: progress bar + %, trend arrow (latest two non-null
+//      %s), and a freshness label — amber once a check-in is older than
+//      STALE_DAYS, because a stale green is more dangerous than an honest
+//      yellow.
+//   2. A "Check in" toggle opening an inline form: status (defaults to the
+//      parent's current), progress % (defaults to the last asserted value),
+//      one-line note. Submitting write-throughs status to the parent server-
+//      side; onCheckedIn lets the parent page update its own list state.
+//   3. A lazy-loaded history (fetched on first expand, newest first).
+
+import { useState } from "react";
+import { CheckIn, CheckInIn, CheckInTrend, GoalStatus } from "@/lib/api";
+
+// Past this many days without a check-in, the freshness label turns amber.
+// Matches the weekly-ish cadence a check-in is designed for (two missed
+// weeks = worth a nudge), deliberately shorter than the dashboard's 21-day
+// 1:1 cadence — goals drift faster than relationships.
+export const STALE_CHECK_IN_DAYS = 14;
+
+const STATUS_OPTIONS: { id: GoalStatus; label: string }[] = [
+  { id: "active", label: "Active" },
+  { id: "on_track", label: "On track" },
+  { id: "at_risk", label: "At risk" },
+  { id: "completed", label: "Completed" },
+  { id: "cancelled", label: "Cancelled" },
+];
+
+const DOT_STYLES: Record<GoalStatus, string> = {
+  active: "bg-gray-400",
+  on_track: "bg-green-500",
+  at_risk: "bg-amber-500",
+  completed: "bg-blue-500",
+  cancelled: "bg-gray-300",
+};
+
+export function daysSince(iso: string) {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function freshnessLabel(iso: string | null | undefined) {
+  if (!iso) return "No check-ins yet";
+  const d = daysSince(iso);
+  if (d === 0) return "Checked in today";
+  if (d === 1) return "Checked in yesterday";
+  return `Checked in ${d} days ago`;
+}
+
+export function isStale(iso: string | null | undefined) {
+  return !iso || daysSince(iso) > STALE_CHECK_IN_DAYS;
+}
+
+export function TrendArrow({ trend }: { trend: CheckInTrend | null | undefined }) {
+  if (!trend) return null;
+  if (trend === "up") return <span className="text-green-600" title="Progress up since last check-in">↑</span>;
+  if (trend === "down") return <span className="text-red-500" title="Progress down since last check-in">↓</span>;
+  return <span className="text-gray-400" title="Progress flat since last check-in">→</span>;
+}
+
+export function ProgressBar({ progress, status }: { progress: number | null | undefined; status: GoalStatus }) {
+  if (progress == null) return null;
+  const barColor =
+    status === "at_risk" ? "bg-amber-500" : status === "completed" ? "bg-blue-500" : "bg-green-500";
+  return (
+    <div className="flex flex-1 items-center gap-2">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${progress}%` }} />
+      </div>
+      <span className="shrink-0 text-xs font-medium text-gray-600">{progress}%</span>
+    </div>
+  );
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export default function CheckInPanel({
+  status,
+  progress,
+  trend,
+  lastCheckInAt,
+  fetchHistory,
+  submitCheckIn,
+  onCheckedIn,
+}: {
+  status: GoalStatus;
+  progress: number | null | undefined;
+  trend: CheckInTrend | null | undefined;
+  lastCheckInAt: string | null | undefined;
+  fetchHistory: () => Promise<CheckIn[]>;
+  submitCheckIn: (body: CheckInIn) => Promise<CheckIn>;
+  onCheckedIn: (checkIn: CheckIn) => void;
+}) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<CheckIn[] | null>(null);
+  const [formStatus, setFormStatus] = useState<GoalStatus>(status);
+  const [formProgress, setFormProgress] = useState<string>(progress != null ? String(progress) : "");
+  const [formNote, setFormNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const stale = isStale(lastCheckInAt);
+
+  async function toggleHistory() {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && history === null) {
+      try {
+        setHistory(await fetchHistory());
+      } catch {
+        setHistory([]);
+      }
+    }
+  }
+
+  function openForm() {
+    // Re-seed defaults from the current values each time the form opens, so
+    // a check-in logged moments ago is reflected the next time.
+    setFormStatus(status);
+    setFormProgress(progress != null ? String(progress) : "");
+    setFormNote("");
+    setFormOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    const parsed = formProgress.trim() === "" ? null : Number(formProgress);
+    if (parsed !== null && (!Number.isInteger(parsed) || parsed < 0 || parsed > 100)) {
+      setError("Progress must be a whole number from 0 to 100");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await submitCheckIn({
+        status: formStatus,
+        progress: parsed,
+        note: formNote.trim() || null,
+      });
+      setHistory((h) => (h === null ? h : [created, ...h]));
+      onCheckedIn(created);
+      setFormOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to log check-in");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 border-t border-gray-100 pt-2">
+      {/* Summary strip */}
+      <div className="flex items-center gap-3">
+        <ProgressBar progress={progress} status={status} />
+        <TrendArrow trend={trend} />
+        <span className={`text-xs ${stale ? "font-medium text-amber-600" : "text-gray-400"}`}>
+          {freshnessLabel(lastCheckInAt)}
+        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {lastCheckInAt && (
+            <button onClick={toggleHistory} className="text-xs text-gray-400 hover:text-gray-700">
+              {historyOpen ? "Hide history" : "History"}
+            </button>
+          )}
+          {!formOpen && (
+            <button
+              onClick={openForm}
+              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Check in
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Quick check-in form */}
+      {formOpen && (
+        <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-dashed border-gray-300 p-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+              <select
+                value={formStatus}
+                onChange={(e) => setFormStatus(e.target.value as GoalStatus)}
+                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="w-24">
+              <label className="mb-1 block text-xs font-medium text-gray-500">Progress %</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={formProgress}
+                onChange={(e) => setFormProgress(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                placeholder="—"
+              />
+            </div>
+            <div className="min-w-40 flex-1">
+              <label className="mb-1 block text-xs font-medium text-gray-500">Note (optional)</label>
+              <input
+                value={formNote}
+                onChange={(e) => setFormNote(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                placeholder="One line on where this stands"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {saving ? "Logging..." : "Log check-in"}
+              </button>
+              <button type="button" onClick={() => setFormOpen(false)} className="text-xs text-gray-500 hover:text-gray-900">
+                Cancel
+              </button>
+            </div>
+          </div>
+          {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        </form>
+      )}
+
+      {/* History */}
+      {historyOpen && (
+        <ul className="mt-2 space-y-1.5">
+          {history === null ? (
+            <li className="text-xs text-gray-400">Loading...</li>
+          ) : history.length === 0 ? (
+            <li className="text-xs text-gray-400">No check-ins yet.</li>
+          ) : (
+            history.map((ci) => (
+              <li key={ci.id} className="flex items-baseline gap-2 text-xs text-gray-500">
+                <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 self-center rounded-full ${DOT_STYLES[ci.status]}`} />
+                <span className="shrink-0 text-gray-400">{formatDateTime(ci.created_at)}</span>
+                <span className="shrink-0 font-medium text-gray-600">
+                  {STATUS_OPTIONS.find((s) => s.id === ci.status)?.label}
+                  {ci.progress != null && ` · ${ci.progress}%`}
+                </span>
+                {ci.note && <span className="min-w-0 truncate">{ci.note}</span>}
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}

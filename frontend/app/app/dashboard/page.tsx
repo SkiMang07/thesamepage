@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import QuickAddModal from "@/components/QuickAddModal";
+import { TrendArrow, isStale } from "@/components/CheckInPanel";
 import {
   CapacityOverviewItem,
   DashboardInsight,
@@ -69,28 +70,6 @@ function needsOneOnOne(lastOneOnOneAt: string | null) {
   return daysSince(lastOneOnOneAt) > CADENCE_DAYS;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-// Goals and Projects share the same status enum/styles — same pattern
-// already used on reports/[id]/page.tsx.
-const STATUS_LABELS: Record<GoalStatus, string> = {
-  active: "Active",
-  on_track: "On track",
-  at_risk: "At risk",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
-const STATUS_STYLES: Record<GoalStatus, string> = {
-  active: "bg-gray-100 text-gray-600",
-  on_track: "bg-green-50 text-green-600",
-  at_risk: "bg-amber-50 text-amber-600",
-  completed: "bg-blue-50 text-blue-600",
-  cancelled: "bg-gray-100 text-gray-400",
-};
-
 // Organization / Department / Team Goals — the board's three top-of-
 // hierarchy goal cards, collapsed into one Goals section here. Individual
 // goals stay off Mission Control; they live on the report's own page.
@@ -104,6 +83,76 @@ const GOAL_CARD_LEVELS: { id: GoalLevel; label: string }[] = [
 // this card — it's a status board, not an archive (full history is on
 // /app/projects).
 const ACTIVE_PROJECT_STATUSES = new Set<GoalStatus>(["active", "on_track", "at_risk"]);
+
+// ---------------------------------------------------------------------------
+// Exception-first triage (Session 26) — the Goals and Key Initiatives cards
+// lead with what needs the manager, not a uniform list. A row earns a spot
+// in the attention section for any of: at-risk status, overdue / due within
+// DUE_SOON_DAYS, no check-in in STALE_CHECK_IN_DAYS (or ever — a stale green
+// is more dangerous than an honest yellow), or (goals only) no initiative
+// attached — a "what" with no "how". Everything healthy collapses into a
+// one-line count that expands on demand. Same worst-first philosophy as the
+// Individual Performance column's sort, applied to the other two columns.
+// ---------------------------------------------------------------------------
+
+const DUE_SOON_DAYS = 14;
+
+const DOT_STYLES: Record<GoalStatus, string> = {
+  active: "bg-gray-400",
+  on_track: "bg-green-500",
+  at_risk: "bg-amber-500",
+  completed: "bg-blue-500",
+  cancelled: "bg-gray-300",
+};
+
+type AttentionReason = { label: string; severe: boolean };
+
+type TriagedItem = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  status: GoalStatus;
+  progress?: number | null;
+  trend?: Goal["trend"];
+  reasons: AttentionReason[];
+};
+
+function daysUntil(isoDate: string) {
+  const target = new Date(isoDate + "T00:00:00").getTime();
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  return Math.round((target - start) / (1000 * 60 * 60 * 24));
+}
+
+function dueReason(dueDate: string | null): AttentionReason | null {
+  if (!dueDate) return null;
+  const d = daysUntil(dueDate);
+  if (d < 0) return { label: `Overdue ${-d}d`, severe: true };
+  if (d === 0) return { label: "Due today", severe: true };
+  if (d <= DUE_SOON_DAYS) return { label: `Due in ${d}d`, severe: false };
+  return null;
+}
+
+function staleReason(lastCheckInAt: string | null | undefined): AttentionReason | null {
+  if (!isStale(lastCheckInAt)) return null;
+  if (!lastCheckInAt) return { label: "Never checked in", severe: false };
+  return { label: `No check-in in ${daysSince(lastCheckInAt)}d`, severe: false };
+}
+
+function severity(item: TriagedItem) {
+  // At-risk beats overdue beats everything else; more reasons break ties.
+  if (item.status === "at_risk") return 0;
+  if (item.reasons.some((r) => r.severe)) return 1;
+  return 2;
+}
+
+function triage(items: TriagedItem[]): { attention: TriagedItem[]; healthy: TriagedItem[] } {
+  const attention = items
+    .filter((i) => i.reasons.length > 0)
+    .sort((a, b) => severity(a) - severity(b) || b.reasons.length - a.reasons.length);
+  const healthy = items.filter((i) => i.reasons.length === 0);
+  return { attention, healthy };
+}
 
 // Minimal local copies of capacity/page.tsx's period helpers — Mission
 // Control only ever needs "this week", so it doesn't need that page's full
@@ -204,6 +253,57 @@ export default function DashboardPage() {
       .then(setInsight)
       .catch(() => setInsight(null));
   }, [loadDashboard]);
+
+  // Exception-first triage inputs (Session 26). Completed/cancelled goals
+  // sit out of triage — they're history, not workload.
+  const triagedGoals = useMemo(() => {
+    const open = goals.filter((g) => g.status !== "completed" && g.status !== "cancelled");
+    return triage(
+      open.map((g) => {
+        const reasons: AttentionReason[] = [];
+        if (g.status === "at_risk") reasons.push({ label: "At risk", severe: true });
+        const due = dueReason(g.due_date);
+        if (due) reasons.push(due);
+        const stale = staleReason(g.last_check_in_at);
+        if (stale) reasons.push(stale);
+        // A "what" with no "how" — the one goal-only smell.
+        if (!projects.some((p) => p.goal_id === g.id)) reasons.push({ label: "No initiative", severe: false });
+        return {
+          id: g.id,
+          title: g.title,
+          subtitle: GOAL_CARD_LEVELS.find((l) => l.id === g.level)?.label ?? null,
+          status: g.status,
+          progress: g.progress,
+          trend: g.trend,
+          reasons,
+        };
+      })
+    );
+  }, [goals, projects]);
+
+  const triagedProjects = useMemo(
+    () =>
+      triage(
+        projects.map((p) => {
+          const reasons: AttentionReason[] = [];
+          if (p.status === "at_risk") reasons.push({ label: "At risk", severe: true });
+          const due = dueReason(p.due_date);
+          if (due) reasons.push(due);
+          const stale = staleReason(p.last_check_in_at);
+          if (stale) reasons.push(stale);
+          return {
+            id: p.id,
+            title: p.title,
+            subtitle: p.direct_report_name ?? "Your initiative",
+            status: p.status,
+            progress: p.progress,
+            trend: p.trend,
+            reasons,
+          };
+        })
+      ),
+    [projects]
+  );
 
   const dueCount = team.filter((r) => needsOneOnOne(r.last_one_on_one_at)).length;
   const atRiskGoalCount = goals.filter((g) => g.status === "at_risk").length;
@@ -359,17 +459,15 @@ export default function DashboardPage() {
             )}
           </section>
 
-          {/* Goals */}
-          <section className="rounded-xl border border-gray-200 bg-white">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
-                Goals{goals.length > 0 && ` (${goals.length})`}
-              </h2>
-              <Link href="/app/goals" className="text-xs text-gray-400 hover:text-gray-600">
-                View all →
-              </Link>
-            </div>
-            {goals.length === 0 ? (
+          {/* Goals — exception-first (Session 26) */}
+          <TriageCard
+            title="Goals"
+            href="/app/goals"
+            linkLabel="View all"
+            total={goals.length}
+            attention={triagedGoals.attention}
+            healthy={triagedGoals.healthy}
+            emptyState={
               <p className="px-5 py-6 text-sm text-gray-500">
                 No organization, department, or team goals yet.{" "}
                 <Link href="/app/goals" className="underline hover:text-gray-700">
@@ -377,44 +475,18 @@ export default function DashboardPage() {
                 </Link>
                 .
               </p>
-            ) : (
-              <div className="space-y-4 px-5 py-4">
-                {GOAL_CARD_LEVELS.map(({ id, label }) => {
-                  const rows = goals.filter((g) => g.level === id);
-                  if (rows.length === 0) return null;
-                  return (
-                    <div key={id}>
-                      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
-                      <ul className="space-y-2">
-                        {rows.map((g) => (
-                          <li key={g.id} className="rounded-lg border border-gray-200 px-3.5 py-2.5">
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="min-w-0 truncate text-sm font-medium text-gray-900">{g.title}</p>
-                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
-                                {STATUS_LABELS[g.status]}
-                              </span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+            }
+          />
 
-          {/* Key Initiatives */}
-          <section className="rounded-xl border border-gray-200 bg-white">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
-                Key Initiatives{projects.length > 0 && ` (${projects.length})`}
-              </h2>
-              <Link href="/app/projects" className="text-xs text-gray-400 hover:text-gray-600">
-                View all →
-              </Link>
-            </div>
-            {projects.length === 0 ? (
+          {/* Key Initiatives — exception-first (Session 26) */}
+          <TriageCard
+            title="Key Initiatives"
+            href="/app/projects"
+            linkLabel="View all"
+            total={projects.length}
+            attention={triagedProjects.attention}
+            healthy={triagedProjects.healthy}
+            emptyState={
               <p className="px-5 py-6 text-sm text-gray-500">
                 No active projects.{" "}
                 <Link href="/app/projects" className="underline hover:text-gray-700">
@@ -422,27 +494,8 @@ export default function DashboardPage() {
                 </Link>
                 .
               </p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {projects.map((p) => (
-                  <li key={p.id} className="px-5 py-3.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-gray-900">{p.title}</p>
-                        <p className="mt-0.5 text-xs text-gray-400">
-                          {p.direct_report_name ?? "Your initiative"}
-                          {p.due_date && ` · Due ${formatDate(p.due_date + "T00:00:00")}`}
-                        </p>
-                      </div>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
-                        {STATUS_LABELS[p.status]}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+            }
+          />
         </div>
       )}
 
@@ -497,5 +550,116 @@ export default function DashboardPage() {
 
       <QuickAddModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} directReports={team} onCreated={loadDashboard} />
     </main>
+  );
+}
+
+// Exception-first card (Session 26) — attention rows first (worst first),
+// healthy rows collapsed into a one-line count that expands on demand. Every
+// row clicks through to the owning page; rows carry status dot, progress %,
+// trend arrow (from the check-ins layer), and reason chips explaining WHY
+// something is in the attention section.
+function TriageCard({
+  title,
+  href,
+  linkLabel,
+  total,
+  attention,
+  healthy,
+  emptyState,
+}: {
+  title: string;
+  href: string;
+  linkLabel: string;
+  total: number;
+  attention: TriagedItem[];
+  healthy: TriagedItem[];
+  emptyState: React.ReactNode;
+}) {
+  const [showHealthy, setShowHealthy] = useState(false);
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white">
+      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+          {title}
+          {total > 0 && ` (${total})`}
+        </h2>
+        <Link href={href} className="text-xs text-gray-400 hover:text-gray-600">
+          {linkLabel} →
+        </Link>
+      </div>
+      {total === 0 ? (
+        emptyState
+      ) : (
+        <div>
+          {attention.length === 0 ? (
+            <p className="px-5 pb-1 pt-4 text-sm text-gray-500">Nothing needs your attention. 🎯</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {attention.map((item) => (
+                <li key={item.id}>
+                  <Link href={href} className="block px-5 py-3 hover:bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${DOT_STYLES[item.status]}`} />
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{item.title}</p>
+                      {item.progress != null && (
+                        <span className="shrink-0 text-xs font-medium text-gray-600">{item.progress}%</span>
+                      )}
+                      <TrendArrow trend={item.trend} />
+                    </div>
+                    {item.progress != null && (
+                      <div className="ml-4 mt-1.5 h-1 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className={`h-full rounded-full ${item.status === "at_risk" ? "bg-amber-500" : "bg-green-500"}`}
+                          style={{ width: `${item.progress}%` }}
+                        />
+                      </div>
+                    )}
+                    <div className="ml-4 mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {item.subtitle && <span className="text-[11px] text-gray-400">{item.subtitle}</span>}
+                      {item.reasons.map((r) => (
+                        <span
+                          key={r.label}
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            r.severe ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {r.label}
+                        </span>
+                      ))}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          {healthy.length > 0 && (
+            <div className="border-t border-gray-100 px-5 py-3">
+              <button
+                onClick={() => setShowHealthy((s) => !s)}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                {showHealthy ? "Hide" : "Show"} {healthy.length} on track {showHealthy ? "▴" : "▾"}
+              </button>
+              {showHealthy && (
+                <ul className="mt-2 space-y-1.5">
+                  {healthy.map((item) => (
+                    <li key={item.id}>
+                      <Link href={href} className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-gray-50">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT_STYLES[item.status]}`} />
+                        <span className="min-w-0 flex-1 truncate text-xs text-gray-600">{item.title}</span>
+                        {item.progress != null && (
+                          <span className="shrink-0 text-[11px] text-gray-400">{item.progress}%</span>
+                        )}
+                        <TrendArrow trend={item.trend} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

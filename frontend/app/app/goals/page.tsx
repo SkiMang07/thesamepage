@@ -11,17 +11,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import CheckInPanel from "@/components/CheckInPanel";
 import {
+  CheckIn,
   DirectReport,
   Goal,
   GoalLevel,
   GoalStatus,
   OrgUnit,
+  Project,
   createGoal,
+  createGoalCheckIn,
   deleteGoal,
   getDirectReports,
+  getGoalCheckIns,
   getGoals,
   getOrgUnits,
+  getProjects,
   updateGoal,
   updateGoalStatus,
 } from "@/lib/api";
@@ -95,17 +101,21 @@ export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  // Session 26: fetched so each goal card can show the initiatives serving
+  // it ("goals = what, projects = how" made visible).
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getGoals(), getDirectReports(), getOrgUnits()])
-      .then(([g, r, ou]) => {
+    Promise.all([getGoals(), getDirectReports(), getOrgUnits(), getProjects()])
+      .then(([g, r, ou, p]) => {
         setGoals(g);
         setReports(r);
         setOrgUnits(ou);
+        setProjects(p);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -132,6 +142,24 @@ export default function GoalsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update status");
     }
+  }
+
+  // Session 26: a logged check-in write-throughs status server-side; mirror
+  // that in list state, along with the derived progress/trend/freshness
+  // fields, so the card updates without a refetch.
+  function applyCheckIn(goalId: string, ci: CheckIn) {
+    setGoals((gs) =>
+      gs.map((g) => {
+        if (g.id !== goalId) return g;
+        const next = { ...g, status: ci.status, last_check_in_at: ci.created_at, last_check_in_note: ci.note };
+        if (ci.progress != null) {
+          const prev = g.progress;
+          next.progress = ci.progress;
+          next.trend = prev == null ? g.trend : ci.progress > prev ? "up" : ci.progress < prev ? "down" : "flat";
+        }
+        return next;
+      })
+    );
   }
 
   async function removeGoal(goalId: string) {
@@ -168,9 +196,11 @@ export default function GoalsPage() {
     onStartEdit: (id: string) => setEditingGoalId(id),
     onCancelEdit: () => setEditingGoalId(null),
     onSaveEdit: saveEdit,
+    onCheckedIn: applyCheckIn,
     reports,
     orgUnits,
     allGoals: goals,
+    projects,
   };
 
   return (
@@ -264,9 +294,11 @@ function GoalList({
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
+  onCheckedIn,
   reports,
   orgUnits,
   allGoals,
+  projects,
 }: {
   goals: Goal[];
   onSetStatus: (id: string, status: GoalStatus) => void;
@@ -275,9 +307,11 @@ function GoalList({
   onStartEdit: (id: string) => void;
   onCancelEdit: () => void;
   onSaveEdit: (id: string, input: GoalFormValues) => Promise<void>;
+  onCheckedIn: (goalId: string, ci: CheckIn) => void;
   reports: DirectReport[];
   orgUnits: OrgUnit[];
   allGoals: Goal[];
+  projects: Project[];
 }) {
   return (
     <ul className="mt-3 space-y-2">
@@ -317,6 +351,21 @@ function GoalList({
                   </p>
                 )}
                 {g.due_date && <p className="mt-1 text-xs text-gray-400">Due {formatDate(g.due_date)}</p>}
+                {/* Session 26: initiatives serving this goal — "goals = what,
+                    projects = how" made visible on the goal itself. */}
+                {(() => {
+                  const serving = projects.filter((p) => p.goal_id === g.id);
+                  if (serving.length === 0) return null;
+                  return (
+                    <p className="mt-1 text-xs text-gray-400">
+                      <Link href="/app/projects" className="hover:text-gray-600">
+                        {serving.length} initiative{serving.length === 1 ? "" : "s"}
+                      </Link>
+                      {": "}
+                      {serving.map((p) => p.title).join(", ")}
+                    </p>
+                  );
+                })()}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <select
@@ -346,6 +395,15 @@ function GoalList({
                 </button>
               </div>
             </div>
+            <CheckInPanel
+              status={g.status}
+              progress={g.progress}
+              trend={g.trend}
+              lastCheckInAt={g.last_check_in_at}
+              fetchHistory={() => getGoalCheckIns(g.id)}
+              submitCheckIn={(body) => createGoalCheckIn(g.id, body)}
+              onCheckedIn={(ci) => onCheckedIn(g.id, ci)}
+            />
           </li>
         )
       )}

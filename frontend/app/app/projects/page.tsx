@@ -10,15 +10,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import CheckInPanel from "@/components/CheckInPanel";
 import {
+  CheckIn,
   DirectReport,
   Goal,
   Project,
   ProjectStatus,
   createProject,
+  createProjectCheckIn,
   deleteProject,
   getDirectReports,
   getGoals,
+  getProjectCheckIns,
   getProjects,
   updateProject,
   updateProjectStatus,
@@ -115,6 +119,23 @@ export default function ProjectsPage() {
     }
   }
 
+  // Session 26: mirror a logged check-in's server-side write-through in list
+  // state (status + derived progress/trend/freshness) — same as Goals.
+  function applyCheckIn(projectId: string, ci: CheckIn) {
+    setProjects((ps) =>
+      ps.map((p) => {
+        if (p.id !== projectId) return p;
+        const next = { ...p, status: ci.status, last_check_in_at: ci.created_at, last_check_in_note: ci.note };
+        if (ci.progress != null) {
+          const prev = p.progress;
+          next.progress = ci.progress;
+          next.trend = prev == null ? p.trend : ci.progress > prev ? "up" : ci.progress < prev ? "down" : "flat";
+        }
+        return next;
+      })
+    );
+  }
+
   async function removeProject(projectId: string) {
     try {
       await deleteProject(projectId);
@@ -148,6 +169,7 @@ export default function ProjectsPage() {
     onStartEdit: (id: string) => setEditingProjectId(id),
     onCancelEdit: () => setEditingProjectId(null),
     onSaveEdit: saveEdit,
+    onCheckedIn: applyCheckIn,
     reports,
     goals,
   };
@@ -215,6 +237,7 @@ function ProjectList({
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
+  onCheckedIn,
   reports,
   goals,
 }: {
@@ -225,6 +248,7 @@ function ProjectList({
   onStartEdit: (id: string) => void;
   onCancelEdit: () => void;
   onSaveEdit: (id: string, input: ProjectFormValues) => Promise<void>;
+  onCheckedIn: (projectId: string, ci: CheckIn) => void;
   reports: DirectReport[];
   goals: Goal[];
 }) {
@@ -282,6 +306,15 @@ function ProjectList({
                 </button>
               </div>
             </div>
+            <CheckInPanel
+              status={p.status}
+              progress={p.progress}
+              trend={p.trend}
+              lastCheckInAt={p.last_check_in_at}
+              fetchHistory={() => getProjectCheckIns(p.id)}
+              submitCheckIn={(body) => createProjectCheckIn(p.id, body)}
+              onCheckedIn={(ci) => onCheckedIn(p.id, ci)}
+            />
           </li>
         )
       )}

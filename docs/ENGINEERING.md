@@ -120,7 +120,7 @@ misleading, don't assume org-scoping from the policy name alone. Like
 
 ---
 
-## Database schema (30 tables — aligned with Miro board)
+## Database schema (31 tables — aligned with Miro board)
 
 Full schema with indexes and RLS policies: `database/schema.sql`.
 
@@ -140,6 +140,9 @@ goals                -- activated Session 10; parent_goal_id self-ref; level: co
                         org_unit_id (Session 11) names which specific team/department a team/dept goal is for
 projects             -- activated Session 13; goal_id (optional, on delete set null) + direct_report_id (optional,
                         on delete cascade). No level/org_unit_id of its own — "goals=what, projects=how"
+check_ins            -- new Session 26; the temporal layer for goals AND projects (one shared table, exactly one
+                        parent enforced via num_nonnulls check): status + optional manual progress % + note per row.
+                        Backend write-throughs status to the parent; progress/trend/staleness derived from here
 capacity_profiles    -- activated Session 14; per-direct-report override of capacity_settings' org defaults
 time_off_entries     -- activated Session 14; PTO/sick/holiday/other per direct report, subtracted per-period
 team_messages        -- new Session 21; free-text update log per direct report, manager-scoped. STORE-ONLY
@@ -680,6 +683,39 @@ the first manager's row affected zero rows and did not mutate it.
 
 ---
 
+## Check-ins (Session 26, 2026-08-11)
+
+The progress layer for goals and projects (initiatives), built after Andrew's brainstorm about
+Mission Control's goal/initiative cards feeling inert. Three primitives were missing — a computable
+progress signal, a freshness/trend signal, and visible goal↔initiative linkage — and `check_ins`
+supplies the first two (the third already existed via `projects.goal_id`, Session 13, and just
+needed surfacing).
+
+- **One shared table** for both parents (`goal_id` XOR `project_id`, enforced with a
+  `num_nonnulls(...) = 1` check constraint) — both share the status enum and check-in shape, and
+  the COO-agent temporal layer (data gap #2 in `docs/COO_AGENT_QUESTION_SET.md`) wants one place
+  to diff history. Owner-scoped RLS (`owner_id = auth.uid()`), same actor as goals/projects rows.
+- **Write-through:** `create_check_in()` (routes/check_ins.py — shared helpers, not a router)
+  inserts the row then updates the parent's `status` column. Every pre-existing status-reading
+  surface (team page KPI/ring, org-unit rollup SQL functions, DR detail sections, dashboard stat
+  ribbon) keeps working with zero changes — the migration is purely additive.
+- **Derived, not stored:** `progress` = latest non-null % across the parent's check-ins (a
+  note-only check-in never wipes the number), `trend` = direction between the latest two non-null
+  %s, `last_check_in_at`/`last_check_in_note` = newest row. Attached by `enrich_with_check_ins()`
+  on every goals/projects list call — one extra query per list, grouped in Python, fine at this
+  scale.
+- **Progress is manual** (0-100, asserted per check-in). Structured key results were considered
+  and deferred; AI-proposed status/progress from `success_metrics` + notes is deferred to the
+  agent layer.
+- Frontend constants: `STALE_CHECK_IN_DAYS = 14` (CheckInPanel.tsx — deliberately shorter than
+  the 21-day 1:1 cadence), `DUE_SOON_DAYS = 14` (dashboard triage).
+
+`database/migrations/2026-08-11_check_ins.sql` must run against live Supabase before deploying —
+the Goals/Projects list endpoints now query `check_ins` and will 500 until it runs. No dependency
+on any other migration beyond the base goals/projects tables.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -750,7 +786,11 @@ backend/
     one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet), POST /wrapup (notes → draft log)
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10) + /rollup (Session 15)
+                          + GET/POST /{id}/check-ins, list enriched with progress/trend/freshness (Session 26)
     projects.py          GET/POST/PUT/PATCH/DELETE /api/projects — goal_id + direct_report_id, no level (Session 13) + /rollup (Session 15)
+                          + GET/POST /{id}/check-ins, list enriched with progress/trend/freshness (Session 26)
+    check_ins.py         shared helpers, NOT a router (Session 26) — create_check_in (ownership 404 + status
+                          write-through to the parent), list_check_ins, enrich_with_check_ins
     org_units.py         GET/POST/PUT/DELETE /api/org-units — team/department tree (Session 11) + leader_user_id, /led, /members (Session 15)
     capacity.py          /api/capacity — settings, work-units, profiles, time-off, /overview, /rollup (Session 14; /rollup gated by led scope as of Session 15)
     settings.py         /api/settings — profile, role-levels, expectations
@@ -764,7 +804,7 @@ backend/
 frontend/
   app/
     (marketing)/        Public SSG pages (home, pricing, blog) — need to be indexable
-    app/dashboard/      Mission Control — landing page (Session 18; grid layout Session 19): Individual Performance, Goals, Key Initiatives, Capacity strip, AI insight banner, Quick Add
+    app/dashboard/      Mission Control — landing page (Session 18; grid layout Session 19): Individual Performance, Goals, Key Initiatives, Capacity strip, AI insight banner, Quick Add. Goals + Key Initiatives cards exception-first via TriageCard (Session 26)
     app/login/          Login page
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
     app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)
@@ -779,6 +819,9 @@ frontend/
     supabase.ts         createClientComponentClient() — browser-side auth client
   components/
     QuickAddModal.tsx   Mission Control's quick-add — type picker + minimal create form (Session 19)
+    CheckInPanel.tsx    shared check-in strip for goal/project cards (Session 26) — progress bar/%, trend arrow,
+                        staleness label, inline check-in form, lazy history; exports isStale/TrendArrow/etc.
+                        reused by dashboard's TriageCard
 ```
 
 ---
