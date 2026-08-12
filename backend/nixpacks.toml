@@ -1,0 +1,18 @@
+# Railway build config (Session 28 — Context Engine Session II).
+#
+# The upload pipeline (routes/documents.py) shells out to `libreoffice
+# --headless --convert-to pdf` to turn PPTX uploads into PDF before handing
+# them to Claude's native PDF/vision support (build-plan resolution #1 —
+# see docs/CONTEXT_ENGINE_BUILD_PLAN.md). Nixpacks' Python provider has no
+# reason to install LibreOffice on its own, so it must be added explicitly
+# here or every PPTX upload 502s in production with "libreoffice not
+# installed" (see _convert_pptx_to_pdf's FileNotFoundError handling).
+#
+# Known cost: the `libreoffice` nixpkg is large (several hundred MB) and
+# will noticeably lengthen Railway build time and image size versus every
+# other route in this app. Accepted for now since Session II's scope is
+# "ship the pipeline," not "optimize the build" — revisit if build time
+# becomes painful (e.g. a slimmer nixpkg variant, or moving PPTX conversion
+# to a separate worker/service so the main API image stays lean).
+[phases.setup]
+nixPkgs = ["...", "libreoffice"]

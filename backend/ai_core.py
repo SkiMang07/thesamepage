@@ -78,3 +78,76 @@ def generate_text(prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: 
     handlers for the common case (no need to touch provider/response internals)."""
     response = _call_anthropic(prompt, model=model, max_tokens=max_tokens)
     return extract_text("anthropic", response)
+
+
+def _call_anthropic_with_document(
+    prompt: str,
+    document_base64: str,
+    media_type: str,
+    model: str = AI_DEFAULT_MODEL_HEAVY,
+    max_tokens: int = 1500,
+) -> dict:
+    """Like _call_anthropic, but the user turn carries a base64-encoded
+    document (PDF) instead of the fixed "Proceed." text, using Claude's
+    native document/vision content block. No OpenAI fallback on 5xx here —
+    _call_openai's chat-completions shape has no equivalent native PDF
+    input, and building a second extraction path would defeat the point of
+    the Claude-native decision (see docs/CONTEXT_ENGINE_BUILD_PLAN.md,
+    resolution #1). A 5xx just fails the call; the caller marks the
+    document row status='failed' and the user re-uploads."""
+    try:
+        resp = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": settings.ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": model,
+                "max_tokens": max_tokens,
+                "system": prompt,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": document_base64,
+                                },
+                            },
+                            {"type": "text", "text": "Proceed."},
+                        ],
+                    }
+                ],
+            },
+            # Documents (multi-page decks) take meaningfully longer to
+            # process than a text-only prompt — the 60s budget on
+            # _call_anthropic is sized for the latter.
+            timeout=120.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"AI document call failed: {e}")
+
+
+def generate_text_from_document(
+    prompt: str,
+    document_base64: str,
+    media_type: str = "application/pdf",
+    model: str = AI_DEFAULT_MODEL_HEAVY,
+    max_tokens: int = 4000,
+) -> str:
+    """Like generate_text(), but the user turn carries a base64 document
+    (PDF) instead of "Proceed." — the Context Engine's Librarian extraction
+    call (docs/CONTEXT_ENGINE_BUILD_PLAN.md Session II) uses this to read
+    decks/PDFs via Claude's native PDF/vision support instead of a separate
+    extraction library, per build-plan resolution #1."""
+    response = _call_anthropic_with_document(
+        prompt, document_base64, media_type, model=model, max_tokens=max_tokens
+    )
+    return extract_text("anthropic", response)

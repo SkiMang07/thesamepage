@@ -112,6 +112,17 @@ def get_authenticated_client(authorization: str = Header(None)) -> tuple[str, Cl
 
     client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
     client.postgrest.auth(token)
+    # Propagate the user's JWT to Storage too (added Session 28 — the Context
+    # Engine's upload endpoint is the first route to touch `client.storage`).
+    # `postgrest.auth(token)` only sets the Authorization header on the
+    # postgrest client's own httpx session — it does NOT touch
+    # `client.options.headers`, which is what `client.storage` (lazily built
+    # on first access) uses to construct its own httpx session. Without this
+    # line, Storage requests would authenticate as the anon key, `auth.uid()`
+    # would be null inside storage.objects' RLS policies, and every upload
+    # would be rejected — confirmed by reading supabase-py 2.9.1's
+    # SyncClient.storage property and BasePostgrestClient.auth() source.
+    client.options.headers["Authorization"] = f"Bearer {token}"
     return user_id, client
 
 

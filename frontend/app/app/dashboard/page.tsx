@@ -189,6 +189,10 @@ const NAV_LINKS = [
   { href: "/app/projects", label: "Projects" },
   { href: "/app/capacity", label: "Capacity" },
   { href: "/app/org", label: "Org" },
+  // Context Engine (Session 28/III) — "the Space" where a manager teaches
+  // the Librarian about their team. Nav label kept short like its peers;
+  // the page itself uses the framework doc's "the Space" name in its <h1>.
+  { href: "/app/context", label: "Context" },
   { href: "/app/settings", label: "Settings" },
 ];
 

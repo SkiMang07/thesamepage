@@ -120,7 +120,7 @@ misleading, don't assume org-scoping from the policy name alone. Like
 
 ---
 
-## Database schema (31 tables — aligned with Miro board)
+## Database schema (35 tables — aligned with Miro board)
 
 Full schema with indexes and RLS policies: `database/schema.sql`.
 
@@ -177,6 +177,17 @@ capacity_settings           -- activated Session 14; one row per org — default
                                 default_target_utilization_pct (never 100 — see Capacity model section below)
 work_unit_configs           -- activated Session 14; per role_level, optional — unit_name + hours_per_unit,
                                 the display translation layer (tickets/points/campaigns) on top of hours
+```
+
+**Context Engine tables (Session 27, schema only — see that section above):**
+```
+document_series      -- recurring-doc grouping (monthly town halls, quarterly updates) + cadence
+documents             -- one row per uploaded doc; Librarian-assigned category/freshness_class/
+                        effective_date/summary_card/novelty_score fill in as the pipeline (Session
+                        II) runs; confirmed_at null until Session III's confirm-card is accepted
+document_scopes      -- which org_unit(s) a doc applies to (a set); null org_unit_id = company-wide
+document_citations   -- usage ledger, one row per agent answer that cites a doc (Session V credit
+                        flow-back)
 ```
 
 **Performance / assessment tables:**
@@ -716,6 +727,307 @@ on any other migration beyond the base goals/projects tables.
 
 ---
 
+## Context Engine (Session 27, 2026-08-12)
+
+Schema + storage foundation for the Context Engine (the Space + the Librarian + the Brain) — see
+`docs/CONTEXT_ENGINE.md` for the full framework and `docs/CONTEXT_ENGINE_BUILD_PLAN.md` for the
+6-session build plan this is Session I of. No backend routes or frontend UI yet — those are
+Sessions II–VI.
+
+- **Four new tables** — `document_series`, `documents`, `document_scopes`, `document_citations` —
+  plus a private Supabase Storage bucket (`context-engine-docs`) for the raw uploaded files.
+- **Org-scoped (`org_id = current_org_id()`), not owner_id-scoped** — a deliberate departure from
+  goals/projects/direct_reports. Docs are shared org context (strategy, values, customers,
+  pricing), not one manager's private data, so any manager in the org can read/write them — same
+  trust level as `org_units`/`role_levels`/`capacity_settings` today.
+- **Scope is application-layer, not an RLS boundary.** `document_scopes` records which org_unit(s)
+  a doc applies to (`org_unit_id = null` means company-wide — `org_units` has no "company" row,
+  see `org_units.py`). This is a deliberate simplification of the build plan's resolution #5
+  ("scope + RLS"): actual per-org-unit row-level RLS gating raw document text would be new ground
+  for this codebase — every existing cross-manager read (capacity, goals, projects, people
+  rollups) solves that problem by returning aggregates only, via `led_org_unit_ids()`-gated
+  SECURITY DEFINER functions, never raw rows. Scope cascade (company → department → team) is a
+  Session IV retrieval-relevance concern, not a security boundary, same "no second manager yet to
+  test a real permission system against" caveat noted on `org_unit_capacity_rollup`.
+- **`documents.status`** (`processing` → `pending_review` → `confirmed`, or `failed`) tracks the
+  Librarian pipeline; `confirmed_at` stays null until Session III's confirm-card is accepted — only
+  confirmed docs are meant to be read by retrieval (Session IV) or counted in the Brain (Session
+  V). `category` is a single field for v1 (build-plan resolution #3: per-document novelty scoring,
+  not per-category-question) — multi-category cross-filing for stream items is explicitly not
+  built this pass.
+- **`document_scopes` uniqueness:** Postgres treats every `NULL` as distinct, so a plain
+  `UNIQUE(document_id, org_unit_id)` would let one document collect unlimited duplicate
+  company-wide (null) rows. Two partial unique indexes cover both cases —
+  `document_scopes_unique_org_unit` (non-null) and `document_scopes_unique_company_wide` (null).
+- **Storage path convention** (Session II's upload endpoint must follow this):
+  `{org_id}/{document_id}/{original_filename}` — `storage.objects` policies check
+  `(storage.foldername(name))[1] = current_org_id()::text`, same org-isolation pattern as every
+  table policy in this file.
+
+**Verification:** local Postgres 16, extended the usual Supabase `auth` stub with a minimal
+`storage` schema (`buckets`/`objects`/`foldername()` — real Supabase's is richer; this covers only
+what the migration touches). Ran the *entire* `schema.sql` end to end with zero errors, then
+separately verified the standalone migration applies cleanly on top of the **pre-session (HEAD)**
+schema too. Functional tests: two-org RLS isolation across all four tables and `storage.objects`
+(Org B sees 0 of Org A's rows), a forged cross-org insert rejected by RLS, both partial-unique-index
+duplicate-scope cases rejected, all four check constraints (`file_type`, `status`, `category`,
+`novelty_score` range) rejected bad values, and cascade-delete confirmed (deleting a `documents` row
+removes its `document_scopes` rows). Not exercised: the real Supabase `storage` schema (the local
+stub is a simplification) and real Auth integration — same caveat every session's sandbox carries.
+
+`database/migrations/2026-08-12_context_engine.sql` must run against live Supabase before Session
+II (extraction pipeline) can write to it. Depends on `org_units` (Session 11) already being live —
+confirm before running.
+
+### Session II — extraction + Librarian pipeline (Session 28, 2026-08-12)
+
+Backend only, no schema changes, no frontend UI — see `docs/CONTEXT_ENGINE_BUILD_PLAN.md`'s
+"Session II" section for the spec this implements.
+
+- **`backend/routes/documents.py`** (new) — `POST /api/documents/upload` runs the full pipeline
+  synchronously: PPTX→PDF (headless LibreOffice) → raw file to the `context-engine-docs` bucket at
+  Session I's path convention → `documents` row (`status='processing'`) → one structured Librarian
+  call (extraction + category/freshness_class/effective_date/summary_card/novelty_score/series,
+  build-plan resolution #3 — per-document, not per-category-question) → row updated to
+  `status='pending_review'`. `GET /api/documents` is a minimal list endpoint for manual verification,
+  not the Session III review queue. `document_scopes` is intentionally not written here — scope is a
+  user-confirmed field for Session III's confirm-card, not an AI-only proposal; a doc with no
+  `document_scopes` row is invisible to Session IV's retrieval cascade until a human sets one.
+- **`ai_core.py`** gained `generate_text_from_document()` (+ `_call_anthropic_with_document()`) —
+  `generate_text()` only ever sent a fixed "Proceed." text message with no way to attach a file. This
+  new function sends a base64 PDF as a native Claude `document` content block, which build-plan
+  resolution #1 (Claude-native extraction, no separate library) actually requires. No OpenAI fallback
+  on 5xx for this path — `_call_openai`'s chat-completions shape has no equivalent native PDF input.
+- **`utils.py` bug fix:** `get_authenticated_client()` propagated the user's JWT to `client.postgrest`
+  but never to `client.options.headers`, which `client.storage` (lazily built on first access) uses
+  for its own session. Every route before this one only ever touched `.table()`/`.rpc()`, so the gap
+  never surfaced. Without the fix, Storage requests would authenticate as the anon key and
+  `storage.objects`' RLS (`auth.uid()`-based) would silently reject every upload. Now also sets
+  `client.options.headers["Authorization"]`.
+- **`backend/nixpacks.toml`** (new) — Railway's Nixpacks build needs the `libreoffice` apt/nix package
+  explicitly added, or the PPTX conversion path 502s in production. Flagged tradeoff: this nixpkg is
+  large and will lengthen build time/image size noticeably; accepted for this session's scope.
+- `requirements.txt` — added `python-multipart` (required for FastAPI file uploads; was missing).
+
+**Verification:** fresh venv, `py_compile` clean, `import main` with dummy env vars confirmed all
+routes registered (87 total) including both new `documents` routes. Mocked-unit-tested in isolation
+(no live Supabase/Anthropic calls) — prompt builders, JSON response parsing (clean/fenced/garbage),
+novelty clamping, file-type inference, series resolution against a fake table client, and the
+outgoing request shape of `generate_text_from_document()` against a monkeypatched `httpx.post`.
+Separately confirmed the `utils.py` storage-auth fix against a real supabase-py client construction
+(not a live server) — `client.storage`'s session headers carry the user JWT after the fix, the anon
+key before it. **Not exercised:** an actual PPTX→PDF conversion (no `libreoffice` binary in the
+build sandbox), a real Storage upload, or a live Anthropic document call — all require the real
+Railway/Supabase/Anthropic environment. Confirm `libreoffice` is actually present on the Railway
+service before the first real PPTX upload — this session could not verify that live.
+
+### Session III — confirm-card UX (Session 28, 2026-08-12, same session as Session II)
+
+Frontend + one schema migration — see `docs/CONTEXT_ENGINE_BUILD_PLAN.md`'s "Session III" section.
+
+- **New migration `database/migrations/2026-08-12_context_engine_confirm.sql`** — adds
+  `documents.confirmed_as_is` (boolean) and `documents.correction_log` (jsonb). **Not yet run against
+  live Supabase** (unlike Session I's migration, which Andrew confirmed live) — must run before the
+  confirm endpoint works for real. Merged into `database/schema.sql`.
+- **`backend/routes/documents.py`** gained `PUT /{document_id}/confirm` and `DELETE /{document_id}`.
+  Confirm validates category/freshness_class, dedupes `org_unit_ids` (at most one `null` entry,
+  mirroring `document_scopes`' partial unique indexes), requires at least one scope (422 otherwise —
+  see Session II's note on scopeless docs being invisible to retrieval), rejects org units outside the
+  caller's org (422), diffs the submission against the Librarian's original proposal to set
+  `confirmed_as_is`/`correction_log`, and replaces `document_scopes` (delete-then-insert). Delete is
+  best-effort on Storage cleanup and works at any document status — not in the build plan's spec, added
+  as a practical escape hatch (flagged in SESSION_HISTORY.md as a judgment call).
+- **New page `frontend/app/app/context/page.tsx`** ("The Space") — upload form, a "Needs review" queue
+  of inline `ConfirmCard`s (editable category/freshness/effective-date, a scope picker defaulting to
+  nothing selected — not "Company-wide" — per the framework doc's "scope is user-confirmed" rule), a
+  `failed`-status discard section, and a small "Recently confirmed" feedback list (not a browse view).
+  Added to Mission Control's `NAV_LINKS` as "Context".
+- **`frontend/lib/api.ts`** — `Document`/`DocumentScope`/`DocumentConfirmIn` types + CRUD calls, and a
+  new `authedFormFetch` helper (the app's first multipart/form-data call — the existing `authedFetch`
+  always forces `Content-Type: application/json`, which would corrupt a file upload body).
+
+**Verification:** Backend — same fresh-venv `py_compile`/`import main` pass as Session II, now 89
+routes total. New mocked unit tests for `_dedupe_scope_ids`, the validators, and `confirm_document`
+end-to-end (confirm-as-is, confirm-with-correction, wrong-status 409, empty-scope 422,
+foreign-org-unit 422) against a hand-written fake Supabase client. Schema — local Postgres 16, a scoped
+stub of the pre-session `documents` table (not the full `schema.sql` — narrower than prior sessions'
+verification, flagged as such) confirmed the migration applies cleanly and idempotently, with the
+resulting columns checked via `\d documents`. Frontend — fresh `npm install`, `tsc --noEmit` clean,
+`next build` clean (`/app/context` compiles, 5/5 static pages). **Not exercised:** any of it against a
+real backend + Supabase + browser together, or a live PPTX/PDF/Anthropic call.
+
+### Session IV — retrieval + agent integration (Session 29, 2026-08-12)
+
+Backend only, no schema changes — see `docs/CONTEXT_ENGINE_BUILD_PLAN.md`'s "Session IV" section for
+the spec this implements.
+
+- **New `backend/context_engine.py`** — shared plumbing (not a route). `get_relevant_context(supabase,
+  org_id, org_unit_id, max_docs=4)` is the two-tier retrieval helper: `_scope_cascade()` walks
+  `org_units.parent_unit_id` up from the target unit (team → department) and appends the implicit
+  company-wide tier (`org_unit_id is null`), most-specific first — this is the same tree
+  `led_org_unit_ids()` walks down from a leader; retrieval walks it up from a leaf instead, since scope
+  application ("does this doc apply here?") is the inverse question of scope leadership ("what can this
+  person see?"). Candidates come from `document_scopes` joined against that cascade,
+  `status='confirmed'` only (`pending_review`/`processing`/`failed` excluded, per the build plan and
+  Session III's note that a scopeless/unconfirmed doc must stay invisible to retrieval). Ranking is
+  (scope specificity, `novelty_score` desc, `effective_date` recency) — a documented placeholder, since
+  the build plan assigns real decay-weighted ranking to Session VI, not this one. Only the top
+  `max_docs` (default 4, a cost/prompt-size judgment call) get a second query for full `extracted_text`
+  — tier one never touches that column. `format_context_block()` renders the result as an embeddable
+  prompt section (`""` when nothing was retrieved). `record_citations()` inserts one `document_citations`
+  row per document actually embedded — the only new write path this session.
+- **`routes/one_on_ones.py`'s `POST /prep`** is the pilot call site (per the build plan's suggestion;
+  wrapup/assessments/dashboard-insight `generate_text()` calls are not wired this session). The route
+  gained an `authorization` param to resolve `org_id` via `ensure_org()`/`get_email_from_token()` (same
+  pattern `documents.py` already uses, since `direct_reports`/`users.org_id` can be null for older MVP
+  rows), fetches `org_unit_id` alongside the existing report select, and splices
+  `format_context_block()`'s output into `_build_prep_prompt()` as a new `context_engine_block` param
+  (positioned after role expectations, before the manager's raw notes). `record_citations()` fires after
+  a successful `generate_text()` call with the retrieved docs' ids and a `context` label naming the
+  report.
+- **No AI call inside retrieval** — ranking/selection is plain Python over already-fetched
+  summary/metadata rows, not a second Librarian-style `generate_text()` call. Keeps this session's
+  retrieval path free of new per-request AI cost; revisit only if the heuristic proves insufficient
+  against real usage.
+
+**Verification:** `py_compile` clean on the new module and the edited route; `import main` with dummy
+env vars confirmed all 89 routes still register. Hand-written fake-Supabase-client tests (same pattern
+Session 28's `confirm_document` tests used) covering the scope-cascade walk (including the
+no-`org_unit_id`-assigned fallback to company-wide-only), full-pipeline retrieval (excludes
+`pending_review` and other-orgs' docs, ranks most-specific-scope first, `max_docs` caps the count,
+tier-two `extracted_text` populated only on what's returned), `format_context_block()`'s content
+rendering and empty-input behavior, `record_citations()`'s insert shape and empty-list no-op, and a
+brand-new org with zero documents returning `[]` without error. Separately rendered
+`_build_prep_prompt()` with a real `format_context_block()` output spliced in and confirmed placement,
+content, and that an empty block leaves no stray section header. **Not exercised:** a live Supabase call
+end to end (real RLS behavior on `document_scopes`/`org_units`/`documents` under a real JWT), a real
+`generate_text()` call with the context block actually in the prompt, or any frontend surface — the
+Context Engine still has no UI for showing which docs informed an answer.
+
+### Session V — the Brain (Session 30, 2026-08-12)
+
+Backend (extends `context_engine.py` + one new route) + frontend, no schema changes — see
+`docs/CONTEXT_ENGINE_BUILD_PLAN.md`'s "Session V" section for the spec this implements.
+
+- **`context_engine.py` gained `_decay_multiplier(freshness_class, effective_date, today)`** — a
+  simple, linear, freshness-class-aware confidence curve (evergreen: 1.0 always; dated: full weight
+  through 120 days, floors at 0.5 by 540; stream_instance: full weight only through 30 days, floors at
+  0.35 by 180; missing/unrecognized freshness_class or an unparseable/missing effective_date falls back
+  to a flat 0.85). Written this session because the Brain's own spec requires "dim regions by
+  freshness-class-driven age curve" now — explicitly documented in the module docstring as a
+  per-session placeholder, since the build plan assigns the CANONICAL decay function (shared by both
+  this and Session IV's retrieval ranking) to Session VI.
+- **`compute_category_coverage(supabase, org_id, today)`** — the Brain's data source. Per category (all
+  five, always, in fixed order): `fill_score` = MAX decayed novelty score among that category's
+  confirmed docs — not an average, matching the framework doc's "ten junk uploads move nothing; one
+  current strategy doc lights a region" example directly; `doc_count`; `citations_this_week` (rolling
+  7-day `document_citations` rollup, one query across all the org's confirmed docs then grouped in
+  Python); a static hand-written `gap_question` per category (Librarian first-person voice, no AI call —
+  matches the build plan's "static... stand-in for the deferred per-category-question scoring"); and up
+  to 20 confirmed docs (a judgment call, not discussed with Andrew) for the click-through, sorted by
+  decayed score descending.
+- **New `GET /api/documents/coverage`** in `routes/documents.py` — thin route: resolves `org_id` via
+  `ensure_org()` (same pattern `POST /upload` already uses) and calls `compute_category_coverage()`.
+  Org-wide, not org_unit-scoped like Session IV's retrieval — the Brain is framed as one coverage map
+  per org (per "the Space"), not a per-team lens.
+- **`frontend/app/app/context/page.tsx`** gained a "The Brain" section above the upload form: a
+  5-category grid of `BrainCategoryCard`s (an inline-SVG radial progress ring per category — no new
+  charting dependency; opacity of the filled arc scales with `fill_score` so an empty region reads as
+  barely-there and a full one as vivid, directly implementing "regions fill/brighten as real coverage
+  grows"), each clickable to expand a `BrainDetailPanel` below the grid showing that category's confirmed
+  docs (title, freshness, effective date, summary card, per-doc citation count) and the always-present
+  `gap_question` rendered in the same "The Librarian: ..." italic voice the confirm-card already uses.
+  Fetched via a separate `getContextCoverage()` call (not folded into the page's main
+  `Promise.all([getDocuments(), getOrgUnits()])`) so a Brain failure can't block the upload flow — same
+  fail-quiet posture as the dashboard's AI insight banner. Refreshes after a confirm or delete, since
+  either changes a category's fill/doc-count. Page container widened `max-w-3xl` → `max-w-4xl` to fit
+  the 5-column grid.
+- **`frontend/lib/api.ts`** gained `CategoryCoverage`/`CoverageDocument` types and `getContextCoverage()`.
+- **No new visualization dependency** — the build plan suggested reusing "the existing dashboard's
+  orbital/radial mission control motif," but `app/dashboard/page.tsx` turned out to be a card grid with
+  no actual radial component to reuse. Interpreted as "radial in spirit, visually consistent" and built
+  a plain SVG ring instead — a documented judgment call, explicitly flagged (per the build plan's own
+  "treat as a placeholder, not a lock-in") as open to a real design pass later.
+
+**Verification:** Backend — `py_compile` clean on `context_engine.py` and `routes/documents.py`; `import
+main` with dummy env vars confirmed all 90 routes now register, including `GET /api/documents/coverage`.
+Hand-written fake-Supabase-client tests (same pattern prior Context Engine sessions used) covering the
+decay curve's shape across all three freshness classes plus the unknown-date fallback;
+`compute_category_coverage()` always returns all five categories in fixed order, including for a
+brand-new org with zero documents (`fill_score=0` everywhere, no error); fill is confirmed to be MAX not
+average via a specific case (a high-raw-novelty-but-ancient doc loses to a lower-novelty-but-current one
+once both are decayed); `pending_review` docs are excluded entirely; an evergreen doc with no
+`effective_date` still gets full weight; `citations_this_week` counts only rolling-7-day citations,
+correctly rolled up per category; every category (even an empty one) carries a `gap_question`;
+click-through docs sort by decayed score descending. Frontend — fresh `npm install`, `tsc --noEmit`
+clean, `next build` clean (18/18 static pages, `/app/context` now 6.06 kB). **Not exercised:** a live
+Supabase call end to end, a real `document_citations` history with actual production citations behind
+it (Session IV only just started writing rows), or the Brain rendered in a real browser against a real
+backend.
+
+### Session VI — staleness + precedence surfacing (Session 31, 2026-08-12)
+
+Backend (extends `context_engine.py` + updates the coverage route) + frontend, no schema changes — see
+`docs/CONTEXT_ENGINE_BUILD_PLAN.md`'s "Session VI" section for the spec this implements. Final session
+of the documented 6-session Context Engine build plan.
+
+- **`_decay_multiplier()` promoted from Session V placeholder to canonical** — same math, no formula
+  changes, just the docstring updated to drop "per-session placeholder" language now that it's shared by
+  both consumers the build plan always intended: retrieval ranking and Brain fill.
+- **`get_relevant_context()`'s `_sort_key()` now decay-weighted** — gained a required `today: date`
+  parameter (threaded through from both call sites: `documents.py`'s coverage route already had `today`;
+  `one_on_ones.py`'s prep route gained `date.today()`) and ranks by `(scope specificity, -decayed_score,
+  has_date, date_rank)` instead of raw `novelty_score` — a stale-but-high-novelty doc can now lose to a
+  fresher-but-lower-novelty one at the same scope tier, closing the gap Session IV's own docstring flagged
+  as deferred.
+- **`_format_staleness_prompt(category_label, doc)` + `staleness_prompt` field on
+  `compute_category_coverage()`'s per-category output** — fires only when a category's fill-driving
+  ("load-bearing" — the doc whose decayed score produced `fill_score`) doc has decayed below
+  `_STALENESS_MULTIPLIER_THRESHOLD = 0.7`. Evergreen docs never trigger it (constant 1.0 multiplier);
+  empty categories and fresh docs likewise never trigger it. Static Librarian-voice string formatting, no
+  AI call — same restraint Session IV/V established for gap questions and citations.
+- **Conflict detection is new**: `_build_unit_ancestor_chains()`, `_scopes_overlap()`, `_more_specific()`,
+  `_format_conflict_message()`, and `find_scope_conflicts(supabase, org_id)`. Reuses the existing
+  `_scope_cascade()` ancestor-walk (built for retrieval in Session IV) rather than new tree logic:
+  precomputes each involved org_unit's ancestor-or-self id set, then two confirmed docs in the same
+  category conflict when their scopes overlap (either is company-wide, or one's unit is a
+  self-or-ancestor of the other's) AND their `effective_date`s differ. `_more_specific()` also flags
+  `specificity_disagrees_with_recency` — true when the more-specific doc is also the *older* one (the
+  framework doc's flagship "your team charter predates the pivot" tension case) — surfaced as a distinct
+  sentence in `_format_conflict_message()`. Conflicts are never auto-resolved, only surfaced.
+- **`GET /api/documents/coverage` response shape changed**: was a bare list of categories (Session V), now
+  `{"categories": [...], "conflicts": [...]}` — a breaking shape change to an endpoint added last session,
+  judged acceptable since nothing besides this session's own frontend edit consumes it yet.
+- **Frontend (`app/app/context/page.tsx`)**: `BrainCategoryCard` gained a small amber "Aging" pill next to
+  the citations pill when `coverage.staleness_prompt` is non-null; `BrainDetailPanel` renders the
+  staleness prompt as a second "The Librarian: ..." line (amber-toned, above the neutral gray
+  `gap_question` line, so an aging warning reads as higher-priority than the standing gap nudge); a new
+  `ConflictBanner` component renders each `CoverageConflict.message` in an amber-bordered banner above the
+  category grid, one per conflict, keyed by the pair of doc ids. `lib/api.ts` gained `CoverageConflict`
+  and `ContextCoverage` types and `getContextCoverage()` now returns the nested `{categories, conflicts}`
+  shape.
+- **No AI call added anywhere this session** — staleness prompts and conflict messages are both static
+  string formatting over already-computed data, consistent with every prior Context Engine session's
+  "no AI call in supporting plumbing" restraint.
+
+**Verification:** Backend — `py_compile` clean on `context_engine.py`, `routes/documents.py`,
+`routes/one_on_ones.py`; `import main` with dummy env vars confirmed all 90 routes still register
+(`GET /api/documents/coverage` present). Hand-written fake-Supabase-client tests: existing Session
+IV/V scripts patched for the new `today` parameter and re-run clean (no regressions); a new script
+covers three groups — decay-weighted retrieval ranking (fresher-lower-novelty beats stale-higher-novelty
+at the same scope tier), `staleness_prompt` firing only on an aging load-bearing doc (never
+evergreen/fresh/empty), and `find_scope_conflicts()` across four cases (overlapping team-vs-company-wide
+docs with differing dates flagged with correct specificity-vs-recency tension; unrelated departments not
+flagged; identical-date same-scope docs not flagged; single-doc categories produce no conflicts) plus a
+zero/one-document org not erroring. Frontend — `tsc --noEmit` clean, `next build` clean (18/18 static
+pages). **Not exercised:** a live Supabase call end to end, a real conflicting-document scenario created
+through the actual upload/confirm UI, or any of this rendered in a real browser against a real backend.
+This closes out the documented 6-session Context Engine build plan — retrieval, the Brain, and now
+staleness/conflict surfacing are all backend-plus-frontend complete, none of it yet run against production
+data.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).
@@ -778,12 +1090,23 @@ Things explicitly not yet built:
 backend/
   main.py         FastAPI app init, CORS, router registration, rate-limiter wiring (Session 20)
   config.py       Settings — reads .env, exposes AI model names + Supabase keys
-  utils.py        get_authenticated_client() (token cache now self-evicting, Session 20), ensure_org()/
-                  get_email_from_token() (Session 11), shared `limiter` (Session 20), shared helpers
-  ai_core.py      generate_text() — the only place Anthropic SDK is called
+  utils.py        get_authenticated_client() (token cache now self-evicting, Session 20; also
+                  propagates the user JWT to client.storage as of Session 28 — see Context Engine
+                  Session II above), ensure_org()/get_email_from_token() (Session 11), shared
+                  `limiter` (Session 20), shared helpers
+  ai_core.py      generate_text() — the only place Anthropic SDK is called; generate_text_from_document()
+                  (Session 28) sends a base64 PDF as a native Claude document content block
+  context_engine.py  Shared Context Engine plumbing, not a route. Session IV (Session 29):
+                  get_relevant_context()/format_context_block()/record_citations() — two-tier
+                  retrieval. Session V (Session 30): _decay_multiplier()/compute_category_coverage() —
+                  the Brain's scoring. Session VI (Session 31): _decay_multiplier() promoted to
+                  canonical + wired into retrieval ranking, staleness_prompt on coverage, and scope
+                  conflict detection (find_scope_conflicts()). See Context Engine Session IV/V/VI above.
+  nixpacks.toml   Railway build config (Session 28) — adds the `libreoffice` package for PPTX→PDF
   routes/
     direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview, /rollup — Session 15)
-    one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet), POST /wrapup (notes → draft log)
+    one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet — now pulls Context Engine
+                          docs via context_engine.py as of Session 29), POST /wrapup (notes → draft log)
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10) + /rollup (Session 15)
                           + GET/POST /{id}/check-ins, list enriched with progress/trend/freshness (Session 26)
@@ -800,6 +1123,16 @@ backend/
     team.py               /api/team — roster + active projects/priorities per report, message log (Session 21);
                           goals, meeting notes (+ meeting_date agenda surfacing, Session 23) (Session 22);
                           commitments (Session 23); callout (Session 24)
+    documents.py           /api/documents — POST /upload (Context Engine Session II, Session 28):
+                          PPTX/PDF/text upload → LibreOffice PPTX→PDF → Storage → Librarian extraction
+                          call → pending_review row. GET "" list for manual verification only.
+                          PUT /{id}/confirm, DELETE /{id} (Session III, same session): confirm-card
+                          write-back — sets category/freshness/effective_date + document_scopes +
+                          confirmed_as_is/correction_log; delete is best-effort at any status.
+                          GET /coverage (Session V, Session 30): the Brain's data — thin wrapper over
+                          context_engine.compute_category_coverage(). Session VI (Session 31): response
+                          shape changed to {"categories": [...], "conflicts": [...]} — conflicts from
+                          context_engine.find_scope_conflicts().
 
 frontend/
   app/
@@ -814,8 +1147,18 @@ frontend/
     app/team/            Team Mission Control — KPI strip, Initiatives/Goals/Commitments row, Critical
                           callouts + Meetings row, roster row at bottom (Session 21; 3-column rework
                           Session 22; layout rework Session 24)
+    app/context/         The Space (Context Engine Session III, Session 28) — upload form, inline
+                          confirm-card queue (ConfirmCard component in-file), failed-upload discard
+                          section, recently-confirmed feedback list. Added to Mission Control's NAV_LINKS.
+                          The Brain (Session V, Session 30): coverage grid above the upload form —
+                          BrainCategoryCard (inline-SVG radial ring) + BrainDetailPanel click-through,
+                          both in-file. Page widened max-w-3xl → max-w-4xl. Session VI (Session 31):
+                          BrainCategoryCard gained an amber "Aging" pill, BrainDetailPanel renders
+                          staleness_prompt, new in-file ConflictBanner renders scope conflicts above
+                          the grid.
   lib/
-    api.ts              All fetch() calls live here
+    api.ts              All fetch() calls live here. authedFormFetch (Session 28) is the multipart
+                        variant for file uploads — authedFetch always forces JSON Content-Type.
     supabase.ts         createClientComponentClient() — browser-side auth client
   components/
     QuickAddModal.tsx   Mission Control's quick-add — type picker + minimal create form (Session 19)

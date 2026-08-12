@@ -22,6 +22,26 @@ async function authedFetch(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
+// Session 28 (Context Engine upload) — the first multipart/form-data call
+// in the app. authedFetch always forces Content-Type: application/json,
+// which would corrupt a multipart body (the browser must set that header
+// itself, boundary included). Same auth handling, different body/headers.
+async function authedFormFetch(path: string, formData: FormData) {
+  const supabase = createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -987,3 +1007,153 @@ export type SaveAssessmentBody = {
 
 export const saveAssessment = (directReportId: string, body: SaveAssessmentBody): Promise<unknown> =>
   authedFetch(`/api/assessments/${directReportId}`, { method: "POST", body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------------------
+// Context Engine (Session 28 upload/extraction, Session III confirm-card) —
+// see docs/CONTEXT_ENGINE.md (framework) and docs/CONTEXT_ENGINE_BUILD_PLAN.md
+// (build plan). Own top-level page (/app/context, "the Space"). The
+// Librarian proposes category/freshness/effective_date/summary_card/
+// novelty on upload; scope + any corrections are confirmed by the user
+// here, per the framework doc's "scope is user-confirmed, not an AI-only
+// proposal" rule.
+// ---------------------------------------------------------------------------
+
+export type DocumentCategory =
+  | "where_we_are_going"
+  | "who_we_are_and_how_we_operate"
+  | "who_we_serve"
+  | "what_we_offer"
+  | "how_people_grow_here";
+
+export type DocumentFreshnessClass = "evergreen" | "dated" | "stream_instance";
+export type DocumentStatus = "processing" | "pending_review" | "confirmed" | "failed";
+export type DocumentFileType = "pptx" | "pdf" | "text";
+
+export type DocumentScope = {
+  id?: string;
+  document_id?: string;
+  // null = company-wide (org_units has no "company" row — see org_units.py).
+  org_unit_id: string | null;
+};
+
+export type Document = {
+  id: string;
+  title: string;
+  file_type: DocumentFileType;
+  status: DocumentStatus;
+  category: DocumentCategory | null;
+  freshness_class: DocumentFreshnessClass | null;
+  effective_date: string | null;
+  summary_card: string | null;
+  novelty_score: number | null;
+  series_id: string | null;
+  confirmed_at: string | null;
+  // Only present on rows fetched after a confirm — captured as a future
+  // training signal (docs/CONTEXT_ENGINE.md), not read by anything yet.
+  confirmed_as_is?: boolean | null;
+  correction_log?: Record<string, { proposed: unknown; confirmed: unknown }> | null;
+  created_at: string;
+  // Only present on POST /confirm's response, not the list endpoint.
+  scopes?: DocumentScope[];
+};
+
+export const getDocuments = (params?: { status?: DocumentStatus }): Promise<Document[]> => {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
+  return authedFetch(`/api/documents${qs ? `?${qs}` : ""}`);
+};
+
+export const uploadDocument = (file: File, title?: string): Promise<Document> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title?.trim()) formData.append("title", title.trim());
+  return authedFormFetch("/api/documents/upload", formData);
+};
+
+export type DocumentConfirmIn = {
+  category: DocumentCategory;
+  freshness_class: DocumentFreshnessClass;
+  effective_date?: string | null;
+  // At least one entry required — null means company-wide. See
+  // backend/routes/documents.py's confirm_document for why an empty list
+  // is rejected (a scopeless confirmed doc would be invisible to Session
+  // IV's retrieval cascade).
+  org_unit_ids: (string | null)[];
+};
+
+export const confirmDocument = (id: string, body: DocumentConfirmIn): Promise<Document> =>
+  authedFetch(`/api/documents/${id}/confirm`, { method: "PUT", body: JSON.stringify(body) });
+
+export const deleteDocument = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/documents/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Context Engine — the Brain (Session V) + staleness/precedence surfacing
+// (Session VI, docs/CONTEXT_ENGINE_BUILD_PLAN.md). One coverage-map entry
+// per category — fill (decay-weighted novelty of the best confirmed doc,
+// never count-weighted), the confirmed docs behind it for the click-through,
+// a static first-person gap question, recent citation credit flow-back, and
+// (Session VI) a proactive staleness prompt when the fill-driving doc has
+// aged past a threshold — plus a top-level list of cross-doc scope
+// conflicts (same category, overlapping scope, disagreeing effective
+// dates — flagged, never auto-resolved). See backend/context_engine.py's
+// compute_category_coverage() / find_scope_conflicts() for the scoring.
+//
+// Response shape changed in Session VI: was a bare CategoryCoverage[]
+// (Session V), now { categories, conflicts } — conflicts span category
+// pairs so they don't nest under any single category.
+// ---------------------------------------------------------------------------
+
+export type CoverageDocument = {
+  id: string;
+  title: string;
+  freshness_class: DocumentFreshnessClass | null;
+  effective_date: string | null;
+  summary_card: string | null;
+  novelty_score: number | null;
+  // Decay-weighted novelty_score as of "now" — what actually drove
+  // fill_score / this doc's position in the list, not the raw novelty
+  // score the Librarian originally proposed.
+  decayed_score: number;
+  citations_this_week: number;
+};
+
+export type CategoryCoverage = {
+  category: DocumentCategory;
+  label: string;
+  fill_score: number; // 0-100
+  doc_count: number;
+  citations_this_week: number;
+  gap_question: string;
+  // Session VI — null unless the category's fill-driving doc has decayed
+  // past the staleness threshold. A proactive Librarian nudge, not an error
+  // state; render it, don't treat its presence as something broken.
+  staleness_prompt: string | null;
+  documents: CoverageDocument[];
+};
+
+// Session VI — one entry per conflicting PAIR of confirmed docs (same
+// category, overlapping scope, disagreeing effective_date). `message` is
+// pre-formatted Librarian-voice copy, ready to render as-is.
+export type CoverageConflict = {
+  category: DocumentCategory;
+  category_label: string;
+  doc_a: { id: string; title: string; effective_date: string };
+  doc_b: { id: string; title: string; effective_date: string };
+  more_recent_id: string;
+  more_specific_id: string | null;
+  // True when the MORE SPECIFIC doc is also the OLDER one — the framework
+  // doc's own "your strategy doc predates the pivot" tension, where the two
+  // precedence rules (specificity wins vs. recency wins) point different
+  // directions.
+  specificity_disagrees_with_recency: boolean;
+  message: string;
+};
+
+export type ContextCoverage = {
+  categories: CategoryCoverage[];
+  conflicts: CoverageConflict[];
+};
+
+export const getContextCoverage = (): Promise<ContextCoverage> => authedFetch("/api/documents/coverage");

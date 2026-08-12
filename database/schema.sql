@@ -760,6 +760,108 @@ create table subscriptions (
 
 alter table subscriptions enable row level security;
 
+-- -------------------------
+-- CONTEXT ENGINE — Session 27 (2026-08-12)
+-- See database/migrations/2026-08-12_context_engine.sql for the full
+-- reasoning and docs/CONTEXT_ENGINE.md / docs/CONTEXT_ENGINE_BUILD_PLAN.md
+-- for the framework + build plan. Org-scoped like org_units/role_levels
+-- (current_org_id()), not owner_id-scoped — docs are shared org context,
+-- not one manager's private data.
+-- -------------------------
+create table document_series (
+  id         uuid primary key default uuid_generate_v4(),
+  org_id     uuid not null references organizations(id) on delete cascade,
+  name       text not null,
+  cadence    text,
+  created_at timestamptz not null default now()
+);
+
+alter table document_series enable row level security;
+
+create table documents (
+  id              uuid primary key default uuid_generate_v4(),
+  org_id          uuid not null references organizations(id) on delete cascade,
+  uploaded_by     uuid not null references auth.users(id),
+  title           text not null,
+  storage_path    text not null,
+  file_type       text not null check (file_type in ('pptx', 'pdf', 'text')),
+  status          text not null default 'processing'
+                  check (status in ('processing', 'pending_review', 'confirmed', 'failed')),
+  category        text
+                  check (category is null or category in (
+                    'where_we_are_going',
+                    'who_we_are_and_how_we_operate',
+                    'who_we_serve',
+                    'what_we_offer',
+                    'how_people_grow_here'
+                  )),
+  freshness_class text
+                  check (freshness_class is null or freshness_class in (
+                    'evergreen', 'dated', 'stream_instance'
+                  )),
+  effective_date  date,
+  series_id       uuid references document_series(id) on delete set null,
+  summary_card    text,
+  extracted_text  text,
+  novelty_score   integer check (novelty_score is null or (novelty_score between 0 and 100)),
+  confirmed_at    timestamptz,
+  -- Session III (2026-08-12, database/migrations/2026-08-12_context_engine_confirm.sql):
+  -- set at confirm time. confirmed_as_is: true if the user accepted the
+  -- Librarian's proposed category/freshness_class/effective_date as-is,
+  -- false if they edited any of them. correction_log: {field: {proposed,
+  -- confirmed}} for changed fields when confirmed_as_is is false — a
+  -- captured training signal, not read by anything yet. Both null until
+  -- confirmed.
+  confirmed_as_is boolean,
+  correction_log  jsonb,
+  created_at      timestamptz not null default now()
+);
+
+alter table documents enable row level security;
+
+create index documents_org_id_idx on documents(org_id);
+create index documents_series_id_idx on documents(series_id);
+create index documents_status_idx on documents(status);
+create index documents_category_idx on documents(category);
+
+-- document_scopes: which org_unit(s) a doc applies to (a set). null
+-- org_unit_id = company-wide (org_units has no "company" row). Cascade
+-- down the tree happens at the application layer (Session IV), not here.
+create table document_scopes (
+  id           uuid primary key default uuid_generate_v4(),
+  document_id  uuid not null references documents(id) on delete cascade,
+  org_unit_id  uuid references org_units(id) on delete cascade,
+  created_at   timestamptz not null default now()
+);
+
+alter table document_scopes enable row level security;
+
+create index document_scopes_document_id_idx on document_scopes(document_id);
+create index document_scopes_org_unit_id_idx on document_scopes(org_unit_id);
+
+-- Postgres treats every NULL as distinct, so a plain UNIQUE(document_id,
+-- org_unit_id) would let one document collect unlimited duplicate
+-- "company-wide" (null) rows. Two partial indexes cover both cases.
+create unique index document_scopes_unique_org_unit
+  on document_scopes(document_id, org_unit_id) where org_unit_id is not null;
+create unique index document_scopes_unique_company_wide
+  on document_scopes(document_id) where org_unit_id is null;
+
+-- document_citations: usage ledger, one row per agent answer that cites a
+-- doc — feeds the Brain's credit flow-back (Session V).
+create table document_citations (
+  id          uuid primary key default uuid_generate_v4(),
+  document_id uuid not null references documents(id) on delete cascade,
+  cited_by    uuid not null references auth.users(id),
+  context     text,
+  created_at  timestamptz not null default now()
+);
+
+alter table document_citations enable row level security;
+
+create index document_citations_document_id_idx on document_citations(document_id);
+create index document_citations_recency_idx on document_citations(document_id, created_at desc);
+
 -- ============================================================
 -- AUTO-CREATE USER PROFILE ON SIGNUP
 -- When someone signs in via magic link for the first time,
@@ -1032,6 +1134,36 @@ create policy "time_off_entries_all_own" on time_off_entries
 create policy "work_unit_configs_all_own_org" on work_unit_configs
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
+
+-- document_series — org-scoped like org_units/role_levels
+create policy "document_series_all_own_org" on document_series
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+-- documents — org-scoped; see the Context Engine note above the table defs
+-- for why this is org-wide rather than owner_id- or org_unit-scoped
+create policy "documents_all_own_org" on documents
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+-- document_scopes — via documents' org_id, same subquery pattern as
+-- metric_scale_definitions/dev_plan_* below
+create policy "document_scopes_all_own_org" on document_scopes
+  for all using (
+    document_id in (select id from documents where org_id = public.current_org_id())
+  )
+  with check (
+    document_id in (select id from documents where org_id = public.current_org_id())
+  );
+
+-- document_citations — same subquery pattern
+create policy "document_citations_all_own_org" on document_citations
+  for all using (
+    document_id in (select id from documents where org_id = public.current_org_id())
+  )
+  with check (
+    document_id in (select id from documents where org_id = public.current_org_id())
+  );
 
 -- ============================================================
 -- ROLE-SCOPED ROLLUP VIEWS (Session 15, 2026-08-03)
@@ -1355,3 +1487,41 @@ $$;
 
 revoke all on function public.accept_direct_report_invite(text) from public;
 grant execute on function public.accept_direct_report_invite(text) to authenticated;
+
+-- ============================================================
+-- CONTEXT ENGINE STORAGE (Session 27, 2026-08-12)
+-- Raw uploaded files (PPTX/PDF/text) live in Supabase Storage. Path
+-- convention Session II's upload endpoint must follow:
+--   {org_id}/{document_id}/{original_filename}
+-- storage.foldername(name) splits the object path on '/' — folder[1] is
+-- the org_id segment, checked against current_org_id() the same way every
+-- other org-scoped policy in this file does. storage.objects already has
+-- RLS enabled by default on Supabase projects.
+--
+-- Not exercised by the local-Postgres functional test this migration was
+-- verified with (bare Postgres has no storage schema) — confirm against
+-- live Supabase, same as every session's real-Auth-integration caveat.
+-- ============================================================
+
+insert into storage.buckets (id, name, public)
+values ('context-engine-docs', 'context-engine-docs', false)
+on conflict (id) do nothing;
+
+create policy "context_engine_docs_select_own_org" on storage.objects
+  for select using (
+    bucket_id = 'context-engine-docs'
+    and (storage.foldername(name))[1] = public.current_org_id()::text
+  );
+
+create policy "context_engine_docs_insert_own_org" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'context-engine-docs'
+    and (storage.foldername(name))[1] = public.current_org_id()::text
+  );
+
+create policy "context_engine_docs_delete_own_org" on storage.objects
+  for delete using (
+    bucket_id = 'context-engine-docs'
+    and (storage.foldername(name))[1] = public.current_org_id()::text
+  );

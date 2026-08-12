@@ -11,6 +11,440 @@ Format per entry:
 
 ---
 
+## Session 31 — 2026-08-12
+
+**Goal:** Build Session VI of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`):
+staleness + precedence surfacing — the final session of the documented 6-session build plan.
+
+**What was done:**
+- **Promoted `_decay_multiplier()` from Session V's per-session placeholder to canonical** — same decay
+  math (evergreen never decays; dated holds full weight through 120 days then floors at 0.5 by 540;
+  stream_instance holds full weight only through 30 days then floors at 0.35 by 180; missing/unparseable
+  dates get a flat 0.85), now genuinely shared by both consumers the build plan always intended.
+- **Wired decay into `get_relevant_context()`'s ranking** — the retrieval sort key is now (scope
+  specificity, decayed novelty score, date recency) instead of raw novelty, so a stale-but-high-novelty
+  doc can lose to a fresher-but-lower-novelty one within the same scope tier. Both call sites
+  (`documents.py`'s coverage route, `one_on_ones.py`'s prep route) now pass `date.today()` through.
+- **Staleness prompts**: `_format_staleness_prompt()` + a new `staleness_prompt` field on
+  `compute_category_coverage()`'s per-category output, firing only when a category's fill-driving
+  (load-bearing) doc has decayed below a 0.7 multiplier threshold — never on evergreen docs (constant
+  1.0), fresh docs, or empty categories. Static Librarian-voice string formatting, no AI call.
+- **Conflict detection**: `find_scope_conflicts(supabase, org_id)` — flags pairs of confirmed docs in the
+  same category whose scopes overlap (reusing the existing scope-cascade ancestor walk from Session IV)
+  but whose `effective_date`s differ. Also detects when "specificity disagrees with recency" — the
+  more-specific doc is also the older one (the framework doc's flagship "team charter predates the
+  company pivot" example) — and surfaces that as a distinct sentence in the generated conflict message.
+  Conflicts are only ever surfaced, never auto-resolved.
+- **`GET /api/documents/coverage` response shape changed** from a bare category list to
+  `{"categories": [...], "conflicts": [...]}`.
+- **Frontend (`app/app/context/page.tsx`)**: `BrainCategoryCard` gained an amber "Aging" pill alongside
+  the citations pill when a category has a `staleness_prompt`; `BrainDetailPanel` renders the staleness
+  prompt as a second, amber-toned "The Librarian: ..." line above the existing neutral gap-question line;
+  new `ConflictBanner` component renders each conflict's message in an amber-bordered banner above the
+  Brain grid. `lib/api.ts` gained `CoverageConflict`/`ContextCoverage` types and updated
+  `getContextCoverage()` for the nested response shape.
+
+**Decisions made / locked:**
+- Staleness threshold set at decay multiplier < 0.7 — a judgment call, not discussed with Andrew; picked
+  because it sits meaningfully inside the "declining" region of the curve for both dated (which holds
+  full weight to day 120) and stream_instance (full weight only to day 30) freshness classes without
+  firing the moment a doc so much as starts to age.
+- Both staleness prompts and scope conflicts reuse the app's existing amber "needs attention" convention
+  rather than inventing a new severity color — both are "the Librarian isn't fully confident here"
+  signals and read as one visual language. See DESIGN.md decisions log.
+- `GET /api/documents/coverage`'s response shape was changed (not versioned/duplicated) even though it
+  was only added last session — judged acceptable since nothing else consumes it yet besides this
+  session's own frontend update.
+- Conflicts are surfaced, never auto-resolved — consistent with the whole Context Engine's design
+  posture (the Librarian curates and confirms with a human, it doesn't silently overwrite).
+
+**Verification:** Backend — `py_compile` clean on `context_engine.py`, `routes/documents.py`,
+`routes/one_on_ones.py`; `import main` with dummy env vars confirmed all 90 routes still register.
+Existing Session IV/V fake-Supabase test scripts patched for the new `today` parameter and re-run clean
+(no regressions). New test script covers three groups: decay-weighted retrieval ranking, staleness
+prompts firing only on an aging load-bearing doc, and `find_scope_conflicts()` across four cases
+(overlapping-scope docs with differing dates flagged including correct specificity-vs-recency detection;
+unrelated departments not flagged; identical-date same-scope docs not flagged; single-doc categories
+produce no conflicts) plus zero/one-document orgs not erroring. Frontend — `tsc --noEmit` clean, `next
+build` clean (18/18 static pages, `/app/context` now 6.31 kB). **Not exercised:** a live Supabase call
+end to end, a real conflicting-document scenario created through the actual upload/confirm UI, or any of
+this in a real browser against a real backend.
+
+**Next step:** This closes out the documented 6-session Context Engine build plan (retrieval + agent
+integration, the Brain, staleness + precedence surfacing — Sessions IV/V/VI, this repo's Sessions
+29/30/31). All of it is backend-plus-frontend complete but has never run against a live Supabase instance,
+a real browser, or actual production documents — that's the natural next validation pass before treating
+any of it as done-done. Per the standing instruction carried through all three sessions, changes have been
+written back to disk but **not pushed to git** — that's a decision point for Andrew now that the full
+build is complete.
+
+---
+
+## Session 30 — 2026-08-12
+
+**Goal:** Build Session V of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`): the
+Brain visualization.
+
+**What was done:**
+- **Extended `backend/context_engine.py`** with the Brain's data source. `_decay_multiplier(freshness_class,
+  effective_date, today)` is a simple, linear, freshness-class-aware confidence curve (evergreen: no
+  decay; dated: full weight through 120 days, floors at 0.5 by 540; stream_instance: full weight only
+  through 30 days, floors at 0.35 by 180) — written now because Session V's spec requires "decay
+  rendering... dim regions by freshness-class-driven age curve" this session, not deferred; explicitly
+  documented as this session's own placeholder that build-plan Session VI ("Staleness + precedence
+  surfacing") is expected to generalize into one canonical decay function shared with Session IV's
+  retrieval ranking. `compute_category_coverage(supabase, org_id, today)` is the actual rollup: for each
+  of the five categories, `fill_score` is the MAX decayed novelty score among that category's confirmed
+  docs (never an average — matches the framework doc's own example, "ten junk uploads move nothing; one
+  current strategy doc lights a region"; an average would let weak docs drag down a category that
+  already has one excellent, current source), `doc_count`, `citations_this_week` (rolling 7-day
+  `document_citations` rollup — credit flow-back), a static first-person `gap_question` per category
+  (Librarian voice, always shown regardless of current fill — "every region is actionable... what it's
+  missing"), and up to 20 confirmed docs for the click-through, most-current-first.
+- **New `GET /api/documents/coverage`** in `routes/documents.py` — thin route, org-wide (not
+  org_unit-scoped like retrieval — the Brain is one coverage map per org, matching "the Space" as a
+  single surface, not a per-team view), resolves `org_id` via the same `ensure_org()` pattern as upload,
+  calls `compute_category_coverage()`.
+- **`frontend/app/app/context/page.tsx`** ("The Space") gained a "The Brain" section above the upload
+  form — a 5-category coverage grid (`BrainCategoryCard`: an inline-SVG radial progress ring per
+  category, opacity scaling with fill so an empty region reads as barely-there and a full one as vivid,
+  per "regions fill/brighten as real coverage grows") that expands a `BrainDetailPanel` below the grid on
+  click, showing the category's confirmed docs (title, freshness, effective date, summary card, this
+  category's fixed 5-item order) or citation counts, plus the always-present gap question in the same
+  "The Librarian: ..." italic voice the confirm-card already uses. Fetched separately from
+  documents/orgUnits and fails silently on error (same posture as the dashboard's AI insight banner) so
+  a Brain hiccup can't block the upload flow. Refreshes after a confirm or a delete, since either can
+  move a category's fill/doc-count. Page widened `max-w-3xl` → `max-w-4xl` to give the 5-card grid room.
+- **`frontend/lib/api.ts`** gained `CategoryCoverage`/`CoverageDocument` types and `getContextCoverage()`.
+
+**Decisions made / locked:**
+- No new charting/visualization dependency — build-plan Session V suggested reusing "the existing
+  dashboard's orbital/radial mission control motif," but Mission Control (`app/dashboard/page.tsx`)
+  turned out to be a card grid with no actual radial component to reuse. Interpreted the spec as "radial
+  in spirit, visually consistent," and built a plain inline-SVG progress ring — no new dependency,
+  matches the app's existing "no component library yet" posture. Judgment call, not discussed with
+  Andrew — flagged as the placeholder the build plan itself invited ("treat as a placeholder, not a
+  lock-in; revisit in a dedicated design pass if it doesn't earn its kitsch-avoidance bar").
+- Decay curve is per-session-simple by design (see above) — real canonical decay weighting stays
+  Session VI's job, not pulled forward here even though the Brain needed *some* decay behavior to
+  satisfy its own spec this session.
+- fill_score uses MAX, not average, across a category's decayed doc scores — directly matches the
+  framework doc's own "one current strategy doc lights a region" language; average was considered and
+  rejected for the reason given above.
+- Gap questions are static, hand-written copy per category (five sentences, Librarian first-person
+  voice) — no AI call, matching the build plan's explicit "static... stand-in for the deferred
+  per-category-question scoring" framing and Session IV's established "no new AI call inside supporting
+  plumbing" restraint.
+- Brain coverage is org-wide, not org_unit-scoped — a deliberate difference from Session IV's retrieval,
+  which does cascade by team. The framework doc frames the Brain as one visualization of "the Space,"
+  not a per-team lens; revisit only if a real second-manager org surfaces a need to scope it.
+- `/app/context` widened to `max-w-4xl` — a judgment call, not discussed with Andrew, made to fit a
+  5-column grid without cramping; the rest of the page (upload form, queues) still reads fine wider.
+
+**Verification:** Backend — `py_compile` clean on `context_engine.py` and `routes/documents.py`;
+`import main` with dummy env vars confirmed all 90 routes now register, including the new `GET
+/api/documents/coverage`. Hand-written fake-Supabase-client tests (same pattern Sessions 28/29 used)
+covering: the decay curve's shape across evergreen/dated/stream_instance and an unknown-effective-date
+fallback; `compute_category_coverage()` returns all five categories in fixed order every time (including
+brand-new orgs with zero documents, all at `fill_score=0`); `fill_score` is confirmed to be MAX not
+average, and a specific case (a high-raw-novelty-but-ancient doc vs. a lower-novelty-but-current one) is
+checked so the current doc wins post-decay, not the stale one; `pending_review` docs are excluded from
+coverage entirely; an evergreen doc with no `effective_date` still gets full weight;
+`citations_this_week` correctly counts only rolling-7-day citations, rolled up per category; every
+category (even an empty one) carries a `gap_question`; click-through docs sort by decayed score
+descending. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean (18/18 static pages,
+`/app/context` compiles at 6.06 kB). **Not exercised:** a live Supabase call end to end, a real
+`document_citations` ledger with actual production data behind it (Session IV just started writing rows
+this session's predecessor — there's no real citation history to visually check against yet), or the
+Brain rendering in an actual browser against a real backend.
+
+**Next step:** Session VI — staleness + precedence surfacing: promote `_decay_multiplier()` into the
+single canonical decay-weight function the build plan describes, wire it into Session IV's
+`get_relevant_context()` ranking (currently specificity → novelty → recency, no decay) so retrieval and
+the Brain agree on "how much does this document still count," add conflict detection (two confirmed docs,
+same category, overlapping scope, disagreeing effective-date order → flag, don't auto-resolve — same
+restraint pattern as logged-vs-assumed capacity), and the Librarian's proactive staleness prompts on
+aging load-bearing docs. Before starting: `libreoffice` on Railway is still unverified live (carried
+forward unaddressed since Session 28 — flag to Andrew), and none of the Context Engine's migrations have
+new pending items, but nothing in Sessions IV/V required schema changes either, so the live-migration
+state is unchanged from what Session 29 already confirmed.
+
+---
+
+## Session 29 — 2026-08-12
+
+**Goal:** Build Session IV of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`):
+retrieval + agent integration, backend only.
+
+**What was done:**
+- **New `backend/context_engine.py`** — shared plumbing, not a route. `get_relevant_context(supabase,
+  org_id, org_unit_id, max_docs=4)` implements the two-tier retrieval the framework doc specifies:
+  `_scope_cascade()` walks `org_units.parent_unit_id` UP from the target unit (team → department) and
+  appends the implicit company-wide (`org_unit_id is null`) tier, most-specific first; candidate
+  `documents` are fetched tier-one (summary_card + metadata only, `status='confirmed'` only — pending/
+  processing/failed excluded per the build plan), ranked by (scope specificity, novelty_score,
+  effective_date recency), and only the top `max_docs` get tier-two `extracted_text` pulled. No
+  decay-curve weighting yet — the build plan assigns that to Session VI ("Staleness + precedence
+  surfacing"), so this session's ranking is a documented placeholder, not a final design. No
+  embeddings/vector store — org doc counts are small in v1 and this codebase has no precedent for one;
+  revisit only if usage shows the heuristic misses genuinely relevant docs. `format_context_block()`
+  renders the result as a ready-to-embed prompt section (empty string when nothing was retrieved, same
+  convention `_format_expectations_block()` in `one_on_ones.py` already uses). `record_citations()`
+  writes one `document_citations` row per document actually embedded — the only new write path this
+  session, per the build plan's Session IV spec.
+- **Wired into `routes/one_on_ones.py`'s `POST /prep`** — the pilot call site (chosen per the build
+  plan's suggestion; the other `generate_text()` call sites — wrapup, assessments, dashboard insights —
+  are not wired this session). The route now takes `authorization` as an explicit param (needed for
+  `ensure_org()`/`get_email_from_token()`, following the same pattern `documents.py` already uses to
+  resolve `org_id` since `direct_reports`/`users.org_id` can still be null for older MVP rows), fetches
+  the report's `org_unit_id` alongside its existing `name`/`role_level_id` select, calls
+  `get_relevant_context()` + `format_context_block()`, and splices the result into `_build_prep_prompt()`
+  as a new `context_engine_block` param positioned right after the role-expectations block and before
+  "MANAGER'S NOTES". After a successful `generate_text()` call, `record_citations()` writes one row per
+  retrieved doc with `context="1:1 prep for {report_name}"`.
+
+**Decisions made / locked:**
+- `max_docs=4` for tier-two `extracted_text` fetches — a judgment call, not discussed with Andrew:
+  decks can run long and this is a $20/mo product, so the cap bounds how much a single retrieval call
+  can add to prompt size regardless of how large an org's context library grows. Revisit if real usage
+  shows 4 is too few to answer well.
+- Ranking is a documented placeholder (specificity → novelty → recency), not the final design — decay
+  weighting is explicitly Session VI's job per the build plan, not pulled forward here.
+- No AI call inside retrieval itself — ranking/selection is plain Python over already-fetched metadata,
+  not a second Librarian-style `generate_text()` call. Keeps this session's only new AI-adjacent cost at
+  zero (retrieval is pure DB + heuristic), consistent with `CLAUDE.md`'s scope-discipline instinct;
+  revisit only if the heuristic proves insufficient.
+- `record_citations()` fires unconditionally after a successful prep generation, even though the
+  citation write isn't (yet) surfaced anywhere in the product — it's the ledger Session V's Brain
+  credit flow-back ("used in N answers this week") will read from. Writing it now, unused, mirrors how
+  `confirmed_as_is`/`correction_log` were captured in Session III ahead of having a consumer.
+
+**Verification:** Backend — `py_compile` clean on `context_engine.py` and the edited
+`routes/one_on_ones.py`; `import main` with dummy env vars confirmed all 89 routes still register,
+including `/api/one-on-ones/prep`. Hand-written fake-Supabase-client tests (same pattern Session 28's
+`confirm_document` tests used — no pytest/live-DB harness exists in this repo yet) covering: scope
+cascade walks team → department → company-wide correctly and falls back to company-wide-only when a
+report has no `org_unit_id`; `get_relevant_context()` excludes `pending_review` docs and other-orgs'
+docs, ranks the most-specific-scope doc first and company-wide last, and `max_docs` caps the result
+count; tier-two `extracted_text` is populated only on returned docs; `format_context_block()` renders
+content correctly and returns `""` on an empty list (not a header with nothing under it);
+`record_citations()` writes one row per retrieved doc and no-ops on an empty list; a brand-new org with
+no documents at all returns `[]` without error. Also rendered `_build_prep_prompt()` end-to-end with a
+real `format_context_block()` output spliced in and confirmed the CONTEXT ENGINE section appears,
+contains the doc's full text, sits before "MANAGER'S NOTES", and disappears entirely (no empty section
+header) when no docs are retrieved. **Not exercised:** a live Supabase call end-to-end (real RLS
+behavior on `document_scopes`/`org_units`/`documents` under a real JWT), a real `generate_text()` call
+with the context block actually in the prompt, or the frontend's display of a prep sheet generated this
+way — the Context Engine has no frontend surface yet for showing which docs informed an answer, though
+`document_citations` now has real rows once this runs live.
+
+**Next step:** Session V — the Brain (visualization): coverage view per category (fill weighted by
+aggregate novelty score, never document count), decay rendering, click-through per region (summary
+cards known + first-person gap questions), and credit flow-back reading `document_citations` (now
+populated by this session's `record_citations()`) to show "used in N answers this week." Before
+starting: (1) `libreoffice` on the Railway service is still unverified live — flag to Andrew if not yet
+checked, since a real PPTX upload 502s until it's in place (unchanged from Session 28, not addressed
+this session — Session IV's work didn't touch the upload path); (2) if there's appetite before Session
+V, wiring the retrieval helper into the other `generate_text()` call sites (wrapup, assessments,
+dashboard insights) would extend this session's work without needing new schema — currently only
+`/prep` uses it.
+
+---
+
+## Session 28 — 2026-08-12
+
+**Goal:** Build Session II (extraction + Librarian pipeline, backend) and, same session, Session III
+(confirm-card UX, frontend) of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`).
+
+**What was done:**
+- **New `backend/routes/documents.py`** — one endpoint, `POST /api/documents/upload`, that runs the
+  whole pipeline synchronously (build-plan resolution #4 — immediate processing, no batching, no cost
+  cap): accepts a PPTX/PDF/plain-text upload, converts PPTX→PDF via headless LibreOffice, uploads the
+  raw file to the `context-engine-docs` Storage bucket at Session I's `{org_id}/{document_id}/
+  {filename}` path convention, creates a `documents` row (`status='processing'`), then makes a single
+  structured Librarian call — `generate_text_from_document()` for PPTX/PDF, `generate_text()` with
+  the text inlined for `.txt`/`.md` — that extracts full text and proposes category / freshness_class
+  / effective_date / summary_card / novelty_score / series in one shot, updating the row to
+  `status='pending_review'`. Series detection is folded into the same call: the prompt lists the
+  org's existing `document_series` and the model either matches one or proposes a new name/cadence;
+  `_resolve_series()` does the lookup-or-create. Also added `GET /api/documents` — a minimal list
+  endpoint for manually verifying the pipeline, not the Session III review queue. `document_scopes`
+  is deliberately NOT written here — scope stays a user-confirmed field for Session III's confirm-card,
+  not an AI-only proposal.
+- **Extended `ai_core.py`** with `generate_text_from_document()` (+ `_call_anthropic_with_document()`
+  helper) — `generate_text()` only ever sent a fixed "Proceed." text message, with no way to attach a
+  file. The new function sends a base64 PDF as a native Claude `document` content block instead,
+  which is what build-plan resolution #1 ("Claude-native extraction, no separate library") actually
+  requires. No OpenAI fallback on this path — the OpenAI chat-completions shape has no equivalent
+  native PDF input, and building a second extraction path would defeat the point of going
+  Claude-native.
+- **Fixed a latent bug in `utils.py`'s `get_authenticated_client()`, found while wiring the Storage
+  upload:** `client.postgrest.auth(token)` only sets the Authorization header on the postgrest
+  client's own httpx session — it never touched `client.options.headers`, which is what
+  `client.storage` (lazily built on first access) uses to build its own session. Every route until
+  now only ever touched `.table()`/`.rpc()`, so this never surfaced. Without the fix, Storage calls
+  would authenticate as the anon key, `auth.uid()` would be null inside `storage.objects`' RLS
+  policies, and every upload would be silently rejected. Fixed by also setting
+  `client.options.headers["Authorization"]`. Confirmed via supabase-py 2.9.1 source (`SyncClient.
+  storage` property, `BasePostgrestClient.auth()`) and a standalone repro against the real client
+  construction path (see Verification).
+- **`backend/nixpacks.toml` (new)** — Railway's Nixpacks build has no reason to install LibreOffice on
+  its own; without this the PPTX conversion path 502s in production. Flagged the tradeoff in a
+  comment: the `libreoffice` nixpkg is large and will noticeably lengthen Railway build time/image
+  size — accepted for Session II's scope ("ship the pipeline"), revisit if build time becomes
+  painful.
+- `requirements.txt` — added `python-multipart` (FastAPI's `UploadFile`/`File(...)` needs it to parse
+  multipart form data; was missing, would have 500'd on first real upload).
+- `main.py` — registered the new router under `/api/documents`.
+
+**Session III — confirm-card UX (frontend, inline), same session:**
+- **New migration `database/migrations/2026-08-12_context_engine_confirm.sql`** — adds
+  `documents.confirmed_as_is` (boolean) and `documents.correction_log` (jsonb), satisfying the build
+  plan's "log corrections distinctly from confirms-as-is (training signal ... just captured)"
+  requirement, which Session II's schema had no column for. Merged into `database/schema.sql`. Not
+  wired to anything downstream — pure capture, per the framework doc.
+- **`backend/routes/documents.py` gained two endpoints:** `PUT /{document_id}/confirm` — validates
+  category/freshness_class, dedupes the submitted `org_unit_ids` (at most one `null`/company-wide
+  entry, mirroring `document_scopes`' two partial unique indexes), rejects an empty scope list (422 —
+  a scopeless confirmed doc would be invisible to Session IV's retrieval cascade) and any
+  `org_unit_id` outside the caller's org (422, checked via `org_units` under RLS), diffs the
+  submitted category/freshness_class/effective_date against the Librarian's original proposal to set
+  `confirmed_as_is`/`correction_log`, sets `status='confirmed'` + `confirmed_at`, and replaces
+  `document_scopes` (delete-then-insert, not a diff — a document has few scopes so this is cheap).
+  Rejects with 409 if the document isn't `pending_review` (already confirmed, still processing, or
+  failed). `DELETE /{document_id}` — discards a document at any status (bad extraction stuck in
+  review, a failed upload, or a confirmed doc no longer wanted); best-effort Storage cleanup (a
+  missing Storage object doesn't block the row delete — they're separate systems).
+- **New page `frontend/app/app/context/page.tsx`** ("The Space", added to Mission Control's
+  `NAV_LINKS` as "Context") — an upload form (file + optional title), a "Needs review" queue
+  rendering each `pending_review` doc as an inline `ConfirmCard` (editable
+  category/freshness/effective-date selects, a scope picker of pill-style checkboxes sourced from
+  `getOrgUnits()`, the Librarian's `summary_card` shown read-only in its own voice, Confirm disabled
+  until at least one scope is picked), a `failed` section with discard-only cards, and a "Recently
+  confirmed" footer list (last 10, feedback only — not a browse/search view; that's Session
+  IV/V territory). Scope defaults to nothing selected, not "Company-wide" — per the framework doc,
+  scope is a user-confirmed decision, not something to silently default.
+- **`frontend/lib/api.ts`** gained `Document`/`DocumentScope`/`DocumentConfirmIn` types,
+  `getDocuments`/`uploadDocument`/`confirmDocument`/`deleteDocument`, and a new `authedFormFetch`
+  helper — the existing `authedFetch` always forces `Content-Type: application/json`, which would
+  corrupt a multipart upload body (the browser must set that header itself, boundary included). This
+  is the app's first multipart/form-data call.
+- `docs/DESIGN.md` — added `/app/context` to the page-structure table and a decisions-log line for
+  the scope-defaults-to-nothing choice.
+
+**Decisions made / locked:**
+- Extraction call has no OpenAI fallback (see above) — an Anthropic 5xx just fails the upload
+  (`status='failed'`); the user re-uploads. Consistent with the build plan treating this as a new,
+  Claude-only path, not an extension of the existing dual-provider one.
+- `document_scopes` stays empty until confirm — a document with no scope row is invisible to Session
+  IV's retrieval cascade until a human sets one. Not a bug, a deliberate gap, now closed by Session
+  III's confirm endpoint (which refuses to confirm without at least one scope).
+- 25MB upload size ceiling — not in the build plan, added because the pipeline is synchronous and
+  feeds the whole file into one AI call; judgment call, not discussed with Andrew, flagged here for
+  visibility.
+- Confirm-card editable fields are exactly what the build plan names — category, scope, freshness,
+  effective-date. `summary_card` and `title` are shown but not editable in this pass; not discussed
+  with Andrew, a narrower reading of the spec kept the confirm payload small and the correction-log
+  comparison unambiguous (title isn't a Librarian-proposed taxonomy field to begin with).
+- Delete (`DELETE /{document_id}`) isn't in the build plan's Session III spec but was added anyway —
+  a confirm-card flow with no way to discard a bad upload is a dead end the manager can't recover
+  from. Flagged as a judgment call, not discussed with Andrew.
+
+**Verification:** Backend — fresh venv, `pip install -r requirements.txt` clean, `py_compile` clean on
+all touched/new files, `import main` with dummy env vars confirmed all 89 routes registered including
+the four `documents` routes. Mocked-unit-tested in isolation (no live Supabase/Anthropic calls):
+`_build_extraction_prompt`, `_parse_librarian_response` (clean/fenced/garbage JSON), `_clamp_novelty`,
+`_infer_file_type`, `_resolve_series`, `generate_text_from_document`'s outgoing request shape, plus
+Session III's `_dedupe_scope_ids`, the two validators, and `confirm_document` end-to-end against a
+hand-written fake Supabase table client covering: confirm-as-is, confirm-with-a-correction (verified
+`correction_log` shape), wrong-status → 409, empty-scope → 422, and foreign-org-unit-scope → 422.
+Separately confirmed the `utils.py` storage-auth fix functionally against a real supabase-py client
+construction (`client.storage`'s headers carry the user JWT after the fix, the anon key before it).
+Schema — local Postgres 16: built a scoped stub of the pre-session `documents` table (plus its FK
+prerequisites: `auth.users`, `organizations`, `org_units`, `document_series`) matching Session I's
+live shape, applied the new migration cleanly on top, confirmed the resulting column list/types via
+`\d documents`, and confirmed the migration is idempotent (`add column if not exists` no-ops cleanly
+on a second run — verified via NOTICE output, not just absence of an error). This is a narrower schema
+check than prior sessions' full `schema.sql` end-to-end run (no auth/storage stub was reconstructed
+here) — reasonable given the migration is two additive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+statements, but flagging the narrower scope rather than implying full-schema parity. Frontend — fresh
+`npm install`, `tsc --noEmit` clean, `next build` clean (`/app/context` and `/app/dashboard` both
+compiled, 5/5 static pages generated). Not exercised (needs the real environment): an actual PPTX→PDF
+conversion, a real Storage upload/delete, a live Anthropic document call, or the confirm/upload flow
+against a real browser + backend + Supabase together.
+
+`database/migrations/2026-08-12_context_engine_confirm.sql` has been run against live Supabase —
+**confirmed live by Andrew** (as of the Session 31 push).
+
+**Next step:** Session IV — retrieval + agent integration. Build the two-tier retrieval helper (search
+summary cards first, scoped by the org_unit cascade — team's own docs + department's + company's,
+more-specific wins on stated conflicts — then pull full `extracted_text` only for top matches), wire
+it into the existing `generate_text()` call sites as an additional context source, and write to
+`document_citations` whenever a doc is actually used in an answer. Before starting: (1) confirm
+`libreoffice` has actually been added to the Railway service (Session II couldn't verify it live) — a
+real PPTX upload will 502 until that's in place; (2) this session's new migration
+(`2026-08-12_context_engine_confirm.sql`) has since been run against live Supabase and confirmed
+by Andrew, same as Session I's migration.
+
+---
+
+## Session 27 — 2026-08-12
+
+**Goal:** Move the Context Engine (Session 25's framework, `docs/CONTEXT_ENGINE.md`) from settled
+concept to buildable. Two parts: resolve the 5 open questions at the end of that doc into a concrete
+build plan, then build Session I of that plan (schema + storage) same session.
+
+**What was done:**
+- Resolved all 5 open questions (walked one at a time with Andrew, all went with the recommended
+  option): (1) extraction pipeline — Claude-native (PPTX→PDF via headless LibreOffice, then fed to
+  Claude's native PDF/vision support through `ai_core.py`'s `generate_text()`, no new extraction
+  library); (2) Librarian confirm-card — inline in the Space, immediately after upload; (3) novelty
+  scoring — per-document for v1, per-category-question explicitly deferred; (4) cost model —
+  immediate processing, no cap, accepted as COGS; (5) sensitive docs — scope + RLS only, no new
+  sensitivity flag, leans on the existing manager-only v1 boundary.
+- Wrote `docs/CONTEXT_ENGINE_BUILD_PLAN.md` — 6 sessions (I schema/storage, II extraction/Librarian
+  pipeline, III confirm-card UX, IV retrieval/agent integration, V the Brain visualization, VI
+  staleness/precedence surfacing), with dependency sequencing (I→II→III hard chain; IV/V both
+  depend on III but not each other; VI depends on both).
+- **Built Session I same session:** 4 new tables (`document_series`, `documents`,
+  `document_scopes`, `document_citations`) + a private Supabase Storage bucket
+  (`context-engine-docs`). New migration `database/migrations/2026-08-12_context_engine.sql`,
+  merged into `database/schema.sql`, new "Context Engine (Session 27)" section in
+  `docs/ENGINEERING.md` (also bumped the schema table count 31→35 and added a Context Engine
+  tables group).
+- **Judgment call, flagged not buried:** documents/scopes/series/citations are ORG-scoped RLS
+  (`current_org_id()`, like `org_units`/`role_levels`/`capacity_settings`) rather than gated by
+  org_unit — this codebase has no precedent for row-level RLS gated by org_unit (only aggregate
+  rollup functions via `led_org_unit_ids()` do that). Org_unit scope tags drive retrieval relevance
+  and Brain grouping at the application layer (Session IV), not an RLS boundary. Andrew was told and
+  didn't redirect it.
+
+**Decisions made / locked:** All 5 build-plan resolutions above. Plus a push-cadence decision for
+the rest of this build (Sessions II–VI): update `SESSION_HISTORY.md` and relevant docs at the end of
+every session as usual, but hold `git add/commit/push` to GitHub until the whole 6-session build is
+done — one clean push instead of six.
+
+**Verification:** local Postgres 16, extended the standard Supabase `auth` stub with a minimal
+`storage` schema (`buckets`/`objects`/`foldername()`) since bare Postgres has none. Ran the full
+`schema.sql` end to end clean, and separately confirmed the standalone migration applies cleanly on
+top of the pre-session (HEAD) schema. Functional: two-org RLS isolation across all 4 tables +
+`storage.objects`, a forged cross-org insert rejected, both partial-unique-index duplicate-scope
+cases rejected, all 4 check constraints (file_type/status/category/novelty_score) rejected bad
+values, cascade-delete confirmed. Not exercised: the real Supabase storage schema (local stub is a
+simplification) and real Auth integration — standard sandbox caveat. No backend/frontend touched
+this session, so no py_compile/tsc/next build needed.
+
+`database/migrations/2026-08-12_context_engine.sql` has been run against live Supabase — **confirmed
+live by Andrew.**
+
+**Next step:** Session II — extraction + Librarian pipeline (backend). Build the upload endpoint
+(PPTX/PDF/text), the PPTX→PDF conversion step, and the single structured `generate_text()` call that
+extracts full text and proposes category/scope/freshness/summary/novelty in one shot, writing to the
+new `documents` row with `status='pending_review'`. See `docs/CONTEXT_ENGINE_BUILD_PLAN.md`'s
+"Session II" section for the full spec.
+
+---
+
 ## Session 26 — 2026-08-11
 
 **Goal:** Started as an open brainstorm from Andrew — goals and initiatives feel inert on Mission Control (cards can't be interacted with, no visible progress, no sense of how they connect to the team), and the free-text `success_metrics` decision from Session 10 makes any rollup a "rollup of vibes." Diagnosed as three missing primitives: a computable progress signal, a freshness/trend signal, and visible goal↔initiative↔people linkage. Andrew said "I'll take your lead"; scoped via one AskUserQuestion round (all four recommendations accepted) and built same session.

@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
-from routes import assessments, capacity, commitments, dashboard, direct_reports, goals, invites, one_on_ones, org_units, projects, settings as settings_routes, team
+from routes import assessments, capacity, commitments, dashboard, direct_reports, documents, goals, invites, one_on_ones, org_units, projects, settings as settings_routes, team
 from utils import limiter
 
 app = FastAPI(title="The Same Page API")
@@ -42,6 +42,7 @@ app.include_router(assessments.router, prefix="/api/assessments", tags=["assessm
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(team.router, prefix="/api/team", tags=["team"])
 app.include_router(invites.router, prefix="/api/invites", tags=["invites"])
+app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 
 
 # Catch-all OPTIONS handler — belt-and-suspenders for Railway's reverse proxy,

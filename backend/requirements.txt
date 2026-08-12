@@ -8,6 +8,7 @@ supabase==2.9.1
 pyjwt==2.13.0
 cryptography==45.0.3
 slowapi==0.1.9
+python-multipart==0.0.9
 stripe==10.4.0
 sentry-sdk[fastapi]==2.20.0
 pytest==8.3.5

@@ -12,17 +12,24 @@ inserting a second row.
 
 Status is derived, not stored: a row with summary is "completed"; a row
 without summary (only prep_guide) is "planned". See _serialize_session().
+
+Context Engine integration (Session IV, 2026-08-12): /prep is the pilot call
+site for backend/context_engine.py's retrieval helper — see that module's
+docstring for the two-tier design. Wiring the other generate_text() call
+sites in this app (wrapup, assessments, dashboard insights) is future work,
+not done this session.
 """
 import json
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
+import context_engine
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.direct_reports import fetch_role_expectations
-from utils import get_authenticated_client, limiter
+from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
 
 router = APIRouter()
 
@@ -155,6 +162,7 @@ def _build_prep_prompt(
     recent_summaries: list[str],
     days_since_last: int | None,
     role_expectations: dict | None = None,
+    context_engine_block: str = "",
 ) -> str:
     # --- Recency context ---
     if days_since_last is None:
@@ -204,7 +212,7 @@ RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
 
 OPEN COMMITMENTS (unresolved — each is marked with who owes it):
 {commitments_block}
-{_format_expectations_block(report_name, role_expectations)}
+{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
 MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
 {raw_notes}
 
@@ -332,14 +340,20 @@ def _find_planned_session(supabase, user_id: str, direct_report_id: str) -> dict
 
 @router.post("/prep", response_model=PrepResponse)
 @limiter.limit("10/minute")
-async def prep_one_on_one(request: Request, body: PrepRequest, auth=Depends(get_authenticated_client)):
+async def prep_one_on_one(
+    request: Request,
+    body: PrepRequest,
+    auth=Depends(get_authenticated_client),
+    authorization: str = Header(None),
+):
     user_id, supabase = auth
 
-    # Fetch direct report name
+    # Fetch direct report name (+ org_unit_id, for the Context Engine's
+    # scope cascade below)
     try:
         report_result = (
             supabase.table("direct_reports")
-            .select("name,role_level_id")
+            .select("name,role_level_id,org_unit_id")
             .eq("id", body.direct_report_id)
             .eq("manager_id", user_id)
             .single()
@@ -394,6 +408,17 @@ async def prep_one_on_one(request: Request, body: PrepRequest, auth=Depends(get_
     # and the prompt simply omits the section.
     role_expectations = fetch_role_expectations(supabase, report.get("role_level_id"))
 
+    # Context Engine (Session IV pilot) — org docs scoped to this report's
+    # team, cascaded up through department + company-wide. org_id comes from
+    # ensure_org() (idempotent) rather than a stored column, matching the
+    # pattern documents.py already uses for the same reason: direct_reports
+    # /users' org_id can still be null for older MVP rows.
+    org_id = ensure_org(user_id, supabase, get_email_from_token(authorization))
+    retrieved_docs = context_engine.get_relevant_context(
+        supabase, org_id, report.get("org_unit_id"), date.today()
+    )
+    context_engine_block = context_engine.format_context_block(retrieved_docs)
+
     prompt = _build_prep_prompt(
         report_name=report["name"],
         raw_notes=body.raw_notes,
@@ -401,9 +426,21 @@ async def prep_one_on_one(request: Request, body: PrepRequest, auth=Depends(get_
         recent_summaries=recent_summaries,
         days_since_last=days_since_last,
         role_expectations=role_expectations,
+        context_engine_block=context_engine_block,
     )
 
     raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)
+
+    # Citations: only after the call that actually used them succeeds, and
+    # only for docs that were in fact embedded above (not broader candidates
+    # ranking dropped) — per build-plan Session IV's "write to
+    # document_citations whenever a doc is actually used in an answer".
+    context_engine.record_citations(
+        supabase,
+        user_id,
+        [doc["id"] for doc in retrieved_docs],
+        context=f"1:1 prep for {report['name']}",
+    )
 
     # Strip markdown code fences — model sometimes wraps JSON in ```json...```
     raw_clean = raw.strip()
