@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useDrawer } from "@/lib/drawer-context";
 import {
   getDirectReport,
   getOneOnOneHistory,
@@ -93,6 +94,7 @@ function isOverdue(dueDate: string | null) {
 
 export default function ReportDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { setPageContext } = useDrawer();
   const [report, setReport] = useState<DirectReport | null>(null);
   const [history, setHistory] = useState<OneOnOne[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
@@ -125,6 +127,12 @@ export default function ReportDetailPage() {
   // as Goals/Projects.
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
 
+  // Clear page context when leaving this page so it doesn't bleed into
+  // other pages that don't know which report was being viewed.
+  useEffect(() => {
+    return () => setPageContext(null);
+  }, [setPageContext]);
+
   useEffect(() => {
     Promise.all([
       getDirectReport(id),
@@ -139,6 +147,7 @@ export default function ReportDetailPage() {
     ])
       .then(([dr, h, c, g, p, cp, cs, to, sc]) => {
         setReport(dr);
+        setPageContext(`${dr.name}'s direct report page`);
         setHistory(h);
         setCommitments(c);
         setGoals(g);

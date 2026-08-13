@@ -1,9 +1,10 @@
 """
 Commitment tracking — the "remembers what you told them" hook.
 
-Commitments are created in two places (logging a 1:1, and eventually goals/
-projects via the polymorphic source_type). This router is the read/resolve
-surface: list a manager's commitments and mark them done/dropped/reopened.
+Commitments are created in two places (logging a 1:1 via one_on_ones.py, and
+as standalone records via POST "" here — added Session 32 for the Scribe
+confirm handler). This router is the read/resolve surface: list a manager's
+commitments and mark them done/dropped/reopened.
 """
 from datetime import datetime, timezone
 
@@ -15,8 +16,50 @@ from utils import get_authenticated_client
 router = APIRouter()
 
 
+class CommitmentIn(BaseModel):
+    description: str
+    direct_report_id: str
+    committed_by: str = "direct_report"   # 'direct_report' | 'manager'
+    due_date: str | None = None
+    is_team_commitment: bool = False
+
+
 class CommitmentUpdate(BaseModel):
     status: str  # 'open' | 'done' | 'dropped'
+
+
+@router.post("")
+async def create_commitment(body: CommitmentIn, auth=Depends(get_authenticated_client)):
+    """Standalone commitment creation — used by the Scribe confirm handler.
+    Validates that the direct report belongs to the manager before inserting."""
+    user_id, supabase = auth
+    if body.committed_by not in ("manager", "direct_report"):
+        raise HTTPException(status_code=422, detail="committed_by must be 'manager' or 'direct_report'")
+    # Verify the direct report belongs to this manager (RLS doesn't cover this insert path).
+    dr_check = (
+        supabase.table("direct_reports")
+        .select("id")
+        .eq("id", body.direct_report_id)
+        .eq("manager_id", user_id)
+        .execute()
+    )
+    if not dr_check.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    result = (
+        supabase.table("commitments")
+        .insert({
+            "description": body.description,
+            "owner_id": user_id,
+            "direct_report_id": body.direct_report_id,
+            "committed_by": body.committed_by,
+            "due_date": body.due_date,
+            "is_team_commitment": body.is_team_commitment,
+            "source_type": "manual",
+            "status": "open",
+        })
+        .execute()
+    )
+    return result.data[0]
 
 
 @router.get("")

@@ -135,6 +135,39 @@ def _call_anthropic_with_document(
         raise HTTPException(status_code=502, detail=f"AI document call failed: {e}")
 
 
+def call_anthropic_with_tools(
+    system: str,
+    messages: list,
+    tools: list,
+    model: str = AI_DEFAULT_MODEL_HEAVY,
+    max_tokens: int = 2000,
+) -> dict:
+    """Call Anthropic with tool definitions. Returns raw response dict (stop_reason + content).
+    No OpenAI fallback — the tool-use message format is Anthropic-specific and has no
+    equivalent in the chat-completions shape."""
+    try:
+        resp = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": settings.ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": model,
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": messages,
+                "tools": tools,
+            },
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"AI tool call failed: {e}")
+
+
 def generate_text_from_document(
     prompt: str,
     document_base64: str,

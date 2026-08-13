@@ -56,6 +56,11 @@ be valid Anthropic model name strings. The fallback path in `ai_core.py` only
 triggers on 5xx errors, not 4xx — a bad model name will not gracefully degrade,
 it will error hard.
 
+One addition (Session 32): `call_anthropic_with_tools()` in `ai_core.py` — the raw
+tool-use call used only by `assistant_engine.py` for the Scribe agent loop. Anthropic-only
+by design (the tool-use message format is provider-specific); no fallback path, same
+timeout/error pattern as `_call_anthropic`.
+
 ### Rate limiting (Session 20, 2026-08-08)
 
 Every AI-calling endpoint must be rate-limited — `slowapi` was a `requirements.txt`
@@ -120,7 +125,7 @@ misleading, don't assume org-scoping from the policy name alone. Like
 
 ---
 
-## Database schema (35 tables — aligned with Miro board)
+## Database schema (36 tables — aligned with Miro board)
 
 Full schema with indexes and RLS policies: `database/schema.sql`.
 
@@ -1025,6 +1030,56 @@ through the actual upload/confirm UI, or any of this rendered in a real browser 
 This closes out the documented 6-session Context Engine build plan — retrieval, the Brain, and now
 staleness/conflict surfacing are all backend-plus-frontend complete, none of it yet run against production
 data.
+
+---
+
+## The Scribe — conversational data entry (Sessions 32–34, 2026-08-13)
+
+Scoping brief (locked decisions, verb set, eval): `docs/AGENT_SCRIBE_SCOPING.md`. The Scribe
+is the write-side agent: the manager talks to a persistent drawer, the agent assembles draft
+entities, and nothing writes until the manager confirms — at which point the client calls the
+same existing endpoint the forms use. Built across three sessions (S1 loop+eval / S2 drawer+confirm
+/ S3 hardening+persistence).
+
+**Hard rules (locked — do not relitigate):**
+- The model has READ tools only (`list_goals`, `list_projects`, `list_direct_reports`,
+  `list_org_units`) plus `emit_draft`. It cannot write to the database. Ever. Its "write" is a
+  structured draft payload; the actual write is the client calling the normal endpoint on Confirm.
+- v1 verbs are create+append only: create project, create goal, link project↔goal, log check-in,
+  add commitment, add direct report. No edits, no deletes.
+- Entity linking: high-confidence match → prefilled + visibly marked in the draft card; ambiguous →
+  ask with candidates; no match → offer to create. Never silently guess a link.
+
+**Backend:**
+- `assistant_engine.py` — `TOOLS`, `SYSTEM_PROMPT_TEMPLATE` (six verbs + MVR schemas verified
+  against schema.sql; note: projects have no success_metrics column, goals do),
+  `run_assistant_turn(thread, new_message, tool_executor, today_str, page_context=None)` —
+  tool loop, max 8 iterations. `page_context` is injected into the system prompt ephemerally,
+  never stored in the thread.
+- `routes/assistant.py` — `POST /api/assistant/message` (rate-limited 10/min; server-managed
+  thread: loads from + saves to `assistant_messages`; body = `{message, page_context?}`) and
+  `GET /api/assistant/thread` (hydration read). Route count after Sessions 32–34: 94.
+- `routes/commitments.py` gained `POST /api/commitments` (standalone create, validates DR
+  ownership, `source_type='manual'`); `routes/projects.py` gained `GET /api/projects/{project_id}`
+  (registered after `/rollup` — literal path must match first).
+- `assistant_messages` table (`database/migrations/2026-08-13_assistant_messages.sql`, applied
+  live 2026-08-13): manager-scoped RLS (`manager_id = auth.uid()`), JSONB `drafts` column so
+  draft cards re-render on hydration, index on `(manager_id, created_at asc)`.
+
+**Frontend:**
+- `app/app/layout.tsx` — first shared authenticated layout: `DrawerProvider` + `AppShell`
+  (flex row, drawer as `sticky h-screen w-[400px]` aside, content reflows), ⌘J/Esc listener,
+  fixed ✦ toggle on non-dashboard pages.
+- `components/ScribeDrawer.tsx` — thread UI, DraftCard (six entity types, confirm handlers
+  each calling the existing form endpoint), receipts + 30s undo (project/goal only — the only
+  types with frontend delete endpoints), ambiguity quick-reply chips, edit-in-card.
+- `lib/drawer-context.tsx` — drawer open state (sessionStorage), thread state, `pageContext`
+  registration (DR detail page sets it; cleared on unmount).
+
+**Eval:** `eval/test_assistant.py` — 15 utterances, mocked tool executor, real Anthropic API;
+exit bar ≥13/15; last full run 15/15 (Session 34). Re-run after any system-prompt or engine
+change. Requires `ANTHROPIC_API_KEY` in `backend/.env` (fails fast if missing — never read
+another project's .env; see Session 32's incident note).
 
 ---
 

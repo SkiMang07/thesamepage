@@ -138,6 +138,22 @@ async def get_projects_rollup(auth=Depends(get_authenticated_client)):
     ]
 
 
+@router.get("/{project_id}")
+async def get_project(project_id: str, auth=Depends(get_authenticated_client)):
+    """Single project by id — used by the Scribe confirm handler when linking a project to a goal."""
+    user_id, supabase = auth
+    result = (
+        supabase.table("projects")
+        .select(_SELECT_COLUMNS)
+        .eq("id", project_id)
+        .eq("owner_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return _shape_rows(result.data)[0]
+
+
 @router.post("")
 async def create_project(body: ProjectIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth

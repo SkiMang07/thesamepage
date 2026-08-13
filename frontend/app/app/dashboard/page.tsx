@@ -47,6 +47,7 @@ import {
   getTeamAssessments,
   getTeamOverview,
 } from "@/lib/api";
+import { useDrawer } from "@/lib/drawer-context";
 
 // Matches the prep prompt's cadence logic in one_on_ones.py — past 21 days
 // we stop assuming last meeting's context still holds.
@@ -197,6 +198,7 @@ const NAV_LINKS = [
 ];
 
 export default function DashboardPage() {
+  const { toggle: toggleDrawer, isOpen: drawerOpen } = useDrawer();
   const [team, setTeam] = useState<PerformanceRow[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -333,6 +335,17 @@ export default function DashboardPage() {
             className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
           >
             + Quick add
+          </button>
+          <button
+            onClick={toggleDrawer}
+            title={drawerOpen ? "Close Scribe (⌘J)" : "Open Scribe (⌘J)"}
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              drawerOpen
+                ? "bg-gray-900 text-white"
+                : "border border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-900"
+            }`}
+          >
+            ✦
           </button>
         </div>
       </div>

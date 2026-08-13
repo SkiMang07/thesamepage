@@ -194,6 +194,17 @@ export const getCommitments = (params?: { directReportId?: string; status?: "ope
 export const updateCommitment = (id: string, status: "open" | "done" | "dropped"): Promise<Commitment> =>
   authedFetch(`/api/commitments/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
 
+// Standalone commitment creation — Session 32 (Scribe confirm handler).
+// Uses POST /api/commitments, separate from 1:1 log and team commitments paths.
+export const createCommitment = (body: {
+  description: string;
+  direct_report_id: string;
+  committed_by?: "direct_report" | "manager";
+  due_date?: string | null;
+  is_team_commitment?: boolean;
+}): Promise<Commitment> =>
+  authedFetch("/api/commitments", { method: "POST", body: JSON.stringify(body) });
+
 // ---------------------------------------------------------------------------
 // Goals (Session 10) — full company/department/team/individual hierarchy.
 // Own top-level page (/app/goals), not Settings — see docs/SESSION_HISTORY.md.
@@ -985,6 +996,65 @@ export type Scorecard = {
 
 export const getScorecard = (directReportId: string): Promise<Scorecard> =>
   authedFetch(`/api/assessments/${directReportId}`);
+
+// ---------------------------------------------------------------------------
+// Single-project GET — added Session 32 for the Scribe confirm handler
+// (link_project_goal draft needs to fetch then PUT with goal_id).
+// ---------------------------------------------------------------------------
+
+export const getProject = (id: string): Promise<Project> =>
+  authedFetch(`/api/projects/${id}`);
+
+// ---------------------------------------------------------------------------
+// Scribe (The Same Page conversational agent) — Sessions 32–33 (S3)
+// POST /api/assistant/message: one conversational turn → {text, drafts}
+//   Thread is now server-managed (stored in assistant_messages table);
+//   the client no longer passes the full thread.
+// GET  /api/assistant/thread: load stored thread for drawer hydration
+// ---------------------------------------------------------------------------
+
+export type DraftEntityType =
+  | "project"
+  | "goal"
+  | "link_project_goal"
+  | "check_in"
+  | "commitment"
+  | "direct_report";
+
+export type DraftEntity = {
+  entity_type: DraftEntityType;
+  payload: Record<string, unknown>;
+  display?: Record<string, string>;
+};
+
+export type AssistantResponse = {
+  text: string;
+  drafts: DraftEntity[];
+};
+
+// Shape returned by GET /api/assistant/thread
+export type StoredMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  drafts: DraftEntity[] | null;
+  created_at: string;
+};
+
+export const getAssistantThread = (): Promise<StoredMessage[]> =>
+  authedFetch("/api/assistant/thread");
+
+// pageContext: human-readable label for the page the drawer is currently on
+// (e.g. "Jordan's direct report page"). Injected into the agent system prompt
+// ephemerally so pronouns resolve correctly. Not stored in the DB.
+export const sendAssistantMessage = (
+  message: string,
+  pageContext?: string,
+): Promise<AssistantResponse> =>
+  authedFetch("/api/assistant/message", {
+    method: "POST",
+    body: JSON.stringify({ message, page_context: pageContext ?? null }),
+  });
 
 // AI-drafted scores — reviewed/edited by the manager before saveAssessment.
 // Sparse by design: the AI only includes items the evidence supports.
