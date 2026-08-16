@@ -1,8 +1,12 @@
 "use client";
 
-// Shared layout for all authenticated /app/* pages — Sessions 32–33.
+// Shared layout for all authenticated /app/* pages — Sessions 32–34.
 // Wraps pages in DrawerProvider + the reflow shell that pushes content
 // left when the Scribe drawer opens.
+//
+// Session 35 change: drawer width is now responsive — clamp(400px, 30vw, 640px)
+// instead of a fixed 400px — so it scales toward ~25-33% of the viewport
+// on larger screens while never going below the original 400px floor.
 //
 // S3 change: adds a fixed ✦ button (top-right, z-50) that opens the
 // drawer from any authenticated page — visible whenever the drawer is
@@ -61,7 +65,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
       {isOpen && (
         <aside
-          className="sticky top-0 flex h-screen w-[400px] shrink-0 flex-col border-l border-gray-200 bg-white shadow-sm"
+          className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-gray-200 bg-white shadow-sm"
           style={{ zIndex: 40 }}
         >
           <ScribeDrawer />

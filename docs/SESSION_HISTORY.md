@@ -11,6 +11,56 @@ Format per entry:
 
 ---
 
+## Session 35 — 2026-08-16
+
+**Goal:** Widen the Scribe drawer from its fixed 400px to roughly 25–33% of the viewport
+width, so the conversation and draft cards get more room without breaking the pages
+beside it.
+
+**What was done:**
+
+- **`frontend/app/app/layout.tsx`** — the drawer `<aside>`'s width changed from a fixed
+  `w-[400px]` to a responsive `w-[clamp(400px,30vw,640px)]`. The clamp keeps the original
+  400px floor (so the drawer never gets narrower than before), scales at 30% of viewport
+  width in the middle range, and caps at 640px so it doesn't sprawl on ultrawide monitors.
+  Updated the file's header comment to document the change.
+- **`frontend/components/ScribeDrawer.tsx`** — reviewed for width-dependent tuning. No
+  changes needed: message bubbles use `max-w-[85%]` of the drawer's own width (not the
+  viewport), so at the 640px cap that's ~544px — still a reasonable chat line length, not
+  the runaway width you'd get from `max-w-[85%]` of the full viewport. Field labels
+  (`w-28`), the composer, and card layouts are all either fixed-width or naturally fill the
+  available space, so they don't need adjustment at the wider drawer.
+
+**Decisions made / locked:**
+
+- **Width formula: `clamp(400px, 30vw, 640px)`.** Reasoning through the breakpoints: at
+  1280–1440px viewports the 30vw term (384–432px) is close to or below the 400px floor, so
+  the drawer sits at essentially the old 400px there — Mission Control's 3-column grid and
+  the Team page rows keep the same content width they had before at laptop sizes. From
+  ~1536px up, 30vw dominates and the drawer grows toward 640px (reached at 2133px and
+  capped beyond that), giving more room on larger screens while staying within the
+  requested 25–33% band in the range where it's actively scaling.
+- **Expected content width beside the drawer** (viewport minus drawer, both open):
+  1280px → 880px; 1440px → 1008–1040px; 1536px → ~1106px; 1728px → ~1244px; 1920px →
+  ~1382px. All comfortably above the 3-column grid's degrade-to-acceptable bar noted in
+  the original surface spec.
+
+**Verification:**
+- `tsc --noEmit`: clean (zero errors), run directly on the connected device.
+- `next build`: clean (18/18 static pages). Device-side `next build` hung indefinitely
+  even with `NEXT_TELEMETRY_DISABLED=1` — the device sandbox has no network access, and
+  something in the build step blocks on an outbound call. Worked around by tarring the
+  frontend source (excluding `node_modules`/`.next`), staging it into the cloud container,
+  running `npm install` + `next build` there (network available), and confirming clean
+  output before discarding the scratch copy. Noting this for future sessions: prefer the
+  cloud container for `next build` verification, not the device sandbox.
+
+**Next step:** None outstanding from this session — the drawer width change is complete
+and verified. Resume with the S3 exit item from Session 34: deploy, run the S2 exit bar,
+then dogfood a real week through the drawer.
+
+---
+
 ## Session 34 — 2026-08-13
 
 **Goal:** S3 of the Scribe build plan (`docs/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out.

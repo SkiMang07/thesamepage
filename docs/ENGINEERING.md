@@ -1068,8 +1068,10 @@ same existing endpoint the forms use. Built across three sessions (S1 loop+eval 
 
 **Frontend:**
 - `app/app/layout.tsx` — first shared authenticated layout: `DrawerProvider` + `AppShell`
-  (flex row, drawer as `sticky h-screen w-[400px]` aside, content reflows), ⌘J/Esc listener,
-  fixed ✦ toggle on non-dashboard pages.
+  (flex row, drawer as `sticky h-screen` aside, content reflows), ⌘J/Esc listener,
+  fixed ✦ toggle on non-dashboard pages. Drawer width is `w-[clamp(400px,30vw,640px)]`
+  (Session 35) — 400px floor unchanged, scales toward ~25-33vw on larger screens, capped
+  at 640px.
 - `components/ScribeDrawer.tsx` — thread UI, DraftCard (six entity types, confirm handlers
   each calling the existing form endpoint), receipts + 30s undo (project/goal only — the only
   types with frontend delete endpoints), ambiguity quick-reply chips, edit-in-card.
