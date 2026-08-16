@@ -64,6 +64,23 @@ export function TrendArrow({ trend }: { trend: CheckInTrend | null | undefined }
   return <span className="text-gray-400" title="Progress flat since last check-in">→</span>;
 }
 
+// Average of the latest asserted progress % across a set of goals/projects
+// — shared by any surface that needs an aggregate progress figure. Fixes
+// the 2026-08-12 data-trust bug where /app/team's goal-progress ring
+// computed "% of goals with status on_track" (a status count) while
+// Mission Control showed each goal's own check-in progress % — two
+// different numbers with the same "progress" label. Both surfaces now read
+// from this one function over the same underlying `progress` field.
+//
+// Items with no check-in progress logged yet are excluded from the average
+// rather than counted as 0 — an un-checked-in goal isn't "0% done," it's
+// "no data," and averaging it in would understate real progress.
+export function averageProgress(items: { progress?: number | null }[]): number | null {
+  const withProgress = items.map((i) => i.progress).filter((p): p is number => p != null);
+  if (withProgress.length === 0) return null;
+  return Math.round(withProgress.reduce((sum, p) => sum + p, 0) / withProgress.length);
+}
+
 export function ProgressBar({ progress, status }: { progress: number | null | undefined; status: GoalStatus }) {
   if (progress == null) return null;
   const barColor =

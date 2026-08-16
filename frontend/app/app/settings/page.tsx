@@ -96,12 +96,7 @@ export default function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <Link href="/app/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          &larr; Back to your team
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold">Settings</h1>
       <p className="mt-1 text-sm text-gray-500">
         Set up roles and expectations once — everything else builds on them.
       </p>
@@ -169,6 +164,7 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [cadenceDays, setCadenceDays] = useState(21);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -178,6 +174,7 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
         setProfile(p);
         setFullName(p.full_name);
         setCompanyName(p.company_name);
+        setCadenceDays(p.one_on_one_cadence_days);
       })
       .catch((e) => onError(e.message));
   }, [onError]);
@@ -187,8 +184,13 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
     setSaving(true);
     setSaved(false);
     try {
-      const p = await updateProfile({ full_name: fullName, company_name: companyName });
+      const p = await updateProfile({
+        full_name: fullName,
+        company_name: companyName,
+        one_on_one_cadence_days: cadenceDays,
+      });
       setProfile(p);
+      setCadenceDays(p.one_on_one_cadence_days);
       setSaved(true);
       onError(null);
     } catch (e) {
@@ -213,6 +215,22 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
       <div>
         <label className={labelCls}>Company</label>
         <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputCls} placeholder="Company name" />
+      </div>
+      <div>
+        <label className={labelCls}>Default 1:1 cadence (days)</label>
+        <input
+          type="number"
+          min={1}
+          max={365}
+          step={1}
+          value={cadenceDays}
+          onChange={(e) => setCadenceDays(parseInt(e.target.value || "21", 10))}
+          className={`${inputCls} max-w-[9rem]`}
+        />
+        <p className="mt-1 text-xs text-gray-400">
+          How often you expect to meet 1:1 with a direct report, by default. Weekly for a new hire and monthly for a
+          senior IC is common — override per person on their report page.
+        </p>
       </div>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={saving} className={primaryBtnCls}>

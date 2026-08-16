@@ -20,6 +20,8 @@ import {
   deleteOneOnOne,
   expectationName,
   getScorecard,
+  getProfile,
+  assignReportCadence,
   DirectReport,
   OneOnOne,
   Commitment,
@@ -127,6 +129,13 @@ export default function ReportDetailPage() {
   // as Goals/Projects.
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
 
+  // 1:1 cadence override (nav rework pass 2, Session 38) — same "blank
+  // means inherit the org default" pattern as the Capacity fields above.
+  const [orgCadenceDays, setOrgCadenceDays] = useState<number>(21);
+  const [cadenceDays, setCadenceDays] = useState<string>("");
+  const [savingCadence, setSavingCadence] = useState(false);
+  const [cadenceSaved, setCadenceSaved] = useState(false);
+
   // Clear page context when leaving this page so it doesn't bleed into
   // other pages that don't know which report was being viewed.
   useEffect(() => {
@@ -144,8 +153,9 @@ export default function ReportDetailPage() {
       getCapacitySettings(),
       getTimeOff(id),
       getScorecard(id),
+      getProfile(),
     ])
-      .then(([dr, h, c, g, p, cp, cs, to, sc]) => {
+      .then(([dr, h, c, g, p, cp, cs, to, sc, prof]) => {
         setReport(dr);
         setPageContext(`${dr.name}'s direct report page`);
         setHistory(h);
@@ -158,10 +168,31 @@ export default function ReportDetailPage() {
         setCapacitySettings(cs);
         setTimeOff(to);
         setScorecard(sc);
+        setOrgCadenceDays(prof.one_on_one_cadence_days);
+        setCadenceDays(dr.one_on_one_cadence_days != null ? String(dr.one_on_one_cadence_days) : "");
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  async function saveCadence(e: React.FormEvent) {
+    e.preventDefault();
+    if (!report) return;
+    setSavingCadence(true);
+    setCadenceSaved(false);
+    try {
+      const parsed = cadenceDays.trim() ? parseInt(cadenceDays, 10) : null;
+      const updated = await assignReportCadence(id, report, parsed);
+      setReport(updated);
+      setCadenceDays(updated.one_on_one_cadence_days != null ? String(updated.one_on_one_cadence_days) : "");
+      setCadenceSaved(true);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save 1:1 cadence");
+    } finally {
+      setSavingCadence(false);
+    }
+  }
 
   async function saveCapacityProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -247,10 +278,9 @@ export default function ReportDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <Link href="/app/dashboard" className="text-sm text-gray-500 hover:underline">
-            ← Dashboard
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold">{report.name}</h1>
+          {/* "← Dashboard" removed — the persistent global nav's orbit
+              strip now carries the roster on this page (Session 36/37). */}
+          <h1 className="text-2xl font-semibold">{report.name}</h1>
           {report.role_title && (
             <p className="mt-1 text-gray-500">{report.role_title}</p>
           )}
@@ -344,6 +374,47 @@ export default function ReportDetailPage() {
             , or let AI draft a first pass from recent 1:1 notes.
           </p>
         )}
+      </div>
+
+      {/* 1:1 cadence (nav rework pass 2, Session 38) — per-person override
+          of the org default set in Settings > Profile & Company. Blank =
+          inherit; same "which source won" honesty convention Capacity uses
+          for logged-vs-assumed hours. */}
+      <div className="mt-10">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">1:1 cadence</h2>
+          <Link href="/app/1-1s" className="text-xs text-gray-400 hover:text-gray-600">
+            View 1:1s →
+          </Link>
+        </div>
+        <form onSubmit={saveCadence} className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Every N days</label>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              step={1}
+              value={cadenceDays}
+              onChange={(e) => setCadenceDays(e.target.value)}
+              placeholder={`${orgCadenceDays} (org default)`}
+              className="w-48 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={savingCadence}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {savingCadence ? "Saving..." : "Save"}
+          </button>
+          {cadenceSaved && <span className="text-sm text-green-600">Saved</span>}
+        </form>
+        <p className="mt-1.5 text-xs text-gray-400">
+          {cadenceDays.trim()
+            ? `Currently every ${cadenceDays.trim()} days (custom).`
+            : `Currently every ${orgCadenceDays} days (org default). Leave blank to keep inheriting it.`}
+        </p>
       </div>
 
       {/* Capacity — always shown, same pattern as Goals/Projects. Baseline

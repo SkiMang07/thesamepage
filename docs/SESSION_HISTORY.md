@@ -11,6 +11,130 @@ Format per entry:
 
 ---
 
+## Session 36 — 2026-08-16
+
+**Goal:** Nav rework pass 1 (tracked in code comments and DESIGN.md as Session 36/37;
+documented here retroactively — Andrew asked to hold SESSION_HISTORY.md/DESIGN.md updates
+until pass 2 closed, then sync both in one sweep). Ship the "hub & orbit" persistent global
+nav (Option C v2, locked in the nav_redesign_options project-memory note): a sticky header,
+sticky orbit strip, and zone-map overlay replacing the per-page "Back to your team" links and
+Mission Control's own nav row.
+
+**What was done:**
+- `frontend/components/ZoneMap.tsx` (new) — nav config (`NAV_GROUPS`/`HOME_ITEM`), the icon
+  set, hue/tone styling ported from `mockups/nav/nav-option-c-v2.html` as exact-hex Tailwind
+  arbitrary values, the `useZoneData()` hook (fetches every door's count data), and the
+  `<ZoneMap>` component — also replaces Mission Control's old stat ribbon in place, one shared
+  component instead of a duplicated grid.
+- `frontend/components/AppNav.tsx` (new) — the persistent header: sticky top bar + sticky
+  orbit strip + zone-map overlay sheet, with breadcrumb/context resolution via
+  `getNavContext()`.
+- `frontend/app/app/layout.tsx` — renders `<AppNav />` above every page's content; retires the
+  fixed top-right Scribe toggle button and the dashboard's own nav-integrated one in favor of a
+  single toggle inside AppNav's header. Skipped on `/app/login` (pre-auth) and `/app/ic` (IC
+  stub, wrong audience).
+- Nine pages (assessments, capacity, context, dashboard, goals, org, projects, team,
+  reports/[id]) — removed their own "Back to your team" link / `NAV_LINKS` row now that
+  cross-page nav lives in one place.
+- `/app/1-1s` nav item added but left `disabled: true` — the destination page isn't built this
+  pass. Its zone-map door still surfaces a real "N due" count rather than hiding the signal
+  behind a dead link (judgment call, unconfirmed with Andrew — see DESIGN.md).
+
+**Decisions made / locked:** all six recorded directly in `docs/DESIGN.md`'s 2026-08-16 rows —
+hub & orbit locked in from nav_redesign_options.md; ZoneMap.tsx shared between the nav overlay
+and Mission Control's inline map rather than duplicated; exact-hex Tailwind arbitrary values
+for zone hues (the mockup's tokens don't line up with Tailwind's defaults); the mockup's ⌘K
+palette and global Quick Add deferred as net-new features, not nav plumbing; the 1:1s door
+count shown live despite its disabled destination; nav/Scribe skipped on `/app/login` and
+`/app/ic`.
+
+**Next step:** Nav rework pass 2 — build `/app/1-1s` and the cadence model it depends on. See
+`docs/ONE_ON_ONES_PAGE_SPEC.md` (written to scope pass 2) and Session 37 below.
+
+---
+
+## Session 37 — 2026-08-16
+
+**Goal:** Nav rework pass 2 (tracked in code comments as Session 38 — see
+`docs/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). Build `/app/1-1s` as the
+front door for the 1:1 loop, the org-default + per-person cadence model it depends on
+(replacing a hardcoded `21` that lived in three places), shrink Mission Control's Individual
+Performance card to exception-first, and fix four data-trust bugs surfaced in a 2026-08-12 live
+review.
+
+**What was done:**
+- `database/migrations/2026-08-16_one_on_one_cadence.sql` (new) — `organizations.
+  one_on_one_cadence_days` (not null, default 21) + `direct_reports.one_on_one_cadence_days`
+  (nullable — null means "inherit the org default"). Verified idempotent against a scratch
+  local Postgres instance; **not yet run against the live Supabase project** — no credentials
+  available in the build sandbox. Andrew needs to run this before the new endpoint/columns work
+  in production.
+- `backend/utils.py` — added `get_org()` (read-only org lookup, never bootstraps one) and
+  `resolve_cadence_days(report, org) -> (days, source)`, the single canonical cadence resolver:
+  per-report override → org default → hardcoded 21, returning a source label per the app's
+  existing "honesty convention" (same pattern as Capacity's logged-vs-assumed hours).
+- `backend/routes/dashboard.py`, `backend/routes/one_on_ones.py`, `backend/routes/settings.py`,
+  `backend/routes/direct_reports.py` — every cadence-aware call site (the dashboard insight
+  prompt, /prep's staleness logic, profile settings, the direct-report record) now goes through
+  `resolve_cadence_days()` instead of a hardcoded `21`.
+- `backend/routes/one_on_ones.py` — new `GET /overview` endpoint: per-report `is_due`,
+  `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — the
+  single canonical "who's due" computation that both the zone map and Mission Control now read
+  instead of each re-deriving it.
+- `frontend/app/app/1-1s/page.tsx` (new) — three sections (Due now / Prepped not yet run /
+  Recently wrapped), sourced entirely from the new overview endpoint.
+- `frontend/components/ZoneMap.tsx` — the 1:1s door is a live link again, reading `is_due` from
+  the overview endpoint instead of computing staleness client-side; removed the local
+  `CADENCE_DAYS` constant.
+- `frontend/app/app/dashboard/page.tsx` — new `IndividualPerformanceCard`: exception-first
+  (due-for-a-1:1 leads, everyone else collapses behind "Show N on track"), the same treatment
+  Goals/Key Initiatives got in Session 26. Also fixes data-trust bug #4: the AI insight banner
+  now distinguishes "legitimately nothing to flag" (renders nothing, as before) from "the call
+  actually failed" (new `insightFailed` state, small muted line) — previously both collapsed
+  into identical silence.
+- `frontend/app/app/goals/page.tsx` — bug #1 fix: the Goals page no longer defaults to an empty
+  tab when the individual level has no goals; it now finds the first level tab with content.
+- `backend/routes/team.py` + `frontend/components/CheckInPanel.tsx` (new exported
+  `averageProgress()`) + `frontend/app/app/team/page.tsx` — bug #2/#3 fixes: `get_team_goals`
+  was never calling `enrich_with_check_ins`, so the Team KPI tile rendered green at 0/5 instead
+  of gray/amber/green by real scored-goal state, and the goal progress ring computed "% of
+  goals with status on_track" instead of averaging real check-in progress. Both now read the
+  same `averageProgress()` function Mission Control already used, with an honest "–" when no
+  goal has logged progress yet.
+- `frontend/lib/api.ts` — `getOneOnOnesOverview()` + its types; `assignReportCadence()`; every
+  `direct_reports` PUT-style updater extended to preserve `one_on_one_cadence_days` ("PUT
+  replaces the whole record").
+- `frontend/app/app/settings/page.tsx` and `frontend/app/app/reports/[id]/page.tsx` — cadence
+  override UI: an org-default input in Settings, a per-person override + resolved-source line
+  on the report detail page.
+
+**Decisions made / locked:**
+- `resolve_cadence_days()` returns `(days, source)` rather than a bare int — a deliberate
+  deviation from the spec's literal suggested signature, needed for `cadence_source` on the
+  overview endpoint without building a second parallel resolver. DRY beat matching the spec's
+  exact suggested shape.
+- `one_on_ones` still has no status column — status stays derived (`planned` = prep_guide set +
+  summary null; `completed` = summary set), per the spec's hard constraint.
+- No new RLS policies needed for the two new cadence columns — verified directly against
+  `schema.sql`: `organizations_update_own` and `direct_reports_all_own` are both row-level
+  policies (scoped by `current_org_id()` / `manager_id = auth.uid()`), which already cover
+  every column on those tables, including new ones.
+
+**Verification:** `npx tsc --noEmit` clean (zero errors); `next build` clean, all 21 routes
+including `/app/1-1s` (config files staged from the device into the build sandbox since the
+sandbox's working copy only held session-touched files). Backend `.py` files re-verified with
+`ast.parse`. Traced the `/overview` endpoint's logic against all four required states (zero
+reports, never-met, overdue, planned session) — all resolve correctly. Confirmed the zone map's
+"N due" count and `/app/1-1s`'s "Due now" section filter the identical `is_due` field from the
+same endpoint call, so the two can't drift apart. Migration verified idempotent against a
+scratch local Postgres instance (no live Supabase credentials available in the build sandbox).
+
+**Next step:** Run the migration against the live Supabase project before this ships — the
+`/overview` endpoint and cadence columns won't work without it. After that: deploy, exercise
+the four 1:1s states against real data, and dogfood a week through `/app/1-1s`.
+
+---
+
 ## Session 35 — 2026-08-16
 
 **Goal:** Widen the Scribe drawer from its fixed 400px to roughly 25–33% of the viewport

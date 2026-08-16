@@ -95,6 +95,9 @@ class DirectReportIn(BaseModel):
     # Separate from role_level_id — two reports can share a role/comp band
     # but sit on different real teams.
     org_unit_id: str | None = None
+    # 1:1 cadence override, in days (nav rework pass 2, Session 38) — null
+    # means inherit the org default. See resolve_cadence_days() in utils.py.
+    one_on_one_cadence_days: int | None = None
 
 
 @router.get("")

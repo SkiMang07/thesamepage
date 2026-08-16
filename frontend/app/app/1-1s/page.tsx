@@ -1,0 +1,208 @@
+"use client";
+
+// /app/1-1s — the front door for the 1:1 loop (nav rework pass 2, Session 38,
+// 2026-08-16). See docs/ONE_ON_ONES_PAGE_SPEC.md — this page answers one
+// question: who do I owe a conversation, and what's already in flight?
+//
+// Owns the 1:1 loop end to end: due now, prepped-not-yet-run, and recently
+// wrapped, all sourced from the single GET /api/one-on-ones/overview call
+// (the canonical is_due/cadence computation — see backend/utils.py's
+// resolve_cadence_days()). This page does no staleness math of its own,
+// only ordering/filtering of fields the API already resolved.
+//
+// Page actions are triage + start/resume prep only (spec decision #4) — no
+// new write paths. Logging an off-platform 1:1, bulk actions, search across
+// history, and calendar integration are all explicitly out of scope.
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { CadenceSource, OneOnOneOverviewItem, getOneOnOnesOverview } from "@/lib/api";
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function initialsOf(name: string) {
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+// Same honesty convention Capacity uses for logged-vs-assumed hours (spec
+// section 3) — say which source resolved this person's cadence. Duplicated
+// locally rather than shared, matching this app's established "minimal
+// local copies" convention for small per-page helpers (see
+// dashboard/page.tsx's period-helper comment).
+function cadenceSourceLabel(days: number, source: CadenceSource) {
+  if (source === "custom") return `every ${days} days (custom)`;
+  if (source === "org") return `every ${days} days (org default)`;
+  return `every ${days} days (default)`;
+}
+
+export default function OneOnOnesPage() {
+  const [items, setItems] = useState<OneOnOneOverviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getOneOnOnesOverview()
+      .then(setItems)
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Due now — worst first (longest gap at top), never-met sorts as the
+  // worst case. Ordering only; is_due/days_since_last are already resolved
+  // server-side.
+  const dueNow = useMemo(
+    () =>
+      items
+        .filter((i) => i.is_due)
+        .sort((a, b) => {
+          const aGap = a.days_since_last ?? Number.POSITIVE_INFINITY;
+          const bGap = b.days_since_last ?? Number.POSITIVE_INFINITY;
+          return bGap - aGap;
+        }),
+    [items]
+  );
+
+  const prepped = useMemo(() => items.filter((i) => i.planned_session !== null), [items]);
+
+  const recentlyWrapped = useMemo(
+    () =>
+      items
+        .filter((i) => i.last_completed !== null)
+        .sort((a, b) => (a.last_completed!.date < b.last_completed!.date ? 1 : -1))
+        .slice(0, 5),
+    [items]
+  );
+
+  if (loading) return <p className="p-8 text-gray-500">Loading...</p>;
+  if (error) return <p className="p-8 text-red-500">{error}</p>;
+
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-16">
+      <h1 className="text-2xl font-semibold">1:1s</h1>
+      <p className="mt-1 text-sm text-gray-500">Who you owe a conversation, and what&apos;s already in flight.</p>
+
+      {items.length === 0 ? (
+        <p className="mt-8 text-gray-500">
+          No direct reports yet.{" "}
+          <Link href="/app/dashboard" className="underline hover:text-gray-700">
+            Add your first one from your dashboard
+          </Link>
+          .
+        </p>
+      ) : (
+        <div className="mt-8 space-y-10">
+          {/* Due now */}
+          <section>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+              Due now{dueNow.length > 0 && ` (${dueNow.length})`}
+            </h2>
+            {dueNow.length === 0 ? (
+              <p className="mt-3 text-sm text-gray-500">
+                You&apos;re all caught up — nobody&apos;s due for a 1:1 right now. 🎯
+              </p>
+            ) : (
+              <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+                {dueNow.map((r) => {
+                  const badlyOverdue = r.days_since_last === null || r.days_since_last > r.cadence_days * 2;
+                  return (
+                    <li key={r.direct_report_id} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                            badlyOverdue ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {initialsOf(r.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
+                          <p className={`mt-0.5 text-xs ${badlyOverdue ? "text-rose-600" : "text-amber-600"}`}>
+                            {r.days_since_last === null ? "Never met" : `${r.days_since_last} days since last 1:1`}
+                            {" · "}
+                            {cadenceSourceLabel(r.cadence_days, r.cadence_source)}
+                          </p>
+                        </div>
+                      </div>
+                      <Link
+                        href={`/app/reports/${r.direct_report_id}/prep`}
+                        className="shrink-0 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700"
+                      >
+                        Prep →
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {/* Prepped, not yet run */}
+          <section>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+              Prepped, not yet run{prepped.length > 0 && ` (${prepped.length})`}
+            </h2>
+            {prepped.length === 0 ? (
+              <p className="mt-3 text-sm text-gray-500">No prep sheets waiting on a meeting.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+                {prepped.map((r) => (
+                  <li key={r.direct_report_id}>
+                    <Link
+                      href={`/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session!.id}`}
+                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
+                        <p className="mt-0.5 truncate text-xs text-gray-400">
+                          {r.planned_session!.display_summary || "Prep sheet generated — no summary yet."}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-gray-400">Resume →</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Recently wrapped */}
+          <section>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+              Recently wrapped{recentlyWrapped.length > 0 && ` (${recentlyWrapped.length})`}
+            </h2>
+            {recentlyWrapped.length === 0 ? (
+              <p className="mt-3 text-sm text-gray-500">Nothing logged yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+                {recentlyWrapped.map((r) => (
+                  <li key={r.direct_report_id}>
+                    <Link
+                      href={`/app/reports/${r.direct_report_id}`}
+                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50"
+                    >
+                      <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
+                      <p className="shrink-0 text-xs text-gray-400">
+                        {formatDate(r.last_completed!.date)}
+                        {r.last_completed!.commitment_count > 0 &&
+                          ` · ${r.last_completed!.commitment_count} commitment${
+                            r.last_completed!.commitment_count === 1 ? "" : "s"
+                          }`}
+                      </p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
+    </main>
+  );
+}

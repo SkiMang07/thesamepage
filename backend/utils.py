@@ -149,6 +149,52 @@ def get_email_from_token(authorization: str | None) -> str:
     return user_data.get("email") or ""
 
 
+# ---------------------------------------------------------------------------
+# 1:1 cadence resolver (nav rework pass 2, Session 38, 2026-08-16 — see
+# docs/ONE_ON_ONES_PAGE_SPEC.md section 4). The number 21 used to be
+# hardcoded in three places: dashboard.py's _CADENCE_DAYS, one_on_ones.py's
+# prep-prompt staleness logic, and the frontend's dashboard/page.tsx
+# CADENCE_DAYS. This is the one resolver every cadence-aware call site must
+# go through instead of re-hardcoding the number a fourth time.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CADENCE_DAYS = 21
+
+
+def resolve_cadence_days(report: dict | None, org: dict | None) -> tuple[int, str]:
+    """Precedence: direct_reports.one_on_one_cadence_days ("custom") ->
+    organizations.one_on_one_cadence_days ("org") -> 21 ("default", used
+    when the manager has no organization row yet — see ensure_org()).
+
+    Returns (days, source) so callers can label which source won, per the
+    same honesty convention Capacity uses for logged-vs-assumed hours
+    ("every 14 days (custom)" vs "every 21 days (org default)").
+    """
+    report_cadence = (report or {}).get("one_on_one_cadence_days")
+    if report_cadence is not None:
+        return report_cadence, "custom"
+    org_cadence = (org or {}).get("one_on_one_cadence_days")
+    if org_cadence is not None:
+        return org_cadence, "org"
+    return _DEFAULT_CADENCE_DAYS, "default"
+
+
+def get_org(user_id: str, supabase: Client) -> dict | None:
+    """Read-only org lookup — unlike ensure_org(), never creates one. A GET
+    endpoint (dashboard insight, 1:1 overview, prep) shouldn't bootstrap an
+    organization row as a side effect of loading; only a Settings write
+    should (same reasoning as capacity.py's _get_org_id). Returns None
+    before the manager has saved their profile once — callers pass that
+    through to resolve_cadence_days(), which treats a missing org the same
+    as a missing per-report override and falls back to the hardcoded 21."""
+    rows = supabase.table("users").select("org_id").eq("id", user_id).execute().data
+    org_id = rows[0]["org_id"] if rows and rows[0].get("org_id") else None
+    if not org_id:
+        return None
+    org_rows = supabase.table("organizations").select("*").eq("id", org_id).execute().data
+    return org_rows[0] if org_rows else None
+
+
 def ensure_org(user_id: str, supabase: Client, email: str, company_name: str | None = None) -> str:
     """Make sure a users row + organization exist and are linked; return
     org_id. Idempotent — safe to call from any org-scoped write path."""

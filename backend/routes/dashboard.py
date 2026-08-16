@@ -38,14 +38,9 @@ from pydantic import BaseModel
 
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_LIGHT
-from utils import get_authenticated_client, limiter
+from utils import get_authenticated_client, get_org, limiter, resolve_cadence_days
 
 router = APIRouter()
-
-# Matches the prep prompt's cadence logic in one_on_ones.py and the
-# dashboard's CADENCE_DAYS constant — if one changes, change all three
-# (see CLAUDE.md).
-_CADENCE_DAYS = 21
 
 # user_id -> (DashboardInsight, cached_until_epoch_seconds). Unbounded like
 # utils.py's _token_cache — same accepted tradeoff (see foundation_weaknesses
@@ -71,7 +66,8 @@ class DashboardInsight(BaseModel):
 def _build_insight_prompt(team_summary: list[dict], at_risk_goals: list[dict]) -> str:
     if team_summary:
         team_block = "\n".join(
-            f"  • {t['name']} (id: {t['id']}): {t['days_since_last']} days since last 1:1, "
+            f"  • {t['name']} (id: {t['id']}): {t['days_since_last']} days since last 1:1 "
+            f"(their cadence is every {t['cadence_days']} days), "
             f"{t['open_commitments']} open commitment(s), {t['overdue_commitments']} overdue"
             for t in team_summary
         )
@@ -85,7 +81,8 @@ def _build_insight_prompt(team_summary: list[dict], at_risk_goals: list[dict]) -
 
     return f"""You are scanning a manager's team status for ONE thing worth flagging the moment they open their dashboard.
 
-TEAM STATUS (cadence threshold is {_CADENCE_DAYS} days — beyond that, a 1:1 is overdue):
+TEAM STATUS (each person has their own cadence — org default or a per-person
+override, see the parenthetical after each — beyond that, a 1:1 is overdue):
 {team_block}
 
 AT-RISK GOALS:
@@ -93,7 +90,7 @@ AT-RISK GOALS:
 
 Rules:
 - Pick at most ONE thing — the single most pressing item. Do not summarize everything; that defeats the point of a one-line flag.
-- Only flag something that clears a real bar: significantly overdue (well past {_CADENCE_DAYS} days), multiple overdue commitments stacking up on one person, or a goal at risk with nothing else mitigating it. A person merely due soon, or with one recent open commitment, is NOT noteworthy.
+- Only flag something that clears a real bar: significantly overdue relative to THEIR OWN cadence (well past it, not merely past it), multiple overdue commitments stacking up on one person, or a goal at risk with nothing else mitigating it. A person merely due soon, or with one recent open commitment, is NOT noteworthy.
 - If nothing clears that bar, say so — do not invent urgency. A null insight is a valid, expected, common answer.
 - Write the insight as ONE tight sentence, plain language, no hedging ("might want to consider..."). Name the person or goal directly.
 - cta_label is a short 2-3 word action ("Prep now", "Review goal") — only when there's a specific direct report to act on, otherwise null.
@@ -120,13 +117,16 @@ async def get_dashboard_insight(request: Request, auth=Depends(get_authenticated
 
     reports = (
         supabase.table("direct_reports")
-        .select("id,name")
+        .select("id,name,one_on_one_cadence_days")
         .eq("manager_id", user_id)
         .execute()
         .data
     )
     if not reports:
         return DashboardInsight()
+
+    # Read-only — a dashboard load shouldn't bootstrap an organization row.
+    org = get_org(user_id, supabase)
 
     # Same "completed only" rule as direct_reports.py's /overview — a
     # planned (prepped, not-yet-happened) session must not reset the
@@ -174,10 +174,12 @@ async def get_dashboard_insight(request: Request, auth=Depends(get_authenticated
                 days_since = "unknown"
         else:
             days_since = "never met"
+        cadence_days, _cadence_source = resolve_cadence_days(r, org)
         team_summary.append({
             "id": r["id"],
             "name": r["name"],
             "days_since_last": days_since,
+            "cadence_days": cadence_days,
             "open_commitments": open_counts.get(r["id"], 0),
             "overdue_commitments": overdue_counts.get(r["id"], 0),
         })

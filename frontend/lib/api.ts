@@ -57,6 +57,11 @@ export type DirectReport = {
   // name client-side against a loaded OrgUnit[] list, same pattern as
   // role_level_id -> RoleLevel in Settings.
   org_unit_id?: string | null;
+  // 1:1 cadence override, in days (nav rework pass 2, Session 38) — null
+  // means inherit the org default (Profile.one_on_one_cadence_days), which
+  // itself falls back to 21. See resolve_cadence_days() in backend/utils.py
+  // and getOneOnOnesOverview() below for the resolved value.
+  one_on_one_cadence_days?: number | null;
   // Present on GET /api/direct-reports/{id} only: the assigned role's
   // configured expectations. null when no role is assigned.
   expectations?: RoleExpectations | null;
@@ -176,6 +181,28 @@ export const assignReportOrgUnit = (reportId: string, report: DirectReport, orgU
       notes: report.notes,
       role_level_id: report.role_level_id,
       org_unit_id: orgUnitId,
+      one_on_one_cadence_days: report.one_on_one_cadence_days,
+    }),
+  });
+
+// Sets (or clears, via null) this report's 1:1 cadence override — same
+// "read, tweak one field, PUT the whole record" pattern as
+// assignReportRole/assignReportOrgUnit, so the other fields on the record
+// survive the round trip.
+export const assignReportCadence = (
+  reportId: string,
+  report: DirectReport,
+  cadenceDays: number | null
+): Promise<DirectReport> =>
+  authedFetch(`/api/direct-reports/${reportId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      name: report.name,
+      role_title: report.role_title,
+      notes: report.notes,
+      role_level_id: report.role_level_id,
+      org_unit_id: report.org_unit_id,
+      one_on_one_cadence_days: cadenceDays,
     }),
   });
 
@@ -672,7 +699,10 @@ export const sendTeamMessage = (reportId: string, message: string): Promise<Team
 // ---------------------------------------------------------------------------
 
 // Company/team goal progress only — see team.py's get_team_goals docstring
-// for why department/individual are excluded here.
+// for why department/individual are excluded here. Carries CheckInDerived
+// (progress/trend/last_check_in_at) as of the 2026-08-12 data-trust fix —
+// same enrich_with_check_ins() call every other goal-listing endpoint uses,
+// so /app/team's progress ring and Mission Control's Goals card agree.
 export type TeamGoal = {
   id: string;
   title: string;
@@ -681,7 +711,7 @@ export type TeamGoal = {
   due_date: string | null;
   org_unit_id: string | null;
   org_unit_name: string | null;
-};
+} & CheckInDerived;
 
 export const getTeamGoals = (): Promise<TeamGoal[]> => authedFetch("/api/team/goals");
 
@@ -808,6 +838,44 @@ export const logOneOnOne = (body: {
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 
 // ---------------------------------------------------------------------------
+// 1:1s overview (nav rework pass 2, Session 38, 2026-08-16) — the front door
+// for the 1:1 loop, /app/1-1s. See docs/ONE_ON_ONES_PAGE_SPEC.md section 5.
+// Single canonical "who's due" computation — Mission Control's Individual
+// Performance card and the zone map's 1:1s door count both read is_due from
+// here rather than computing staleness client-side (that's the specific
+// failure this endpoint exists to prevent — see the backend's
+// resolve_cadence_days()).
+// ---------------------------------------------------------------------------
+
+// Which source resolved this person's cadence — surfaced so the UI can be
+// honest about where the number came from, same convention Capacity uses
+// for logged-vs-assumed hours (off_hours_source).
+export type CadenceSource = "custom" | "org" | "default";
+
+export type LastCompletedSession = {
+  id: string;
+  date: string;
+  commitment_count: number;
+};
+
+export type OneOnOneOverviewItem = {
+  direct_report_id: string;
+  name: string;
+  role_title: string | null;
+  org_unit: string | null;
+  last_one_on_one_at: string | null;
+  days_since_last: number | null;
+  cadence_days: number;
+  cadence_source: CadenceSource;
+  is_due: boolean;
+  planned_session: OneOnOne | null;
+  last_completed: LastCompletedSession | null;
+};
+
+export const getOneOnOnesOverview = (): Promise<OneOnOneOverviewItem[]> =>
+  authedFetch("/api/one-on-ones/overview");
+
+// ---------------------------------------------------------------------------
 // Settings (Session 6) — Profile & Company, Roles & Levels, Expectations
 // ---------------------------------------------------------------------------
 
@@ -816,6 +884,11 @@ export type Profile = {
   full_name: string;
   company_name: string;
   org_ready: boolean;
+  // Org-wide default 1:1 cadence, in days (nav rework pass 2, Session 38) —
+  // a per-person override on DirectReport.one_on_one_cadence_days takes
+  // precedence over this; this in turn falls back to 21 for a manager with
+  // no organization row yet. See resolve_cadence_days() in backend/utils.py.
+  one_on_one_cadence_days: number;
 };
 
 export type RoleLevel = {
@@ -847,8 +920,11 @@ export const expectationName = (e: Expectation): string =>
 
 export const getProfile = (): Promise<Profile> => authedFetch("/api/settings/profile");
 
-export const updateProfile = (body: { full_name: string; company_name: string }): Promise<Profile> =>
-  authedFetch("/api/settings/profile", { method: "PUT", body: JSON.stringify(body) });
+export const updateProfile = (body: {
+  full_name: string;
+  company_name: string;
+  one_on_one_cadence_days: number;
+}): Promise<Profile> => authedFetch("/api/settings/profile", { method: "PUT", body: JSON.stringify(body) });
 
 export const getRoleLevels = (): Promise<RoleLevel[]> => authedFetch("/api/settings/role-levels");
 
@@ -895,9 +971,11 @@ export const assignReportRole = (reportId: string, report: DirectReport, roleLev
       role_title: report.role_title,
       notes: report.notes,
       role_level_id: roleLevelId,
-      // PUT replaces the whole record — preserve the report's org unit or
-      // reassigning a role would silently clear their team (Session 11).
+      // PUT replaces the whole record — preserve the report's org unit and
+      // cadence override or reassigning a role would silently clear them
+      // (Session 11 / Session 38).
       org_unit_id: report.org_unit_id,
+      one_on_one_cadence_days: report.one_on_one_cadence_days,
     }),
   });
 

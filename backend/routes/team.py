@@ -72,6 +72,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from routes.check_ins import enrich_with_check_ins
 from utils import get_authenticated_client
 
 router = APIRouter()
@@ -233,7 +234,16 @@ async def get_team_goals(auth=Depends(get_authenticated_client)):
     column. Goals are owner-scoped everywhere in this codebase (see
     goals.py's RLS note — the "*_all_own_org" policy names are misleading,
     it's actually owner_id = auth.uid()), so this is just the manager's own
-    goals filtered by level — no org rollup needed."""
+    goals filtered by level — no org rollup needed.
+
+    Data-trust fix (2026-08-12 review, spec section 8 #3): this endpoint
+    used to omit check-in progress entirely, so /app/team's goal-progress
+    ring had nothing real to average and fell back to a status-count ratio
+    instead — a different number from the per-goal progress % Mission
+    Control shows for the same goals (goals.py's list_goals DOES call
+    enrich_with_check_ins). Both now read from the same helper over the
+    same underlying data.
+    """
     user_id, supabase = auth
     rows = (
         supabase.table("goals")
@@ -247,7 +257,7 @@ async def get_team_goals(auth=Depends(get_authenticated_client)):
     for row in rows:
         org_unit = row.pop("org_units", None) or {}
         row["org_unit_name"] = org_unit.get("name")
-    return rows
+    return enrich_with_check_ins(supabase, user_id, rows, "goal_id")
 
 
 @router.get("/notes")

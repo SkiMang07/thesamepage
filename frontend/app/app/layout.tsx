@@ -8,10 +8,17 @@
 // instead of a fixed 400px — so it scales toward ~25-33% of the viewport
 // on larger screens while never going below the original 400px floor.
 //
-// S3 change: adds a fixed ✦ button (top-right, z-50) that opens the
-// drawer from any authenticated page — visible whenever the drawer is
-// closed. This makes the drawer discoverable everywhere without touching
-// each page's own header.
+// Session 36/37 change: the persistent global nav ("hub & orbit", Option C
+// v2 — see docs/DESIGN.md and the nav_redesign_options project memory note)
+// renders here as <AppNav />, above every page's own content. The old
+// per-page "← Back to your team" links and Mission Control's own NAV_LINKS
+// row are gone now that this is the one place cross-page navigation lives.
+//
+// This also retires the fixed top-right ✦ button + the dashboard's
+// nav-bar-integrated one — the Scribe toggle now lives once, inside AppNav's
+// header, for every page. AppNav (and the Scribe toggle/drawer with it) is
+// skipped on /app/login (unauthenticated) and /app/ic (IC stub landing —
+// wrong audience for a manager-oriented nav).
 //
 // Keyboard: ⌘J summons the drawer with the composer focused; Esc closes.
 
@@ -19,15 +26,18 @@ import { useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { DrawerProvider, useDrawer } from "@/lib/drawer-context";
 import ScribeDrawer from "@/components/ScribeDrawer";
+import AppNav from "@/components/AppNav";
+
+const NO_NAV_PATHS = new Set(["/app/login", "/app/ic"]);
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { isOpen, toggle, close } = useDrawer();
   const pathname = usePathname();
-  // Dashboard has its own ✦ button in its nav bar — skip the fixed one there.
-  const showFixedButton = !isOpen && pathname !== "/app/dashboard";
+  const showNav = !NO_NAV_PATHS.has(pathname ?? "");
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      if (!showNav) return;
       if ((e.metaKey || e.ctrlKey) && e.key === "j") {
         e.preventDefault();
         toggle();
@@ -36,7 +46,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         close();
       }
     },
-    [toggle, isOpen, close],
+    [toggle, isOpen, close, showNav],
   );
 
   useEffect(() => {
@@ -47,23 +57,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       {/* Main content — flex-1 so it gives up space to the drawer */}
-      <div className="flex-1 min-w-0 overflow-x-hidden">{children}</div>
-
-      {/* Fixed ✦ button — visible on all pages (except dashboard, which
-          has its own ✦ in its nav bar) when the drawer is closed. */}
-      {showFixedButton && (
-        <button
-          onClick={toggle}
-          title="Open Scribe (⌘J)"
-          className="fixed right-4 top-4 z-50 flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm text-white shadow-sm hover:bg-gray-700 focus:outline-none"
-          aria-label="Open Scribe assistant"
-        >
-          ✦
-        </button>
-      )}
+      <div className="flex-1 min-w-0 overflow-x-hidden">
+        {showNav && <AppNav />}
+        {children}
+      </div>
 
       {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
-      {isOpen && (
+      {showNav && isOpen && (
         <aside
           className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-gray-200 bg-white shadow-sm"
           style={{ zIndex: 40 }}

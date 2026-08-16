@@ -116,6 +116,17 @@ export default function GoalsPage() {
         setReports(r);
         setOrgUnits(ou);
         setProjects(p);
+        // Data-trust fix (2026-08-12 review, spec section 8 #1): the page
+        // always opened on the Individual tab, which reads as broken for
+        // any manager who works mostly in department/team/company goals —
+        // the first thing they see is an empty list. Land on the first tab
+        // (in tab order) that actually has content; Individual stays the
+        // fallback only when nothing has been added anywhere yet.
+        const hasIndividual = g.some((goal) => goal.level === "individual");
+        if (!hasIndividual) {
+          const firstWithContent = LEVEL_TABS.find((t) => g.some((goal) => goal.level === t.id));
+          if (firstWithContent) setLevel(firstWithContent.id);
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -205,12 +216,7 @@ export default function GoalsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Goals</h1>
-        <Link href="/app/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          &larr; Back to your team
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold">Goals</h1>
       <p className="mt-1 text-sm text-gray-500">
         Company, department, team, and individual goals in one place.
       </p>

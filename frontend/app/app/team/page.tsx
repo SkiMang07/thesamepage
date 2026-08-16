@@ -44,6 +44,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { averageProgress } from "@/components/CheckInPanel";
 import {
   Project,
   TeamCallout,
@@ -239,12 +240,7 @@ export default function TeamPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Team</h1>
-        <Link href="/app/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          &larr; Back to your team
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold">Team</h1>
       <p className="mt-1 text-sm text-gray-500">
         Everything your team is working on, how goals and commitments are tracking, and a shared space
         for meetings — this week&apos;s must-knows included.
@@ -308,6 +304,16 @@ function KpiStrip({
   const scoredGoals = goals.filter((g) => g.status !== "cancelled");
   const onTrackGoals = scoredGoals.filter((g) => g.status === "on_track").length;
   const goalsLabel = scoredGoals.length > 0 ? `${onTrackGoals}/${scoredGoals.length}` : "—";
+  // Data-trust fix (2026-08-12 review, spec section 8 #2): this tile used a
+  // fixed green gradient regardless of value, so "0/5 on track" rendered as
+  // a success color — zero is not success. Amber once there's real signal
+  // and nothing is on track yet; gray when there's nothing to score at all.
+  const goalsTileTone =
+    scoredGoals.length === 0
+      ? { from: "from-gray-400", to: "to-gray-500" }
+      : onTrackGoals === 0
+        ? { from: "from-amber-500", to: "to-amber-600" }
+        : { from: "from-green-500", to: "to-green-600" };
 
   const today = localDateStr();
   const weekOut = addDaysStr(today, 7);
@@ -320,7 +326,7 @@ function KpiStrip({
   const meetingSubLabel = nextAgenda ? "Until next meeting" : "No meeting planned";
 
   const tiles = [
-    { value: goalsLabel, label: "Goals on track", from: "from-green-500", to: "to-green-600" },
+    { value: goalsLabel, label: "Goals on track", from: goalsTileTone.from, to: goalsTileTone.to },
     { value: String(initiatives.length), label: "Active initiatives", from: "from-sky-500", to: "to-sky-600" },
     { value: String(dueThisWeek), label: "Commitments due this week", from: "from-amber-500", to: "to-amber-600" },
     { value: meetingLabel, label: meetingSubLabel, from: "from-indigo-500", to: "to-indigo-600" },
@@ -388,7 +394,15 @@ function InitiativesCard({ initiatives, members }: { initiatives: Project[]; mem
 
 function GoalsCard({ goals }: { goals: TeamGoal[] }) {
   const scored = goals.filter((g) => g.status !== "cancelled");
-  const pct = scored.length > 0 ? Math.round((scored.filter((g) => g.status === "on_track").length / scored.length) * 100) : 0;
+  // Data-trust fix (2026-08-12 review, spec section 8 #3): this ring used to
+  // compute "% of goals with status on_track" — a status count, not actual
+  // progress — so it could read 0% while Mission Control showed real
+  // per-goal check-in progress (e.g. 25%/10%) for the very same goals.
+  // averageProgress() reads the same `progress` field both surfaces share
+  // (see CheckInPanel.tsx). null (nobody's checked in yet) renders as an
+  // honest "–" rather than a misleading 0%.
+  const avgProgress = averageProgress(scored);
+  const pct = avgProgress ?? 0;
   const dash = `${pct}, 100`;
   const sorted = [...goals].sort((a, b) => (a.level === b.level ? 0 : a.level === "company" ? -1 : 1));
 
@@ -406,16 +420,18 @@ function GoalsCard({ goals }: { goals: TeamGoal[] }) {
               stroke="#e5e7eb"
               strokeWidth="3"
             />
-            <path
-              d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
-              fill="none"
-              stroke="#22c55e"
-              strokeWidth="3"
-              strokeDasharray={dash}
-              strokeLinecap="round"
-            />
+            {avgProgress != null && (
+              <path
+                d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth="3"
+                strokeDasharray={dash}
+                strokeLinecap="round"
+              />
+            )}
             <text x="18" y="21" textAnchor="middle" fontSize="9" fill="#111827" fontWeight="600">
-              {pct}%
+              {avgProgress != null ? `${pct}%` : "–"}
             </text>
           </svg>
           <ul className="min-w-0 flex-1 space-y-1.5">

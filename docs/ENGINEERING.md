@@ -131,12 +131,15 @@ Full schema with indexes and RLS policies: `database/schema.sql`.
 
 **Core tables (MVP feature set lives here):**
 ```
-organizations        -- org-level config
+organizations        -- org-level config; one_on_one_cadence_days (Session 37/38) — org-wide
+                        1:1 cadence default, itself defaulting to 21
 users                -- manager_id self-ref for hierarchy; role: manager/director/vp/ic
 manager_report_connections  -- explicit join table for hierarchy traversal (was on Miro board)
 direct_reports       -- the manager's team; user_id nullable, now claimable via the invite flow
                         (Session 22) — see direct_report_invites below and the Team Mission Control
                         section. No IC-facing view consumes it yet.
+                        one_on_one_cadence_days (Session 37/38) — per-report cadence override,
+                        null means inherit the org default; see resolve_cadence_days() in utils.py
 one_on_ones          -- 1:1 logs; notes private to writing manager (RLS)
 commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id;
                         is_team_commitment (Session 23) flags a commitment (still assigned to one
@@ -1151,6 +1154,9 @@ backend/
                   propagates the user JWT to client.storage as of Session 28 — see Context Engine
                   Session II above), ensure_org()/get_email_from_token() (Session 11), shared
                   `limiter` (Session 20), shared helpers
+                  get_org()/resolve_cadence_days() (Session 37/38) — read-only org lookup +
+                  the single canonical cadence resolver (per-report override -> org default ->
+                  hardcoded 21), returns (days, source) for the honesty-convention label
   ai_core.py      generate_text() — the only place Anthropic SDK is called; generate_text_from_document()
                   (Session 28) sends a base64 PDF as a native Claude document content block
   context_engine.py  Shared Context Engine plumbing, not a route. Session IV (Session 29):
@@ -1164,6 +1170,9 @@ backend/
     direct_reports.py   GET/POST/PUT/DELETE /api/direct-reports (+ /overview, /rollup — Session 15)
     one_on_ones.py      GET/POST /api/one-on-ones, POST /prep (prep sheet — now pulls Context Engine
                           docs via context_engine.py as of Session 29), POST /wrapup (notes → draft log)
+                          GET /overview (Session 37/38) — per-report is_due/days_since_last/
+                          cadence_days/cadence_source/planned_session/last_completed; the single
+                          canonical "who's due" computation, backs /app/1-1s and the zone map
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10) + /rollup (Session 15)
                           + GET/POST /{id}/check-ins, list enriched with progress/trend/freshness (Session 26)
@@ -1177,9 +1186,14 @@ backend/
     assessments.py       /api/assessments — levels, team list, per-report scorecard, AI draft, save (Session 16)
     dashboard.py          GET /api/dashboard/insight — Mission Control's AI insight banner (Session 19),
                           cached + rate-limited (Session 20)
+                          Session 37/38: the insight prompt's staleness bullet now uses each report's
+                          own resolve_cadence_days() result instead of one shared hardcoded threshold
     team.py               /api/team — roster + active projects/priorities per report, message log (Session 21);
                           goals, meeting notes (+ meeting_date agenda surfacing, Session 23) (Session 22);
                           commitments (Session 23); callout (Session 24)
+                          Session 37/38 bug fix: get_team_goals() now calls check_ins.py's
+                          enrich_with_check_ins() (previously never called it) — the KPI tile and
+                          progress ring were reading a different, wrong signal than Mission Control
     documents.py           /api/documents — POST /upload (Context Engine Session II, Session 28):
                           PPTX/PDF/text upload → LibreOffice PPTX→PDF → Storage → Librarian extraction
                           call → pending_review row. GET "" list for manual verification only.
@@ -1194,7 +1208,9 @@ backend/
 frontend/
   app/
     (marketing)/        Public SSG pages (home, pricing, blog) — need to be indexable
-    app/dashboard/      Mission Control — landing page (Session 18; grid layout Session 19): Individual Performance, Goals, Key Initiatives, Capacity strip, AI insight banner, Quick Add. Goals + Key Initiatives cards exception-first via TriageCard (Session 26)
+    app/dashboard/      Mission Control — landing page (Session 18; grid layout Session 19): Individual Performance, Goals, Key Initiatives, Capacity strip, AI insight banner, Quick Add. Goals + Key Initiatives cards exception-first via TriageCard (Session 26). Individual Performance itself went exception-first (IndividualPerformanceCard) and the AI insight banner gained a distinct failed-vs-null state, Session 37/38
+    app/1-1s/            Front door for the 1:1 loop (Session 37/38, nav rework pass 2) — Due now /
+                          Prepped not yet run / Recently wrapped, sourced from GET /api/one-on-ones/overview
     app/login/          Login page
     app/goals/          Goals page — own top-level page, not under Settings (Session 10)
     app/projects/        Projects page — own top-level page, grouped by assignee (Session 13)
@@ -1218,10 +1234,16 @@ frontend/
                         variant for file uploads — authedFetch always forces JSON Content-Type.
     supabase.ts         createClientComponentClient() — browser-side auth client
   components/
+    AppNav.tsx           Persistent global nav (Session 36/37, "hub & orbit") — sticky header + orbit
+                        strip + zone-map overlay, rendered once from app/app/layout.tsx
+    ZoneMap.tsx           Nav config (NAV_GROUPS), icons, hue/tone styling, useZoneData() (fetches every
+                        door's count), <ZoneMap> — shared between AppNav's overlay and Mission Control's
+                        inline map, which it replaced in place (Session 36/37)
     QuickAddModal.tsx   Mission Control's quick-add — type picker + minimal create form (Session 19)
     CheckInPanel.tsx    shared check-in strip for goal/project cards (Session 26) — progress bar/%, trend arrow,
                         staleness label, inline check-in form, lazy history; exports isStale/TrendArrow/etc.
-                        reused by dashboard's TriageCard
+                        reused by dashboard's TriageCard. averageProgress() (Session 37/38) — shared
+                        progress-% aggregate now used by both Mission Control and /app/team's goal ring
 ```
 
 ---

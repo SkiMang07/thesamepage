@@ -40,7 +40,6 @@
 // not discussed with Andrew; flagged as a placeholder open to revision.
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   CategoryCoverage,
   ContextCoverage,
@@ -167,12 +166,7 @@ export default function ContextEnginePage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">The Space</h1>
-        <Link href="/app/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          &larr; Back to your team
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold">The Space</h1>
       <p className="mt-1 text-sm text-gray-500">
         Teach the Librarian about your team — strategy, values, customers, offerings, career paths.
         The more it knows, the better your answers get.

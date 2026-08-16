@@ -43,12 +43,7 @@ export default function AssessmentsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Assessments</h1>
-        <Link href="/app/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          &larr; Back to your team
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold">Assessments</h1>
       <p className="mt-1 text-sm text-gray-500">
         How each person is doing against their role&apos;s configured expectations — metrics, skills, and values.
       </p>

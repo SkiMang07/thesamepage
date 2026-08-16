@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Option C v2 - Hub & orbit — The Same Page nav prototype</title>
+<style>
+:root{
+  --ink:#15171c; --ink2:#3d434f; --muted:#79808d; --faint:#a3a9b4;
+  --line:#e7e5e0; --line2:#f1efeb; --bg:#faf9f6; --surface:#ffffff;
+  --indigo:#4f46e5; --indigo-bg:#eef1ff; --indigo-line:#d9dcff;
+  --emerald:#0e8f7e; --emerald-bg:#ecfaf6; --emerald-line:#c7ece4;
+  --violet:#7c4ddb; --violet-bg:#f5f0ff; --violet-line:#e4d8fb;
+  --amber:#b0640c; --amber-bg:#fdf5e9; --rose:#c02a4c; --rose-bg:#fdf0f3;
+  --green:#0e8f4e;
+  --r:14px; --rs:10px;
+  --sh:0 1px 2px rgba(21,23,28,.04), 0 10px 30px -18px rgba(21,23,28,.35);
+  --sh-lift:0 2px 6px rgba(21,23,28,.06), 0 18px 40px -20px rgba(21,23,28,.4);
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);
+  font:15px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.ic{width:18px;height:18px;flex:0 0 auto}
+.ic-sm{width:15px;height:15px;flex:0 0 auto}
+.ic-lg{width:22px;height:22px;flex:0 0 auto}
+.hue-indigo{color:var(--indigo)} .hue-emerald{color:var(--emerald)} .hue-violet{color:var(--violet)} .hue-ink{color:var(--ink)}
+
+/* ---- screens ---- */
+.stage{padding:28px 34px 120px}
+.screen{display:none}
+.screen.is-active{display:block;animation:rise .22s var(--ease)}
+@keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.h1{font-size:24px;font-weight:640;letter-spacing:-.02em;margin:0}
+.sub{margin:5px 0 0;color:var(--muted);font-size:13.5px}
+.row{display:flex;gap:14px;align-items:flex-start}
+.between{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media (max-width:1080px){.grid3,.grid4{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh)}
+.card-h{padding:14px 16px 12px;border-bottom:1px solid var(--line2);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card-t{font-size:12.5px;font-weight:640;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.card-b{padding:6px 8px 10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--rs);padding:13px 15px}
+.tile .n{font-size:22px;font-weight:640;letter-spacing:-.02em}
+.tile .l{font-size:12px;color:var(--muted);margin-top:2px}
+.tile.warn{background:var(--amber-bg);border-color:#f0dfc2}.tile.warn .n,.tile.warn .l{color:var(--amber)}
+.tile.risk{background:var(--rose-bg);border-color:#f5d2da}.tile.risk .n,.tile.risk .l{color:var(--rose)}
+.item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;transition:background .14s var(--ease)}
+.item:hover{background:#faf9f6;cursor:pointer}
+.dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.dot.ok{background:var(--green)}.dot.warn{background:#d99b28}.dot.risk{background:var(--rose)}
+.nm{font-size:13.5px;font-weight:550;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta{font-size:11.5px;color:var(--faint)}
+.chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.chip.warn{background:var(--amber-bg);color:var(--amber)}
+.chip.risk{background:var(--rose-bg);color:var(--rose)}
+.chip.ok{background:#eaf7ef;color:var(--green)}
+.chip.neutral{background:var(--line2);color:var(--muted)}
+.bar{height:5px;border-radius:99px;background:var(--line2);overflow:hidden;margin-top:7px}
+.bar>i{display:block;height:100%;border-radius:99px;background:var(--green)}
+.bar>i.warn{background:#d99b28}.bar>i.risk{background:var(--rose)}
+.insight{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(180deg,#f3f1ff,#eef1ff);
+  border:1px solid var(--indigo-line);border-radius:var(--r);padding:14px 16px;margin-top:18px}
+.insight .sp{width:26px;height:26px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.insight p{margin:0;font-size:13.5px;color:#2f2a63}
+.cta{background:var(--indigo);color:#fff;font-size:12px;font-weight:600;padding:6px 11px;border-radius:8px;white-space:nowrap}
+.skel{max-width:620px;margin:8px 0 0}
+.skel .l{height:9px;border-radius:99px;background:var(--line2);margin-top:11px}
+.note-inline{margin-top:20px;font-size:13px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);
+  border-radius:var(--r);padding:16px 18px;max-width:640px}
+.tabs{display:flex;gap:4px;margin:18px 0 14px}
+.tab{font-size:13px;padding:6px 12px;border-radius:99px;color:var(--muted)}
+.tab.on{background:var(--ink);color:#fff}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{text-align:left;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:0 12px 9px}
+.tbl td{padding:11px 12px;border-top:1px solid var(--line2)}
+.av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:650;color:#fff;flex:0 0 auto}
+
+/* ---- global actions ---- */
+.gbtn{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink2);border:1px solid var(--line);
+  background:var(--surface);padding:6px 11px;border-radius:9px;transition:all .15s var(--ease)}
+.gbtn:hover{border-color:#d6d3cc;box-shadow:var(--sh);transform:translateY(-1px)}
+.gbtn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.gbtn.spark{background:linear-gradient(135deg,#4f46e5,#7c4ddb);color:#fff;border-color:transparent}
+.kbd{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:5px;padding:1px 5px;color:var(--faint);background:var(--surface)}
+
+/* ---- command palette (shared) ---- */
+.pal-wrap{position:fixed;inset:0;background:rgba(21,23,28,.28);backdrop-filter:blur(2px);display:none;
+  align-items:flex-start;justify-content:center;padding-top:14vh;z-index:120}
+.pal-wrap.on{display:flex;animation:fadein .15s var(--ease)}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.pal{width:min(540px,92vw);background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 30px 80px -20px rgba(21,23,28,.5);overflow:hidden}
+.pal input{width:100%;border:0;outline:0;padding:16px 18px;font-size:15px;background:transparent}
+.pal .res{max-height:320px;overflow:auto;border-top:1px solid var(--line2);padding:6px}
+.pal .r{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;font-size:13.5px}
+.pal .r.on{background:var(--indigo-bg)}
+.pal .r .g{margin-left:auto;font-size:11px;color:var(--faint)}
+.pal .ft{border-top:1px solid var(--line2);padding:8px 14px;font-size:11.5px;color:var(--faint);display:flex;gap:12px}
+
+/* ---- designer note ---- */
+.notebtn{position:fixed;bottom:16px;right:16px;z-index:130;font-size:12px;font-weight:600;background:var(--ink);color:#fff;
+  padding:7px 13px;border-radius:99px;box-shadow:var(--sh-lift);opacity:.92}
+.notepanel{position:fixed;top:0;right:0;bottom:0;width:min(420px,92vw);background:var(--surface);
+  border-left:1px solid var(--line);box-shadow:-20px 0 60px -30px rgba(21,23,28,.5);z-index:129;
+  padding:64px 26px 30px;overflow:auto;transform:translateX(102%);transition:transform .28s var(--ease)}
+.notepanel.on{transform:none}
+.notepanel h3{margin:0 0 4px;font-size:17px;letter-spacing:-.01em}
+.notepanel h4{margin:22px 0 6px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.notepanel p,.notepanel li{font-size:13.5px;color:var(--ink2);margin:6px 0}
+.notepanel ul{padding-left:18px;margin:4px 0}
+.tagline{font-size:13px;color:var(--muted);margin:0 0 2px}
+
+.c-top{position:sticky;top:0;z-index:45;background:rgba(250,249,246,.92);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:11px 30px;flex-wrap:nowrap}
+.c-brand{display:flex;align-items:center;gap:9px;font-weight:650;font-size:14.5px;white-space:nowrap}
+.c-mark{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#4f46e5,#7c4ddb);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:12px}
+#hereslot{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:nowrap}
+.c-back{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);padding:6px 10px;border-radius:9px;white-space:nowrap}
+.c-back:hover{background:#f2f0ec;color:var(--ink)}
+.c-here{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);white-space:nowrap}
+.c-here b{color:var(--ink)}
+.c-acts{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+/* orbit strip — sticky under the header */
+.c-orbit{position:sticky;top:53px;z-index:44;background:rgba(250,249,246,.92);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line2);padding:10px 30px;display:flex;align-items:center;gap:8px;overflow-x:auto}
+.c-orbit::-webkit-scrollbar{display:none}
+.c-zonechip{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:99px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink2);white-space:nowrap;transition:all .15s var(--ease)}
+.c-zonechip:hover{box-shadow:var(--sh);transform:translateY(-1px)}
+.c-zonechip .ch{width:12px;height:12px;color:var(--faint)}
+.c-zonechip.indigo{color:var(--indigo);border-color:var(--indigo-line);background:var(--indigo-bg)}
+.c-zonechip.emerald{color:var(--emerald);border-color:var(--emerald-line);background:var(--emerald-bg)}
+.c-zonechip.violet{color:var(--violet);border-color:var(--violet-line);background:var(--violet-bg)}
+.c-div{width:1px;height:20px;background:var(--line);margin:0 4px;flex:0 0 auto}
+.c-o{display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 13px;border-radius:99px;background:transparent;
+  border:1px solid transparent;color:var(--muted);white-space:nowrap;transition:all .16s var(--ease)}
+.c-o:hover{background:var(--surface);border-color:var(--line);color:var(--ink);transform:translateY(-1px)}
+.c-o .ic-sm{color:var(--faint)}
+.c-o.on{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:600;box-shadow:var(--sh)}
+.c-o.on .ic-sm{color:currentColor}
+.c-o.on.indigo{color:var(--indigo)} .c-o.on.emerald{color:var(--emerald)} .c-o.on.violet{color:var(--violet)}
+.c-p{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 12px 5px 5px;border-radius:99px;
+  border:1px solid transparent;color:var(--ink2);white-space:nowrap;transition:all .16s var(--ease)}
+.c-p:hover{background:var(--surface);border-color:var(--line);transform:translateY(-1px)}
+.c-p.on{background:var(--surface);border-color:var(--line);box-shadow:var(--sh);font-weight:600}
+.c-p .av{width:24px;height:24px;font-size:10px}
+.c-p .d{width:6px;height:6px;border-radius:50%}
+.c-more{margin-left:auto;font-size:12.5px;color:var(--muted);padding:6px 12px;border-radius:99px;white-space:nowrap}
+.c-more:hover{background:var(--surface);color:var(--ink)}
+
+/* zone map */
+.c-map{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0 4px}
+@media (max-width:1080px){.c-map{grid-template-columns:1fr}}
+.c-zone{border-radius:var(--r);padding:15px 16px;border:1px solid;transition:transform .18s var(--ease),box-shadow .18s var(--ease)}
+.c-zone:hover{transform:translateY(-2px);box-shadow:var(--sh-lift)}
+.c-zone.indigo{background:var(--indigo-bg);border-color:var(--indigo-line)}
+.c-zone.emerald{background:var(--emerald-bg);border-color:var(--emerald-line)}
+.c-zone.violet{background:var(--violet-bg);border-color:var(--violet-line)}
+.c-zone .zt{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.c-zone .zb{font-size:12px;color:var(--muted);margin-top:1px}
+.c-zone .zi{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;margin-top:6px;
+  background:rgba(255,255,255,.66);transition:background .14s var(--ease),transform .14s var(--ease)}
+.c-zone .zi:hover{background:#fff;transform:translateX(2px)}
+.c-zone .zi .t{font-size:13px;font-weight:560;flex:1}
+.c-zone .zi .c{font-size:11.5px;color:var(--muted)}
+.c-zone .zi .c.warn{color:var(--amber);font-weight:640}
+.c-zone .zi .c.risk{color:var(--rose);font-weight:640}
+.c-zone .zi .c.setup{color:var(--faint);font-style:italic}
+
+/* map overlay */
+.c-sheetwrap{position:fixed;inset:0;background:rgba(21,23,28,.26);backdrop-filter:blur(2px);display:none;z-index:100;
+  padding:78px 30px}
+.c-sheetwrap.on{display:block;animation:fadein .15s var(--ease)}
+.c-sheet{max-width:1100px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  box-shadow:0 30px 80px -20px rgba(21,23,28,.45);padding:18px 20px 22px;animation:rise .2s var(--ease)}
+.c-sheet .sh{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2px}
+.c-sheet .sh h3{margin:0;font-size:15px}
+.c-sheet .c-map{margin-top:12px}
+</style></head>
+<body>
+
+<header class="c-top" id="ctop"></header>
+<div class="c-orbit" id="corbit"></div>
+<main class="stage"><section class="screen" data-screen="home"><div class="between"><div><h1 class="h1">Mission Control</h1><p class="sub">Sunday, 16 August &middot; here's your whole operation</p></div><div class="row"></div></div>
+<div id="home-extra"></div>
+<div class="insight">
+  <span class="sp"><svg class="ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></span>
+  <p><strong>Devin has gone 24 days without a 1:1</strong> while carrying two at-risk initiatives. That pairing is the thing most likely to bite you this week.</p>
+  <a class="cta" data-go="report" style="margin-left:auto">Prep with Devin &rarr;</a>
+</div>
+<div class="grid3" style="margin-top:18px">
+  <div class="card"><div class="card-h"><span class="card-t">Individual performance</span><a class="meta" data-go="team">Team &rarr;</a></div><div class="card-b">
+    <div class="item" data-go="report"><span class="dot risk"></span><span class="nm">Devin Ross</span><span class="chip risk">24d</span></div>
+    <div class="item" data-go="report"><span class="dot warn"></span><span class="nm">Tom Whitfield</span><span class="chip warn">due</span></div>
+    <div class="item" data-go="report"><span class="dot ok"></span><span class="nm">Maya Chen</span><span class="meta">4d ago</span></div>
+    <div class="item" data-go="report"><span class="dot ok"></span><span class="nm">Priya Raman</span><span class="meta">6d ago</span></div>
+    <div class="item" data-go="report"><span class="dot ok"></span><span class="nm">Alex Kim</span><span class="meta">2d ago</span></div>
+  </div></div>
+  <div class="card"><div class="card-h"><span class="card-t">Goals</span><a class="meta" data-go="goals">Q3 &rarr;</a></div><div class="card-b">
+    <div class="item" data-go="goals"><div style="flex:1;min-width:0"><div class="row" style="gap:8px"><span class="nm">Cut onboarding time to 10 days</span><span class="chip risk">at risk</span></div><div class="bar"><i class="risk" style="width:35%"></i></div></div></div>
+    <div class="item" data-go="goals"><div style="flex:1;min-width:0"><div class="row" style="gap:8px"><span class="nm">Renewals &ge; 92%</span><span class="chip warn">stale 17d</span></div><div class="bar"><i class="warn" style="width:61%"></i></div></div></div>
+    <div class="item" data-go="goals"><div style="flex:1;min-width:0"><div class="row" style="gap:8px"><span class="nm">Ship the partner portal</span></div><div class="bar"><i style="width:78%"></i></div></div></div>
+    <div style="padding:6px 12px"><span class="meta">Show 4 on track &#9662;</span></div>
+  </div></div>
+  <div class="card"><div class="card-h"><span class="card-t">Key initiatives</span><a class="meta" data-go="projects">All &rarr;</a></div><div class="card-b">
+    <div class="item" data-go="projects"><span class="dot risk"></span><span class="nm">Migration &mdash; phase 2</span><span class="chip risk">no owner</span></div>
+    <div class="item" data-go="projects"><span class="dot warn"></span><span class="nm">QBR content refresh</span><span class="chip warn">due Fri</span></div>
+    <div class="item" data-go="projects"><span class="dot ok"></span><span class="nm">Health-score rollout</span><span class="meta">62%</span></div>
+    <div style="padding:6px 12px"><span class="meta">Show 3 on track &#9662;</span></div>
+  </div></div>
+</div>
+</section><section class="screen" data-screen="team"><div class="between"><div><h1 class="h1">Team</h1><p class="sub">Five people &middot; what they're carrying this week</p></div><div class="row"></div></div>
+<div class="grid4" style="margin-top:20px">
+  <div class="tile"><div class="n">12</div><div class="l">Active initiatives</div></div>
+  <div class="tile"><div class="n">7</div><div class="l">Open commitments</div></div>
+  <div class="tile warn"><div class="n">2</div><div class="l">Meetings without notes</div></div>
+  <div class="tile"><div class="n">83%</div><div class="l">Goals on track</div></div>
+</div>
+<div class="grid2" style="margin-top:18px">
+  <div class="card"><div class="card-h"><span class="card-t">Critical callouts</span></div><div class="card-b" style="padding:14px 16px">
+    <p style="margin:0;font-size:13.5px;color:var(--ink2)">Migration phase 2 slipped a week. Priya is covering QBR content while Tom is out &mdash; revisit Thursday.</p>
+  </div></div>
+  <div class="card"><div class="card-h"><span class="card-t">Next meeting &middot; Tue 18 Aug</span></div><div class="card-b">
+    <div class="item"><span class="nm">Agenda: migration re-plan</span></div>
+    <div class="item"><span class="nm">Agenda: Q4 goal draft</span></div>
+  </div></div>
+</div>
+<div class="card" style="margin-top:16px"><div class="card-h"><span class="card-t">Roster</span></div><div class="card-b" style="padding:10px 14px 14px">
+<table class="tbl"><thead><tr><th>Person</th><th>Priorities</th><th>Initiatives</th><th>Last 1:1</th></tr></thead><tbody>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#4f46e5">MC</span> Maya Chen</div></td><td>Renewals playbook</td><td>2 active</td><td>4d ago</td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#0e8f7e">DR</span> Devin Ross</div></td><td>Migration phase 2</td><td>3 active</td><td><span class="chip risk">24d ago</span></td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#7c4ddb">PR</span> Priya Raman</div></td><td>QBR content</td><td>2 active</td><td>6d ago</td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#b0640c">TW</span> Tom Whitfield</div></td><td>Health-score rollout</td><td>3 active</td><td><span class="chip warn">19d ago</span></td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#c02a4c">AK</span> Alex Kim</div></td><td>Partner portal</td><td>2 active</td><td>2d ago</td></tr>
+</tbody></table></div></div>
+</section><section class="screen" data-screen="oneonones"><div class="between"><div><h1 class="h1">1:1s</h1><p class="sub">Every conversation you owe, in one place</p></div><div class="row"></div></div>
+<div class="card" style="margin-top:20px"><div class="card-h"><span class="card-t">Due now</span><span class="chip warn">2</span></div><div class="card-b">
+  <div class="item" data-go="report"><span class="av" style="background:#0e8f7e">DR</span><span class="nm">Devin Ross</span><span class="chip risk">24 days</span><span class="cta">Prep &rarr;</span></div>
+  <div class="item" data-go="report"><span class="av" style="background:#b0640c">TW</span><span class="nm">Tom Whitfield</span><span class="chip warn">19 days</span><span class="cta">Prep &rarr;</span></div>
+</div></div>
+<div class="grid2" style="margin-top:16px">
+  <div class="card"><div class="card-h"><span class="card-t">Prepped, not yet run</span></div><div class="card-b">
+    <div class="item" data-go="report"><span class="av" style="background:#4f46e5">MC</span><span class="nm">Maya Chen</span><span class="meta">Tue 18 Aug</span><span class="chip neutral">resume</span></div>
+  </div></div>
+  <div class="card"><div class="card-h"><span class="card-t">Recently wrapped</span></div><div class="card-b">
+    <div class="item" data-go="report"><span class="av" style="background:#7c4ddb">PR</span><span class="nm">Priya Raman</span><span class="meta">6d ago &middot; 2 commitments</span></div>
+    <div class="item" data-go="report"><span class="av" style="background:#c02a4c">AK</span><span class="nm">Alex Kim</span><span class="meta">2d ago &middot; 1 commitment</span></div>
+  </div></div>
+</div>
+<div class="note-inline"><strong>This route doesn't exist yet.</strong> Today a 1:1 only lives inside a report's detail page, so the product's core job has no front door. You chose to build it &mdash; roughly a session on top of the nav itself.</div>
+</section><section class="screen" data-screen="goals"><div class="between"><div><h1 class="h1">Goals</h1><p class="sub">What we said we'd achieve this quarter</p></div><div class="row"></div></div>
+<div class="tabs"><span class="tab on">Company</span><span class="tab">Department</span><span class="tab">Team</span><span class="tab">Individual</span></div>
+<div class="grid2">
+  <div class="card"><div class="card-b" style="padding:16px 18px">
+    <div class="row" style="justify-content:space-between"><strong style="font-size:14.5px">Cut onboarding time to 10 days</strong><span class="chip risk">at risk</span></div>
+    <p class="sub" style="margin-top:6px">Measured by median days from contract to first value.</p>
+    <div class="bar"><i class="risk" style="width:35%"></i></div>
+    <div class="row" style="justify-content:space-between;margin-top:8px"><span class="meta">35% &middot; checked in 3d ago</span><span class="meta">Owner: Devin</span></div>
+  </div></div>
+  <div class="card"><div class="card-b" style="padding:16px 18px">
+    <div class="row" style="justify-content:space-between"><strong style="font-size:14.5px">Renewals &ge; 92%</strong><span class="chip warn">stale 17d</span></div>
+    <p class="sub" style="margin-top:6px">Gross renewal rate across the book.</p>
+    <div class="bar"><i class="warn" style="width:61%"></i></div>
+    <div class="row" style="justify-content:space-between;margin-top:8px"><span class="meta">61% &middot; needs a check-in</span><span class="meta">Owner: Maya</span></div>
+  </div></div>
+  <div class="card"><div class="card-b" style="padding:16px 18px">
+    <div class="row" style="justify-content:space-between"><strong style="font-size:14.5px">Ship the partner portal</strong><span class="chip ok">on track</span></div>
+    <p class="sub" style="margin-top:6px">GA to 20 launch partners.</p>
+    <div class="bar"><i style="width:78%"></i></div>
+    <div class="row" style="justify-content:space-between;margin-top:8px"><span class="meta">78% &middot; checked in today</span><span class="meta">Owner: Alex</span></div>
+  </div></div>
+  <div class="card"><div class="card-b" style="padding:16px 18px">
+    <div class="row" style="justify-content:space-between"><strong style="font-size:14.5px">NPS to 45</strong><span class="chip ok">on track</span></div>
+    <p class="sub" style="margin-top:6px">Rolling 90-day score.</p>
+    <div class="bar"><i style="width:54%"></i></div>
+    <div class="row" style="justify-content:space-between;margin-top:8px"><span class="meta">54% &middot; checked in 5d ago</span><span class="meta">Owner: Priya</span></div>
+  </div></div>
+</div>
+</section><section class="screen" data-screen="capacity"><div class="between"><div><h1 class="h1">Capacity</h1><p class="sub">Who has room over the next four weeks</p></div><div class="row"></div></div>
+<div class="grid4" style="margin-top:20px">
+  <div class="tile"><div class="n">168h</div><div class="l">Available this week</div></div>
+  <div class="tile"><div class="n">33.6h</div><div class="l">Average per person</div></div>
+  <div class="tile warn"><div class="n">1</div><div class="l">Person under 20h</div></div>
+  <div class="tile"><div class="n">21</div><div class="l">Off-days assumed / yr</div></div>
+</div>
+<div class="card" style="margin-top:18px"><div class="card-b" style="padding:14px 16px 16px">
+<table class="tbl"><thead><tr><th>Person</th><th>Contracted</th><th>Off hours</th><th>Available</th><th></th></tr></thead><tbody>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#4f46e5">MC</span> Maya Chen</div></td><td>40h</td><td>3.2h <span class="chip neutral">assumed</span></td><td><strong>36.8h</strong></td><td style="width:32%"><div class="bar"><i style="width:92%"></i></div></td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#0e8f7e">DR</span> Devin Ross</div></td><td>40h</td><td>16h <span class="chip neutral">logged</span></td><td><strong>18.4h</strong></td><td><div class="bar"><i class="warn" style="width:46%"></i></div></td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#7c4ddb">PR</span> Priya Raman</div></td><td>40h</td><td>3.2h <span class="chip neutral">assumed</span></td><td><strong>36.8h</strong></td><td><div class="bar"><i style="width:92%"></i></div></td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#b0640c">TW</span> Tom Whitfield</div></td><td>32h</td><td>3.2h <span class="chip neutral">assumed</span></td><td><strong>28.8h</strong></td><td><div class="bar"><i style="width:72%"></i></div></td></tr>
+<tr><td><div class="row" style="align-items:center;gap:9px"><span class="av" style="background:#c02a4c">AK</span> Alex Kim</div></td><td>40h</td><td>3.2h <span class="chip neutral">assumed</span></td><td><strong>36.8h</strong></td><td><div class="bar"><i style="width:92%"></i></div></td></tr>
+</tbody></table></div></div>
+</section><section class="screen" data-screen="report">
+<div class="between">
+  <div class="row" style="align-items:center;gap:13px">
+    <span class="av" style="background:#0e8f7e;width:42px;height:42px;font-size:15px">DR</span>
+    <div><h1 class="h1">Devin Ross</h1><p class="sub">Senior CSM &middot; L3 &middot; Enterprise</p></div>
+  </div>
+  <div class="row"><span class="chip risk" style="align-self:center">24 days since last 1:1</span><a class="gbtn primary">Start 1:1 prep &rarr;</a></div>
+</div>
+<div class="grid2" style="margin-top:20px">
+  <div class="card"><div class="card-h"><span class="card-t">Open commitments</span></div><div class="card-b">
+    <div class="item"><span class="dot warn"></span><span class="nm">Re-plan migration phase 2</span><span class="meta">due Thu</span></div>
+    <div class="item"><span class="dot ok"></span><span class="nm">Draft the runbook</span><span class="meta">due 22 Aug</span></div>
+  </div></div>
+  <div class="card"><div class="card-h"><span class="card-t">Goals</span><a class="meta" data-go="goals">Goals &rarr;</a></div><div class="card-b">
+    <div class="item"><div style="flex:1"><div class="row" style="gap:8px"><span class="nm">Cut onboarding time to 10 days</span><span class="chip risk">at risk</span></div><div class="bar"><i class="risk" style="width:35%"></i></div></div></div>
+  </div></div>
+  <div class="card"><div class="card-h"><span class="card-t">Initiatives</span><a class="meta" data-go="projects">Projects &rarr;</a></div><div class="card-b">
+    <div class="item"><span class="dot risk"></span><span class="nm">Migration &mdash; phase 2</span><span class="chip risk">no owner</span></div>
+    <div class="item"><span class="dot warn"></span><span class="nm">Data hygiene sweep</span><span class="meta">40%</span></div>
+  </div></div>
+  <div class="card"><div class="card-h"><span class="card-t">1:1 sessions</span></div><div class="card-b">
+    <div class="item"><span class="nm">23 Jul &middot; wrapped</span><span class="meta">3 commitments</span></div>
+    <div class="item"><span class="nm">9 Jul &middot; wrapped</span><span class="meta">1 commitment</span></div>
+  </div></div>
+</div>
+<div class="note-inline">This is the deepest page in the app and today it's the worst dead-end &mdash; one &ldquo;Back to your team&rdquo; link and nothing else. Look at the strip above: on a person page it carries <strong>your roster</strong>, not the zone's pages. Back-to-back prep becomes one click per person.</div>
+</section><section class="screen" data-screen="projects"><div class="between"><div><h1 class="h1">Projects</h1><p class="sub">The initiatives behind the goals</p></div><div class="row"></div></div>
+<div class="card" style="margin-top:20px"><div class="card-b" style="padding:20px 22px">
+  <div class="skel"><div class="l" style="width:46%"></div><div class="l" style="width:88%"></div><div class="l" style="width:72%"></div><div class="l" style="width:80%"></div></div>
+</div></div>
+<div class="note-inline">Not mocked &mdash; the point here is the navigation. Try the zone chip in the strip above.</div></section><section class="screen" data-screen="assessments"><div class="between"><div><h1 class="h1">Assessments</h1><p class="sub">How each person is tracking over time</p></div><div class="row"></div></div>
+<div class="card" style="margin-top:20px"><div class="card-b" style="padding:20px 22px">
+  <div class="skel"><div class="l" style="width:46%"></div><div class="l" style="width:88%"></div><div class="l" style="width:72%"></div><div class="l" style="width:80%"></div></div>
+</div></div>
+<div class="note-inline">Not mocked. Note the strip: Assessments sits in <em>Your people</em>, so its siblings are Team and 1:1s.</div></section><section class="screen" data-screen="org"><div class="between"><div><h1 class="h1">Org</h1><p class="sub">Departments, teams and who leads them</p></div><div class="row"></div></div>
+<div class="card" style="margin-top:20px"><div class="card-b" style="padding:20px 22px">
+  <div class="skel"><div class="l" style="width:46%"></div><div class="l" style="width:88%"></div><div class="l" style="width:72%"></div><div class="l" style="width:80%"></div></div>
+</div></div>
+<div class="note-inline">Not mocked. <em>Foundation</em> &mdash; set up once, revisited rarely.</div></section><section class="screen" data-screen="knowledge"><div class="between"><div><h1 class="h1">Knowledge</h1><p class="sub">What the AI knows about your world</p></div><div class="row"></div></div>
+<div class="card" style="margin-top:20px"><div class="card-b" style="padding:20px 22px">
+  <div class="skel"><div class="l" style="width:46%"></div><div class="l" style="width:88%"></div><div class="l" style="width:72%"></div><div class="l" style="width:80%"></div></div>
+</div></div>
+<div class="note-inline">Renamed from <strong>Context</strong>. &ldquo;Context&rdquo; names the mechanism; &ldquo;Knowledge&rdquo; names what you get.</div></section><section class="screen" data-screen="settings"><div class="between"><div><h1 class="h1">Settings</h1><p class="sub">Roles, levels, expectations, company</p></div><div class="row"></div></div>
+<div class="card" style="margin-top:20px"><div class="card-b" style="padding:20px 22px">
+  <div class="skel"><div class="l" style="width:46%"></div><div class="l" style="width:88%"></div><div class="l" style="width:72%"></div><div class="l" style="width:80%"></div></div>
+</div></div>
+<div class="note-inline">Note this reads <span class="chip warn">not finished</span> on the map rather than a count. Unfinished setup is the one thing the map should nag about.</div></section></main>
+
+<script>
+const ICONS = {"home": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>", "team": "<path d=\"M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9.5\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/>", "oneonones": "<path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/>", "assessments": "<polygon points=\"12 2.5 14.9 8.4 21.4 9.3 16.7 13.9 17.8 20.4 12 17.3 6.2 20.4 7.3 13.9 2.6 9.3 9.1 8.4\"/>", "goals": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"5\"/><circle cx=\"12\" cy=\"12\" r=\"1.4\" fill=\"currentColor\" stroke=\"none\"/>", "projects": "<polygon points=\"12 2.5 2.5 7.2 12 11.9 21.5 7.2\"/><polyline points=\"2.5 16.8 12 21.5 21.5 16.8\"/><polyline points=\"2.5 12 12 16.7 21.5 12\"/>", "capacity": "<line x1=\"18\" y1=\"20\" x2=\"18\" y2=\"10\"/><line x1=\"12\" y1=\"20\" x2=\"12\" y2=\"4\"/><line x1=\"6\" y1=\"20\" x2=\"6\" y2=\"14\"/>", "org": "<circle cx=\"18\" cy=\"5\" r=\"2.6\"/><circle cx=\"6\" cy=\"12\" r=\"2.6\"/><circle cx=\"18\" cy=\"19\" r=\"2.6\"/><line x1=\"8.4\" y1=\"13.4\" x2=\"15.6\" y2=\"17.6\"/><line x1=\"15.6\" y1=\"6.4\" x2=\"8.4\" y2=\"10.6\"/>", "knowledge": "<path d=\"M2.5 3.5h5.5a3.5 3.5 0 0 1 3.5 3.5v13.5a3 3 0 0 0-3-3h-6z\"/><path d=\"M21.5 3.5H16a3.5 3.5 0 0 0-3.5 3.5v13.5a3 3 0 0 1 3-3h6z\"/>", "settings": "<line x1=\"4\" y1=\"21\" x2=\"4\" y2=\"14\"/><line x1=\"4\" y1=\"10\" x2=\"4\" y2=\"3\"/><line x1=\"12\" y1=\"21\" x2=\"12\" y2=\"12\"/><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"3\"/><line x1=\"20\" y1=\"21\" x2=\"20\" y2=\"16\"/><line x1=\"20\" y1=\"12\" x2=\"20\" y2=\"3\"/><line x1=\"1.5\" y1=\"14\" x2=\"6.5\" y2=\"14\"/><line x1=\"9.5\" y1=\"8\" x2=\"14.5\" y2=\"8\"/><line x1=\"17.5\" y1=\"16\" x2=\"22.5\" y2=\"16\"/>", "scribe": "<path d=\"M12 3.2l1.9 5.4 5.4 1.9-5.4 1.9L12 17.8l-1.9-5.4L4.7 10.5l5.4-1.9z\"/>", "search": "<circle cx=\"11\" cy=\"11\" r=\"7\"/><line x1=\"21\" y1=\"21\" x2=\"16\" y2=\"16\"/>", "plus": "<line x1=\"12\" y1=\"5.5\" x2=\"12\" y2=\"18.5\"/><line x1=\"5.5\" y1=\"12\" x2=\"18.5\" y2=\"12\"/>", "chevron": "<polyline points=\"6 9.5 12 15.5 18 9.5\"/>", "back": "<line x1=\"19\" y1=\"12\" x2=\"5\" y2=\"12\"/><polyline points=\"11 18 5 12 11 6\"/>", "map": "<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.6\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.6\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.6\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.6\"/>", "clock": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><polyline points=\"12 7 12 12 15.5 14\"/>", "check": "<polyline points=\"20 6.5 9.5 17 4 11.5\"/>", "arrow": "<line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"/><polyline points=\"13 6 19 12 13 18\"/>"};
+
+const NAV = [
+  { kind:"solo", id:"home", label:"Mission Control", icon:"home", hue:"ink" },
+  { kind:"group", group:"Your people", hue:"indigo", blurb:"The rhythm you keep with humans",
+    items:[
+      { id:"team",        label:"Team",        icon:"team",        state:"5 people" },
+      { id:"oneonones",   label:"1:1s",        icon:"oneonones",   state:"2 due", tone:"warn" },
+      { id:"assessments", label:"Assessments", icon:"assessments", state:"last 12 Aug" },
+    ]},
+  { kind:"group", group:"The work", hue:"emerald", blurb:"What we said we'd deliver",
+    items:[
+      { id:"goals",    label:"Goals",    icon:"goals",    state:"1 at risk", tone:"risk" },
+      { id:"projects", label:"Projects", icon:"projects", state:"12 active" },
+      { id:"capacity", label:"Capacity", icon:"capacity", state:"168h free" },
+    ]},
+  { kind:"group", group:"Foundation", hue:"violet", blurb:"Set once, tuned rarely",
+    items:[
+      { id:"org",       label:"Org",       icon:"org",       state:"4 units" },
+      { id:"knowledge", label:"Knowledge", icon:"knowledge", state:"63% covered" },
+      { id:"settings",  label:"Settings",  icon:"settings",  state:"not finished", tone:"setup" },
+    ]},
+];
+const ROSTER = [
+  { id:"p-maya",  n:"Maya Chen",     i:"MC", c:"#4f46e5", last:"4d ago" },
+  { id:"p-devin", n:"Devin Ross",    i:"DR", c:"#0e8f7e", last:"24d ago", tone:"risk" },
+  { id:"p-priya", n:"Priya Raman",   i:"PR", c:"#7c4ddb", last:"6d ago" },
+  { id:"p-tom",   n:"Tom Whitfield", i:"TW", c:"#b0640c", last:"19d ago", tone:"warn" },
+  { id:"p-alex",  n:"Alex Kim",      i:"AK", c:"#c02a4c", last:"2d ago" },
+];
+const DEEP = [{ id:"report", label:"Devin Ross", icon:"team", group:"Your people", hue:"indigo", person:true, via:"Team" }];
+const FLAT = (() => { const o=[]; NAV.forEach(n => n.kind==="solo" ? o.push({...n, group:"Start here"}) : n.items.forEach(i => o.push({...i, group:n.group, hue:n.hue}))); DEEP.forEach(d => o.push(d)); return o; })();
+const BY_ID = Object.fromEntries(FLAT.map(i => [i.id, i]));
+function svg(name, cls){ return `<svg class="${cls||"ic"}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||""}</svg>`; }
+function zoneHTML(){
+  return NAV.filter(n => n.kind==="group").map(n => `<div class="c-zone ${n.hue}">
+    <div class="zt">${n.group}</div><div class="zb">${n.blurb}</div>` +
+    n.items.map(i => `<a class="zi" data-go="${i.id}">${svg(i.icon,"ic-sm")}<span class="t">${i.label}</span>
+        <span class="c ${i.tone||""}">${i.state||""}</span></a>`).join("") + `</div>`).join("");
+}
+
+
+let CURRENT = "home";
+function screens(){ return document.querySelectorAll("[data-screen]"); }
+function go(id){
+  if(!BY_ID[id]) return;
+  CURRENT = id;
+  screens().forEach(s => s.classList.toggle("is-active", s.dataset.screen === id));
+  document.querySelectorAll(".stage")[0].scrollTop = 0;
+  window.scrollTo({top:0});
+  paint();
+}
+/* command palette */
+function buildPalette(){
+  const w = document.createElement("div"); w.className = "pal-wrap"; w.id = "palwrap";
+  w.innerHTML = `<div class="pal">
+    <input id="palin" placeholder="Jump to anything\u2026" autocomplete="off">
+    <div class="res" id="palres"></div>
+    <div class="ft"><span><span class="kbd">\u2318K</span> open</span><span><span class="kbd">\u21B5</span> go</span><span><span class="kbd">esc</span> close</span></div>
+  </div>`;
+  document.body.appendChild(w);
+  const input = w.querySelector("#palin"), res = w.querySelector("#palres");
+  let sel = 0, list = [];
+  function render(){
+    const q = input.value.toLowerCase().trim();
+    list = FLAT.filter(i => !q || i.label.toLowerCase().includes(q) || (i.group||"").toLowerCase().includes(q));
+    sel = Math.min(sel, Math.max(0, list.length-1));
+    res.innerHTML = list.map((i,n) => `<div class="r ${n===sel?"on":""}" data-go="${i.id}">${svg(i.icon,"ic-sm")}<span>${i.label}</span><span class="g">${i.group}</span></div>`).join("");
+  }
+  input.addEventListener("input", () => { sel = 0; render(); });
+  res.addEventListener("click", e => { const t = e.target.closest("[data-go]"); if(t){ go(t.dataset.go); closePal(); }});
+  w.addEventListener("click", e => { if(e.target === w) closePal(); });
+  document.addEventListener("keydown", e => {
+    if((e.metaKey||e.ctrlKey) && e.key.toLowerCase() === "k"){ e.preventDefault(); openPal(); return; }
+    if(!w.classList.contains("on")) return;
+    if(e.key === "Escape") closePal();
+    if(e.key === "ArrowDown"){ e.preventDefault(); sel = Math.min(sel+1, list.length-1); render(); }
+    if(e.key === "ArrowUp"){ e.preventDefault(); sel = Math.max(sel-1, 0); render(); }
+    if(e.key === "Enter" && list[sel]){ go(list[sel].id); closePal(); }
+  });
+  window.openPal = () => { w.classList.add("on"); input.value = ""; sel = 0; render(); input.focus(); };
+  window.closePal = () => w.classList.remove("on");
+}
+/* designer note */
+function buildNote(title, tagline, bodyHtml){
+  const b = document.createElement("button"); b.className = "notebtn"; b.textContent = "Designer's note";
+  const p = document.createElement("div"); p.className = "notepanel";
+  p.innerHTML = `<p class="tagline">${tagline}</p><h3>${title}</h3>${bodyHtml}`;
+  document.body.append(p, b);
+  b.addEventListener("click", () => { const on = p.classList.toggle("on"); b.textContent = on ? "Close note" : "Designer's note"; });
+}
+function delegate(){
+  document.body.addEventListener("click", e => {
+    const t = e.target.closest("[data-go]");
+    if(t && !t.closest(".pal")){ e.preventDefault(); go(t.dataset.go); }
+    if(e.target.closest("[data-pal]")) window.openPal();
+  });
+}
+
+
+document.getElementById("ctop").innerHTML =
+  `<a class="c-brand" data-go="home"><span class="c-mark">\u25C9</span> The Same Page</a>
+   <span id="hereslot"></span>
+   <div class="c-acts">
+     <button class="gbtn" data-pal>${svg("search","ic-sm")} Jump to <span class="kbd">\u2318K</span></button>
+     <button class="gbtn primary">${svg("plus","ic-sm")} Quick add</button>
+     <button class="gbtn spark">${svg("scribe","ic-sm")} Scribe</button>
+     <span class="av" style="background:#15171c;margin-left:4px">AG</span>
+   </div>`;
+
+document.getElementById("home-extra").innerHTML = `<div class="c-map">${zoneHTML()}</div>`;
+
+const sheet = document.createElement("div");
+sheet.className = "c-sheetwrap"; sheet.id = "sheet";
+sheet.innerHTML = `<div class="c-sheet"><div class="sh"><h3>All areas</h3>
+  <span class="meta">press <span class="kbd">esc</span> to close</span></div>
+  <div class="c-map">${zoneHTML()}</div></div>`;
+document.body.appendChild(sheet);
+sheet.addEventListener("click", e => { if(e.target === sheet) sheet.classList.remove("on"); });
+document.addEventListener("keydown", e => { if(e.key === "Escape") sheet.classList.remove("on"); });
+document.body.addEventListener("click", e => {
+  if(e.target.closest("[data-sheet]")) sheet.classList.toggle("on");
+  if(e.target.closest("#sheet [data-go]")) sheet.classList.remove("on");
+});
+
+function paint(){
+  const cur = BY_ID[CURRENT], orbit = document.getElementById("corbit"), here = document.getElementById("hereslot");
+  if(cur.group === "Start here"){
+    here.innerHTML = `<span class="c-here"><b>Mission Control</b></span>`;
+    orbit.style.display = "none"; orbit.innerHTML = "";
+    return;
+  }
+  orbit.style.display = "flex";
+  const g = NAV.find(n => n.group === cur.group);
+  if(cur.person){
+    here.innerHTML = `<a class="c-back" data-go="home">${svg("back","ic-sm")} Mission Control</a>
+      <span class="c-here"><a data-go="team" style="text-decoration:underline;text-decoration-color:var(--line)">${cur.group}</a>
+      <span style="color:var(--faint)">/</span><a data-go="team">${cur.via}</a>
+      <span style="color:var(--faint)">/</span><b>${cur.label}</b></span>`;
+    orbit.innerHTML = `<button class="c-zonechip ${g.hue}" data-sheet>${svg("map","ic-sm")} ${g.group}
+        <svg class="ch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.chevron}</svg></button>
+      <span class="c-div"></span>` +
+      ROSTER.map(p => `<a class="c-p ${p.n===cur.label?"on":""}" data-go="report">
+        <span class="av" style="background:${p.c}">${p.i}</span>${p.n.split(" ")[0]}
+        ${p.tone?`<span class="d ${p.tone==="risk"?"":""}" style="background:${p.tone==="risk"?"var(--rose)":"#d99b28"}"></span>`:""}</a>`).join("") +
+      `<a class="c-more" data-go="team">All 5 &rarr;</a>`;
+  } else {
+    here.innerHTML = `<a class="c-back" data-go="home">${svg("back","ic-sm")} Mission Control</a>
+      <span class="c-here"><span>${cur.group}</span><span style="color:var(--faint)">/</span><b>${cur.label}</b></span>`;
+    orbit.innerHTML = `<button class="c-zonechip ${g.hue}" data-sheet>${svg("map","ic-sm")} ${g.group}
+        <svg class="ch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS.chevron}</svg></button>
+      <span class="c-div"></span>` +
+      g.items.map(i => `<a class="c-o ${g.hue} ${i.id===CURRENT?"on":""}" data-go="${i.id}">${svg(i.icon,"ic-sm")}${i.label}</a>`).join("");
+  }
+}
+
+buildPalette(); delegate();
+buildNote("Option C v2 &mdash; Hub &amp; orbit", "Refined after you picked it", "<p>Same idea you picked, tightened in five places. Everything below is a change from the version you clicked.</p> <h4>1. The map replaced the stat ribbon</h4> <p>Your call, and I think the right one. The old ribbon and the old map were saying the same things twice. Now the numbers live <em>on</em> the doors: &ldquo;2 due&rdquo; is both the status and the way to act on it. Note the restraint &mdash; only counts that need you are coloured. Everything healthy stays grey, so colour still means something.</p> <h4>2. The zone chip opens the whole map, from anywhere</h4> <p>The biggest weakness of what you clicked was that cross-zone moves needed <span class=\"kbd\">&#8984;K</span>, which a new manager will never find. The strip's left label is now a button: press it on any page and the full map drops down as an overlay. One click, same place every time, and it reuses the mental model rather than adding a second one. <span class=\"kbd\">&#8984;K</span> stays for you.</p> <h4>3. The strip is sticky, and carries people on people pages</h4> <p>It scrolled away before, which for a nav is a bug. Now it pins under the header. And on a report or prep page it swaps the zone's pages for <strong>your roster</strong> &mdash; Sunday-afternoon back-to-back prep becomes one click per person instead of five round-trips through the dashboard. Open the Devin Ross screen (via 1:1s, or the insight banner) to feel it.</p> <h4>4. 1:1s is now a real screen</h4> <p>Due now / prepped-not-yet-run / recently wrapped. This is new code, not a re-skin &mdash; roughly a session on top of the nav. Worth it: it's the job the product exists for, and it's currently the only one with no front door.</p> <h4>5. Settings reads &ldquo;not finished&rdquo;, not a count</h4> <p>Unfinished setup is the one thing the map should nag about. This is where your onboarding golden path can eventually surface without adding a separate checklist UI.</p> <h4>What I'd still watch</h4> <ul> <li><strong>The map has to stay honest.</strong> The moment a count is wrong or stale, the whole landing page loses trust &mdash; and your 12 Aug review already found three disagreeing numbers. Fix those before this ships, or the map amplifies them.</li> <li><strong>Empty org, day one.</strong> With no reports, every count is 0 and the map is a wall of nothing. Needs a first-run variant: three zones, one live &ldquo;Add your first report&rdquo; door, the rest quiet.</li> <li><strong>Icons.</strong> These are hand-rolled inline SVG. Twelve of them is fine to keep; more than that and it's worth deciding on lucide-react, which would be the app's first UI dependency.</li> <li><strong>Mobile.</strong> Map stacks to one column, strip scrolls horizontally. Both fine, neither designed yet.</li> </ul> <h4>Build order I'd take</h4> <p>Strip + zone chip + map overlay in <code>layout.tsx</code> &rarr; rewrite Mission Control's top half &rarr; delete &ldquo;Back to your team&rdquo; from nine pages &rarr; person-scoped strip on report/prep &rarr; then the 1:1s route as its own pass.</p>");
+go("home");
+</script>
+</body></html>

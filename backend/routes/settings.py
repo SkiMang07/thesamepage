@@ -53,9 +53,18 @@ def _get_profile(user_id: str, supabase):
 # Section 1 — Profile & Company
 # ---------------------------------------------------------------------------
 
+_DEFAULT_CADENCE_DAYS = 21
+
+
 class ProfileIn(BaseModel):
     full_name: str
     company_name: str
+    # Org-wide default 1:1 cadence (nav rework pass 2, Session 38) — see
+    # ONE_ON_ONES_PAGE_SPEC.md section 3 and resolve_cadence_days() in
+    # utils.py. Grouped with Profile & Company rather than its own settings
+    # section: one scalar on organizations doesn't earn a dedicated tab the
+    # way Capacity's cluster of related defaults does.
+    one_on_one_cadence_days: int = _DEFAULT_CADENCE_DAYS
 
 
 @router.get("/profile")
@@ -71,6 +80,7 @@ async def get_profile(auth=Depends(get_authenticated_client), authorization: str
         "full_name": (profile or {}).get("full_name") or "",
         "company_name": (org or {}).get("name") or "",
         "org_ready": org is not None,
+        "one_on_one_cadence_days": (org or {}).get("one_on_one_cadence_days", _DEFAULT_CADENCE_DAYS),
     }
 
 
@@ -80,8 +90,10 @@ async def update_profile(body: ProfileIn, auth=Depends(get_authenticated_client)
     email = _get_email(authorization)
     org_id = _ensure_org(user_id, supabase, email, company_name=body.company_name.strip() or None)
     supabase.table("users").update({"full_name": body.full_name.strip()}).eq("id", user_id).execute()
+    org_update: dict = {"one_on_one_cadence_days": body.one_on_one_cadence_days}
     if body.company_name.strip():
-        supabase.table("organizations").update({"name": body.company_name.strip()}).eq("id", org_id).execute()
+        org_update["name"] = body.company_name.strip()
+    supabase.table("organizations").update(org_update).eq("id", org_id).execute()
     return await get_profile(auth=auth, authorization=authorization)
 
 

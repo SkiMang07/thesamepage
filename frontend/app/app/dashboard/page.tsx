@@ -32,43 +32,48 @@ import Link from "next/link";
 import QuickAddModal from "@/components/QuickAddModal";
 import { TrendArrow, isStale } from "@/components/CheckInPanel";
 import {
+  CadenceSource,
   CapacityOverviewItem,
   DashboardInsight,
   Goal,
   GoalLevel,
   GoalStatus,
+  OneOnOneOverviewItem,
   Project,
   TeamAssessmentItem,
   TeamOverviewItem,
   getCapacityOverview,
   getDashboardInsight,
   getGoals,
+  getOneOnOnesOverview,
   getProjects,
   getTeamAssessments,
   getTeamOverview,
 } from "@/lib/api";
-import { useDrawer } from "@/lib/drawer-context";
-
-// Matches the prep prompt's cadence logic in one_on_ones.py — past 21 days
-// we stop assuming last meeting's context still holds.
-const CADENCE_DAYS = 21;
+import { useZoneData, ZoneMap } from "@/components/ZoneMap";
 
 function daysSince(iso: string) {
   const then = new Date(iso).getTime();
   return Math.floor((Date.now() - then) / (1000 * 60 * 60 * 24));
 }
 
-function lastOneOnOneLabel(iso: string | null) {
-  if (!iso) return "No 1:1s yet";
-  const d = daysSince(iso);
-  if (d === 0) return "Last 1:1 today";
-  if (d === 1) return "Last 1:1 yesterday";
-  return `Last 1:1 ${d} days ago`;
+// days_since_last comes straight from GET /api/one-on-ones/overview — the
+// frontend no longer computes 1:1 staleness itself (nav rework pass 2,
+// Session 38; see docs/ONE_ON_ONES_PAGE_SPEC.md section 4). This is display
+// formatting only, not a staleness calculation.
+function lastOneOnOneLabel(daysSinceLast: number | null) {
+  if (daysSinceLast === null) return "No 1:1s yet";
+  if (daysSinceLast === 0) return "Last 1:1 today";
+  if (daysSinceLast === 1) return "Last 1:1 yesterday";
+  return `Last 1:1 ${daysSinceLast} days ago`;
 }
 
-function needsOneOnOne(lastOneOnOneAt: string | null) {
-  if (!lastOneOnOneAt) return true;
-  return daysSince(lastOneOnOneAt) > CADENCE_DAYS;
+// Honesty convention Capacity uses for logged-vs-assumed hours (spec
+// section 3): say which source resolved this person's cadence.
+function cadenceSourceLabel(days: number, source: CadenceSource) {
+  if (source === "custom") return `every ${days} days (custom)`;
+  if (source === "org") return `every ${days} days (org default)`;
+  return `every ${days} days (default)`;
 }
 
 // Organization / Department / Team Goals — the board's three top-of-
@@ -175,30 +180,21 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-// Individual Performance row — getTeamOverview (1:1 cadence, open
-// commitments) merged client-side with getTeamAssessments (latest rating)
-// by direct_report_id. No new backend route for this.
+// Individual Performance row — getTeamOverview (open commitments) merged
+// client-side with getOneOnOnesOverview (the canonical is_due/cadence
+// computation, nav rework pass 2 — see docs/ONE_ON_ONES_PAGE_SPEC.md) and
+// getTeamAssessments (latest rating), all by direct_report_id.
 type PerformanceRow = TeamOverviewItem & {
   latest_level_label: string | null;
   assessed_at: string | null;
+  days_since_last: number | null;
+  cadence_days: number;
+  cadence_source: CadenceSource;
+  is_due: boolean;
 };
 
-const NAV_LINKS = [
-  { href: "/app/team", label: "Team" },
-  { href: "/app/assessments", label: "Assessments" },
-  { href: "/app/goals", label: "Goals" },
-  { href: "/app/projects", label: "Projects" },
-  { href: "/app/capacity", label: "Capacity" },
-  { href: "/app/org", label: "Org" },
-  // Context Engine (Session 28/III) — "the Space" where a manager teaches
-  // the Librarian about their team. Nav label kept short like its peers;
-  // the page itself uses the framework doc's "the Space" name in its <h1>.
-  { href: "/app/context", label: "Context" },
-  { href: "/app/settings", label: "Settings" },
-];
-
 export default function DashboardPage() {
-  const { toggle: toggleDrawer, isOpen: drawerOpen } = useDrawer();
+  const zone = useZoneData();
   const [team, setTeam] = useState<PerformanceRow[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -207,6 +203,14 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [insight, setInsight] = useState<DashboardInsight | null>(null);
   const [insightDismissed, setInsightDismissed] = useState(false);
+  // Distinct from `insight === null`, which is the legitimate "nothing to
+  // flag today" response (200, insight: null) and should occupy no space.
+  // insightFailed means the call itself failed (network/5xx/etc) — that's
+  // not "all clear," it's "we don't know," and silently rendering nothing
+  // made a real failure look identical to a healthy team (2026-08-12
+  // data-trust bug #4). Degrades visibly but quietly: a small muted line,
+  // not an error banner.
+  const [insightFailed, setInsightFailed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const weekRange = useMemo(() => {
@@ -218,26 +222,43 @@ export default function DashboardPage() {
     setLoading(true);
     return Promise.all([
       getTeamOverview(),
+      getOneOnOnesOverview(),
       getTeamAssessments(),
       getGoals(),
       getProjects(),
       getCapacityOverview(toISODate(weekRange.start), toISODate(weekRange.end)),
     ])
-      .then(([overview, assessments, allGoals, allProjects, capacityRows]) => {
+      .then(([overview, oneOnOnes, assessments, allGoals, allProjects, capacityRows]) => {
         const ratingByReport = new Map<string, TeamAssessmentItem>(assessments.map((a) => [a.id, a]));
-        const merged: PerformanceRow[] = overview.map((r) => ({
-          ...r,
-          latest_level_label: ratingByReport.get(r.id)?.latest_level_label ?? null,
-          assessed_at: ratingByReport.get(r.id)?.assessed_at ?? null,
-        }));
+        const cadenceByReport = new Map<string, OneOnOneOverviewItem>(
+          oneOnOnes.map((o) => [o.direct_report_id, o])
+        );
+        const merged: PerformanceRow[] = overview.map((r) => {
+          const cad = cadenceByReport.get(r.id);
+          return {
+            ...r,
+            latest_level_label: ratingByReport.get(r.id)?.latest_level_label ?? null,
+            assessed_at: ratingByReport.get(r.id)?.assessed_at ?? null,
+            days_since_last: cad?.days_since_last ?? null,
+            cadence_days: cad?.cadence_days ?? 21,
+            cadence_source: cad?.cadence_source ?? "default",
+            is_due: cad?.is_due ?? true,
+          };
+        });
         // Worst-first: due for a 1:1 sorts before everyone who isn't, then
-        // by open commitment count within each group. This is the single
+        // longest gap (never-met first), then by open commitment count.
+        // is_due/days_since_last come straight from GET
+        // /api/one-on-ones/overview — the single canonical "who's due"
+        // computation (nav rework pass 2). This is the single
         // highest-leverage change in the grid redesign — a manager scanning
         // three columns should see problems before people who are fine.
         merged.sort((a, b) => {
-          const aDue = needsOneOnOne(a.last_one_on_one_at) ? 0 : 1;
-          const bDue = needsOneOnOne(b.last_one_on_one_at) ? 0 : 1;
+          const aDue = a.is_due ? 0 : 1;
+          const bDue = b.is_due ? 0 : 1;
           if (aDue !== bDue) return aDue - bDue;
+          const aGap = a.days_since_last ?? Number.POSITIVE_INFINITY;
+          const bGap = b.days_since_last ?? Number.POSITIVE_INFINITY;
+          if (aGap !== bGap) return bGap - aGap;
           return b.open_commitment_count - a.open_commitment_count;
         });
         setTeam(merged);
@@ -252,12 +273,19 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboard();
-    // The insight call is separate and allowed to fail quietly — it's a
-    // nice-to-have banner, not core dashboard data, and a bad AI call
-    // shouldn't block or error out the rest of the page.
+    // The insight call is separate and allowed to fail without blocking or
+    // erroring out the rest of the page — it's a nice-to-have banner, not
+    // core dashboard data. But "failed" and "legitimately nothing to flag"
+    // are different states and must render differently (bug #4 fix below).
     getDashboardInsight()
-      .then(setInsight)
-      .catch(() => setInsight(null));
+      .then((i) => {
+        setInsight(i);
+        setInsightFailed(false);
+      })
+      .catch(() => {
+        setInsight(null);
+        setInsightFailed(true);
+      });
   }, [loadDashboard]);
 
   // Exception-first triage inputs (Session 26). Completed/cancelled goals
@@ -311,74 +339,59 @@ export default function DashboardPage() {
     [projects]
   );
 
-  const dueCount = team.filter((r) => needsOneOnOne(r.last_one_on_one_at)).length;
-  const atRiskGoalCount = goals.filter((g) => g.status === "at_risk").length;
+  // Individual Performance, exception-first (spec section 7) — same
+  // treatment Goals/Key Initiatives got in Session 26. `team` is already
+  // sorted worst-first in loadDashboard, so attention/healthy are a plain
+  // filter, not a re-sort.
+  const dueTeam = useMemo(() => team.filter((r) => r.is_due), [team]);
+  const healthyTeam = useMemo(() => team.filter((r) => !r.is_due), [team]);
+
   const totalAvailableHours = capacity.reduce((sum, c) => sum + c.available_hours, 0);
   const maxCapacityHours = Math.max(1, ...capacity.map((c) => c.available_hours));
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10 sm:px-8">
-      {/* Header */}
+      {/* Header — cross-page nav (Team/Goals/etc links), the Scribe toggle,
+          and the account avatar all moved into the persistent global nav
+          (components/AppNav.tsx) rendered from app/app/layout.tsx. Quick add
+          stays here — it's still page-specific (needs the fetched team list
+          + reloads this page's own sections on create). */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Mission Control</h1>
           <p className="mt-1 text-sm text-gray-500">Your team, at a glance.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-          {NAV_LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className="hover:text-gray-900">
-              {l.label}
-            </Link>
-          ))}
-          <button
-            onClick={() => setQuickAddOpen(true)}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
-          >
-            + Quick add
-          </button>
-          <button
-            onClick={toggleDrawer}
-            title={drawerOpen ? "Close Scribe (⌘J)" : "Open Scribe (⌘J)"}
-            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              drawerOpen
-                ? "bg-gray-900 text-white"
-                : "border border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-900"
-            }`}
-          >
-            ✦
-          </button>
-        </div>
+        <button
+          onClick={() => setQuickAddOpen(true)}
+          className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+        >
+          + Quick add
+        </button>
       </div>
 
       {loadError && <p className="mt-4 text-sm text-red-500">{loadError}</p>}
 
-      {/* Stat ribbon — answers "how's my team right now" before a single
-          card is read. All four numbers come from data already fetched
-          above; no extra endpoint. */}
-      {!loading && team.length > 0 && (
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-            <p className="text-xl font-semibold text-gray-900">{team.length}</p>
-            <p className="mt-0.5 text-xs text-gray-500">Direct reports</p>
-          </div>
-          <div className={`rounded-lg border px-4 py-3 ${dueCount > 0 ? "border-amber-200 bg-amber-50/60" : "border-gray-200 bg-white"}`}>
-            <p className={`text-xl font-semibold ${dueCount > 0 ? "text-amber-700" : "text-gray-900"}`}>{dueCount}</p>
-            <p className={`mt-0.5 text-xs ${dueCount > 0 ? "text-amber-700/80" : "text-gray-500"}`}>Due for a 1:1</p>
-          </div>
-          <div className={`rounded-lg border px-4 py-3 ${atRiskGoalCount > 0 ? "border-red-200 bg-red-50/60" : "border-gray-200 bg-white"}`}>
-            <p className={`text-xl font-semibold ${atRiskGoalCount > 0 ? "text-red-700" : "text-gray-900"}`}>{atRiskGoalCount}</p>
-            <p className={`mt-0.5 text-xs ${atRiskGoalCount > 0 ? "text-red-700/80" : "text-gray-500"}`}>
-              Goal{atRiskGoalCount === 1 ? "" : "s"} at risk
-            </p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-            <p className="text-xl font-semibold text-gray-900">{Math.round(totalAvailableHours)}h</p>
-            <p className="mt-0.5 text-xs text-gray-500">Available this week</p>
-          </div>
+      {/* Zone map — replaces the old stat ribbon in place (Session 36/37
+          decision: the map's door counts already carry the numbers a ribbon
+          would have shown, so keeping both said the same things twice). Only
+          counts that need attention are colored; everything healthy stays
+          grey — see components/ZoneMap.tsx. */}
+      {!zone.loading && (
+        <div className="mt-6">
+          <ZoneMap doorStates={zone.doorStates} />
         </div>
       )}
 
-      {/* AI insight — real endpoint, null most days by design. */}
+      {/* AI insight — real endpoint, null most days by design. A legitimate
+          null (nothing to flag) renders nothing, same as always. A failed
+          call is a distinct state (bug #4, 2026-08-12 data-trust review) —
+          it must not look identical to "all clear," so it gets a small
+          muted line instead of silence. */}
+      {insightFailed && !insightDismissed && (
+        <p className="mt-6 text-xs text-gray-400">
+          Couldn&apos;t check for anything to flag right now.
+        </p>
+      )}
       {insight && insight.insight && !insightDismissed && (
         <div className="mt-6 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600">
@@ -413,68 +426,17 @@ export default function DashboardPage() {
           column competing for the same vertical space. */}
       {!loading && (
         <div className="mt-8 grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-          {/* Individual Performance */}
-          <section className="rounded-xl border border-gray-200 bg-white">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
-                Individual Performance{team.length > 0 && ` (${team.length})`}
-              </h2>
-              <Link href="/app/assessments" className="text-xs text-gray-400 hover:text-gray-600">
-                Assessments →
-              </Link>
-            </div>
-            {team.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-gray-500">
-                No one added yet.{" "}
-                <button onClick={() => setQuickAddOpen(true)} className="underline hover:text-gray-700">
-                  Add your first direct report
-                </button>
-                .
-              </p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {team.map((r) => {
-                  const due = needsOneOnOne(r.last_one_on_one_at);
-                  const initials = r.name
-                    .split(" ")
-                    .map((p) => p[0])
-                    .slice(0, 2)
-                    .join("")
-                    .toUpperCase();
-                  return (
-                    <li key={r.id}>
-                      <Link href={`/app/reports/${r.id}`} className="block px-5 py-3.5 hover:bg-gray-50">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                              due ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {initials}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
-                              {r.latest_level_label && (
-                                <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">
-                                  {r.latest_level_label}
-                                </span>
-                              )}
-                            </div>
-                            <p className={`mt-0.5 text-xs ${due ? "text-amber-600" : "text-gray-400"}`}>
-                              {lastOneOnOneLabel(r.last_one_on_one_at)}
-                              {r.open_commitment_count > 0 &&
-                                ` · ${r.open_commitment_count} open commitment${r.open_commitment_count === 1 ? "" : "s"}`}
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          {/* Individual Performance — exception-first (spec section 7):
+              only who's due for a 1:1 leads, everyone else collapses behind
+              "Show N on track". Same treatment Goals/Key Initiatives got in
+              Session 26; resolves the duplication pass 1 introduced between
+              the zone map's "N due" and this column. */}
+          <IndividualPerformanceCard
+            team={team}
+            dueTeam={dueTeam}
+            healthyTeam={healthyTeam}
+            onAddFirst={() => setQuickAddOpen(true)}
+          />
 
           {/* Goals — exception-first (Session 26) */}
           <TriageCard
@@ -567,6 +529,134 @@ export default function DashboardPage() {
 
       <QuickAddModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} directReports={team} onCreated={loadDashboard} />
     </main>
+  );
+}
+
+// Individual Performance — exception-first (spec section 7, nav rework
+// pass 2). Same collapse pattern TriageCard below uses for Goals/Key
+// Initiatives, but not built on TriageCard itself: a person row (avatar,
+// name, rating badge, last-1:1 label) isn't goal-status shaped, so this is
+// its own small component rather than forcing TriagedItem's shape onto it.
+function IndividualPerformanceCard({
+  team,
+  dueTeam,
+  healthyTeam,
+  onAddFirst,
+}: {
+  team: PerformanceRow[];
+  dueTeam: PerformanceRow[];
+  healthyTeam: PerformanceRow[];
+  onAddFirst: () => void;
+}) {
+  const [showHealthy, setShowHealthy] = useState(false);
+
+  function initialsOf(name: string) {
+    return name
+      .split(" ")
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
+  }
+
+  // Badly overdue (past 2x cadence, or never met) gets rose instead of
+  // amber — same convention /app/1-1s's Due now section uses (spec
+  // section 6).
+  function severityStyles(r: PerformanceRow) {
+    const badlyOverdue = r.days_since_last === null || r.days_since_last > r.cadence_days * 2;
+    if (badlyOverdue) return { avatar: "bg-rose-100 text-rose-700", text: "text-rose-600" };
+    return { avatar: "bg-amber-100 text-amber-700", text: "text-amber-600" };
+  }
+
+  function Row({ r }: { r: PerformanceRow }) {
+    const sev = severityStyles(r);
+    return (
+      <li>
+        <Link href={`/app/reports/${r.id}`} className="block px-5 py-3.5 hover:bg-gray-50">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${sev.avatar}`}>
+              {initialsOf(r.name)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
+                {r.latest_level_label && (
+                  <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">
+                    {r.latest_level_label}
+                  </span>
+                )}
+              </div>
+              <p className={`mt-0.5 text-xs ${sev.text}`}>
+                {lastOneOnOneLabel(r.days_since_last)}
+                {r.open_commitment_count > 0 &&
+                  ` · ${r.open_commitment_count} open commitment${r.open_commitment_count === 1 ? "" : "s"}`}
+              </p>
+            </div>
+          </div>
+        </Link>
+      </li>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white">
+      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+          Individual Performance{team.length > 0 && ` (${team.length})`}
+        </h2>
+        <div className="flex shrink-0 items-center gap-3">
+          <Link href="/app/1-1s" className="text-xs text-gray-400 hover:text-gray-600">
+            1:1s →
+          </Link>
+          <Link href="/app/assessments" className="text-xs text-gray-400 hover:text-gray-600">
+            Assessments →
+          </Link>
+        </div>
+      </div>
+      {team.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-gray-500">
+          No one added yet.{" "}
+          <button onClick={onAddFirst} className="underline hover:text-gray-700">
+            Add your first direct report
+          </button>
+          .
+        </p>
+      ) : (
+        <div>
+          {dueTeam.length === 0 ? (
+            <p className="px-5 pb-1 pt-4 text-sm text-gray-500">Everyone&apos;s on cadence. 🎯</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {dueTeam.map((r) => (
+                <Row key={r.id} r={r} />
+              ))}
+            </ul>
+          )}
+          {healthyTeam.length > 0 && (
+            <div className="border-t border-gray-100 px-5 py-3">
+              <button onClick={() => setShowHealthy((s) => !s)} className="text-xs text-gray-400 hover:text-gray-600">
+                {showHealthy ? "Hide" : "Show"} {healthyTeam.length} on track {showHealthy ? "▴" : "▾"}
+              </button>
+              {showHealthy && (
+                <ul className="mt-2 space-y-1.5">
+                  {healthyTeam.map((r) => (
+                    <li key={r.id}>
+                      <Link
+                        href={`/app/reports/${r.id}`}
+                        className="flex items-center justify-between gap-2 rounded px-1 py-0.5 hover:bg-gray-50"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-xs text-gray-600">{r.name}</span>
+                        <span className="shrink-0 text-[11px] text-gray-400">{lastOneOnOneLabel(r.days_since_last)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

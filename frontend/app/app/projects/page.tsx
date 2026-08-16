@@ -9,7 +9,6 @@
 // whatever it's linked to. See docs/SESSION_HISTORY.md Session 13.
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import CheckInPanel from "@/components/CheckInPanel";
 import {
   CheckIn,
@@ -176,12 +175,7 @@ export default function ProjectsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        <Link href="/app/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          &larr; Back to your team
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold">Projects</h1>
       <p className="mt-1 text-sm text-gray-500">
         How your goals get done — standalone or linked to a goal, yours or a direct report&apos;s.
       </p>

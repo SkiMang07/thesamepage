@@ -29,7 +29,14 @@ import context_engine
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.direct_reports import fetch_role_expectations
-from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
+from utils import (
+    ensure_org,
+    get_authenticated_client,
+    get_email_from_token,
+    get_org,
+    limiter,
+    resolve_cadence_days,
+)
 
 router = APIRouter()
 
@@ -161,6 +168,7 @@ def _build_prep_prompt(
     open_commitments: list[dict],
     recent_summaries: list[str],
     days_since_last: int | None,
+    cadence_days: int,
     role_expectations: dict | None = None,
     context_engine_block: str = "",
 ) -> str:
@@ -172,9 +180,10 @@ def _build_prep_prompt(
             "understand their goals and current challenges, and set expectations for how "
             "you'll work together."
         )
-    elif days_since_last > 21:
+    elif days_since_last > cadence_days:
         recency_note = (
-            f"It has been {days_since_last} days since the last 1:1 — longer than a healthy cadence. "
+            f"It has been {days_since_last} days since the last 1:1 — longer than this person's "
+            f"usual {cadence_days}-day cadence. "
             "Prioritize reconnection and checking what has shifted since you last spoke. "
             "Do not assume the context from the last meeting still holds."
         )
@@ -338,6 +347,126 @@ def _find_planned_session(supabase, user_id: str, direct_report_id: str) -> dict
 # Routes
 # ---------------------------------------------------------------------------
 
+# NOTE: declared before /{direct_report_id}/history and /session/{id} would
+# only matter if "overview" could be mistaken for a path segment on those —
+# it can't (both are two-segment paths) — but kept first for the same
+# ordering-hygiene reason direct_reports.py flags on its /overview.
+@router.get("/overview")
+async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
+    """Front door for the 1:1 loop (/app/1-1s, nav rework pass 2 — see
+    docs/ONE_ON_ONES_PAGE_SPEC.md section 5). Every direct report with a
+    resolved cadence, whether they're due, any in-flight planned session,
+    and their last completed session. This is the single canonical
+    computation of "who's due" — the zone map's 1:1s door count and Mission
+    Control's Individual Performance card both read is_due from here rather
+    than recomputing cadence math a fourth time (see resolve_cadence_days()
+    in utils.py).
+    """
+    user_id, supabase = auth
+
+    reports = (
+        supabase.table("direct_reports")
+        .select("id,name,role_title,one_on_one_cadence_days,org_units(name)")
+        .eq("manager_id", user_id)
+        .order("name")
+        .execute()
+        .data
+    )
+    if not reports:
+        return []
+
+    # Read-only — a page load shouldn't bootstrap an organization row.
+    org = get_org(user_id, supabase)
+
+    # Every session for these reports, newest first — one query, split in
+    # Python into "planned" (prep_guide set, summary null) and "completed"
+    # (summary set) per the standing no-status-column rule (see
+    # _serialize_session's docstring above). setdefault + newest-first order
+    # means the first hit per report is the latest of each kind.
+    sessions = (
+        supabase.table("one_on_ones")
+        .select("id,direct_report_id,summary,notes,prep_guide,created_at")
+        .eq("manager_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+
+    planned_by_report: dict[str, dict] = {}
+    completed_by_report: dict[str, dict] = {}
+    for row in sessions:
+        rid = row["direct_report_id"]
+        if row.get("summary"):
+            completed_by_report.setdefault(rid, row)
+        elif row.get("prep_guide"):
+            planned_by_report.setdefault(rid, row)
+
+    # Commitments logged against each report's last completed session —
+    # total count regardless of current status (open/done/dropped), since
+    # this is "how much came out of this 1:1," not a live open-items count
+    # (that's what the DR detail page's Open commitments section is for).
+    completed_ids = [row["id"] for row in completed_by_report.values()]
+    commitment_counts: dict[str, int] = {}
+    if completed_ids:
+        commitment_rows = (
+            supabase.table("commitments")
+            .select("source_id")
+            .eq("owner_id", user_id)
+            .eq("source_type", "one_on_one")
+            .in_("source_id", completed_ids)
+            .execute()
+            .data
+        )
+        for row in commitment_rows:
+            sid = row["source_id"]
+            commitment_counts[sid] = commitment_counts.get(sid, 0) + 1
+
+    today = date.today()
+    result = []
+    for r in reports:
+        rid = r["id"]
+        completed = completed_by_report.get(rid)
+        last_at = completed["created_at"] if completed else None
+        days_since_last: int | None = None
+        if last_at:
+            try:
+                last_date = datetime.fromisoformat(last_at.replace("Z", "+00:00")).date()
+                days_since_last = (today - last_date).days
+            except (ValueError, AttributeError):
+                pass
+
+        cadence_days, cadence_source = resolve_cadence_days(r, org)
+        # Never met counts as due — same rule needsOneOnOne() used to apply
+        # client-side; now the only place this is decided.
+        is_due = days_since_last is None or days_since_last > cadence_days
+
+        planned = planned_by_report.get(rid)
+        org_unit = r.get("org_units") or {}
+
+        result.append({
+            "direct_report_id": rid,
+            "name": r["name"],
+            "role_title": r.get("role_title"),
+            "org_unit": org_unit.get("name"),
+            "last_one_on_one_at": last_at,
+            "days_since_last": days_since_last,
+            "cadence_days": cadence_days,
+            "cadence_source": cadence_source,
+            "is_due": is_due,
+            "planned_session": _serialize_session(planned) if planned else None,
+            "last_completed": (
+                {
+                    "id": completed["id"],
+                    "date": completed["created_at"],
+                    "commitment_count": commitment_counts.get(completed["id"], 0),
+                }
+                if completed
+                else None
+            ),
+        })
+    return result
+
+
 @router.post("/prep", response_model=PrepResponse)
 @limiter.limit("10/minute")
 async def prep_one_on_one(
@@ -353,7 +482,7 @@ async def prep_one_on_one(
     try:
         report_result = (
             supabase.table("direct_reports")
-            .select("name,role_level_id,org_unit_id")
+            .select("name,role_level_id,org_unit_id,one_on_one_cadence_days")
             .eq("id", body.direct_report_id)
             .eq("manager_id", user_id)
             .single()
@@ -364,6 +493,12 @@ async def prep_one_on_one(
     if not report_result.data:
         raise HTTPException(status_code=404, detail="Direct report not found")
     report = report_result.data
+    # Read-only — same org.one_on_one_cadence_days -> 21 fallback resolve_
+    # cadence_days() uses everywhere else (dashboard insight, /overview).
+    # A missing org here resolves to the same "default" (21) that ensure_org()
+    # below would produce a moment later anyway, so this doesn't need to wait
+    # for the bootstrap.
+    cadence_days, _cadence_source = resolve_cadence_days(report, get_org(user_id, supabase))
 
     # Fetch open commitments for this report
     open_commitments = (
@@ -378,8 +513,9 @@ async def prep_one_on_one(
     # Fetch recent 1:1 history. Over-fetch and filter to COMPLETED meetings
     # only (summary set) — a "planned" row (prep_guide only, meeting hasn't
     # happened yet) must not count as the last 1:1, or the recency logic and
-    # the dashboard's 21-day cadence badge would both go stale the moment a
-    # prep sheet is generated. See CLAUDE.md: the two share this threshold.
+    # /api/one-on-ones/overview's is_due badge would both go stale the
+    # moment a prep sheet is generated. See resolve_cadence_days() in
+    # utils.py: every cadence-aware call site shares that one resolver.
     history_rows_raw = (
         supabase.table("one_on_ones")
         .select("summary,created_at")
@@ -425,6 +561,7 @@ async def prep_one_on_one(
         open_commitments=open_commitments,
         recent_summaries=recent_summaries,
         days_since_last=days_since_last,
+        cadence_days=cadence_days,
         role_expectations=role_expectations,
         context_engine_block=context_engine_block,
     )

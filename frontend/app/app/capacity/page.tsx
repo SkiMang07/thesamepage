@@ -185,12 +185,7 @@ export default function CapacityPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Capacity</h1>
-        <Link href="/app/dashboard" className="text-sm text-gray-500 hover:text-gray-900">
-          &larr; Back to your team
-        </Link>
-      </div>
+      <h1 className="text-2xl font-semibold">Capacity</h1>
       <p className="mt-1 text-sm text-gray-500">
         How much bandwidth your team has right now — not what&apos;s using it up yet.
       </p>
