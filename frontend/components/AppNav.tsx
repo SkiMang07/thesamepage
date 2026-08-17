@@ -16,6 +16,20 @@
 //
 // Not rendered on /app/login (unauthenticated) or /app/ic (IC stub landing,
 // wrong audience for a manager-oriented nav) — see getNavContext's "none" case.
+//
+// Alignment fix (this pass): the header/strip bars used to span edge-to-edge
+// (just px-6/sm:px-8 on the bar itself), while every page's own <main> is a
+// centered `mx-auto max-w-*` column — on anything wider than a laptop this
+// left the nav's brand/breadcrumb/actions sitting noticeably closer to the
+// true viewport edges than the page content below them, which Andrew flagged
+// as the persistent nav looking "differently aligned" from everything under
+// it. Fix: the bar itself (background/border) still spans full width, but its
+// content now sits inside an inner `mx-auto max-w-7xl` wrapper — max-w-7xl
+// matches Mission Control's and Team's own <main> (the two widest/primary
+// pages), so the nav's left/right edges line up with content there. Narrower
+// pages (Settings, Goals, etc. at max-w-3xl/4xl) still have extra margin of
+// their own below the nav, same as they already do relative to Team/Mission
+// Control — that's an existing per-page width choice, not part of this fix.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -63,150 +77,162 @@ export default function AppNav() {
 
   return (
     <>
-      {/* Header */}
-      <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-[#e7e5e0] bg-[#faf9f6]/92 px-6 py-2.5 backdrop-blur sm:px-8">
-        <Link href="/app/dashboard" className="flex shrink-0 items-center gap-2 text-[14.5px] font-semibold text-gray-900">
-          <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#4f46e5] to-[#7c4ddb] text-xs text-white">
-            ●
-          </span>
-          The Same Page
-        </Link>
+      {/* Header — bar spans full width; inner wrapper (mx-auto max-w-7xl)
+          aligns the actual content with the page's own <main> below it. */}
+      <header className="sticky top-0 z-40 border-b border-[#e7e5e0] bg-[#faf9f6]/92 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-2.5 sm:px-8">
+          <Link href="/app/dashboard" className="flex shrink-0 items-center gap-2 text-[14.5px] font-semibold text-gray-900">
+            <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#4f46e5] to-[#7c4ddb] text-xs text-white">
+              ●
+            </span>
+            The Same Page
+          </Link>
 
-        {/* "here" slot — breadcrumb, rules ported from the mockup's paint() */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-gray-500">
-          {ctx.kind === "home" && <span className="font-semibold text-gray-900">Mission Control</span>}
+          {/* "here" slot — breadcrumb, rules ported from the mockup's paint() */}
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-gray-500">
+            {ctx.kind === "home" && <span className="font-semibold text-gray-900">Mission Control</span>}
 
-          {ctx.kind === "item" && (
-            <>
-              <Link href={HOME_ITEM.href} className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-black/5 hover:text-gray-900">
-                <Icon name="back" className="h-[15px] w-[15px]" /> Mission Control
-              </Link>
-              <span className="min-w-0 truncate">
-                <span>{ctx.group.group}</span>
-                <span className="mx-1.5 text-[#a3a9b4]">/</span>
-                <b className="text-gray-900">{ctx.item.label}</b>
-              </span>
-            </>
-          )}
-
-          {ctx.kind === "person" && (
-            <>
-              <Link href={HOME_ITEM.href} className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-black/5 hover:text-gray-900">
-                <Icon name="back" className="h-[15px] w-[15px]" /> Mission Control
-              </Link>
-              <span className="min-w-0 truncate">
-                <span>{ctx.group.group}</span>
-                <span className="mx-1.5 text-[#a3a9b4]">/</span>
-                <Link href={ctx.viaItem.href} className="underline decoration-[#e7e5e0] hover:text-gray-900">
-                  {ctx.viaItem.label}
+            {ctx.kind === "item" && (
+              <>
+                <Link href={HOME_ITEM.href} className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-black/5 hover:text-gray-900">
+                  <Icon name="back" className="h-[15px] w-[15px]" /> Mission Control
                 </Link>
-                <span className="mx-1.5 text-[#a3a9b4]">/</span>
-                <b className="text-gray-900">
-                  {zone.roster.find((p) => p.id === ctx.reportId)?.name ?? "…"}
-                </b>
-              </span>
-            </>
-          )}
-        </div>
+                <span className="min-w-0 truncate">
+                  <span>{ctx.group.group}</span>
+                  <span className="mx-1.5 text-[#a3a9b4]">/</span>
+                  <b className="text-gray-900">{ctx.item.label}</b>
+                </span>
+              </>
+            )}
 
-        {/* Global actions — Scribe toggle (moved here from the dashboard-only
-            + fixed-button pattern, per DESIGN.md's 2026-08-13 note that this
-            was the planned home once global nav shipped) + a static avatar
-            badge. */}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button
-            onClick={toggleDrawer}
-            title={drawerOpen ? "Close Scribe (⌘J)" : "Open Scribe (⌘J)"}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              drawerOpen
-                ? "bg-gray-900 text-white"
-                : "border border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-900"
-            }`}
-          >
-            ✦
-          </button>
-          <span
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#15171c] text-[11px] font-semibold text-white"
-            title={zone.profileName ?? undefined}
-          >
-            {initialsOf(zone.profileName)}
-          </span>
+            {ctx.kind === "person" && (
+              <>
+                <Link href={HOME_ITEM.href} className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-black/5 hover:text-gray-900">
+                  <Icon name="back" className="h-[15px] w-[15px]" /> Mission Control
+                </Link>
+                <span className="min-w-0 truncate">
+                  <span>{ctx.group.group}</span>
+                  <span className="mx-1.5 text-[#a3a9b4]">/</span>
+                  <Link href={ctx.viaItem.href} className="underline decoration-[#e7e5e0] hover:text-gray-900">
+                    {ctx.viaItem.label}
+                  </Link>
+                  <span className="mx-1.5 text-[#a3a9b4]">/</span>
+                  <b className="text-gray-900">
+                    {zone.roster.find((p) => p.id === ctx.reportId)?.name ?? "…"}
+                  </b>
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Global actions — Scribe toggle (moved here from the dashboard-only
+              + fixed-button pattern, per DESIGN.md's 2026-08-13 note that this
+              was the planned home once global nav shipped) + a static avatar
+              badge. */}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <button
+              onClick={toggleDrawer}
+              title={drawerOpen ? "Close Scribe (⌘J)" : "Open Scribe (⌘J)"}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium shadow-sm transition-all ${
+                drawerOpen
+                  ? "bg-gray-900 text-white"
+                  : "bg-gradient-to-br from-[#4f46e5] to-[#7c4ddb] text-white hover:shadow-md hover:brightness-105"
+              }`}
+            >
+              <span aria-hidden>✦</span>
+              <span>Scribe</span>
+              <span className={`text-xs ${drawerOpen ? "text-gray-400" : "text-white/70"}`}>⌘J</span>
+            </button>
+            <span
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#15171c] text-[11px] font-semibold text-white"
+              title={zone.profileName ?? undefined}
+            >
+              {initialsOf(zone.profileName)}
+            </span>
+          </div>
         </div>
       </header>
 
       {/* Orbit strip — sticky under the header, hidden on Mission Control
-          itself (the inline zone map already gives full-map access there). */}
+          itself (the inline zone map already gives full-map access there).
+          top-[55px] replaces the old hardcoded top-[45px], which assumed a
+          shorter header than the actual rendered height (the Scribe button's
+          own padding makes the header ~55px tall, not 45px) — the mismatch
+          let the strip stick a few pixels too high, overlapping the header's
+          bottom edge on scroll. */}
       {ctx.kind !== "home" && (
-        <div className="sticky top-[45px] z-30 flex items-center gap-2 overflow-x-auto border-b border-[#f1efeb] bg-[#faf9f6]/92 px-6 py-2 backdrop-blur sm:px-8">
-          <button
-            onClick={() => setMapOpen(true)}
-            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[12.5px] font-semibold transition hover:-translate-y-px hover:shadow-sm ${HUE_STYLES[ctx.group.hue].chipOn}`}
-          >
-            <Icon name="map" className="h-3 w-3" />
-            {ctx.group.group}
-            <Icon name="chevron" className="h-3 w-3 opacity-60" />
-          </button>
-          <span className="mx-1 h-5 w-px shrink-0 bg-[#e7e5e0]" />
+        <div className="sticky top-[55px] z-30 border-b border-[#f1efeb] bg-[#faf9f6]/92 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-6 py-2 sm:px-8">
+            <button
+              onClick={() => setMapOpen(true)}
+              className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[12.5px] font-semibold transition hover:-translate-y-px hover:shadow-sm ${HUE_STYLES[ctx.group.hue].chipOn}`}
+            >
+              <Icon name="map" className="h-3 w-3" />
+              {ctx.group.group}
+              <Icon name="chevron" className="h-3 w-3 opacity-60" />
+            </button>
+            <span className="mx-1 h-5 w-px shrink-0 bg-[#e7e5e0]" />
 
-          {ctx.kind === "item" &&
-            ctx.group.items.map((item) => {
-              const active = item.id === ctx.item.id;
-              const hue = HUE_STYLES[ctx.group.hue];
-              const content = (
-                <>
-                  <Icon name={item.icon} className="h-[15px] w-[15px]" />
-                  {item.label}
-                </>
-              );
-              return item.disabled ? (
-                <span
-                  key={item.id}
-                  className="flex shrink-0 cursor-default items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] text-gray-300"
-                  title="Coming in a later pass"
-                >
-                  {content}
-                </span>
-              ) : (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px] transition hover:-translate-y-px ${
-                    active ? `border-[#e7e5e0] bg-white font-semibold shadow-sm ${hue.text}` : "border-transparent text-gray-500 hover:border-[#e7e5e0] hover:bg-white hover:text-gray-900"
-                  }`}
-                >
-                  {content}
-                </Link>
-              );
-            })}
-
-          {ctx.kind === "person" &&
-            zone.roster.map((p) => {
-              const active = p.id === ctx.reportId;
-              return (
-                <Link
-                  key={p.id}
-                  href={ctx.viaItem.id === "assessments" ? `/app/assessments/${p.id}` : `/app/reports/${p.id}`}
-                  className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border py-1 pl-1 pr-3 text-[13px] transition hover:-translate-y-px ${
-                    active ? "border-[#e7e5e0] bg-white font-semibold shadow-sm" : "border-transparent text-gray-600 hover:border-[#e7e5e0] hover:bg-white"
-                  }`}
-                >
+            {ctx.kind === "item" &&
+              ctx.group.items.map((item) => {
+                const active = item.id === ctx.item.id;
+                const hue = HUE_STYLES[ctx.group.hue];
+                const content = (
+                  <>
+                    <Icon name={item.icon} className="h-[15px] w-[15px]" />
+                    {item.label}
+                  </>
+                );
+                return item.disabled ? (
                   <span
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-                    style={{ background: p.color }}
+                    key={item.id}
+                    className="flex shrink-0 cursor-default items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] text-gray-300"
+                    title="Coming in a later pass"
                   >
-                    {p.initials}
+                    {content}
                   </span>
-                  {p.firstName}
-                  {p.due && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d99b28]" />}
-                </Link>
-              );
-            })}
+                ) : (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px] transition hover:-translate-y-px ${
+                      active ? `border-[#e7e5e0] bg-white font-semibold shadow-sm ${hue.text}` : "border-transparent text-gray-500 hover:border-[#e7e5e0] hover:bg-white hover:text-gray-900"
+                    }`}
+                  >
+                    {content}
+                  </Link>
+                );
+              })}
 
-          {ctx.kind === "person" && (
-            <Link href="/app/team" className="ml-auto shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] text-gray-500 hover:bg-white hover:text-gray-900">
-              All {zone.roster.length} →
-            </Link>
-          )}
+            {ctx.kind === "person" &&
+              zone.roster.map((p) => {
+                const active = p.id === ctx.reportId;
+                return (
+                  <Link
+                    key={p.id}
+                    href={ctx.viaItem.id === "assessments" ? `/app/assessments/${p.id}` : `/app/reports/${p.id}`}
+                    className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border py-1 pl-1 pr-3 text-[13px] transition hover:-translate-y-px ${
+                      active ? "border-[#e7e5e0] bg-white font-semibold shadow-sm" : "border-transparent text-gray-600 hover:border-[#e7e5e0] hover:bg-white"
+                    }`}
+                  >
+                    <span
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+                      style={{ background: p.color }}
+                    >
+                      {p.initials}
+                    </span>
+                    {p.firstName}
+                    {p.due && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d99b28]" />}
+                  </Link>
+                );
+              })}
+
+            {ctx.kind === "person" && (
+              <Link href="/app/team" className="ml-auto shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] text-gray-500 hover:bg-white hover:text-gray-900">
+                All {zone.roster.length} →
+              </Link>
+            )}
+          </div>
         </div>
       )}
 

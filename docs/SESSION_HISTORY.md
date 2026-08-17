@@ -11,6 +11,80 @@ Format per entry:
 
 ---
 
+## Session 38 — 2026-08-17
+
+**Goal:** Polish pass on the persistent nav shipped in Sessions 36/37: fix the top-bar alignment
+Andrew flagged, confirm/wire up a working Profile settings section, and make the Scribe toggle more
+prominent and discoverable.
+
+**What was done:**
+- **Alignment fix (`frontend/components/AppNav.tsx`, `frontend/app/app/layout.tsx`).** Andrew's
+  actual complaint, once he described it directly: the header/orbit-strip spanned edge-to-edge
+  (`px-6`/`sm:px-8` on the bar itself, no max-width), while every page's own `<main>` is a centered
+  `mx-auto max-w-*` column — so on anything wider than a laptop, the nav's brand/breadcrumb/actions
+  sat noticeably closer to the true viewport edges than the page content below them. Fixed by keeping
+  the bar's background/border full-width but wrapping its actual content (both the header row and the
+  orbit-strip row) in an inner `mx-auto max-w-7xl` container — `max-w-7xl` matches Dashboard's and
+  Team's own `<main>` (the two widest/"primary" pages), so the nav's edges line up with content there.
+  Confirmed via direct `getBoundingClientRect` measurement on the live production site before touching
+  anything (logo, breadcrumb, Scribe button, and avatar were all correctly centered *within* the
+  header row — the header itself just wasn't positioned to match the page content's left/right edges).
+- **Sticky-nav scroll bug (`frontend/app/app/layout.tsx`), found during verification.** While
+  measuring the header for the alignment fix, found that `AppShell`'s content wrapper
+  (`flex-1 min-w-0 overflow-x-hidden`) also wraps `<AppNav />`. Per the CSS overflow spec, setting
+  `overflow-x` to anything but `visible` forces the browser to compute `overflow-y` as `auto` too when
+  it isn't set explicitly — so that div silently became a scroll container. AppNav's
+  `position: sticky` header/strip then stuck relative to *that div's own* (never-scrolling) box
+  instead of the real viewport: on any page tall enough to scroll, the "persistent" nav would just
+  scroll away instead of staying pinned, defeating the whole point of Session 36/37's build. Fixed by
+  moving `overflow-x-hidden` to wrap only `{children}`, leaving `<AppNav />` in a plain-overflow
+  ancestor so its sticky positioning resolves against the real page scroll again.
+- **Orbit-strip sticky offset (`frontend/components/AppNav.tsx`).** The strip's `top-[45px]` assumed
+  a 45px-tall header; the actual rendered header is 55px (the Scribe button's own padding makes it the
+  tallest element in the row) — a leftover mismatch from Session 36/37. Updated to `top-[55px]` so the
+  strip doesn't overlap the header's bottom edge once both are stuck during scroll.
+- **Scribe toggle prominence (`frontend/components/AppNav.tsx`).** Replaced the small bordered box
+  (just a "✦" glyph) with a filled indigo→violet gradient pill labeled "✦ Scribe ⌘J" — same single
+  toggle location inside AppNav's header (per Session 36/37's consolidation), no second toggle
+  reintroduced elsewhere.
+- **Profile & Company settings — verified, not changed.** Read `frontend/app/app/settings/page.tsx`
+  fresh and tested it live against production: changed the default 1:1 cadence, saved, reloaded the
+  page, confirmed the new value persisted, then reverted it back to 21. Name, company, and cadence
+  save/load correctly end-to-end; email is intentionally read-only (tied to the Supabase auth
+  identity, per Session 6's original design). No code changes were needed — the section was already
+  fully wired.
+
+**Decisions made / locked:**
+- Nav content aligns to `max-w-7xl` (matching Dashboard/Team) rather than trying to match every
+  page's own, varying max-width. Narrower pages (Settings/Goals/Projects/etc. at
+  `max-w-2xl`/`3xl`/`4xl`) will still show their own inset relative to the nav — consistent with how
+  they already relate to Dashboard/Team, and not something this pass tried to unify.
+- Scribe toggle prominence was solved with styling (filled gradient pill + label), not a second
+  toggle location — keeps Session 36/37's "one toggle, in AppNav" decision intact.
+- Profile & Company confirmed complete as-is. Did not add an avatar/photo field — that would need new
+  file-storage infrastructure (no such system exists yet) and wasn't something Andrew asked for
+  directly; worth confirming with him before building it.
+
+**Verification:** `npx tsc --noEmit` clean; `next build` clean (all 21 routes) — tarred
+`frontend/` (excluding `node_modules`/`.next`) into the cloud container and built there, per Session
+35's established workflow (the device sandbox itself has no network access for `npm install`). The
+sticky-overflow root cause was confirmed empirically on the live production site
+(thesamepage-blush.vercel.app) via `getBoundingClientRect`/computed-style inspection before the fix;
+the fix itself is standard, well-understood CSS behavior (removing an `overflow-x-hidden` ancestor
+restores normal viewport-relative `position: sticky`) but **could not be visually re-confirmed on a
+live deploy** — this cloud container has no way to serve pages to Andrew's actual browser, and
+deploying requires his own `git push` (see the command below). The Profile section verification was
+live end-to-end against production, not just code review.
+
+**Next step:** Push and deploy this fix, then on the live app: confirm the nav's left/right edges now
+line up with Dashboard's and Team's content, and confirm the header/strip stay pinned while scrolling
+a page with enough content to actually scroll (Team or Goals with several items is a good test — the
+bug wasn't visible on short pages, which is likely why it went unnoticed in Session 36/37's own
+verification). Also worth a quick check that the wider "✦ Scribe ⌘J" pill doesn't crowd the breadcrumb
+on narrower laptop widths.
+
+---
+
 ## Session 36 — 2026-08-16
 
 **Goal:** Nav rework pass 1 (tracked in code comments and DESIGN.md as Session 36/37;

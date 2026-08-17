@@ -21,6 +21,17 @@
 // wrong audience for a manager-oriented nav).
 //
 // Keyboard: ⌘J summons the drawer with the composer focused; Esc closes.
+//
+// Sticky-nav fix (this pass): `overflow-x-hidden` used to live on the same
+// div that wraps <AppNav />. Per the CSS overflow spec, setting overflow-x to
+// anything but `visible` forces the browser to compute overflow-y as `auto`
+// too when it isn't set explicitly — so that div silently became a scroll
+// container. AppNav's `position: sticky` header/strip then stuck relative to
+// *that div's* (never-scrolling) box instead of the real viewport, so on any
+// page tall enough to scroll they just scrolled away instead of staying
+// pinned. Fix: `overflow-x-hidden` now wraps only `{children}`, so AppNav
+// sits in a plain-overflow ancestor and its sticky positioning resolves
+// against the actual page scroll again.
 
 import { useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -56,10 +67,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      {/* Main content — flex-1 so it gives up space to the drawer */}
-      <div className="flex-1 min-w-0 overflow-x-hidden">
+      {/* Main content — flex-1 so it gives up space to the drawer. AppNav
+          lives outside the overflow-x-hidden div (see note above) so its
+          sticky header/strip resolve against the real page scroll. */}
+      <div className="flex-1 min-w-0">
         {showNav && <AppNav />}
-        {children}
+        <div className="overflow-x-hidden">{children}</div>
       </div>
 
       {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
