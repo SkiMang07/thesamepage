@@ -31,10 +31,11 @@
 // their own below the nav, same as they already do relative to Team/Mission
 // Control — that's an existing per-page width choice, not part of this fix.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import { useDrawer } from "@/lib/drawer-context";
+import { createClient } from "@/lib/supabase";
 import {
   HOME_ITEM,
   HUE_STYLES,
@@ -57,9 +58,17 @@ function initialsOf(name: string | null) {
 export default function AppNav() {
   const pathname = usePathname();
   const params = useParams<Record<string, string | string[] | undefined>>();
+  const router = useRouter();
   const { isOpen: drawerOpen, toggle: toggleDrawer } = useDrawer();
   const zone = useZoneData();
   const [mapOpen, setMapOpen] = useState(false);
+  // Andrew flagged (2026-08-17): clicking the avatar badge did nothing — it
+  // was a plain <span>, no menu ever built. Wired up here: name/email +
+  // Settings + Sign out, the one place a manager can actually get out of the
+  // app (there was previously no sign-out control anywhere in the UI).
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
 
   const ctx = getNavContext(pathname ?? "", params ?? {});
 
@@ -72,6 +81,32 @@ export default function AppNav() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [mapOpen]);
+
+  // Escape + click-outside close the avatar menu.
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setAvatarMenuOpen(false);
+    }
+    function onClick(e: MouseEvent) {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(e.target as Node)) {
+        setAvatarMenuOpen(false);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [avatarMenuOpen]);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/app/login");
+  }
 
   if (ctx.kind === "none") return null;
 
@@ -143,12 +178,47 @@ export default function AppNav() {
               <span>Scribe</span>
               <span className={`text-xs ${drawerOpen ? "text-gray-400" : "text-white/70"}`}>⌘J</span>
             </button>
-            <span
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#15171c] text-[11px] font-semibold text-white"
-              title={zone.profileName ?? undefined}
-            >
-              {initialsOf(zone.profileName)}
-            </span>
+            <div className="relative" ref={avatarMenuRef}>
+              <button
+                onClick={() => setAvatarMenuOpen((v) => !v)}
+                title={zone.profileName ?? undefined}
+                aria-haspopup="menu"
+                aria-expanded={avatarMenuOpen}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#15171c] text-[11px] font-semibold text-white transition hover:ring-2 hover:ring-[#4f46e5]/30"
+              >
+                {initialsOf(zone.profileName)}
+              </button>
+
+              {avatarMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-9 z-50 w-56 overflow-hidden rounded-lg border border-[#e7e5e0] bg-white shadow-lg"
+                >
+                  <div className="border-b border-[#f1efeb] px-3 py-2.5">
+                    <p className="truncate text-sm font-medium text-gray-900">{zone.profileName || "—"}</p>
+                    {zone.profileEmail && <p className="truncate text-xs text-gray-400">{zone.profileEmail}</p>}
+                  </div>
+                  <Link
+                    href="/app/settings"
+                    role="menuitem"
+                    onClick={() => setAvatarMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <Icon name="settings" className="h-[15px] w-[15px] text-gray-400" />
+                    Settings
+                  </Link>
+                  <button
+                    role="menuitem"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <Icon name="back" className="h-[15px] w-[15px] text-gray-400" />
+                    {signingOut ? "Signing out…" : "Sign out"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>

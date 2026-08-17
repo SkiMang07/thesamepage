@@ -313,6 +313,7 @@ export type ZoneData = {
   // For the header avatar badge — reuses the same getProfile() call already
   // needed for the Settings door's org_ready check, no extra fetch.
   profileName: string | null;
+  profileEmail: string | null;
 };
 
 // One hook, called independently by AppNav (for the orbit roster + the map
@@ -322,7 +323,13 @@ export type ZoneData = {
 // per-page (e.g. dashboard and /app/team both independently fetch
 // getProjects()) rather than introducing shared global data state.
 export function useZoneData(): ZoneData {
-  const [data, setData] = useState<ZoneData>({ loading: true, doorStates: {}, roster: [], profileName: null });
+  const [data, setData] = useState<ZoneData>({
+    loading: true,
+    doorStates: {},
+    roster: [],
+    profileName: null,
+    profileEmail: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -344,6 +351,7 @@ export function useZoneData(): ZoneData {
       const doorStates: Partial<Record<string, DoorState>> = {};
       let roster: RosterPerson[] = [];
       let profileName: string | null = null;
+      let profileEmail: string | null = null;
 
       if (teamR.status === "fulfilled") {
         const team = teamR.value as OneOnOneOverviewItem[];
@@ -411,9 +419,10 @@ export function useZoneData(): ZoneData {
         // Settings door shows no count at all (Session 36 decision).
         if (!profR.value.org_ready) doorStates.settings = { label: "not finished", tone: "setup" };
         profileName = profR.value.full_name || null;
+        profileEmail = profR.value.email || null;
       }
 
-      setData({ loading: false, doorStates, roster, profileName });
+      setData({ loading: false, doorStates, roster, profileName, profileEmail });
     });
 
     return () => {

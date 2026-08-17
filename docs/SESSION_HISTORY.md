@@ -53,6 +53,14 @@ prominent and discoverable.
   save/load correctly end-to-end; email is intentionally read-only (tied to the Supabase auth
   identity, per Session 6's original design). No code changes were needed — the section was already
   fully wired.
+- **Avatar menu (`frontend/components/AppNav.tsx`, `frontend/components/ZoneMap.tsx`), added after
+  Andrew tried clicking it.** The header avatar badge was a plain `<span>` — no `onClick`, nothing
+  happened. Also surfaced a real gap while checking: there was no sign-out control anywhere in the
+  app. Turned the avatar into a button that opens a small menu (name + email, then Settings, then Sign
+  out via `supabase.auth.signOut()` → redirect to `/app/login`); closes on Escape or an outside click.
+  `ZoneMap.tsx`'s `useZoneData()` already fetched `getProfile()` for the Settings door's `org_ready`
+  check, so the menu's email line reuses that same call (`ZoneData` gained `profileEmail` alongside
+  the existing `profileName`) rather than adding a new fetch.
 
 **Decisions made / locked:**
 - Nav content aligns to `max-w-7xl` (matching Dashboard/Team) rather than trying to match every
@@ -64,6 +72,10 @@ prominent and discoverable.
 - Profile & Company confirmed complete as-is. Did not add an avatar/photo field — that would need new
   file-storage infrastructure (no such system exists yet) and wasn't something Andrew asked for
   directly; worth confirming with him before building it.
+- Avatar menu is Settings + Sign out only — no "switch org" or account-management items, since the
+  app has exactly one org per manager today (no multi-org concept exists). Sign out redirects to
+  `/app/login` via the client router rather than a full page reload, matching how the rest of the app
+  navigates.
 
 **Verification:** `npx tsc --noEmit` clean; `next build` clean (all 21 routes) — tarred
 `frontend/` (excluding `node_modules`/`.next`) into the cloud container and built there, per Session
@@ -74,14 +86,16 @@ the fix itself is standard, well-understood CSS behavior (removing an `overflow-
 restores normal viewport-relative `position: sticky`) but **could not be visually re-confirmed on a
 live deploy** — this cloud container has no way to serve pages to Andrew's actual browser, and
 deploying requires his own `git push` (see the command below). The Profile section verification was
-live end-to-end against production, not just code review.
+live end-to-end against production, not just code review. The avatar menu's sign-out path (Supabase
+`signOut()` → redirect) was not exercised live in this session — worth a real click-through after
+deploy since it's the app's first sign-out path ever shipped.
 
 **Next step:** Push and deploy this fix, then on the live app: confirm the nav's left/right edges now
-line up with Dashboard's and Team's content, and confirm the header/strip stay pinned while scrolling
-a page with enough content to actually scroll (Team or Goals with several items is a good test — the
-bug wasn't visible on short pages, which is likely why it went unnoticed in Session 36/37's own
-verification). Also worth a quick check that the wider "✦ Scribe ⌘J" pill doesn't crowd the breadcrumb
-on narrower laptop widths.
+line up with Dashboard's and Team's content, confirm the header/strip stay pinned while scrolling a
+page with enough content to actually scroll (Team or Goals with several items is a good test — the bug
+wasn't visible on short pages, which is likely why it went unnoticed in Session 36/37's own
+verification), and click through the avatar menu's Sign out for the first time. Also worth a quick
+check that the wider "✦ Scribe ⌘J" pill doesn't crowd the breadcrumb on narrower laptop widths.
 
 ---
 
