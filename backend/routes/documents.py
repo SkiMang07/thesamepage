@@ -58,6 +58,7 @@ trust/weight this document" logic. See that module's docstring.
 """
 import base64
 import json
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -111,11 +112,28 @@ def _infer_file_type(filename: str, content_type: str | None) -> str:
     )
 
 
+# LibreOffice's CLI binary goes by different names depending on how it was
+# installed: Debian/apt exposes both `libreoffice` and `soffice`, the nix
+# package exposes `soffice` (and not always the `libreoffice` wrapper).
+# Session 44's live .docx test 502'd with "libreoffice not installed"
+# because convert_to_pdf hardcoded the `libreoffice` name — resolve
+# whichever one is actually on PATH instead of assuming.
+_LIBREOFFICE_BINARIES = ("libreoffice", "soffice")
+
+
+def _find_libreoffice() -> str | None:
+    for name in _LIBREOFFICE_BINARIES:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
 def convert_to_pdf(raw_bytes: bytes, kind: str) -> bytes:
     """Headless LibreOffice conversion (build-plan resolution #1). Requires
-    the `libreoffice` binary on PATH — see backend/nixpacks.toml. Raises a
-    502 if the binary is missing or conversion fails; the caller marks the
-    document row status='failed'.
+    LibreOffice on PATH (either binary name — see _find_libreoffice and
+    backend/nixpacks.toml). Raises a 502 if the binary is missing or
+    conversion fails; the caller marks the document row status='failed'.
 
     `kind` is the input's extension without the dot ("pptx", "docx") — the
     subprocess call is identical either way, LibreOffice picks its filter
@@ -125,6 +143,16 @@ def convert_to_pdf(raw_bytes: bytes, kind: str) -> bytes:
     of adding a second document-conversion path (see
     docs/ROLE_JD_IMPORT_SCOPING.md §3.1). Public (no leading underscore)
     since it now has a caller outside this module."""
+    binary = _find_libreoffice()
+    if binary is None:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"{kind.upper()} conversion is unavailable on this server "
+                f"(no LibreOffice binary on PATH — tried {', '.join(_LIBREOFFICE_BINARIES)}; "
+                "see backend/nixpacks.toml)"
+            ),
+        )
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         input_path = tmp_path / f"input.{kind}"
@@ -132,7 +160,7 @@ def convert_to_pdf(raw_bytes: bytes, kind: str) -> bytes:
         try:
             subprocess.run(
                 [
-                    "libreoffice",
+                    binary,
                     "--headless",
                     "--norestore",
                     "--convert-to",
@@ -146,9 +174,11 @@ def convert_to_pdf(raw_bytes: bytes, kind: str) -> bytes:
                 timeout=120,
             )
         except FileNotFoundError:
+            # Shouldn't happen now that the binary is resolved via
+            # shutil.which above, but kept as a backstop.
             raise HTTPException(
                 status_code=502,
-                detail=f"{kind.upper()} conversion is unavailable on this server (libreoffice not installed)",
+                detail=f"{kind.upper()} conversion is unavailable on this server (LibreOffice not installed)",
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             raise HTTPException(status_code=502, detail=f"{kind.upper()}-to-PDF conversion failed: {e}")
