@@ -364,10 +364,13 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
     """
     user_id, supabase = auth
 
+    # Archived people (Session 43) drop off the 1:1s overview — see
+    # docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1.
     reports = (
         supabase.table("direct_reports")
         .select("id,name,role_title,one_on_one_cadence_days,org_units(name)")
         .eq("manager_id", user_id)
+        .is_("archived_at", "null")
         .order("name")
         .execute()
         .data

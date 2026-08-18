@@ -31,6 +31,19 @@ export function orgUnitLabel(ou: OrgUnit) {
   return `${ou.unit_type === "department" ? "Department" : "Team"} · ${ou.name}`;
 }
 
+// Level-only label ("L1", or "Senior Corporate CSM · L3" when the level has
+// a title override) — for contexts that already show the family name once
+// as a header and would otherwise repeat it on every row underneath
+// (Settings' coverage grid, Session 43 Polish Pass A, finding P5). Same
+// overrideTitle logic as LevelRow in settings/page.tsx, just returning a
+// string instead of JSX. Falls back to the full roleLabel() when there's no
+// family context (the "Ungrouped" bucket has no header to avoid repeating).
+export function levelOnlyLabel(rl: RoleLevel, family: RoleFamily | null) {
+  if (!family) return roleLabel(rl);
+  const overrideTitle = rl.job_role && rl.job_role !== family.name ? rl.job_role : null;
+  return overrideTitle ? `${overrideTitle} · L${rl.job_level}` : `L${rl.job_level}`;
+}
+
 export const UNGROUPED_LABEL = "Ungrouped";
 
 // Groups role_levels by family for both the ladder-card view (Settings'

@@ -328,13 +328,19 @@ function TreeNode({
               {TYPE_LABEL[node.unit_type]}
             </span>
             {leader && <span className="ml-2 text-xs font-normal text-gray-400">Led by {leader}</span>}
-            {memberCount > 0 && (
+            {memberCount > 0 ? (
               <Link
                 href={`/app/settings?section=people&unit=${node.id}`}
                 className="ml-2 text-xs font-normal text-gray-400 hover:text-gray-700 hover:underline"
               >
                 {memberCount} {memberCount === 1 ? "person" : "people"}
               </Link>
+            ) : (
+              // Session 43 (Polish Pass A, finding P5) — an empty/dead unit
+              // used to show no count at all, indistinguishable from a
+              // loading state. Plain text (not a link — nothing to filter
+              // to yet).
+              <span className="ml-2 text-xs font-normal text-gray-400">0 people</span>
             )}
           </p>
           <div className="flex shrink-0 items-center gap-3">

@@ -25,6 +25,7 @@ import {
   assignReportRole,
   getRoleFamilies,
   getRoleLevels,
+  getOrgUnits,
   DirectReport,
   OneOnOne,
   Commitment,
@@ -38,8 +39,9 @@ import {
   Scorecard,
   RoleFamily,
   RoleLevel,
+  OrgUnit,
 } from "@/lib/api";
-import { GroupedRoleSelect } from "@/components/RolePicker";
+import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
@@ -149,6 +151,11 @@ export default function ReportDetailPage() {
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
   const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
   const [assigningRole, setAssigningRole] = useState(false);
+  // Role · team subtitle under the H1 (Session 43, Polish Pass A, finding
+  // P5 — "the person page H1 still shows only the name"). orgUnits fetched
+  // alongside roleLevels/roleFamilies purely for this label; PeopleSection
+  // and the roster cards already load the same list for the same reason.
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
 
   // Clear page context when leaving this page so it doesn't bleed into
   // other pages that don't know which report was being viewed.
@@ -170,8 +177,9 @@ export default function ReportDetailPage() {
       getProfile(),
       getRoleLevels(),
       getRoleFamilies(),
+      getOrgUnits(),
     ])
-      .then(([dr, h, c, g, p, cp, cs, to, sc, prof, rls, rfs]) => {
+      .then(([dr, h, c, g, p, cp, cs, to, sc, prof, rls, rfs, ous]) => {
         setReport(dr);
         setPageContext(`${dr.name}'s direct report page`);
         setHistory(h);
@@ -188,6 +196,7 @@ export default function ReportDetailPage() {
         setCadenceDays(dr.one_on_one_cadence_days != null ? String(dr.one_on_one_cadence_days) : "");
         setRoleLevels(rls);
         setRoleFamilies(rfs);
+        setOrgUnits(ous);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -320,9 +329,26 @@ export default function ReportDetailPage() {
           {/* "← Dashboard" removed — the persistent global nav's orbit
               strip now carries the roster on this page (Session 36/37). */}
           <h1 className="text-2xl font-semibold">{report.name}</h1>
-          {report.role_title && (
-            <p className="mt-1 text-gray-500">{report.role_title}</p>
-          )}
+          {(() => {
+            // Role · team subtitle (Session 43, Polish Pass A, finding P5) —
+            // the real assigned role_level + org_unit, once set; falls back
+            // to the legacy free-text role_title only when neither is
+            // assigned yet, same "was: ..." hint PeopleSection shows.
+            const rl = roleLevels.find((r) => r.id === report.role_level_id);
+            const ou = orgUnits.find((u) => u.id === report.org_unit_id);
+            if (rl || ou) {
+              return (
+                <p className="mt-1 text-gray-500">
+                  {rl ? roleLabel(rl) : "No role assigned"}
+                  {ou && ` · ${orgUnitLabel(ou)}`}
+                </p>
+              );
+            }
+            if (report.role_title) {
+              return <p className="mt-1 text-gray-500">{report.role_title}</p>;
+            }
+            return null;
+          })()}
         </div>
         <div className="flex shrink-0 gap-2">
           <Link

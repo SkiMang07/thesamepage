@@ -38,7 +38,7 @@ from pydantic import BaseModel
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.settings import _CONFIG_TABLES, ExpectationIn, _expectation_row, _validate_kind
-from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
+from utils import ensure_org, get_authenticated_client, get_email_from_token, get_org, limiter
 
 router = APIRouter()
 
@@ -272,6 +272,17 @@ async def draft_expectations(
         sibling_configs=sibling_configs,
     )
 
+    return _generate_and_parse_draft(prompt)
+
+
+def _generate_and_parse_draft(prompt: str) -> ExpectationsDraft:
+    """Shared AI-call + parse tail for both draft_expectations (role-level,
+    all three kinds) and draft_org_values (org-level, values only) —
+    extracted so the org-wide values draft (Session 43, Polish Pass B, see
+    docs/TEAM_SETUP_UX_REVIEW.md §7.3 item 8) doesn't duplicate the JSON
+    extraction / validation logic. A prompt that only asks for values simply
+    yields empty metrics/skills lists here, same "empty array is an honest
+    answer" contract as the role-level draft."""
     raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)
     raw_clean = raw.strip()
     if raw_clean.startswith("```"):
@@ -325,6 +336,62 @@ async def draft_expectations(
         ))
 
     return ExpectationsDraft(metrics=metrics, skills=skills, values=values)
+
+
+# ---------------------------------------------------------------------------
+# POST /draft-org-values — org-wide values (Session 43, Polish Pass B, see
+# docs/TEAM_SETUP_UX_REVIEW.md §7.3, item 8). Same draft-then-review
+# contract as /draft, but drafts from the company name/context instead of a
+# role's job description — org-wide values (value_configs.role_level_id
+# NULL) apply to every role automatically, so there's no JD to draft from.
+# Returns the same ExpectationsDraft shape (metrics/skills always empty)
+# so the frontend can reuse the same draft-row rendering.
+# ---------------------------------------------------------------------------
+
+def _build_org_values_draft_prompt(company_name: str, existing_values: list[dict]) -> str:
+    existing_block = (
+        _format_existing_configs(existing_values, "value_name")
+        if existing_values
+        else "  (none configured yet)"
+    )
+    return f"""You are helping a first-time manager set up their company's org-wide values — behavioral/cultural expectations that apply to EVERY role automatically, not one specific job. This is for "{company_name}".
+
+Company values already configured (do not repeat these, only suggest new ones that would round out the set):
+{existing_block}
+
+Draft 3-5 company-wide values a small, fast-moving company like this would plausibly hold — things like ownership, transparency, customer obsession, directness — generic enough to be true without more company-specific detail, since no company context beyond the name was provided. The manager will edit or discard anything that doesn't fit before saving.
+
+Return ONLY valid JSON. No commentary, no markdown, no code fences.
+
+{{
+  "values": [{{"name": "...", "order_type": "primary", "description": "what living this value looks like day to day, one sentence", "value_type": "company"}}]
+}}
+
+order_type must be one of: primary, secondary, tertiary — most sets should have 2-3 primary values, the rest secondary. value_type should be "company" for every item here (org-wide values are company-scoped by definition). Return an empty array only if you truly have nothing plausible to suggest."""
+
+
+@router.post("/draft-org-values", response_model=ExpectationsDraft)
+@limiter.limit("10/minute")
+async def draft_org_values(request: Request, auth=Depends(get_authenticated_client)):
+    """Pure AI-call route — nothing is saved. The manager reviews in the
+    Org-wide values block, then POST /values/batch with role_level_id: null
+    commits whatever they keep (same batch endpoint the role-level draft
+    review panel already uses)."""
+    user_id, supabase = auth
+
+    org = get_org(user_id, supabase)
+    company_name = (org or {}).get("name") or "your company"
+
+    existing_values = (
+        supabase.table("value_configs")
+        .select("value_name,order_type,description")
+        .is_("role_level_id", "null")
+        .execute()
+        .data
+    )
+
+    prompt = _build_org_values_draft_prompt(company_name, existing_values)
+    return _generate_and_parse_draft(prompt)
 
 
 # ---------------------------------------------------------------------------

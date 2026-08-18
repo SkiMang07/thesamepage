@@ -304,10 +304,13 @@ async def get_overview(period_start: date, period_end: date, auth=Depends(get_au
     if period_end < period_start:
         raise HTTPException(status_code=422, detail="period_end must be on or after period_start")
 
+    # Archived people (Session 43) don't count toward capacity — see
+    # docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1.
     reports = (
         supabase.table("direct_reports")
         .select("id,name,role_title,role_level_id,org_unit_id")
         .eq("manager_id", user_id)
+        .is_("archived_at", "null")
         .order("name")
         .execute()
         .data

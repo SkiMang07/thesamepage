@@ -17,7 +17,10 @@ trained to have. Solo founder, content/SEO distribution, $20/mo self-serve.
 | What was done last session / what's next | [SESSION_HISTORY.md](docs/SESSION_HISTORY.md) |
 
 **Always read SESSION_HISTORY.md first.** It tells you the current state and
-next task so you don't relitigate decisions already made.
+next task so you don't relitigate decisions already made. It holds the 5 most
+recent sessions in full; older sessions are one-line summaries pointing to
+[SESSION_HISTORY_ARCHIVE.md](docs/SESSION_HISTORY_ARCHIVE.md) — only open the
+archive if you need the full detail behind a specific past decision.
 
 ---
 

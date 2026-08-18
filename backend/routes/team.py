@@ -120,10 +120,13 @@ async def get_team(auth=Depends(get_authenticated_client)):
     action — user_id set means the report already claimed an account."""
     user_id, supabase = auth
 
+    # Archived people (Session 43) drop off the roster — see
+    # docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1.
     reports = (
         supabase.table("direct_reports")
         .select("id,name,role_title,email,user_id")
         .eq("manager_id", user_id)
+        .is_("archived_at", "null")
         .order("name")
         .execute()
         .data

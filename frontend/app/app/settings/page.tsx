@@ -32,6 +32,7 @@ import {
   SetupStatus,
   SetupStatusPerson,
   WorkUnitConfig,
+  archiveDirectReport,
   assignReportOrgUnit,
   assignReportRole,
   batchCreateExpectations,
@@ -45,7 +46,9 @@ import {
   deleteRoleLevel,
   deleteWorkUnitConfig,
   draftExpectations,
+  draftOrgValues,
   expectationName,
+  getArchivedDirectReports,
   getCapacitySettings,
   getDirectReports,
   getExpectations,
@@ -56,7 +59,9 @@ import {
   getRoleLevels,
   getSetupStatus,
   getWorkUnitConfigs,
+  unarchiveDirectReport,
   updateCapacitySettings,
+  updateDirectReportProfile,
   updateProfile,
   updateRoleFamily,
   updateRoleLevel,
@@ -67,6 +72,7 @@ import {
   OrgUnitSelect,
   UNGROUPED_LABEL,
   groupRoleLevelsByFamily,
+  levelOnlyLabel,
   orgUnitLabel,
   roleLabel,
 } from "@/components/RolePicker";
@@ -555,6 +561,49 @@ function LevelRow({
   );
 }
 
+// Ladder merge nudge (Session 43, Polish Pass B, finding P3 — see
+// docs/TEAM_SETUP_UX_REVIEW.md §7.3 item 9). A 1-level family whose name
+// contains, or is contained by, another family's name (after stripping a
+// leading "Senior/Lead/Staff " variant) is flagged as a likely level of that
+// other ladder — e.g. "Senior Corporate CSM" next to "Corporate Customer
+// Success Manager". Heuristic + dismiss only, never auto-merges; the actual
+// merge still goes through "Move to another ladder…" on the level row.
+const SENIORITY_PREFIXES = ["senior ", "sr. ", "sr ", "lead ", "staff ", "principal "];
+
+function stripSeniorityPrefix(name: string): string {
+  const lower = name.toLowerCase();
+  for (const prefix of SENIORITY_PREFIXES) {
+    if (lower.startsWith(prefix)) return lower.slice(prefix.length).trim();
+  }
+  return lower;
+}
+
+function suggestLadderMerges(
+  roleFamilies: RoleFamily[],
+  roleLevels: RoleLevel[]
+): { family: RoleFamily; target: RoleFamily }[] {
+  const levelCountByFamily = new Map<string, number>();
+  for (const rl of roleLevels) {
+    if (!rl.role_family_id) continue;
+    levelCountByFamily.set(rl.role_family_id, (levelCountByFamily.get(rl.role_family_id) ?? 0) + 1);
+  }
+
+  const suggestions: { family: RoleFamily; target: RoleFamily }[] = [];
+  for (const family of roleFamilies) {
+    if ((levelCountByFamily.get(family.id) ?? 0) !== 1) continue; // only 1-level families
+    const stripped = stripSeniorityPrefix(family.name);
+    const lowerName = family.name.trim().toLowerCase();
+    const target = roleFamilies.find((other) => {
+      if (other.id === family.id) return false;
+      const otherLower = other.name.trim().toLowerCase();
+      if (!otherLower) return false;
+      return stripped === otherLower || lowerName.includes(otherLower) || otherLower.includes(stripped);
+    });
+    if (target) suggestions.push({ family, target });
+  }
+  return suggestions;
+}
+
 function RolesSection({
   roleLevels,
   setRoleLevels,
@@ -581,6 +630,11 @@ function RolesSection({
   const [renameValue, setRenameValue] = useState("");
   const [addingLadder, setAddingLadder] = useState(false);
   const [expandedJdIds, setExpandedJdIds] = useState<Set<string>>(new Set());
+  // Merge nudge (Session 43, Polish Pass B, finding P3) — dismissed
+  // suggestions are local/session-only (not persisted), same "one-time
+  // hint" scope as the plan calls for; a fresh page load can resurface a
+  // dismissed suggestion if the underlying ladders still look mergeable.
+  const [dismissedMergeIds, setDismissedMergeIds] = useState<Set<string>>(new Set());
 
   const groups = groupRoleLevelsByFamily(roleLevels, roleFamilies);
 
@@ -721,14 +775,43 @@ function RolesSection({
     else moveLevel(role, choice);
   }
 
+  const mergeSuggestions = suggestLadderMerges(roleFamilies, roleLevels).filter(
+    (s) => !dismissedMergeIds.has(s.family.id)
+  );
+
   return (
     <div>
       <h2 className="font-medium text-gray-900">Roles on your team</h2>
       <p className="mt-1 text-sm text-gray-500">
         A role family is a ladder — L1, L2, L3&hellip; are levels inside it. Everything else (expectations now,
         ratings later) attaches to a level. Assigning people to roles and teams lives in{" "}
-        <span className="font-medium text-gray-700">Team</span>.
+        <span className="font-medium text-gray-700">People</span>.
       </p>
+
+      {/* Merge nudge (Session 43, Polish Pass B, finding P3) — a one-time
+          heuristic hint, dismiss-only, no auto-merge. Andrew still has to
+          click Move… himself; this just points at the likely candidates. */}
+      {mergeSuggestions.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {mergeSuggestions.map((s) => (
+            <p
+              key={s.family.id}
+              className="flex items-center justify-between gap-3 rounded-md bg-indigo-50 px-3 py-1.5 text-xs text-indigo-800"
+            >
+              <span>
+                <span className="font-medium">{s.family.name}</span> looks like a level of{" "}
+                <span className="font-medium">{s.target.name}</span> — use Move&hellip; on its level row to merge.
+              </span>
+              <button
+                onClick={() => setDismissedMergeIds((ids) => new Set(ids).add(s.family.id))}
+                className="shrink-0 text-indigo-400 hover:text-indigo-700"
+              >
+                Dismiss
+              </button>
+            </p>
+          ))}
+        </div>
+      )}
 
       <div className="mt-4 space-y-5">
         {groups.map((g) => {
@@ -919,9 +1002,12 @@ function RolesSection({
 
 const SETUP_STEP_DEFS: { id: "people" | "teams" | "roles" | "expectations"; label: string }[] = [
   { id: "people", label: "People" },
-  { id: "teams", label: "Teams" },
+  { id: "teams", label: "Teams & departments" },
   { id: "roles", label: "Roles assigned" },
-  { id: "expectations", label: "Expectations" },
+  // Session 43 (Polish Pass A, finding P2) — "Expectations" alone read as
+  // ambiguous ("1 what of 13 what?"); spell out the unit in the label
+  // itself since the count cell just shows "1/13".
+  { id: "expectations", label: "Roles with expectations" },
 ];
 
 function setupStepView(status: SetupStatus, id: "people" | "teams" | "roles" | "expectations") {
@@ -929,7 +1015,14 @@ function setupStepView(status: SetupStatus, id: "people" | "teams" | "roles" | "
     case "people":
       return { count: `${status.people_count}`, done: status.people_count > 0 };
     case "teams":
-      return { count: `${status.teams_count}`, done: status.teams_count > 0 };
+      // Session 43 (Polish Pass A, finding P2) — "8 Teams" used to mean "8
+      // org units" (6 teams + 2 departments folded together, the exact
+      // disagreeing-numbers bug the product review flagged). Now spells out
+      // both counts instead of one ambiguous total.
+      return {
+        count: `${status.team_units_count} team${status.team_units_count === 1 ? "" : "s"} · ${status.department_units_count} department${status.department_units_count === 1 ? "" : "s"}`,
+        done: status.teams_count > 0,
+      };
     case "roles": {
       const assigned = status.people_count - status.people_without_role_count;
       return {
@@ -948,7 +1041,9 @@ function setupStepView(status: SetupStatus, id: "people" | "teams" | "roles" | "
 // Four steps with counts, each deep-linking to where you'd fix it — feeds
 // the same setup-status data the roster badges and the Foundation door use,
 // so all three can never tell three different stories about how "done"
-// setup is.
+// setup is. All four are buttons (Session 43, Polish Pass A, finding P2 —
+// none of the four used to be clickable despite each having an obvious
+// destination).
 function SetupProgressHeader({
   status,
   onStep,
@@ -969,7 +1064,9 @@ function SetupProgressHeader({
               v.done ? "border-gray-200 bg-white hover:bg-gray-50" : "border-amber-200 bg-amber-50 hover:bg-amber-100"
             }`}
           >
-            <p className={`text-lg font-semibold ${v.done ? "text-gray-900" : "text-amber-800"}`}>{v.count}</p>
+            <p className={`font-semibold ${step.id === "teams" ? "text-sm" : "text-lg"} ${v.done ? "text-gray-900" : "text-amber-800"}`}>
+              {v.count}
+            </p>
             <p className="text-xs text-gray-500">{step.label}</p>
           </button>
         );
@@ -1128,6 +1225,188 @@ function ExpectationsChip({
   );
 }
 
+// Per-row "⋯" menu (Session 43, Polish Pass A, finding P1 — "no way to
+// rename someone, fix their email, open their profile, or remove them from
+// Settings → People"). A plain absolutely-positioned dropdown, same
+// lightweight pattern as the rest of this file's inline UI (no new
+// dependency) — a fixed full-screen click-catcher closes it on outside
+// click.
+function PersonRowMenu({
+  onEdit,
+  onArchive,
+  profileHref,
+}: {
+  onEdit: () => void;
+  onArchive: () => void;
+  profileHref: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-md px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        title="More actions"
+        aria-label="More actions"
+      >
+        &#8942;
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg">
+            <button
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50"
+            >
+              Edit name &amp; email
+            </button>
+            <Link
+              href={profileHref}
+              onClick={() => setOpen(false)}
+              className="block w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50"
+            >
+              Open profile
+            </Link>
+            <button
+              onClick={() => {
+                setOpen(false);
+                onArchive();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50"
+            >
+              Archive&hellip;
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Edit name/email — its own small modal (same shape as CreateRoleModal/
+// CreateTeamModal above) rather than an inline row edit, since two labeled
+// fields don't fit the row's already-busy second line.
+function EditPersonModal({
+  report,
+  onClose,
+  onSave,
+}: {
+  report: DirectReport;
+  onClose: () => void;
+  onSave: (name: string, email: string) => Promise<void>;
+}) {
+  const [name, setName] = useState(report.name);
+  const [email, setEmail] = useState(report.email ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(name.trim(), email.trim());
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-medium text-gray-900">Edit name &amp; email</h3>
+        <div className="mt-3 space-y-3">
+          <div>
+            <label className={labelCls}>Name</label>
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Email</label>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.com"
+              className={inputCls}
+            />
+          </div>
+        </div>
+        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+            Cancel
+          </button>
+          <button type="submit" disabled={saving || !name.trim()} className={primaryBtnCls}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Archive confirm — a small modal (not a bare window.confirm, to match this
+// file's other confirmations) that states explicitly that history is kept,
+// per the decided copy in docs/TEAM_SETUP_UX_REVIEW.md §7.3 item 2.
+function ArchiveConfirmModal({
+  report,
+  onClose,
+  onConfirm,
+}: {
+  report: DirectReport;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [archiving, setArchiving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    setArchiving(true);
+    setError(null);
+    try {
+      await onConfirm();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to archive");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-medium text-gray-900">Archive {report.name}?</h3>
+        <p className="mt-2 text-sm text-gray-500">
+          They&apos;ll drop off your roster, rollups, and setup counts. Their 1:1 history, assessments, goals, and
+          metrics all stay intact — you can unarchive them any time to bring them back.
+        </p>
+        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirm}
+            disabled={archiving}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {archiving ? "Archiving..." : "Archive"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PeopleSection({
   reports,
   setReports,
@@ -1171,6 +1450,17 @@ function PeopleSection({
   const [addingPerson, setAddingPerson] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
+  // Archive, not delete (Session 43, Polish Pass A — see
+  // docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1). editingPerson/
+  // archivingPerson gate the two modals below; showArchived toggles a
+  // separately-fetched archived list in below the active roster.
+  const [editingPerson, setEditingPerson] = useState<DirectReport | null>(null);
+  const [archivingPerson, setArchivingPerson] = useState<DirectReport | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedReports, setArchivedReports] = useState<DirectReport[] | null>(null);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
+
   const loadSetupStatus = useCallback(() => {
     getSetupStatus()
       .then(setSetupStatus)
@@ -1180,6 +1470,44 @@ function PeopleSection({
   useEffect(() => {
     loadSetupStatus();
   }, [loadSetupStatus]);
+
+  function toggleShowArchived() {
+    const next = !showArchived;
+    setShowArchived(next);
+    if (next && archivedReports === null) {
+      setArchivedLoading(true);
+      getArchivedDirectReports()
+        .then(setArchivedReports)
+        .catch((e) => onError(e instanceof Error ? e.message : "Failed to load archived people"))
+        .finally(() => setArchivedLoading(false));
+    }
+  }
+
+  async function saveProfile(report: DirectReport, name: string, email: string) {
+    const updated = await updateDirectReportProfile(report.id, { name, email: email || null });
+    setReports((rs) => rs.map((r) => (r.id === report.id ? { ...r, ...updated } : r)));
+  }
+
+  async function doArchive(report: DirectReport) {
+    await archiveDirectReport(report.id);
+    setReports((rs) => rs.filter((r) => r.id !== report.id));
+    setArchivedReports((ars) => (ars ? [...ars, { ...report, archived_at: new Date().toISOString() }] : ars));
+    loadSetupStatus();
+  }
+
+  async function doUnarchive(report: DirectReport) {
+    setUnarchivingId(report.id);
+    try {
+      const updated = await unarchiveDirectReport(report.id);
+      setArchivedReports((ars) => (ars ? ars.filter((r) => r.id !== report.id) : ars));
+      setReports((rs) => [...rs, updated].sort((a, b) => a.name.localeCompare(b.name)));
+      loadSetupStatus();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to unarchive");
+    } finally {
+      setUnarchivingId(null);
+    }
+  }
 
   const peopleById = new Map((setupStatus?.people ?? []).map((p) => [p.id, p]));
 
@@ -1293,6 +1621,12 @@ function PeopleSection({
         </div>
       )}
 
+      {/* Two-line row layout (Session 43, Polish Pass A, finding P1): line 1
+          is the name — a real link to the person's profile, never
+          truncated — with the status chip and the ⋯ menu at the right; line
+          2 is the role/team pickers. Previously a single flex row where the
+          pickers crowded out the name, which is the row's most important
+          text. */}
       <ul className="mt-6 space-y-2">
         {visibleReports.map((r) => {
           const person = peopleById.get(r.id);
@@ -1300,17 +1634,27 @@ function PeopleSection({
             <li
               key={r.id}
               id={`person-row-${r.id}`}
-              className={`flex flex-col gap-2 rounded-lg border px-4 py-3 transition-colors sm:flex-row sm:items-center sm:justify-between ${
+              className={`rounded-lg border px-4 py-3 transition-colors ${
                 highlightId === r.id ? "border-amber-300 bg-amber-50" : "border-gray-200"
               }`}
             >
-              <div className="min-w-0 flex-1 truncate">
-                <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
-                {!r.role_level_id && r.role_title && (
-                  <p className="truncate text-xs text-gray-400">was: &quot;{r.role_title}&quot;</p>
-                )}
+              <div className="flex items-center justify-between gap-3">
+                <Link href={`/app/reports/${r.id}`} className="min-w-0 font-medium text-gray-900 hover:underline">
+                  {r.name}
+                </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  <ExpectationsChip person={person} roleLevelId={r.role_level_id} onDraft={onDraftExpectations} />
+                  <PersonRowMenu
+                    onEdit={() => setEditingPerson(r)}
+                    onArchive={() => setArchivingPerson(r)}
+                    profileHref={`/app/reports/${r.id}`}
+                  />
+                </div>
               </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {!r.role_level_id && r.role_title && (
+                <p className="mt-0.5 text-xs text-gray-400">was: &quot;{r.role_title}&quot;</p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <GroupedRoleSelect
                   roleLevels={roleLevels}
                   roleFamilies={roleFamilies}
@@ -1327,7 +1671,6 @@ function PeopleSection({
                   onCreateNew={() => setCreatingTeamFor(r)}
                   className="w-44 truncate rounded-md border border-gray-300 px-2 py-1.5 text-sm"
                 />
-                <ExpectationsChip person={person} roleLevelId={r.role_level_id} onDraft={onDraftExpectations} />
               </div>
             </li>
           );
@@ -1345,6 +1688,49 @@ function PeopleSection({
           <p className="py-2 text-sm text-gray-500">No direct reports yet — add your first one below.</p>
         )}
       </ul>
+
+      {/* Archive, not delete (Session 43, Polish Pass A). Separate list, not
+          a filter on the roster above — fetched on first expand so a
+          manager who never archives anyone pays nothing for it. */}
+      <div className="mt-4">
+        <button onClick={toggleShowArchived} className="text-xs font-medium text-gray-500 hover:text-gray-900">
+          {showArchived ? "Hide" : "Show"} archived{setupStatus ? ` (${setupStatus.archived_people_count})` : ""}
+        </button>
+        {showArchived && (
+          <ul className="mt-2 space-y-2">
+            {archivedLoading && <p className="py-2 text-sm text-gray-500">Loading...</p>}
+            {!archivedLoading && archivedReports?.length === 0 && (
+              <p className="py-2 text-sm text-gray-500">No archived people.</p>
+            )}
+            {!archivedLoading &&
+              archivedReports?.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-500">{r.name}</p>
+                    <p className="text-xs text-gray-400">
+                      Archived {r.archived_at ? new Date(r.archived_at).toLocaleDateString() : ""} — history kept
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <Link href={`/app/reports/${r.id}`} className="text-xs text-gray-400 hover:text-gray-700">
+                      Open profile
+                    </Link>
+                    <button
+                      onClick={() => doUnarchive(r)}
+                      disabled={unarchivingId === r.id}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                    >
+                      {unarchivingId === r.id ? "Unarchiving..." : "Unarchive"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        )}
+      </div>
 
       <form onSubmit={addPerson} className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-gray-300 p-3">
         <div>
@@ -1376,6 +1762,20 @@ function PeopleSection({
       )}
       {creatingTeamFor && (
         <CreateTeamModal onClose={() => setCreatingTeamFor(null)} onCreate={handleCreateTeam} />
+      )}
+      {editingPerson && (
+        <EditPersonModal
+          report={editingPerson}
+          onClose={() => setEditingPerson(null)}
+          onSave={(name, email) => saveProfile(editingPerson, name, email)}
+        />
+      )}
+      {archivingPerson && (
+        <ArchiveConfirmModal
+          report={archivingPerson}
+          onClose={() => setArchivingPerson(null)}
+          onConfirm={() => doArchive(archivingPerson)}
+        />
       )}
     </div>
   );
@@ -1489,6 +1889,7 @@ function ExpectationsSection({
             coverage={coverage}
             onCell={openCell}
             onDraft={(id) => setDraftingRoleId(id)}
+            onError={onError}
           />
         )
       ) : (
@@ -1529,12 +1930,14 @@ function CoverageGrid({
   coverage,
   onCell,
   onDraft,
+  onError,
 }: {
   roleLevels: RoleLevel[];
   roleFamilies: RoleFamily[];
   coverage: ExpectationsCoverage | null;
   onCell: (roleId: string, kind: ExpectationKind) => void;
   onDraft: (roleId: string) => void;
+  onError: (m: string | null) => void;
 }) {
   const countsByRole = new Map((coverage?.roles ?? []).map((r) => [r.role_level_id, r]));
   // Grouped by ladder (Session 40) — rows sub-headed by family instead of
@@ -1543,13 +1946,13 @@ function CoverageGrid({
 
   return (
     <div className="mt-4">
-      {!!coverage && coverage.org_wide_values_count > 0 && (
-        <p className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
-          {coverage.org_wide_values_count} org-wide value{coverage.org_wide_values_count === 1 ? "" : "s"} apply to
-          every role automatically — open any role's Values column to manage them.
-        </p>
-      )}
-      <div className="overflow-hidden rounded-lg border border-gray-200">
+      {/* Org-wide values (Session 43, Polish Pass B, item 8) — surfaced at
+          the top of the grid, the entry point of this merged section, so
+          managing/drafting company-wide values doesn't require picking a
+          role first. Same block also appears on a role's own Values tab
+          (ExpectationDetail) for in-context editing. */}
+      <OrgWideValuesBlock onError={onError} />
+      <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-500">
@@ -1577,7 +1980,10 @@ function CoverageGrid({
                   ];
                   return (
                     <tr key={rl.id} className="border-b border-gray-100 last:border-0">
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{roleLabel(rl)}</td>
+                      {/* Session 43 (Polish Pass A, finding P5) — level rows
+                          under a family header show "L1"/"L2", not the full
+                          family name repeated on every row. */}
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{levelOnlyLabel(rl, g.family)}</td>
                       {cells.map((cell) => (
                         <td key={cell.kind} className="px-3 py-2.5 text-center">
                           <button
@@ -1826,6 +2232,16 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
   const [description, setDescription] = useState("");
   const [adding, setAdding] = useState(false);
 
+  // Draft with AI (Session 43, Polish Pass B — see
+  // docs/TEAM_SETUP_UX_REVIEW.md §7.3 item 8). Drafts from the company
+  // name/context rather than a JD (there's no role here) via
+  // draftOrgValues(); same draft-then-review, include-checkbox, batch-commit
+  // pattern as DraftReviewPanel below, just scoped to values only.
+  const [drafting, setDrafting] = useState(false);
+  const [draftRows, setDraftRows] = useState<DraftValueRow[] | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [committingDraft, setCommittingDraft] = useState(false);
+
   const load = useCallback(() => {
     setLoading(true);
     // No role_level_id filter server-side returns every org-wide AND
@@ -1840,6 +2256,50 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
   useEffect(() => {
     load();
   }, [load]);
+
+  async function startDraft() {
+    setDrafting(true);
+    setDraftError(null);
+    try {
+      const draft = await draftOrgValues();
+      setDraftRows(draft.values.map((v) => ({ ...v, included: true })));
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : "Failed to draft values");
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  function patchDraftRow(i: number, patch: Partial<DraftValueRow>) {
+    setDraftRows((rows) => (rows ? rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) : rows));
+  }
+
+  async function commitDraft() {
+    if (!draftRows) return;
+    const included = draftRows.filter((r) => r.included);
+    if (included.length === 0) return;
+    setCommittingDraft(true);
+    setDraftError(null);
+    try {
+      const created = await batchCreateExpectations(
+        "values",
+        null,
+        included.map((r) => ({
+          name: r.name,
+          order_type: r.order_type ?? undefined,
+          description: r.description ?? undefined,
+          value_type: r.value_type ?? "company",
+        }))
+      );
+      setItems((xs) => [...xs, ...created]);
+      setDraftRows(null);
+      onError(null);
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : "Failed to save draft");
+    } finally {
+      setCommittingDraft(false);
+    }
+  }
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -1875,11 +2335,72 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
 
   return (
     <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4">
-      <h3 className="text-sm font-medium text-gray-900">Org-wide values</h3>
-      <p className="mt-1 text-xs text-gray-500">
-        Apply to every role automatically — no need to repeat a company value per role. Role-specific values below
-        are additional to these, not a replacement.
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-gray-900">Org-wide values</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Apply to every role automatically — no need to repeat a company value per role. Role-specific values
+            below are additional to these, not a replacement.
+          </p>
+        </div>
+        <button
+          onClick={startDraft}
+          disabled={drafting || !!draftRows}
+          className="shrink-0 rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+        >
+          {drafting ? "Drafting..." : "Draft with AI"}
+        </button>
+      </div>
+
+      {draftRows && (
+        <div className="mt-3 rounded-md border border-indigo-200 bg-white p-3">
+          <p className="text-xs font-medium text-gray-500">
+            Drafted from your company name — review, edit, and choose what to keep.
+          </p>
+          {draftError && <p className="mt-2 text-xs text-red-500">{draftError}</p>}
+          {draftRows.length === 0 && !draftError && (
+            <p className="mt-2 text-xs text-gray-500">Nothing drafted — add values manually below.</p>
+          )}
+          <ul className="mt-2 space-y-2">
+            {draftRows.map((row, i) => (
+              <li key={i} className="flex items-start gap-2 rounded-md border border-gray-100 p-2">
+                <input
+                  type="checkbox"
+                  checked={row.included}
+                  onChange={(e) => patchDraftRow(i, { included: e.target.checked })}
+                  className="mt-1"
+                />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <input
+                    value={row.name}
+                    onChange={(e) => patchDraftRow(i, { name: e.target.value })}
+                    className="w-full rounded border border-gray-200 px-2 py-1 text-sm font-medium"
+                  />
+                  <input
+                    value={row.description ?? ""}
+                    onChange={(e) => patchDraftRow(i, { description: e.target.value })}
+                    placeholder="What living it looks like"
+                    className="w-full rounded border border-gray-200 px-2 py-1 text-xs text-gray-500"
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={commitDraft}
+              disabled={committingDraft || draftRows.filter((r) => r.included).length === 0}
+              className={primaryBtnCls}
+            >
+              {committingDraft ? "Saving..." : `Add ${draftRows.filter((r) => r.included).length} value${draftRows.filter((r) => r.included).length === 1 ? "" : "s"}`}
+            </button>
+            <button onClick={() => setDraftRows(null)} className="text-xs text-gray-500 hover:text-gray-900">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p className="mt-3 text-xs text-gray-500">Loading...</p>
       ) : (

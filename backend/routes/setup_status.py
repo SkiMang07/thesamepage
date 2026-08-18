@@ -26,10 +26,16 @@ router = APIRouter()
 async def get_setup_status(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
 
+    # Archived people (Session 43, Polish Pass A) are excluded here the same
+    # way every other listing surface excludes them — this endpoint feeds
+    # the People progress header, roster badges, and the Foundation door, so
+    # an archived person disappearing from setup counts is what makes all
+    # three agree with the roster itself.
     reports = (
         supabase.table("direct_reports")
         .select("id,name,role_level_id,org_unit_id")
         .eq("manager_id", user_id)
+        .is_("archived_at", "null")
         .order("name")
         .execute()
         .data
@@ -37,8 +43,16 @@ async def get_setup_status(auth=Depends(get_authenticated_client)):
 
     # org_units is org-scoped (not leader-scoped like the role-scoped-views
     # rollups) — same "every unit in the org" list org_units.py's own
-    # GET "" returns, just a count here.
-    teams_count = len(supabase.table("org_units").select("id").execute().data)
+    # GET "" returns. Split by unit_type (Session 43, Polish Pass A, finding
+    # P2 — "8 Teams" previously meant "8 org units," conflating departments
+    # into "teams") so the People tile can say "6 teams · 2 departments"
+    # instead of one ambiguous number. teams_count keeps its old meaning
+    # (total org units) for callers that only care "does at least one unit
+    # exist" (ZoneMap.tsx's Foundation door check).
+    all_units = supabase.table("org_units").select("id,unit_type").execute().data
+    teams_count = len(all_units)
+    team_units_count = sum(1 for u in all_units if u["unit_type"] == "team")
+    department_units_count = sum(1 for u in all_units if u["unit_type"] == "department")
 
     coverage = _compute_coverage(supabase)
     covered_role_ids = {
@@ -63,12 +77,28 @@ async def get_setup_status(auth=Depends(get_authenticated_client)):
         for r in reports
     ]
 
+    # Archived headcount (Session 43) — feeds the People section's "Show
+    # archived (N)" toggle without a second round-trip. Same len(...) style
+    # as every other count in this file rather than a count="exact" head
+    # query — untested against this codebase's supabase-py usage elsewhere.
+    archived_people_count = len(
+        supabase.table("direct_reports")
+        .select("id")
+        .eq("manager_id", user_id)
+        .not_.is_("archived_at", "null")
+        .execute()
+        .data
+    )
+
     return {
         "people_count": len(reports),
         "teams_count": teams_count,
+        "team_units_count": team_units_count,
+        "department_units_count": department_units_count,
         "roles_count": len(coverage["roles"]),
         "roles_with_expectations_count": len(covered_role_ids),
         "people_without_role_count": sum(1 for p in people if not p["has_role"]),
         "people_without_team_count": sum(1 for p in people if not p["has_team"]),
+        "archived_people_count": archived_people_count,
         "people": people,
     }

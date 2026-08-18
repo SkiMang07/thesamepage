@@ -54,9 +54,12 @@ def _build_tool_executor(supabase, user_id: str) -> dict:
             .data
         ),
         "list_direct_reports": lambda _: (
+            # Archived people (Session 43) excluded — same rule as every
+            # other roster surface. See docs/TEAM_SETUP_UX_REVIEW.md §7.3.
             supabase.table("direct_reports")
             .select("id,name,role_title")
             .eq("manager_id", user_id)
+            .is_("archived_at", "null")
             .order("name")
             .execute()
             .data

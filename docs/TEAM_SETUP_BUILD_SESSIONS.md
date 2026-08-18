@@ -121,3 +121,45 @@ Mostly frontend; no migration expected. No new UI dependencies. Verify: npx tsc 
 **Immediate next task**
 Read docs/TEAM_SETUP_UX_REVIEW.md §6 Plan S4+S5, then start with the person-page expectations block (highest trust payoff), and do the Settings consolidation last so everything else is stable under it. End with a report: what shipped, files touched, renames applied, deviations — then the project returns to the Cowork review session for final review of all four builds.
 ```
+
+---
+
+## Session 5 — Polish pass: People management, trust details, values story
+
+*(Added 2026-08-18 after the post-build review — see docs/TEAM_SETUP_UX_REVIEW.md §7. Sessions 1–4 are shipped and live.)*
+
+```
+**Project**
+The Same Page — a management OS for first-time managers. Next.js frontend (frontend/), FastAPI backend (backend/), Supabase Postgres with RLS (database/schema.sql + database/migrations/). Live deploys via GitHub push (Vercel + Railway).
+
+**Objective for this session**
+Build the polish pass from docs/TEAM_SETUP_UX_REVIEW.md §7.3 (Pass A + Pass B combined): person management on Settings → People (edit, open profile, archive), a People-row layout rethink, data-trust fixes on tiles/labels/links, the org-wide values story, and a ladder-merge nudge.
+
+**Source of truth**
+docs/TEAM_SETUP_UX_REVIEW.md §7 (findings P1–P5 and §7.3) is the spec — read it in full first. Also CLAUDE.md, docs/ENGINEERING.md, docs/SESSION_HISTORY.md (Sessions covering the team-setup builds), database/schema.sql.
+
+**Active folders and files**
+frontend/app/app/settings/page.tsx (People section + Roles & expectations section), frontend/app/app/reports/[id]/page.tsx, frontend/app/app/org/page.tsx, backend/routes/direct_reports.py + the expectations/values routes, frontend/lib/api.ts, database/migrations/ + schema.sql (one new migration: archived_at).
+
+**What is already decided**
+(1) ARCHIVE, NOT DELETE — decided explicitly. Migration adds direct_reports.archived_at timestamptz null (update schema.sql too). Archived people keep all history (1:1s, assessments, goals, metric entries) but disappear from rosters, People rows (behind a "Show archived (N)" toggle with unarchive), rollups, capacity, and setup counts. Do NOT build a hard delete in the UI. Audit every query/rollup that lists direct reports and exclude archived — including the SECURITY DEFINER rollup functions in schema.sql if they count people.
+(2) People row rework: two-line layout — line 1: full name as a link to /app/reports/[id] (never truncate the name) + status chip on the right; line 2: role picker + team picker. Per-row ⋯ menu: Edit name & email (inline or small modal), Open profile, Archive (confirm states history is kept).
+(3) Tile fixes: second tile becomes "6 teams · 2 departments" style (count unit_type='team' separately — never call departments teams); clarify the expectations tile label (e.g. "1/13 roles have expectations"); all four tiles become links (People→rows below, Teams→/app/org, Roles/Expectations→Roles & expectations section).
+(4) Deep links: the "Draft expectations" chip on a People row opens the AI-draft modal for that person's role·level directly (navigate to Roles & expectations with the modal open), not just the section.
+(5) Coverage grid: level rows under a family header show "L1"/"L2" style labels, not the full repeated family name.
+(6) Org page: units with zero people show "0 people"; member counts link to Settings → People (filtered or scrolled to that unit's people if cheap — plain link acceptable).
+(7) Person page: role · team subtitle under the H1 once assigned.
+(8) Values story: backend + UI treat value_configs.role_level_id NULL as ORG-WIDE values — an "Org-wide values" block at the top of the Values view in Roles & expectations, with its own "Draft with AI" (drafts from company name/context, not a JD); the role-expectations fetch helper (grep fetch_role_expectations) unions org-wide values into every role's expectation set (prep grounding + person page + assessments all inherit this). Per-role values remain possible as overrides/additions.
+(9) Merge nudge: on Roles & expectations, a dismissible one-line hint when a 1-level family's name contains another family's name or a "Senior/Lead/Staff " prefix variant of it ("Senior Corporate CSM looks like a level of Corporate Customer Success Manager — use Move… to merge"). Heuristic + dismiss only; no auto-merge.
+(10) Copy fixes: the Roles & expectations header still says assigning people "lives in Team" — it must say People; re-sweep all setup surfaces for stale section names.
+(11) Role selects on People rows and the person page get optgroup grouping by family. No typeahead this session.
+
+**What is already completed**
+Sessions 1–4: coverage grid + AI draft (works well), role families + ladder UI + Move…, People section + setup tiles + fixed Quick add, person-page inline assign + roster chips + org counts + section renames. Don't rebuild any of it — this session refines.
+
+**Constraints and cautions**
+RLS: current_org_id() security definer pattern; never inline users subqueries in policies. Schema changes in BOTH the migration file and schema.sql; test by running full schema.sql + migration against a local Postgres. The migration must be run manually in the Supabase SQL editor — flag it prominently in your report. Preserve the role↔org_unit sibling-preserving PUT invariant in api.ts assign helpers. No new UI dependencies. Verify: python3 -m py_compile on touched backend files, npx tsc --noEmit, isolated npm install + npx next build. Update docs/SESSION_HISTORY.md. Commit + push.
+
+**Immediate next task**
+Read docs/TEAM_SETUP_UX_REVIEW.md §7, then start with the archived_at migration + backend filtering (it touches the most call sites), then the People row rework, then the smaller items in the order above. End with a report: what shipped, files touched, the migration to run, and any deviations — for final review back in the Cowork session.
+```

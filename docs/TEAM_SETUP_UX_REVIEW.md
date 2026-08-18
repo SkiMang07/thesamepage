@@ -162,3 +162,35 @@ Sequencing rationale: S3 makes expectations real for the 13 existing roles (high
 **Verification.** tsc / next build; click-through of every renamed surface from the zone map; confirm no orphaned links (the Session-37 nav made labels centralized in ZoneMap.tsx — update once).
 
 **Open question.** Merge timing: if S2/S3 land as separate sections first, this pass does the consolidation — acceptable churn, or should S3 build directly into the merged layout? Lean: build S3 in place, consolidate here — keeps each session shippable.
+
+---
+
+## 7. Post-build review (2026-08-18, after all four sessions shipped)
+
+**Method:** re-walked the live deploy end-to-end — Settings (all four sections), the AI draft modal (generated a real draft for Corporate CSM · L1, cancelled without committing), Org, Team roster, a role-less person page, and Quick add.
+
+### 7.1 Verification: what landed
+
+All four plans are live and substantially faithful. S2: family cards with level rows, collapsed JDs, Rename / Edit / Move… / Remove, "+ Add L3" and "+ Add L1 (lower)". S3: coverage grid grouped by family with M/S/V counts and per-level "Draft with AI" — the draft itself is *good* (NRR quarterly primary, onboarding time-to-value, health score, QBR completion, sensible descriptions), with copy-from-role in the modal. S1: "Set up your team" People section with four stat tiles, per-person role/team selects with status chips, add-person row, "+ Create new role…" in the picker, and Quick add's trap replaced by a real role select with honest helper copy. S4/S5: person page always renders the Expectations block with an inline "Assign a role…" picker and the assess link reworded; roster cards show role·team chips and an amber "No role" badge; Org shows member counts and the new blurb; Settings is consolidated to Profile & Company / People / Roles & expectations / Capacity.
+
+Two plan items didn't fully land: **org-wide values** (no org-level values block anywhere; values are still per-level only, every Values count is 0, and the AI draft returned 0 values — the values story is simply unfinished) and **grouped/typeahead role selects** (the People and person-page role pickers are flat native selects, not grouped by family, not searchable).
+
+### 7.2 New findings
+
+**P1 — People rows can't manage the person, only the wiring (Andrew's find; severity: high).** No way to rename someone, fix their email, open their profile, or remove them from Settings → People — the one place framed as "set up your team." And the row layout is crammed: with both selects populated, the *person's name* truncates ("Jordan …", "Leah W…") while the dropdowns hog the width — the most important text on the row loses. Removal has a real design question underneath: `direct_reports` delete cascades through 1:1s, commitments, assessments, goals history, metric entries — everything. Offboarding someone should not torch their history, so this wants a soft **archive** (small migration: `archived_at`), with hard delete either dropped or gated behind archive + explicit cascade warning.
+
+**P2 — Setup tiles have data-trust problems (severity: medium).** The second tile reads "8 Teams" but 8 is *all org units* — 6 teams + 2 departments. Exactly the class of disagreeing-numbers bug the Aug-12 review flagged. "1/13 Expectations" is also ambiguous (1 what?). And none of the four tiles is clickable, though each has an obvious destination.
+
+**P3 — The near-duplicate ladders are still unmerged, and nothing nudges (severity: medium).** "Senior Corporate CSM," "Senior Customer Support Coordinator," etc. still sit as 1-level families beside their parent ladders. The Move… tool exists but nothing suggests using it. A one-time heuristic hint ("Senior Corporate CSM looks like L3 of Corporate Customer Success Manager — merge?") would finish what the S2 backfill couldn't.
+
+**P4 — Stale copy survived the sweep (severity: low, trust-eroding).** Roles & expectations still says "Assigning people to roles and teams lives in **Team**" — the section it points to is now called People. (The plan's stale-copy sweep explicitly listed this sentence.)
+
+**P5 — Small deep-link and label gaps (severity: low).** The "Draft expectations" chip on a People row goes to the section, not straight into that role's AI-draft modal (one extra decision for the user at the moment of highest intent). The coverage grid repeats the full role name under its own family header ("Corporate Customer Success Manager · L1" under "Corporate Customer Success Manager") where "L1" would scan. Org units with zero people show no count at all — you can't spot an empty/dead team; counts also aren't clickable through to People. The person page H1 still shows only the name — role · team under it would orient every 1:1.
+
+### 7.3 Proposed follow-up scope
+
+**Polish Pass A — People management + trust details (one session).** Rework the People row: two-line layout (name as a link to the profile, status chip right; pickers on line two) with a per-row ⋯ menu — Edit name & email, Open profile, Archive. Add `archived_at` migration + backend support; archived people drop out of rosters/rollups but keep history. Fix the tiles ("6 teams · 2 departments", clarify the expectations tile, make all four clickable). Group role selects by family (optgroup — cheap, no typeahead needed yet). Deep-link the "Draft expectations" chip into the draft modal. Level-only labels in the coverage grid. "0 people" chip on empty org units + counts click through to People. Role · team subtitle on the person page H1. Kill the stale "lives in Team" sentence (and re-sweep).
+
+**Polish Pass B — finish the values story (half to one session).** Org-wide values block (backend treats `value_configs.role_level_id NULL` as org-wide; `fetch_role_expectations` unions them in), AI draft for values at the org level (from company/context info rather than JDs), and the merge-suggestion nudge from P3 if it didn't fit in Pass A.
+
+*Approved scope and session prompts: see docs/TEAM_SETUP_BUILD_SESSIONS.md (Session 5, and 6 if split).*

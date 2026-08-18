@@ -126,15 +126,19 @@ class DirectReportCreateIn(DirectReportIn):
 
 
 @router.get("")
-async def list_direct_reports(auth=Depends(get_authenticated_client)):
+async def list_direct_reports(archived: bool = False, auth=Depends(get_authenticated_client)):
+    """Active people by default (Session 43, Polish Pass A — see
+    docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1). Every other listing
+    surface in the app (rosters, rollups, capacity, setup counts) composes
+    on top of this endpoint or filters the same way, so archiving someone
+    here is what makes them disappear everywhere at once. Pass
+    ?archived=true for the People section's "Show archived (N)" toggle —
+    the two are mutually exclusive lists, not a combined one, so the
+    frontend fetches each explicitly rather than filtering client-side."""
     user_id, supabase = auth
-    result = (
-        supabase.table("direct_reports")
-        .select("*")
-        .eq("manager_id", user_id)
-        .order("name")
-        .execute()
-    )
+    query = supabase.table("direct_reports").select("*").eq("manager_id", user_id)
+    query = query.not_.is_("archived_at", "null") if archived else query.is_("archived_at", "null")
+    result = query.order("name").execute()
     return result.data
 
 
@@ -150,6 +154,7 @@ async def get_team_overview(auth=Depends(get_authenticated_client)):
         supabase.table("direct_reports")
         .select("id,name,role_title")
         .eq("manager_id", user_id)
+        .is_("archived_at", "null")
         .order("name")
         .execute()
         .data
@@ -236,6 +241,77 @@ async def create_direct_report(body: DirectReportCreateIn, auth=Depends(get_auth
         .insert({**row, "manager_id": user_id})
         .execute()
     )
+    return result.data[0]
+
+
+# ---------------------------------------------------------------------------
+# Archive, not delete (Session 43, Polish Pass A, finding P1). Soft-delete
+# only — no cascade, history stays intact. Separate POST endpoints (rather
+# than folding into the PUT) so the People row's "Archive" action can't
+# accidentally be triggered by an unrelated field update, and so unarchive
+# is a one-click undo without reconstructing the rest of the record.
+# ---------------------------------------------------------------------------
+
+@router.post("/{report_id}/archive")
+async def archive_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
+    user_id, supabase = auth
+    result = (
+        supabase.table("direct_reports")
+        .update({"archived_at": datetime.now(timezone.utc).isoformat()})
+        .eq("id", report_id)
+        .eq("manager_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    return result.data[0]
+
+
+@router.post("/{report_id}/unarchive")
+async def unarchive_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
+    user_id, supabase = auth
+    result = (
+        supabase.table("direct_reports")
+        .update({"archived_at": None})
+        .eq("id", report_id)
+        .eq("manager_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
+    return result.data[0]
+
+
+# Edit name/email from the People row's ⋯ menu (Session 43, Polish Pass A,
+# finding P1 — "no way to rename someone, fix their email"). Deliberately its
+# own small PATCH rather than routing through the shared PUT: DirectReportIn
+# (the PUT body) has no `email` field on purpose (see DirectReportCreateIn's
+# docstring above — an omitted key on that model would silently wipe a
+# previously-set email), so a name/email edit needs a model that carries
+# exactly these two fields and nothing else.
+class DirectReportProfileIn(BaseModel):
+    name: str
+    email: str | None = None
+
+
+@router.patch("/{report_id}/profile")
+async def update_direct_report_profile(report_id: str, body: DirectReportProfileIn, auth=Depends(get_authenticated_client)):
+    user_id, supabase = auth
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Name cannot be empty")
+    update: dict = {"name": name}
+    if body.email is not None:
+        update["email"] = body.email.strip().lower() or None
+    result = (
+        supabase.table("direct_reports")
+        .update(update)
+        .eq("id", report_id)
+        .eq("manager_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Direct report not found")
     return result.data[0]
 
 

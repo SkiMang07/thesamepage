@@ -115,10 +115,13 @@ async def get_dashboard_insight(request: Request, auth=Depends(get_authenticated
     if cached and cached[1] > now:
         return cached[0]
 
+    # Archived people (Session 43) shouldn't drive a dashboard nudge — see
+    # docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1.
     reports = (
         supabase.table("direct_reports")
         .select("id,name,one_on_one_cadence_days")
         .eq("manager_id", user_id)
+        .is_("archived_at", "null")
         .execute()
         .data
     )

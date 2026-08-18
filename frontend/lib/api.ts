@@ -49,6 +49,11 @@ async function authedFormFetch(path: string, formData: FormData) {
 export type DirectReport = {
   id: string;
   name: string;
+  // Not on the shared PUT model (DirectReportIn has no email field — see
+  // DirectReportCreateIn's backend docstring) so assignReportRole/
+  // assignReportOrgUnit/assignReportCadence never round-trip it. Edited via
+  // updateDirectReportProfile() only.
+  email?: string | null;
   role_title: string | null;
   notes: string | null;
   role_level_id?: string | null;
@@ -62,6 +67,11 @@ export type DirectReport = {
   // itself falls back to 21. See resolve_cadence_days() in backend/utils.py
   // and getOneOnOnesOverview() below for the resolved value.
   one_on_one_cadence_days?: number | null;
+  // Archive, not delete (Session 43, Polish Pass A — see
+  // docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1). Set once archived; every
+  // listing endpoint excludes archived people by default (GET
+  // /api/direct-reports only returns them with ?archived=true).
+  archived_at?: string | null;
   // Present on GET /api/direct-reports/{id} only: the assigned role's
   // configured expectations. null when no role is assigned.
   expectations?: RoleExpectations | null;
@@ -151,6 +161,28 @@ export type WrapUpDraft = {
 
 export const getDirectReports = (): Promise<DirectReport[]> =>
   authedFetch("/api/direct-reports");
+
+// Archived people (Session 43, Polish Pass A) — a separate list, not a
+// filter flag on getDirectReports(), so the People section's "Show archived
+// (N)" toggle can fetch them on demand rather than always paying for a
+// combined query. See docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1.
+export const getArchivedDirectReports = (): Promise<DirectReport[]> =>
+  authedFetch("/api/direct-reports?archived=true");
+
+export const archiveDirectReport = (id: string): Promise<DirectReport> =>
+  authedFetch(`/api/direct-reports/${id}/archive`, { method: "POST" });
+
+export const unarchiveDirectReport = (id: string): Promise<DirectReport> =>
+  authedFetch(`/api/direct-reports/${id}/unarchive`, { method: "POST" });
+
+// Edit name/email from the People row's ⋯ menu — its own small PATCH, not
+// routed through assignReportRole's PUT pattern, since DirectReportIn (the
+// PUT body) deliberately has no email field.
+export const updateDirectReportProfile = (
+  id: string,
+  body: { name: string; email?: string | null }
+): Promise<DirectReport> =>
+  authedFetch(`/api/direct-reports/${id}/profile`, { method: "PATCH", body: JSON.stringify(body) });
 
 export type TeamOverviewItem = {
   id: string;
@@ -1052,11 +1084,20 @@ export type SetupStatusPerson = {
 
 export type SetupStatus = {
   people_count: number;
+  // Total org units (teams + departments) — kept for the "does at least one
+  // unit exist" checks (ZoneMap.tsx's Foundation door). team_units_count/
+  // department_units_count (Session 43, Polish Pass A, finding P2) are the
+  // ones the People tile actually displays ("6 teams · 2 departments"
+  // instead of one ambiguous "8 Teams" number).
   teams_count: number;
+  team_units_count: number;
+  department_units_count: number;
   roles_count: number;
   roles_with_expectations_count: number;
   people_without_role_count: number;
   people_without_team_count: number;
+  // Session 43 — feeds the People section's "Show archived (N)" toggle.
+  archived_people_count: number;
   people: SetupStatusPerson[];
 };
 
@@ -1098,6 +1139,14 @@ export const draftExpectations = (roleLevelId: string): Promise<ExpectationsDraf
     method: "POST",
     body: JSON.stringify({ role_level_id: roleLevelId }),
   });
+
+// Org-wide values draft (Session 43, Polish Pass B — see
+// docs/TEAM_SETUP_UX_REVIEW.md §7.3, item 8). Drafts from the company
+// name/context, not a job description — there is no role here. Same
+// ExpectationsDraft shape (metrics/skills always empty) so the review row
+// UI can be reused; commit via batchCreateExpectations("values", null, ...).
+export const draftOrgValues = (): Promise<ExpectationsDraft> =>
+  authedFetch("/api/expectations/draft-org-values", { method: "POST" });
 
 export type ExpectationBatchItem = {
   name: string;

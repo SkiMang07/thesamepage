@@ -156,6 +156,13 @@ create table direct_reports (
   role_title    text,
   notes         text,
   start_date    date,
+  -- Archive, not delete (Session 43, Polish Pass A — see
+  -- docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1). Soft-delete only: no
+  -- cascade behavior changes, history (1:1s, assessments, goals, metric
+  -- entries) all stays intact. Archived people are excluded from every
+  -- listing/rollup query in the backend (grep archived_at) but remain
+  -- reachable by id (person page, 1:1 history, scorecard).
+  archived_at   timestamptz,
   created_at    timestamptz not null default now()
 );
 
@@ -231,6 +238,9 @@ create table commitments (
 alter table commitments enable row level security;
 
 create index commitments_open_idx on commitments (direct_report_id, status) where status = 'open';
+
+-- Session 43 (Polish Pass A) — see the archived_at column comment above.
+create index direct_reports_archived_at_idx on direct_reports (archived_at);
 
 -- -------------------------
 -- ASSESSMENT LEVELS
@@ -1284,6 +1294,7 @@ begin
   from direct_reports dr
   join org_units ou on ou.id = dr.org_unit_id and ou.org_id = v_org_id
   left join capacity_profiles cp on cp.direct_report_id = dr.id
+  -- Archived people (Session 43) don't count toward available capacity.
   left join capacity_settings cs on cs.org_id = v_org_id
   left join lateral (
     select sum(
@@ -1299,6 +1310,7 @@ begin
       and t.end_date >= p_period_start
   ) actual_off on true
   where dr.org_unit_id in (select unit_id from public.led_org_unit_ids())
+    and dr.archived_at is null
   group by dr.org_unit_id;
 end;
 $$;
@@ -1389,6 +1401,8 @@ as $$
     from direct_reports dr
     left join role_levels rl on rl.id = dr.role_level_id
     where dr.org_unit_id in (select unit_id from public.led_org_unit_ids())
+      -- Session 43: archived people drop out of the headcount rollup.
+      and dr.archived_at is null
     group by dr.org_unit_id, coalesce(rl.job_role, 'Unassigned')
   )
   select
