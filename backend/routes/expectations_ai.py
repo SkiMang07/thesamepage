@@ -47,15 +47,20 @@ router = APIRouter()
 # GET /coverage
 # ---------------------------------------------------------------------------
 
-@router.get("/coverage")
-async def get_coverage(auth=Depends(get_authenticated_client)):
+def _compute_coverage(supabase) -> dict:
     """One row per role_level with metric/skill/value config counts, plus
     the org-wide (role_level_id IS NULL) value count. Three queries total
     (one per config table) + one for role_levels, grouped in Python — same
     "single grouped query, no per-role N+1" shape as
-    assessments.py's list_team_assessments."""
-    user_id, supabase = auth
+    assessments.py's list_team_assessments.
 
+    Extracted from get_coverage() (Session 41, Plan S1) so
+    routes/setup_status.py can reuse the exact same computation for its
+    per-role "has expectations" check — see docs/TEAM_SETUP_UX_REVIEW.md §6,
+    "setup-status feeds ... reuses S3's coverage query." Takes a bare
+    supabase client (no auth dependency) so it composes into another route's
+    handler without a second HTTP round-trip.
+    """
     role_levels = (
         supabase.table("role_levels")
         .select("id,job_role,job_level,functional_team")
@@ -94,6 +99,12 @@ async def get_coverage(auth=Depends(get_authenticated_client)):
         ],
         "org_wide_values_count": org_wide_values_count,
     }
+
+
+@router.get("/coverage")
+async def get_coverage(auth=Depends(get_authenticated_client)):
+    _, supabase = auth
+    return _compute_coverage(supabase)
 
 
 # ---------------------------------------------------------------------------

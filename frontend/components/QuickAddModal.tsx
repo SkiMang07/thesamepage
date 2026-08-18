@@ -13,16 +13,61 @@
 // those stay the place for anything more than "get this typed in before I
 // forget it." Quick add optimizes for speed, not completeness.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DirectReport,
   GoalLevel,
+  RoleFamily,
+  RoleLevel,
   createDirectReport,
   createGoal,
   createProject,
+  createRoleFamily,
+  createRoleLevel,
+  getRoleFamilies,
+  getRoleLevels,
 } from "@/lib/api";
 
 type QuickAddType = "report" | "goal" | "project";
+
+// Session 41 (Plan S1, docs/TEAM_SETUP_UX_REVIEW.md §6, F1): Quick add's
+// "Role (optional)" used to be a free-text input writing direct_reports.
+// role_title — a dead end disconnected from role_levels, expectations, and
+// everything downstream (see the review's F1 finding). This is now the same
+// grouped-by-ladder role typeahead + "create new role inline" mechanic as
+// the People roster's picker in settings/page.tsx (GroupedRoleSelect there
+// isn't exported — small enough to duplicate here rather than promoting a
+// page-local component to a shared one for a single second caller).
+const CREATE_NEW_ROLE = "__create_new_role__";
+
+function roleLabel(rl: RoleLevel) {
+  const name = rl.role_families?.name ?? rl.job_role;
+  return `${name} · L${rl.job_level}`;
+}
+
+function groupRolesByFamily(
+  roleLevels: RoleLevel[],
+  roleFamilies: RoleFamily[]
+): { family: RoleFamily | null; levels: RoleLevel[] }[] {
+  const byFamily = new Map<string, RoleLevel[]>();
+  const ungrouped: RoleLevel[] = [];
+  for (const rl of roleLevels) {
+    if (rl.role_family_id) {
+      const bucket = byFamily.get(rl.role_family_id) ?? [];
+      bucket.push(rl);
+      byFamily.set(rl.role_family_id, bucket);
+    } else {
+      ungrouped.push(rl);
+    }
+  }
+  const sortByLevel = (a: RoleLevel, b: RoleLevel) => a.job_level - b.job_level;
+  const groups: { family: RoleFamily | null; levels: RoleLevel[] }[] = [...roleFamilies]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((f) => ({ family: f, levels: (byFamily.get(f.id) ?? []).sort(sortByLevel) }))
+    .filter((g) => g.levels.length > 0);
+  if (ungrouped.length > 0) groups.push({ family: null, levels: ungrouped.sort(sortByLevel) });
+  return groups;
+}
 
 const TYPE_LABELS: Record<QuickAddType, string> = {
   report: "Direct report",
@@ -54,22 +99,61 @@ export default function QuickAddModal({
 }) {
   const [type, setType] = useState<QuickAddType>("report");
   const [title, setTitle] = useState("");
-  const [roleTitle, setRoleTitle] = useState("");
   const [level, setLevel] = useState<GoalLevel>("team");
   const [dueDate, setDueDate] = useState("");
   const [directReportId, setDirectReportId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Role picker state (Plan S1 fix for F1 — see the module comment above).
+  const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
+  const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
+  const [roleLevelId, setRoleLevelId] = useState("");
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [creatingRoleSaving, setCreatingRoleSaving] = useState(false);
+
+  // Fetched once per open rather than once ever — role_levels/role_families
+  // can change between opens (a role added from Settings while this modal
+  // was closed), and this modal is opened rarely enough that a per-open
+  // fetch is fine at this scale (same "fine at this scale" posture as every
+  // other list fetch in this codebase).
+  useEffect(() => {
+    if (!open) return;
+    getRoleLevels().then(setRoleLevels).catch(() => {});
+    getRoleFamilies().then(setRoleFamilies).catch(() => {});
+  }, [open]);
+
   if (!open) return null;
 
   function reset() {
     setTitle("");
-    setRoleTitle("");
     setLevel("team");
     setDueDate("");
     setDirectReportId("");
+    setRoleLevelId("");
+    setCreatingRole(false);
+    setNewRoleName("");
     setError(null);
+  }
+
+  async function handleCreateRole() {
+    if (!newRoleName.trim() || creatingRoleSaving) return;
+    setCreatingRoleSaving(true);
+    setError(null);
+    try {
+      const family = await createRoleFamily({ name: newRoleName.trim() });
+      const level = await createRoleLevel({ job_role: newRoleName.trim(), job_level: 1, role_family_id: family.id });
+      setRoleFamilies((fs) => [...fs, family]);
+      setRoleLevels((ls) => [...ls, level]);
+      setRoleLevelId(level.id);
+      setCreatingRole(false);
+      setNewRoleName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create role");
+    } finally {
+      setCreatingRoleSaving(false);
+    }
   }
 
   function handleClose() {
@@ -84,7 +168,10 @@ export default function QuickAddModal({
     setError(null);
     try {
       if (type === "report") {
-        await createDirectReport({ name: title.trim(), role_title: roleTitle.trim() || undefined });
+        // role_title is no longer written from here (Plan S1, F1) — the
+        // picker below writes role_level_id, the real connection to
+        // expectations/assessments/prep. See the module comment.
+        await createDirectReport({ name: title.trim(), role_level_id: roleLevelId || undefined });
       } else if (type === "goal") {
         await createGoal({ title: title.trim(), level, due_date: dueDate || null });
       } else {
@@ -146,15 +233,65 @@ export default function QuickAddModal({
             />
           </div>
 
-          {type === "report" && (
+          {type === "report" && !creatingRole && (
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-500">Role (optional)</label>
+              <select
+                value={roleLevelId}
+                onChange={(e) => {
+                  if (e.target.value === CREATE_NEW_ROLE) setCreatingRole(true);
+                  else setRoleLevelId(e.target.value);
+                }}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">No role assigned</option>
+                <option value={CREATE_NEW_ROLE}>+ Create new role…</option>
+                {groupRolesByFamily(roleLevels, roleFamilies).map((g) => (
+                  <optgroup key={g.family?.id ?? "ungrouped"} label={g.family?.name ?? "Ungrouped"}>
+                    {g.levels.map((rl) => (
+                      <option key={rl.id} value={rl.id}>
+                        {roleLabel(rl)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-400">
+                Full setup (teams, expectations) lives in Settings → People — this just gets them started.
+              </p>
+            </div>
+          )}
+
+          {type === "report" && creatingRole && (
+            <div className="rounded-md border border-gray-200 p-3">
+              <label className="mb-1 block text-xs font-medium text-gray-500">New role name</label>
               <input
-                value={roleTitle}
-                onChange={(e) => setRoleTitle(e.target.value)}
+                autoFocus
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
                 placeholder="e.g. Account Executive"
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
               />
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreatingRole(false);
+                    setNewRoleName("");
+                  }}
+                  className="rounded-md px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateRole}
+                  disabled={creatingRoleSaving || !newRoleName.trim()}
+                  className="rounded-md bg-gray-900 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                >
+                  {creatingRoleSaving ? "Creating..." : "Create role"}
+                </button>
+              </div>
             </div>
           )}
 

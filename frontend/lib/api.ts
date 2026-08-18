@@ -166,8 +166,21 @@ export const getTeamOverview = (): Promise<TeamOverviewItem[]> =>
 export const getDirectReport = (id: string): Promise<DirectReport> =>
   authedFetch(`/api/direct-reports/${id}`);
 
-export const createDirectReport = (body: { name: string; role_title?: string; notes?: string }): Promise<DirectReport> =>
-  authedFetch("/api/direct-reports", { method: "POST", body: JSON.stringify(body) });
+// role_level_id/org_unit_id (Session 41, Plan S1) — the backend's
+// DirectReportIn already accepted these; the client type just didn't expose
+// them, so every create path (Quick add, the new People add-person row) can
+// wire a person straight to a role/team at creation time instead of a
+// separate assign step. role_title deliberately still accepted (not
+// removed) so nothing breaks if a caller still sends it, but Plan S1 stops
+// every UI path from writing it — see roleTitleHint() in settings/page.tsx.
+export const createDirectReport = (body: {
+  name: string;
+  email?: string;
+  role_title?: string;
+  notes?: string;
+  role_level_id?: string | null;
+  org_unit_id?: string | null;
+}): Promise<DirectReport> => authedFetch("/api/direct-reports", { method: "POST", body: JSON.stringify(body) });
 
 // Assigns a direct report to a team/department, preserving their other
 // fields — same "read, tweak one field, PUT the whole record" pattern as
@@ -1019,6 +1032,35 @@ export type ExpectationsCoverage = {
 
 export const getExpectationsCoverage = (): Promise<ExpectationsCoverage> =>
   authedFetch("/api/expectations/coverage");
+
+// ---------------------------------------------------------------------------
+// Setup status (Session 41, Plan S1 — see docs/TEAM_SETUP_UX_REVIEW.md §6).
+// Feeds the People section's progress header + roster badges, and the
+// Foundation door's "not finished" state in ZoneMap.tsx. Reuses the same
+// coverage computation as getExpectationsCoverage() above (backend-side).
+// ---------------------------------------------------------------------------
+
+export type SetupStatusPerson = {
+  id: string;
+  name: string;
+  has_role: boolean;
+  has_team: boolean;
+  // null when has_role is false — "no role" and "role has zero configured
+  // expectations" are different states the roster chip needs to tell apart.
+  role_has_expectations: boolean | null;
+};
+
+export type SetupStatus = {
+  people_count: number;
+  teams_count: number;
+  roles_count: number;
+  roles_with_expectations_count: number;
+  people_without_role_count: number;
+  people_without_team_count: number;
+  people: SetupStatusPerson[];
+};
+
+export const getSetupStatus = (): Promise<SetupStatus> => authedFetch("/api/setup-status");
 
 export type DraftMetricItem = {
   name: string;

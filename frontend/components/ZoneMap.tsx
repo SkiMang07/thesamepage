@@ -32,6 +32,7 @@ import {
   getOrgUnits,
   getProfile,
   getProjects,
+  getSetupStatus,
   getTeamAssessments,
   GoalStatus,
   OneOnOneOverviewItem,
@@ -345,9 +346,10 @@ export function useZoneData(): ZoneData {
       getOrgUnits(),
       getContextCoverage(),
       getProfile(),
+      getSetupStatus(),
     ]).then((results) => {
       if (cancelled) return;
-      const [teamR, assessR, goalsR, projectsR, capR, orgR, ctxR, profR] = results;
+      const [teamR, assessR, goalsR, projectsR, capR, orgR, ctxR, profR, setupR] = results;
       const doorStates: Partial<Record<string, DoorState>> = {};
       let roster: RosterPerson[] = [];
       let profileName: string | null = null;
@@ -414,10 +416,33 @@ export function useZoneData(): ZoneData {
         }
       }
 
-      if (profR.status === "fulfilled") {
+      // Settings door (Session 41, Plan S1): previously only checked
+      // org_ready (does the org row exist at all — true the moment a
+      // manager saves Profile & Company once). That's a much lower bar than
+      // "setup is actually done," so a manager could clear this door's
+      // warning without a single person, team, role, or expectation
+      // configured. Now reads the real setup-status four-step model —
+      // people / teams / roles-assigned / expectations-covered — the same
+      // data People's progress header and roster badges read, so all three
+      // surfaces agree on what "done" means.
+      if (setupR.status === "fulfilled") {
+        const s = setupR.value;
+        const fullySetUp =
+          s.people_count > 0 &&
+          s.teams_count > 0 &&
+          s.people_without_role_count === 0 &&
+          s.roles_count > 0 &&
+          s.roles_with_expectations_count === s.roles_count;
         // Only render a state when setup isn't finished — a finished
         // Settings door shows no count at all (Session 36 decision).
-        if (!profR.value.org_ready) doorStates.settings = { label: "not finished", tone: "setup" };
+        if (!fullySetUp) doorStates.settings = { label: "not finished", tone: "setup" };
+      } else if (profR.status === "fulfilled" && !profR.value.org_ready) {
+        // Fallback if setup-status itself failed to load: org_ready is a
+        // strictly weaker signal, but better than showing nothing.
+        doorStates.settings = { label: "not finished", tone: "setup" };
+      }
+
+      if (profR.status === "fulfilled") {
         profileName = profR.value.full_name || null;
         profileEmail = profR.value.email || null;
       }

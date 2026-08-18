@@ -109,6 +109,22 @@ class DirectReportIn(BaseModel):
     one_on_one_cadence_days: int | None = None
 
 
+# Create-only: adds an optional `email` on top of the base model, rather than
+# putting it on DirectReportIn itself (Session 41, Plan S1 — People's
+# add-person row wants name + optional email). update_direct_report's PUT
+# still uses the base DirectReportIn (no email field), and every existing
+# caller (assignReportRole/assignReportOrgUnit/assignReportCadence in
+# api.ts) does a full `body.model_dump()` PUT that omits fields it doesn't
+# know about — if email were on the shared model, an omitted key would
+# resolve to Pydantic's None default and silently wipe out an email set via
+# the invite flow (routes/direct_reports.py's POST /{report_id}/invite,
+# which writes email with its own raw .update() call, bypassing this model
+# entirely). Keeping email off the PUT-shared model sidesteps that risk
+# rather than requiring every PUT caller to remember to round-trip it.
+class DirectReportCreateIn(DirectReportIn):
+    email: str | None = None
+
+
 @router.get("")
 async def list_direct_reports(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
@@ -208,11 +224,16 @@ async def get_people_rollup(auth=Depends(get_authenticated_client)):
 
 
 @router.post("")
-async def create_direct_report(body: DirectReportIn, auth=Depends(get_authenticated_client)):
+async def create_direct_report(body: DirectReportCreateIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
+    row = body.model_dump()
+    if row.get("email"):
+        row["email"] = row["email"].strip().lower()
+    else:
+        row.pop("email", None)  # don't write an empty string over the column's null default
     result = (
         supabase.table("direct_reports")
-        .insert({**body.model_dump(), "manager_id": user_id})
+        .insert({**row, "manager_id": user_id})
         .execute()
     )
     return result.data[0]
