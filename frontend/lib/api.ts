@@ -963,6 +963,89 @@ export const createExpectation = (kind: ExpectationKind, body: ExpectationIn): P
 export const deleteExpectation = (kind: ExpectationKind, id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/settings/expectations/${kind}/${id}`, { method: "DELETE" });
 
+// ---------------------------------------------------------------------------
+// Expectations coverage + AI draft (Plan S3, Session 1 — see
+// docs/TEAM_SETUP_UX_REVIEW.md §6). Separate /api/expectations prefix from
+// the /api/settings/expectations CRUD above — this is a read-only rollup
+// (coverage) plus a draft-then-review flow (draft + batch), not more CRUD.
+// ---------------------------------------------------------------------------
+
+export type ExpectationsCoverageRow = {
+  role_level_id: string;
+  job_role: string;
+  job_level: number;
+  metrics_count: number;
+  skills_count: number;
+  values_count: number;
+};
+
+export type ExpectationsCoverage = {
+  roles: ExpectationsCoverageRow[];
+  org_wide_values_count: number;
+};
+
+export const getExpectationsCoverage = (): Promise<ExpectationsCoverage> =>
+  authedFetch("/api/expectations/coverage");
+
+export type DraftMetricItem = {
+  name: string;
+  order_type: "primary" | "secondary" | "tertiary" | null;
+  expectation: string | null;
+  measurement_period: string | null;
+};
+
+export type DraftSkillItem = {
+  name: string;
+  order_type: "primary" | "secondary" | "tertiary" | null;
+  expectation: string | null;
+};
+
+export type DraftValueItem = {
+  name: string;
+  order_type: "primary" | "secondary" | "tertiary" | null;
+  description: string | null;
+  value_type: "team" | "company" | "department" | null;
+};
+
+export type ExpectationsDraft = {
+  metrics: DraftMetricItem[];
+  skills: DraftSkillItem[];
+  values: DraftValueItem[];
+};
+
+// AI-drafts metrics/skills/values from the role's job_responsibilities text
+// (falls back to role title + level when there's no JD text). Nothing is
+// saved — review in the UI, then commit via batchCreateExpectations. Can
+// throw (rate limit, AI failure) — callers must degrade to the manual forms
+// on error, never block them (draft-then-review rule, same as assessments).
+export const draftExpectations = (roleLevelId: string): Promise<ExpectationsDraft> =>
+  authedFetch("/api/expectations/draft", {
+    method: "POST",
+    body: JSON.stringify({ role_level_id: roleLevelId }),
+  });
+
+export type ExpectationBatchItem = {
+  name: string;
+  order_type?: string | null;
+  description?: string | null;
+  expectation?: string | null;
+  measurement_period?: string | null;
+  value_type?: string | null;
+};
+
+// Commits a reviewed draft (or any hand-assembled batch) in one insert.
+// roleLevelId null => org-wide (values only — value_configs.role_level_id
+// IS NULL convention, Plan S3).
+export const batchCreateExpectations = (
+  kind: ExpectationKind,
+  roleLevelId: string | null,
+  items: ExpectationBatchItem[]
+): Promise<Expectation[]> =>
+  authedFetch(`/api/expectations/${kind}/batch`, {
+    method: "POST",
+    body: JSON.stringify({ role_level_id: roleLevelId, items }),
+  });
+
 export const assignReportRole = (reportId: string, report: DirectReport, roleLevelId: string | null): Promise<DirectReport> =>
   authedFetch(`/api/direct-reports/${reportId}`, {
     method: "PUT",

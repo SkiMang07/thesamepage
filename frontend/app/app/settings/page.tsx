@@ -11,28 +11,36 @@
 // Deferred: evaluation weighting, scale definitions, capacity/recruitment,
 // project settings, permissions (all department-tier — see SESSION_HISTORY).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   CapacitySettings,
   DirectReport,
+  DraftMetricItem,
+  DraftSkillItem,
+  DraftValueItem,
   Expectation,
+  ExpectationBatchItem,
   ExpectationKind,
+  ExpectationsCoverage,
   OrgUnit,
   Profile,
   RoleLevel,
   WorkUnitConfig,
   assignReportOrgUnit,
   assignReportRole,
+  batchCreateExpectations,
   createExpectation,
   createRoleLevel,
   deleteExpectation,
   deleteRoleLevel,
   deleteWorkUnitConfig,
+  draftExpectations,
   expectationName,
   getCapacitySettings,
   getDirectReports,
   getExpectations,
+  getExpectationsCoverage,
   getOrgUnits,
   getProfile,
   getRoleLevels,
@@ -562,6 +570,13 @@ function TeamSection({
 
 // ---------------------------------------------------------------------------
 // Section 3 — Expectations (metrics / skills / values per role level)
+//
+// Reworked Session 39 (Plan S3, docs/TEAM_SETUP_UX_REVIEW.md §6): the blind
+// "pick 1 of 13 roles from a dropdown" entry point is replaced by a coverage
+// grid (role x metrics/skills/values counts) — click a cell to edit that
+// role+kind in the same editor as before. Each role also gets a "Draft with
+// AI" button that turns its pasted job_responsibilities into a reviewable
+// draft (or copies another role's existing items) before anything commits.
 // ---------------------------------------------------------------------------
 
 function ExpectationsSection({
@@ -579,6 +594,194 @@ function ExpectationsSection({
   setKind: (k: ExpectationKind) => void;
   onError: (m: string | null) => void;
 }) {
+  // 'grid' is the entry point (coverage overview); 'detail' is the existing
+  // per-role editor. Deliberately local (not lifted like roleLevelId/kind)
+  // — landing back on the grid after visiting another Settings section is
+  // the desired behavior now that the grid, not the last-viewed role, is
+  // the section's anchor.
+  const [view, setView] = useState<"grid" | "detail">("grid");
+  const [coverage, setCoverage] = useState<ExpectationsCoverage | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  // Role currently being drafted/reviewed — the panel renders as an overlay
+  // regardless of grid/detail view, so a draft started from the grid can
+  // finish while looking at the coverage rows update live.
+  const [draftingRoleId, setDraftingRoleId] = useState<string | null>(null);
+
+  const loadCoverage = useCallback(() => {
+    setCoverageLoading(true);
+    getExpectationsCoverage()
+      .then(setCoverage)
+      .catch((e) => onError(e.message))
+      .finally(() => setCoverageLoading(false));
+  }, [onError]);
+
+  useEffect(() => {
+    loadCoverage();
+  }, [loadCoverage]);
+
+  function openCell(roleId: string, k: ExpectationKind) {
+    setRoleLevelId(roleId);
+    setKind(k);
+    setView("detail");
+  }
+
+  function backToGrid() {
+    setView("grid");
+    loadCoverage();
+  }
+
+  if (roleLevels.length === 0) {
+    return (
+      <p className="text-sm text-gray-500">
+        Expectations attach to a role — set up your first role in{" "}
+        <span className="font-medium text-gray-700">Roles &amp; Levels</span> and come back here.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="font-medium text-gray-900">What good looks like</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Define the metrics, skills, and values each role is measured against. Scales and weighting come later.
+      </p>
+
+      {view === "grid" || !roleLevelId ? (
+        coverageLoading ? (
+          <p className="mt-6 text-sm text-gray-500">Loading...</p>
+        ) : (
+          <CoverageGrid
+            roleLevels={roleLevels}
+            coverage={coverage}
+            onCell={openCell}
+            onDraft={(id) => setDraftingRoleId(id)}
+          />
+        )
+      ) : (
+        <ExpectationDetail
+          roleLevels={roleLevels}
+          roleLevelId={roleLevelId}
+          setRoleLevelId={setRoleLevelId}
+          kind={kind}
+          setKind={setKind}
+          onBack={backToGrid}
+          onDraft={() => setDraftingRoleId(roleLevelId)}
+          onError={onError}
+        />
+      )}
+
+      {draftingRoleId && (
+        <DraftReviewPanel
+          roleLevelId={draftingRoleId}
+          roleLevels={roleLevels}
+          onClose={() => setDraftingRoleId(null)}
+          onCommitted={() => {
+            setDraftingRoleId(null);
+            loadCoverage();
+          }}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+// Coverage grid — one row per role, a count "pill" per kind (amber when
+// zero) that opens the per-role editor, plus a Draft with AI shortcut.
+function CoverageGrid({
+  roleLevels,
+  coverage,
+  onCell,
+  onDraft,
+}: {
+  roleLevels: RoleLevel[];
+  coverage: ExpectationsCoverage | null;
+  onCell: (roleId: string, kind: ExpectationKind) => void;
+  onDraft: (roleId: string) => void;
+}) {
+  const countsByRole = new Map((coverage?.roles ?? []).map((r) => [r.role_level_id, r]));
+
+  return (
+    <div className="mt-4">
+      {!!coverage && coverage.org_wide_values_count > 0 && (
+        <p className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
+          {coverage.org_wide_values_count} org-wide value{coverage.org_wide_values_count === 1 ? "" : "s"} apply to
+          every role automatically — open any role's Values column to manage them.
+        </p>
+      )}
+      <div className="overflow-hidden rounded-lg border border-gray-200">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-500">
+              <th className="px-4 py-2">Role</th>
+              <th className="px-3 py-2 text-center">Metrics</th>
+              <th className="px-3 py-2 text-center">Skills</th>
+              <th className="px-3 py-2 text-center">Values</th>
+              <th className="px-3 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {roleLevels.map((rl) => {
+              const c = countsByRole.get(rl.id);
+              const cells: { kind: ExpectationKind; count: number }[] = [
+                { kind: "metrics", count: c?.metrics_count ?? 0 },
+                { kind: "skills", count: c?.skills_count ?? 0 },
+                { kind: "values", count: c?.values_count ?? 0 },
+              ];
+              return (
+                <tr key={rl.id} className="border-b border-gray-100 last:border-0">
+                  <td className="px-4 py-2.5 font-medium text-gray-900">{roleLabel(rl)}</td>
+                  {cells.map((cell) => (
+                    <td key={cell.kind} className="px-3 py-2.5 text-center">
+                      <button
+                        onClick={() => onCell(rl.id, cell.kind)}
+                        className={`min-w-[2.5rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          cell.count === 0
+                            ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                      >
+                        {cell.count}
+                      </button>
+                    </td>
+                  ))}
+                  <td className="px-3 py-2.5 text-right">
+                    <button onClick={() => onDraft(rl.id)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                      Draft with AI
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Per-role, per-kind editor — the same list + manual add form the section
+// always had, now reached from a grid cell instead of being the landing
+// view. Values tab also renders the org-wide values block above the list.
+function ExpectationDetail({
+  roleLevels,
+  roleLevelId,
+  setRoleLevelId,
+  kind,
+  setKind,
+  onBack,
+  onDraft,
+  onError,
+}: {
+  roleLevels: RoleLevel[];
+  roleLevelId: string;
+  setRoleLevelId: (id: string) => void;
+  kind: ExpectationKind;
+  setKind: (k: ExpectationKind) => void;
+  onBack: () => void;
+  onDraft: () => void;
+  onError: (m: string | null) => void;
+}) {
   const [items, setItems] = useState<Expectation[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -588,11 +791,6 @@ function ExpectationsSection({
   const [period, setPeriod] = useState("month");
   const [valueType, setValueType] = useState("company");
   const [adding, setAdding] = useState(false);
-
-  // Default to the first role level once loaded.
-  useEffect(() => {
-    if (!roleLevelId && roleLevels.length > 0) setRoleLevelId(roleLevels[0].id);
-  }, [roleLevels, roleLevelId]);
 
   useEffect(() => {
     if (!roleLevelId) return;
@@ -637,23 +835,15 @@ function ExpectationsSection({
     }
   }
 
-  if (roleLevels.length === 0) {
-    return (
-      <p className="text-sm text-gray-500">
-        Expectations attach to a role — set up your first role in{" "}
-        <span className="font-medium text-gray-700">Roles &amp; Levels</span> and come back here.
-      </p>
-    );
-  }
+  const role = roleLevels.find((rl) => rl.id === roleLevelId);
 
   return (
-    <div>
-      <h2 className="font-medium text-gray-900">What good looks like</h2>
-      <p className="mt-1 text-sm text-gray-500">
-        Define the metrics, skills, and values each role is measured against. Scales and weighting come later.
-      </p>
+    <div className="mt-4">
+      <button onClick={onBack} className="text-xs font-medium text-gray-500 hover:text-gray-900">
+        &larr; Back to coverage
+      </button>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <select value={roleLevelId} onChange={(e) => setRoleLevelId(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
           {roleLevels.map((rl) => (
             <option key={rl.id} value={rl.id}>
@@ -672,12 +862,21 @@ function ExpectationsSection({
             </button>
           ))}
         </div>
+        <button onClick={onDraft} className="ml-auto rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100">
+          Draft with AI
+        </button>
       </div>
+
+      {kind === "values" && <OrgWideValuesBlock onError={onError} />}
+
+      {role && kind === "values" && (
+        <p className="mt-4 text-xs font-medium text-gray-500">{roleLabel(role)}-specific values</p>
+      )}
 
       {loading ? (
         <p className="mt-6 text-sm text-gray-500">Loading...</p>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <ul className="mt-2 space-y-2">
           {items.map((it) => (
             <li key={it.id} className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
               <div className="min-w-0">
@@ -700,7 +899,7 @@ function ExpectationsSection({
             </li>
           ))}
           {items.length === 0 && (
-            <p className="py-2 text-sm text-gray-500">Nothing here yet — add the first one below.</p>
+            <p className="py-2 text-sm text-gray-500">Nothing here yet — add the first one below, or draft with AI above.</p>
           )}
         </ul>
       )}
@@ -761,6 +960,449 @@ function ExpectationsSection({
           {adding ? "Adding..." : `Add ${kind === "metrics" ? "metric" : kind === "skills" ? "skill" : "value"}`}
         </button>
       </form>
+    </div>
+  );
+}
+
+// Org-wide values (Plan S3): value_configs.role_level_id NULL. Shown above
+// the role-specific list on the Values tab — same createExpectation/
+// deleteExpectation("values", ...) calls as the manual form below, just
+// with role_level_id forced to null instead of the selected role.
+function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }) {
+  const [items, setItems] = useState<Expectation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    // No role_level_id filter server-side returns every org-wide AND
+    // role-specific value config; filter to org-wide (null) client-side
+    // rather than adding a dedicated backend query param for this one block.
+    getExpectations("values")
+      .then((all) => setItems(all.filter((v) => v.role_level_id === null)))
+      .catch((e) => onError(e.message))
+      .finally(() => setLoading(false));
+  }, [onError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || adding) return;
+    setAdding(true);
+    try {
+      const created = await createExpectation("values", {
+        name: name.trim(),
+        role_level_id: null,
+        order_type: "primary",
+        description: description.trim() || undefined,
+        value_type: "company",
+      });
+      setItems((xs) => [...xs, created]);
+      setName("");
+      setDescription("");
+      onError(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to add");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function removeItem(id: string) {
+    try {
+      await deleteExpectation("values", id);
+      setItems((xs) => xs.filter((x) => x.id !== id));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to delete");
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4">
+      <h3 className="text-sm font-medium text-gray-900">Org-wide values</h3>
+      <p className="mt-1 text-xs text-gray-500">
+        Apply to every role automatically — no need to repeat a company value per role. Role-specific values below
+        are additional to these, not a replacement.
+      </p>
+      {loading ? (
+        <p className="mt-3 text-xs text-gray-500">Loading...</p>
+      ) : (
+        <ul className="mt-3 space-y-1.5">
+          {items.map((it) => (
+            <li key={it.id} className="flex items-start justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900">{expectationName(it)}</p>
+                {it.description && <p className="mt-0.5 text-xs text-gray-500">{it.description}</p>}
+              </div>
+              <button onClick={() => removeItem(it.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+                Remove
+              </button>
+            </li>
+          ))}
+          {items.length === 0 && <p className="text-xs text-gray-500">No org-wide values yet.</p>}
+        </ul>
+      )}
+      <form onSubmit={addItem} className="mt-3 flex flex-wrap gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Default to transparency"
+          className={`${inputCls} flex-1`}
+        />
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="What living it looks like (optional)"
+          className={`${inputCls} flex-1`}
+        />
+        <button type="submit" disabled={adding} className={primaryBtnCls}>
+          {adding ? "Adding..." : "Add"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Draft with AI — review panel (Plan S3). Draft-then-review, same rule as
+// wrap-up extraction and assessment drafts: nothing saves until the manager
+// hits "Add N expectations". AI failure degrades to an inline error with a
+// Retry — the manual forms in ExpectationDetail are never blocked by this.
+// "Copy from…" is the non-AI alternative source: pulls another role's
+// existing expectations into the same editable/include-checkbox rows.
+// ---------------------------------------------------------------------------
+
+type DraftMetricRow = DraftMetricItem & { included: boolean };
+type DraftSkillRow = DraftSkillItem & { included: boolean };
+type DraftValueRow = DraftValueItem & { included: boolean };
+
+function DraftReviewPanel({
+  roleLevelId,
+  roleLevels,
+  onClose,
+  onCommitted,
+  onError,
+}: {
+  roleLevelId: string;
+  roleLevels: RoleLevel[];
+  onClose: () => void;
+  onCommitted: () => void;
+  onError: (m: string | null) => void;
+}) {
+  const role = roleLevels.find((rl) => rl.id === roleLevelId);
+  const otherRoles = roleLevels.filter((rl) => rl.id !== roleLevelId);
+
+  const [tab, setTab] = useState<ExpectationKind>("metrics");
+  const [loading, setLoading] = useState(true);
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const [committing, setCommitting] = useState(false);
+  const [copyFromId, setCopyFromId] = useState("");
+
+  const [metrics, setMetrics] = useState<DraftMetricRow[]>([]);
+  const [skills, setSkills] = useState<DraftSkillRow[]>([]);
+  const [values, setValues] = useState<DraftValueRow[]>([]);
+
+  const runDraft = useCallback(() => {
+    setLoading(true);
+    setPanelError(null);
+    draftExpectations(roleLevelId)
+      .then((d) => {
+        setMetrics(d.metrics.map((m) => ({ ...m, included: true })));
+        setSkills(d.skills.map((s) => ({ ...s, included: true })));
+        setValues(d.values.map((v) => ({ ...v, included: true })));
+      })
+      .catch((e) => setPanelError(e instanceof Error ? e.message : "AI draft failed"))
+      .finally(() => setLoading(false));
+  }, [roleLevelId]);
+
+  useEffect(() => {
+    runDraft();
+    // Only re-run automatically for the initial mount / role change, not on
+    // every render — runDraft is stable per roleLevelId via useCallback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleLevelId]);
+
+  async function copyFrom(sourceId: string) {
+    if (!sourceId) return;
+    setLoading(true);
+    setPanelError(null);
+    try {
+      const [m, s, v] = await Promise.all([
+        getExpectations("metrics", sourceId),
+        getExpectations("skills", sourceId),
+        getExpectations("values", sourceId),
+      ]);
+      setMetrics(
+        m.map((e) => ({
+          name: expectationName(e),
+          order_type: e.order_type,
+          expectation: e.expectation ?? null,
+          measurement_period: e.measurement_period ?? null,
+          included: true,
+        }))
+      );
+      setSkills(
+        s.map((e) => ({
+          name: expectationName(e),
+          order_type: e.order_type,
+          expectation: e.expectation ?? null,
+          included: true,
+        }))
+      );
+      setValues(
+        v
+          .filter((e) => e.role_level_id != null) // that role's own values, not org-wide ones already covered
+          .map((e) => ({
+            name: expectationName(e),
+            order_type: e.order_type,
+            description: e.description ?? null,
+            value_type: e.value_type ?? "company",
+            included: true,
+          }))
+      );
+    } catch (e) {
+      setPanelError(e instanceof Error ? e.message : "Failed to copy from that role");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function updateMetric(i: number, patch: Partial<DraftMetricRow>) {
+    setMetrics((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function updateSkill(i: number, patch: Partial<DraftSkillRow>) {
+    setSkills((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function updateValue(i: number, patch: Partial<DraftValueRow>) {
+    setValues((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+
+  const includedCount =
+    metrics.filter((m) => m.included).length + skills.filter((s) => s.included).length + values.filter((v) => v.included).length;
+
+  async function commit() {
+    setCommitting(true);
+    setPanelError(null);
+    try {
+      const incM = metrics.filter((m) => m.included);
+      const incS = skills.filter((s) => s.included);
+      const incV = values.filter((v) => v.included);
+
+      if (incM.length) {
+        const items: ExpectationBatchItem[] = incM.map(({ included, ...rest }) => rest);
+        await batchCreateExpectations("metrics", roleLevelId, items);
+      }
+      if (incS.length) {
+        const items: ExpectationBatchItem[] = incS.map(({ included, ...rest }) => rest);
+        await batchCreateExpectations("skills", roleLevelId, items);
+      }
+      if (incV.length) {
+        const items: ExpectationBatchItem[] = incV.map(({ included, ...rest }) => rest);
+        await batchCreateExpectations("values", roleLevelId, items);
+      }
+      onError(null);
+      onCommitted();
+    } catch (e) {
+      setPanelError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setCommitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-medium text-gray-900">Draft with AI {role ? `— ${roleLabel(role)}` : ""}</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              Review each item before it saves. Uncheck anything that doesn&apos;t fit, edit the rest.
+            </p>
+          </div>
+          <button onClick={onClose} className="shrink-0 text-sm text-gray-400 hover:text-gray-900">
+            Close
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={runDraft}
+            disabled={loading}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {loading ? "Drafting..." : "Regenerate with AI"}
+          </button>
+          {otherRoles.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">or copy from</span>
+              <select
+                value={copyFromId}
+                onChange={(e) => {
+                  setCopyFromId(e.target.value);
+                  copyFrom(e.target.value);
+                }}
+                className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+              >
+                <option value="">Choose a role...</option>
+                {otherRoles.map((rl) => (
+                  <option key={rl.id} value={rl.id}>
+                    {roleLabel(rl)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {panelError && <p className="mt-3 text-sm text-red-500">{panelError}</p>}
+
+        <div className="mt-4 flex rounded-md border border-gray-200 p-0.5">
+          {KIND_TABS.map((t) => {
+            const count = t.id === "metrics" ? metrics.length : t.id === "skills" ? skills.length : values.length;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`rounded px-3 py-1 text-sm ${tab === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+              >
+                {t.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {loading ? (
+          <p className="mt-4 text-sm text-gray-500">Drafting...</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {tab === "metrics" &&
+              (metrics.length === 0 ? (
+                <p className="text-sm text-gray-500">No metrics drafted — the manual form still works below.</p>
+              ) : (
+                metrics.map((m, i) => (
+                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-start gap-2">
+                      <input type="checkbox" checked={m.included} onChange={(e) => updateMetric(i, { included: e.target.checked })} className="mt-1.5" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <input value={m.name} onChange={(e) => updateMetric(i, { name: e.target.value })} className={inputCls} />
+                        <div className="flex gap-2">
+                          <select
+                            value={m.order_type ?? "primary"}
+                            onChange={(e) => updateMetric(i, { order_type: e.target.value as "primary" | "secondary" | "tertiary" })}
+                            className={`${inputCls} w-32`}
+                          >
+                            <option value="primary">Primary</option>
+                            <option value="secondary">Secondary</option>
+                            <option value="tertiary">Tertiary</option>
+                          </select>
+                          <select
+                            value={m.measurement_period ?? "month"}
+                            onChange={(e) => updateMetric(i, { measurement_period: e.target.value })}
+                            className={`${inputCls} w-36`}
+                          >
+                            <option value="week">Weekly</option>
+                            <option value="month">Monthly</option>
+                            <option value="quarter">Quarterly</option>
+                            <option value="annual">Annually</option>
+                            <option value="none">Not time-based</option>
+                          </select>
+                        </div>
+                        <textarea
+                          value={m.expectation ?? ""}
+                          onChange={(e) => updateMetric(i, { expectation: e.target.value })}
+                          rows={2}
+                          className={inputCls}
+                          placeholder="What good looks like"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ))}
+
+            {tab === "skills" &&
+              (skills.length === 0 ? (
+                <p className="text-sm text-gray-500">No skills drafted — the manual form still works below.</p>
+              ) : (
+                skills.map((s, i) => (
+                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-start gap-2">
+                      <input type="checkbox" checked={s.included} onChange={(e) => updateSkill(i, { included: e.target.checked })} className="mt-1.5" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <input value={s.name} onChange={(e) => updateSkill(i, { name: e.target.value })} className={inputCls} />
+                        <select
+                          value={s.order_type ?? "primary"}
+                          onChange={(e) => updateSkill(i, { order_type: e.target.value as "primary" | "secondary" | "tertiary" })}
+                          className={`${inputCls} w-32`}
+                        >
+                          <option value="primary">Primary</option>
+                          <option value="secondary">Secondary</option>
+                          <option value="tertiary">Tertiary</option>
+                        </select>
+                        <textarea
+                          value={s.expectation ?? ""}
+                          onChange={(e) => updateSkill(i, { expectation: e.target.value })}
+                          rows={2}
+                          className={inputCls}
+                          placeholder="What good looks like"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ))}
+
+            {tab === "values" &&
+              (values.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  No role-specific values drafted — that&apos;s often correct (most values belong in Org-wide
+                  values instead). The manual form still works below.
+                </p>
+              ) : (
+                values.map((v, i) => (
+                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-start gap-2">
+                      <input type="checkbox" checked={v.included} onChange={(e) => updateValue(i, { included: e.target.checked })} className="mt-1.5" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <input value={v.name} onChange={(e) => updateValue(i, { name: e.target.value })} className={inputCls} />
+                        <select
+                          value={v.order_type ?? "secondary"}
+                          onChange={(e) => updateValue(i, { order_type: e.target.value as "primary" | "secondary" | "tertiary" })}
+                          className={`${inputCls} w-32`}
+                        >
+                          <option value="primary">Primary</option>
+                          <option value="secondary">Secondary</option>
+                          <option value="tertiary">Tertiary</option>
+                        </select>
+                        <textarea
+                          value={v.description ?? ""}
+                          onChange={(e) => updateValue(i, { description: e.target.value })}
+                          rows={2}
+                          className={inputCls}
+                          placeholder="What living this value looks like"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center gap-3 border-t border-gray-100 pt-4">
+          <button onClick={commit} disabled={committing || loading || includedCount === 0} className={primaryBtnCls}>
+            {committing ? "Saving..." : `Add ${includedCount} expectation${includedCount === 1 ? "" : "s"}`}
+          </button>
+          <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-900">
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

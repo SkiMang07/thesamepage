@@ -11,6 +11,105 @@ Format per entry:
 
 ---
 
+## Session 39 — 2026-08-18
+
+**Goal:** Build Plan S3 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (first of the four S1–S5 setup-UX
+sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): an expectations coverage grid plus per-role
+"Draft with AI" that turns each role's stored job description into draft metrics/skills/values for
+review-then-commit, and org-wide values support.
+
+**What was done:**
+- **`backend/routes/expectations_ai.py` (new)**, registered in `main.py` under `/api/expectations`
+  (separate prefix from `settings.py`'s `/api/settings/expectations` CRUD, which is unchanged and
+  still owns manual single-item add/delete):
+  - `GET /coverage` — one row per role_level with metric/skill/value config counts (three grouped
+    queries + one for role_levels, no per-role N+1) plus `org_wide_values_count`
+    (`value_configs.role_level_id IS NULL`).
+  - `POST /draft` — AI drafts metrics/skills/values from the role's `job_responsibilities` text,
+    calibrated against sibling levels' existing configs (same `job_role` string, different
+    `job_level` — Plan S2's `role_family_id` doesn't exist yet). Falls back to drafting from role
+    title + level alone when there's no JD text. Rate-limited (`10/minute`, same as
+    `assessments.py`'s draft endpoint). Nothing is persisted.
+  - `POST /{kind}/batch` — commits a reviewed draft (or any batch) in one insert; reuses
+    `settings.py`'s `_CONFIG_TABLES` / `_expectation_row` / `ExpectationIn` so the row shape can't
+    drift from the manual CRUD path.
+- **`backend/routes/direct_reports.py`** — `fetch_role_expectations()`'s values fetch now uses
+  `.or_("role_level_id.eq.<id>,role_level_id.is.null")` instead of a plain `.eq()`, unioning
+  org-wide values into every role's expectation set. This is the one shared helper behind the DR
+  detail page, 1:1 prep grounding, and assessments' scorecard — fixing it here means all three pick
+  up org-wide values automatically, no per-caller changes needed.
+- **`frontend/app/app/settings/page.tsx`** — Expectations section reworked:
+  - `CoverageGrid` (new default view) replaces the blind role dropdown as the entry point: one row
+    per role, a metrics/skills/values count "pill" per row (amber when zero) that opens the
+    existing per-role editor (now `ExpectationDetail`) on click, plus a per-row "Draft with AI"
+    button. A banner surfaces `org_wide_values_count` when nonzero.
+  - `ExpectationDetail` is the old section body (list + manual add form), now reached via a
+    "← Back to coverage" link instead of being the landing view; unchanged behavior otherwise.
+  - `OrgWideValuesBlock` (new) renders above the list on the Values tab — its own tiny add/remove
+    form writing `value_configs` rows with `role_level_id: null` via the existing
+    `createExpectation`/`deleteExpectation("values", ...)` calls (no new backend endpoint needed for
+    this part).
+  - `DraftReviewPanel` (new, modal overlay) — runs the AI draft on open, renders editable
+    include-checkbox rows per kind tab (name/order type/expectation-or-description/period, all
+    editable before commit), and a "copy from another role" select as the non-AI alternative source
+    (pulls that role's existing configs into the same editable rows via `getExpectations`, no new
+    endpoint). "Add N expectations" batches the included rows per kind through the new
+    `/batch` endpoint, then refreshes the coverage grid.
+- **`frontend/lib/api.ts`** — added `ExpectationsCoverage(Row)`, `Draft{Metric,Skill,Value}Item`,
+  `ExpectationsDraft`, `ExpectationBatchItem` types and `getExpectationsCoverage`,
+  `draftExpectations`, `batchCreateExpectations` calls.
+
+**Decisions made / locked:**
+- Org-wide values = `value_configs.role_level_id IS NULL`, per the plan — no migration (the column
+  was already nullable and RLS is org-scoped, not role_level-scoped, so a null role_level_id needed
+  no policy change either).
+- AI draft leans conservative on values: the prompt tells the model to prefer leaving role-specific
+  values empty unless the JD clearly implies a role-specific behavioral bar, since company values
+  belong in the org-wide block, not duplicated 13x. Confirmed via the smoke test below that an empty
+  `values` array round-trips correctly (draft-then-review treats it as an honest answer, not a
+  failure).
+- "Copy from…" was built as a same-panel alternative source (a role picker that replaces the draft
+  rows with another role's real configs) rather than a separate UI surface — reuses
+  `getExpectations` instead of a new endpoint.
+- Kept `settings.py`'s expectations CRUD completely unchanged; all new logic lives in
+  `expectations_ai.py` and imports the CRUD module's private helpers rather than duplicating the
+  row-shaping logic — same "read-only/AI module sits on top of an existing CRUD module" shape as
+  `assessments.py` on `direct_reports.py`.
+- No scale definitions in drafts this session (per the plan's open question — deferred).
+
+**Verification:** `python3 -m py_compile` on all touched/new backend files, plus a full import of
+`main.py` (not just py_compile) after staging every route module `expectations_ai.py` transitively
+pulls in via `main.py`'s router registration — catches import-order/circular-import bugs py_compile
+alone would miss. Beyond that, three functional smoke tests against a hand-rolled fake Supabase
+client (not real Postgres — no network from this session): (1) `get_coverage()` called directly,
+confirming per-role counts exclude org-wide rows and `org_wide_values_count` is correct; (2)
+`batch_create_expectations()` called directly, confirming the inserted row shape and `org_id`; (3)
+`POST /draft` through a real `FastAPI` `TestClient` (exercises the `@limiter.limit` decorator path,
+which a direct function call would skip) with `generate_text` monkeypatched to a canned
+code-fenced JSON response, confirming the fence-stripping and per-item validation. A fourth test
+confirmed `fetch_role_expectations()`'s new `.or_()` filter actually unions org-wide + role-specific
+values and excludes a third role's values, using a fake that emulates postgrest's `.or_()` filter
+syntax rather than ignoring it. `postgrest-py 0.17.2` (pinned via `supabase==2.9.1`) confirmed to
+expose `.or_()` before relying on it. Frontend: `npx tsc --noEmit` clean; `npx next build` clean,
+all 21 routes — installed dependencies and built directly in this cloud container (this session had
+network access here, unlike the device sandbox Session 38 noted has none for `npm install`).
+**Not done this session:** no live click-through against the production Supabase database (this
+container has no route to it) — Andrew should run the golden-path check from the plan (Draft with AI
+on a real role, e.g. Corporate CSM · L1, commit, confirm the person page + prep grounding pick up
+the result) after deploying.
+
+**Deviations from the plan:** none structural. The plan named the new file `expectations_ai.py` as
+one of two options ("settings.py or new `expectations_ai.py`") — went with the new file. Batch
+commit fields are slightly richer than described (measurement_period/value_type carried through
+per-item) to avoid a second round-trip after commit. No new migration, as expected.
+
+**Next step:** Deploy (Vercel + Railway pick this up on push) and run the live golden-path check
+above. Then Session 2 of the four (`docs/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 2 prompt) builds
+Plan S2 — role families — grouping this session's coverage grid rows by ladder once `role_family_id`
+exists.
+
+---
+
 ## Session 38 — 2026-08-17
 
 **Goal:** Polish pass on the persistent nav shipped in Sessions 36/37: fix the top-bar alignment

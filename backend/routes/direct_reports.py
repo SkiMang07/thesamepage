@@ -71,12 +71,21 @@ def fetch_role_expectations(supabase, role_level_id: str | None) -> dict | None:
 
     result: dict = {"role_level": role_rows[0]}
     for kind, (table, name_col) in _EXPECTATION_TABLES.items():
+        query = supabase.table(table).select("*")
+        if kind == "values":
+            # Org-wide values (role_level_id IS NULL — Plan S3, see
+            # docs/TEAM_SETUP_UX_REVIEW.md §6) apply to every role. Union
+            # them into this role's own value overrides here so every
+            # downstream consumer (DR detail's expectations block, 1:1 prep
+            # grounding, assessments' scorecard) sees company values
+            # automatically without each caller re-implementing the union.
+            query = query.or_(f"role_level_id.eq.{role_level_id},role_level_id.is.null")
+        else:
+            query = query.eq("role_level_id", role_level_id)
         # order_type sorts primary < secondary < tertiary alphabetically;
         # Postgres puts nulls last on ascending order.
         result[kind] = (
-            supabase.table(table)
-            .select("*")
-            .eq("role_level_id", role_level_id)
+            query
             .order("order_type")
             .order(name_col)
             .execute()
