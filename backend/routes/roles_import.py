@@ -32,21 +32,30 @@ new write endpoints, and no migration: every column this flow writes
 (job_responsibilities, role_family_id, nullable value_configs.role_level_id)
 already exists.
 
-File handling reuses documents.py's LibreOffice path (convert_to_pdf,
-generalized from its PPTX-only ancestor this session) and its 25MB cap.
-PDFs go to Claude natively via generate_text_from_document; .txt/.md and
-pasted text go through generate_text with the JD inlined.
+File handling: PDFs go to Claude natively via generate_text_from_document;
+.txt/.md and pasted text go through generate_text with the JD inlined.
+.docx is text-extracted in pure Python (_extract_docx_text below) and goes
+down the same inline-text path — originally it went through documents.py's
+LibreOffice convert_to_pdf, but the first live test (Session 44, same day)
+502'd because LibreOffice never actually made it into the Railway image
+(both the nixPkgs and aptPkgs attempts — see nixpacks.toml). A JD is text,
+not layout; unlike Context Engine decks there's nothing for vision to see,
+so shelling out to a 300MB office suite was never load-bearing here. The
+25MB cap is still shared with documents.py.
 """
 import base64
+import io
 import json
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from ai_core import generate_text, generate_text_from_document
 from config import AI_DEFAULT_MODEL_HEAVY
-from routes.documents import _MAX_UPLOAD_BYTES, convert_to_pdf
+from routes.documents import _MAX_UPLOAD_BYTES
 from routes.expectations_ai import (
     _EXPECTATION_DEFINITIONS,
     ExpectationsDraft,
@@ -136,6 +145,37 @@ def _infer_import_type(filename: str, content_type: str | None) -> str:
         status_code=422,
         detail="Unsupported file type — paste the text, or upload a .pdf, .docx, .txt or .md file",
     )
+
+
+_DOCX_W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _extract_docx_text(raw_bytes: bytes) -> str:
+    """Pure-Python .docx text extraction — a .docx is a zip whose body text
+    lives in word/document.xml as <w:t> runs inside <w:p> paragraphs. One
+    line per paragraph is plenty of structure for a JD prompt; tables'
+    cells fall out as their own paragraphs, which reads fine. Exists so
+    this flow has zero system-binary dependencies (see module docstring for
+    the LibreOffice story)."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw_bytes)) as archive:
+            document_xml = archive.read("word/document.xml")
+    except (zipfile.BadZipFile, KeyError):
+        raise HTTPException(
+            status_code=422,
+            detail="That .docx couldn't be read — is it a real Word document? (Older .doc files aren't supported — save as .docx or paste the text.)",
+        )
+    try:
+        root = ElementTree.fromstring(document_xml)
+    except ElementTree.ParseError:
+        raise HTTPException(status_code=422, detail="That .docx couldn't be read — its contents look corrupted.")
+
+    paragraphs = []
+    for paragraph in root.iter(f"{_DOCX_W_NS}p"):
+        text = "".join(t.text or "" for t in paragraph.iter(f"{_DOCX_W_NS}t")).strip()
+        if text:
+            paragraphs.append(text)
+    return "\n".join(paragraphs)
 
 
 def _parse_json_object(raw: str) -> dict:
@@ -492,8 +532,13 @@ async def draft_role_import(
         if import_type == "text":
             jd_text = raw_bytes.decode("utf-8", errors="replace")
             signal = jd_text
+        elif import_type == "docx":
+            jd_text = _extract_docx_text(raw_bytes)
+            if not jd_text.strip():
+                raise HTTPException(status_code=422, detail="Couldn't find any text in that .docx — paste the job description instead")
+            signal = jd_text  # real text beats the filename for shortlisting
         else:
-            pdf_bytes = convert_to_pdf(raw_bytes, "docx") if import_type == "docx" else raw_bytes
+            pdf_bytes = raw_bytes
             # A PDF's text isn't readable here without a second extraction
             # call, so the filename is the only pre-call signal available
             # for shortlisting. JD files are usually named after the role.
