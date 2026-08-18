@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
-from routes import assessments, assistant, capacity, commitments, dashboard, direct_reports, documents, expectations_ai, goals, invites, one_on_ones, org_units, projects, settings as settings_routes, team
+from routes import assessments, assistant, capacity, commitments, dashboard, direct_reports, documents, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, settings as settings_routes, team
 from utils import limiter
 
 app = FastAPI(title="The Same Page API")
@@ -36,6 +36,7 @@ app.include_router(commitments.router, prefix="/api/commitments", tags=["commitm
 app.include_router(goals.router, prefix="/api/goals", tags=["goals"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(org_units.router, prefix="/api/org-units", tags=["org-units"])
+app.include_router(role_families.router, prefix="/api/role-families", tags=["role-families"])
 app.include_router(capacity.router, prefix="/api/capacity", tags=["capacity"])
 app.include_router(settings_routes.router, prefix="/api/settings", tags=["settings"])
 app.include_router(expectations_ai.router, prefix="/api/expectations", tags=["expectations"])

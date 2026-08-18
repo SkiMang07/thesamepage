@@ -17,6 +17,11 @@ users.org_id, but the MVP has no users row or organization until the manager
 first saves their profile. `ensure_org()` (backend/utils.py — shared with
 org_units.py as of Session 11) creates both on demand. Requires the policies
 in database/migrations/2026-08-01_settings_policies.sql.
+
+Role families (Session 40, 2026-08-18, Plan S2): role_levels rows optionally
+belong to a role_families row (routes/role_families.py owns that table's own
+CRUD). role_levels CRUD stays here — role_family_id is just one more column
+on RoleLevelIn, validated by `_validate_role_family()` below.
 """
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
@@ -106,15 +111,37 @@ class RoleLevelIn(BaseModel):
     job_level: int = 1
     functional_team: str | None = None
     job_responsibilities: str | None = None
+    # Session 40 (Plan S2) — which ladder this level belongs to. None =
+    # "Ungrouped" bucket in the UI. Setting this on an existing level is the
+    # whole merge mechanic ("Move to another ladder…").
+    role_family_id: str | None = None
+
+
+def _validate_role_family(role_family_id: str | None, supabase) -> None:
+    """A role_family_id must belong to the caller's own org. Relies on
+    role_families' RLS policy (org_id = current_org_id()) rather than a
+    manual org_id comparison: a family id from another org simply won't
+    come back from this select, same trick used elsewhere in this codebase
+    to fold an isolation check into a query that already has to run. See
+    role_families.py's module docstring for the known limitation this
+    doesn't cover (no DB-level trigger backstopping it)."""
+    if role_family_id is None:
+        return
+    rows = supabase.table("role_families").select("id").eq("id", role_family_id).execute().data
+    if not rows:
+        raise HTTPException(status_code=422, detail="Role family not found")
 
 
 @router.get("/role-levels")
 async def list_role_levels(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # RLS scopes to own org; empty list before the org bootstrap has run.
+    # Embeds the family name (Session 40) so the frontend can group/label
+    # ladders without a second round-trip; role_families is null for
+    # "Ungrouped" levels.
     return (
         supabase.table("role_levels")
-        .select("*")
+        .select("*, role_families(id, name)")
         .order("job_role")
         .order("job_level")
         .execute()
@@ -126,6 +153,7 @@ async def list_role_levels(auth=Depends(get_authenticated_client)):
 async def create_role_level(body: RoleLevelIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     user_id, supabase = auth
     org_id = _ensure_org(user_id, supabase, _get_email(authorization))
+    _validate_role_family(body.role_family_id, supabase)
     result = (
         supabase.table("role_levels")
         .insert({**body.model_dump(), "org_id": org_id})
@@ -137,6 +165,7 @@ async def create_role_level(body: RoleLevelIn, auth=Depends(get_authenticated_cl
 @router.put("/role-levels/{role_level_id}")
 async def update_role_level(role_level_id: str, body: RoleLevelIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
+    _validate_role_family(body.role_family_id, supabase)
     result = (
         supabase.table("role_levels")
         .update(body.model_dump())

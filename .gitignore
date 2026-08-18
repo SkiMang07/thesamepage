@@ -6,3 +6,8 @@ __pycache__/
 .env.local
 backend/.env
 .DS_Store
+# Next.js/npm-generated, not source (Session 40) — untracked before this
+# session too, formalizing it here rather than leaving it ambiguous.
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo
+frontend/package-lock.json

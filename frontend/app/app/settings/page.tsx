@@ -11,7 +11,7 @@
 // Deferred: evaluation weighting, scale definitions, capacity/recruitment,
 // project settings, permissions (all department-tier — see SESSION_HISTORY).
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   CapacitySettings,
@@ -25,14 +25,17 @@ import {
   ExpectationsCoverage,
   OrgUnit,
   Profile,
+  RoleFamily,
   RoleLevel,
   WorkUnitConfig,
   assignReportOrgUnit,
   assignReportRole,
   batchCreateExpectations,
   createExpectation,
+  createRoleFamily,
   createRoleLevel,
   deleteExpectation,
+  deleteRoleFamily,
   deleteRoleLevel,
   deleteWorkUnitConfig,
   draftExpectations,
@@ -43,10 +46,12 @@ import {
   getExpectationsCoverage,
   getOrgUnits,
   getProfile,
+  getRoleFamilies,
   getRoleLevels,
   getWorkUnitConfigs,
   updateCapacitySettings,
   updateProfile,
+  updateRoleFamily,
   updateRoleLevel,
   upsertWorkUnitConfig,
 } from "@/lib/api";
@@ -77,6 +82,10 @@ export default function SettingsPage() {
 
   // Shared data
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
+  // Role families (Session 40) — fetched separately from roleLevels' own
+  // embedded role_families(name) because a family can exist with zero levels
+  // (the "ghost card" state) and wouldn't show up via any level's embed.
+  const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
 
@@ -93,9 +102,10 @@ export default function SettingsPage() {
   const [expKind, setExpKind] = useState<ExpectationKind>("metrics");
 
   useEffect(() => {
-    Promise.all([getRoleLevels(), getDirectReports(), getOrgUnits()])
-      .then(([rls, drs, ous]) => {
+    Promise.all([getRoleLevels(), getRoleFamilies(), getDirectReports(), getOrgUnits()])
+      .then(([rls, rfs, drs, ous]) => {
         setRoleLevels(rls);
+        setRoleFamilies(rfs);
         setReports(drs);
         setOrgUnits(ous);
       })
@@ -133,6 +143,8 @@ export default function SettingsPage() {
             <RolesSection
               roleLevels={roleLevels}
               setRoleLevels={setRoleLevels}
+              roleFamilies={roleFamilies}
+              setRoleFamilies={setRoleFamilies}
               setReports={setReports}
               onError={setError}
             />
@@ -142,6 +154,7 @@ export default function SettingsPage() {
               reports={reports}
               setReports={setReports}
               roleLevels={roleLevels}
+              roleFamilies={roleFamilies}
               orgUnits={orgUnits}
               onNavigateToRoles={() => setSection("roles")}
               onError={setError}
@@ -150,6 +163,7 @@ export default function SettingsPage() {
           {section === "expectations" && (
             <ExpectationsSection
               roleLevels={roleLevels}
+              roleFamilies={roleFamilies}
               roleLevelId={expRoleLevelId}
               setRoleLevelId={setExpRoleLevelId}
               kind={expKind}
@@ -157,7 +171,9 @@ export default function SettingsPage() {
               onError={setError}
             />
           )}
-          {section === "capacity" && <CapacitySection roleLevels={roleLevels} onError={setError} />}
+          {section === "capacity" && (
+            <CapacitySection roleLevels={roleLevels} roleFamilies={roleFamilies} onError={setError} />
+          )}
         </div>
       </div>
     </main>
@@ -255,16 +271,92 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
 // "who's in which role" + org_unit assignment moved to TeamSection below)
 // ---------------------------------------------------------------------------
 
+// Session 40 (Plan S2) display convention: once a level has a family, the
+// family name takes over as the display name ("Corporate CSM · L3");
+// job_role stays as the level's optional title override, shown separately
+// wherever the ladder card itself is rendered (RolesSection), not in this
+// compact label used everywhere else (Team/Expectations/Capacity selects,
+// the coverage grid, "copy from" pickers).
 function roleLabel(rl: RoleLevel) {
   // functional_team (free text) dropped from the label as of Session 11 —
   // "which team" now lives on the direct report as a structured org_unit_id,
   // shown separately in TeamSection. The column stays in the schema, just
   // unused here.
-  return `${rl.job_role} · L${rl.job_level}`;
+  const name = rl.role_families?.name ?? rl.job_role;
+  return `${name} · L${rl.job_level}`;
 }
 
 function orgUnitLabel(ou: OrgUnit) {
   return `${ou.unit_type === "department" ? "Department" : "Team"} · ${ou.name}`;
+}
+
+const UNGROUPED_LABEL = "Ungrouped";
+
+// Groups role_levels by family for both the ladder-card view (RolesSection)
+// and every grouped <select> elsewhere. Families with zero levels still
+// appear (the "ghost card" state) since they come from roleFamilies, not
+// from any role_level's embed. "Ungrouped" (role_family_id null, or
+// pointing at a family this org can no longer see) sorts last.
+function groupRoleLevelsByFamily(
+  roleLevels: RoleLevel[],
+  roleFamilies: RoleFamily[]
+): { family: RoleFamily | null; levels: RoleLevel[] }[] {
+  const levelsByFamilyId = new Map<string, RoleLevel[]>();
+  const ungrouped: RoleLevel[] = [];
+  for (const rl of roleLevels) {
+    if (rl.role_family_id) {
+      const bucket = levelsByFamilyId.get(rl.role_family_id) ?? [];
+      bucket.push(rl);
+      levelsByFamilyId.set(rl.role_family_id, bucket);
+    } else {
+      ungrouped.push(rl);
+    }
+  }
+  const sortByLevel = (a: RoleLevel, b: RoleLevel) => a.job_level - b.job_level;
+  const groups: { family: RoleFamily | null; levels: RoleLevel[] }[] = [...roleFamilies]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((family) => ({
+      family,
+      levels: (levelsByFamilyId.get(family.id) ?? []).sort(sortByLevel),
+    }));
+  if (ungrouped.length > 0) {
+    groups.push({ family: null, levels: ungrouped.sort(sortByLevel) });
+  }
+  return groups;
+}
+
+// Grouped role <select> — used by Team, Expectations, and Capacity so a
+// role dropdown always reads as ~5 ladders instead of 13 flat rows.
+function GroupedRoleSelect({
+  roleLevels,
+  roleFamilies,
+  value,
+  onChange,
+  className,
+  placeholder,
+}: {
+  roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
+  value: string;
+  onChange: (id: string) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const groups = groupRoleLevelsByFamily(roleLevels, roleFamilies).filter((g) => g.levels.length > 0);
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={className}>
+      {placeholder !== undefined && <option value="">{placeholder}</option>}
+      {groups.map((g) => (
+        <optgroup key={g.family?.id ?? "ungrouped"} label={g.family?.name ?? UNGROUPED_LABEL}>
+          {g.levels.map((rl) => (
+            <option key={rl.id} value={rl.id}>
+              {roleLabel(rl)}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
 }
 
 type RoleFormValues = {
@@ -273,26 +365,34 @@ type RoleFormValues = {
   responsibilities: string;
 };
 
-// Shared by "Add role" and "Edit role" — same card-swap edit-in-place
-// pattern as Goals' GoalForm (Session 10). initialRole present -> edit mode.
+// Shared by "Add ladder" / "Add L{n+1}" / "Edit level" — same card-swap
+// edit-in-place pattern as Goals' GoalForm (Session 10). Takes plain
+// `initialValues` (not a whole RoleLevel) as of Session 40, so the same form
+// can pre-fill from a not-yet-created "next level" (job_role/responsibilities
+// carried over from L{n}) as easily as from a real existing row.
 function RoleForm({
-  initialRole,
+  initialValues,
+  isEdit,
   onCancel,
   onSubmit,
   submitLabel,
   savingLabel,
+  roleLabelText = "Role",
+  rolePlaceholder = "e.g. Customer Success Manager",
 }: {
-  initialRole?: RoleLevel | null;
+  initialValues?: RoleFormValues;
+  isEdit?: boolean;
   onCancel?: () => void;
   onSubmit: (input: RoleFormValues) => Promise<void>;
   submitLabel: string;
   savingLabel: string;
+  roleLabelText?: string;
+  rolePlaceholder?: string;
 }) {
-  const [jobRole, setJobRole] = useState(initialRole?.job_role ?? "");
-  const [jobLevel, setJobLevel] = useState(initialRole?.job_level ?? 1);
-  const [responsibilities, setResponsibilities] = useState(initialRole?.job_responsibilities ?? "");
+  const [jobRole, setJobRole] = useState(initialValues?.jobRole ?? "");
+  const [jobLevel, setJobLevel] = useState(initialValues?.jobLevel ?? 1);
+  const [responsibilities, setResponsibilities] = useState(initialValues?.responsibilities ?? "");
   const [saving, setSaving] = useState(false);
-  const isEdit = !!initialRole;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -311,11 +411,11 @@ function RoleForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form onSubmit={handleSubmit} className="mt-3 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
       <div className="flex gap-3">
         <div className="flex-1">
-          <label className={labelCls}>Role</label>
-          <input value={jobRole} onChange={(e) => setJobRole(e.target.value)} className={inputCls} placeholder="e.g. Customer Success Manager" />
+          <label className={labelCls}>{roleLabelText}</label>
+          <input value={jobRole} onChange={(e) => setJobRole(e.target.value)} className={inputCls} placeholder={rolePlaceholder} />
         </div>
         <div className="w-24">
           <label className={labelCls}>Level</label>
@@ -353,40 +453,185 @@ function RoleForm({
   );
 }
 
+// Per-level row inside a ladder card (or the Ungrouped bucket) — the JD is
+// collapsed to 2 lines by default (`line-clamp-2`, native to Tailwind 3.3+,
+// no plugin needed), Edit swaps the row for RoleForm in place, and "Move to
+// another ladder…" (the whole merge mechanic — a PUT with a different
+// role_family_id) opens an inline family picker.
+function LevelRow({
+  role,
+  allFamilies,
+  isEditing,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onRemove,
+  isMoving,
+  onStartMove,
+  onCancelMove,
+  onMove,
+  jdExpanded,
+  onToggleJd,
+}: {
+  role: RoleLevel;
+  allFamilies: RoleFamily[];
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (input: RoleFormValues) => Promise<void>;
+  onRemove: () => void;
+  isMoving: boolean;
+  onStartMove: () => void;
+  onCancelMove: () => void;
+  onMove: (familyId: string | null) => void;
+  jdExpanded: boolean;
+  onToggleJd: () => void;
+}) {
+  if (isEditing) {
+    return (
+      <li>
+        <RoleForm
+          initialValues={{ jobRole: role.job_role, jobLevel: role.job_level, responsibilities: role.job_responsibilities ?? "" }}
+          isEdit
+          onCancel={onCancelEdit}
+          onSubmit={onSaveEdit}
+          submitLabel="Save changes"
+          savingLabel="Saving..."
+        />
+      </li>
+    );
+  }
+
+  // Family name takes over as the primary display once a level has one
+  // (Session 40 decision); job_role only shows separately here as an
+  // override title when it differs — e.g. "Senior Corporate CSM" merged
+  // into the "Corporate CSM" ladder still reads as "Senior Corporate CSM"
+  // on its own row.
+  const overrideTitle = role.role_families && role.role_families.name !== role.job_role ? role.job_role : null;
+
+  return (
+    <li className="rounded-lg border border-gray-200 px-4 py-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900">
+            L{role.job_level}
+            {overrideTitle && <span className="ml-2 font-normal text-gray-500">&middot; {overrideTitle}</span>}
+          </p>
+          {role.job_responsibilities && (
+            <p className={`mt-1 text-xs text-gray-500 ${jdExpanded ? "" : "line-clamp-2"}`}>{role.job_responsibilities}</p>
+          )}
+          {role.job_responsibilities && role.job_responsibilities.length > 100 && (
+            <button onClick={onToggleJd} className="mt-0.5 text-xs text-gray-400 hover:text-gray-700">
+              {jdExpanded ? "Show less" : "Show more"}
+            </button>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <button onClick={onStartMove} className="text-xs text-gray-400 hover:text-gray-700" title="Move to another ladder">
+            Move&hellip;
+          </button>
+          <button onClick={onStartEdit} className="text-xs text-gray-400 hover:text-gray-700" title="Edit level">
+            Edit
+          </button>
+          <button onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500" title="Delete level">
+            Remove
+          </button>
+        </div>
+      </div>
+      {isMoving && (
+        <div className="mt-2 flex items-center gap-2 border-t border-gray-100 pt-2">
+          <span className="text-xs text-gray-500">Move to</span>
+          <select
+            defaultValue=""
+            onChange={(e) => onMove(e.target.value || null)}
+            className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+          >
+            <option value="" disabled>
+              Choose a ladder&hellip;
+            </option>
+            <option value="__ungrouped__">{UNGROUPED_LABEL}</option>
+            {allFamilies
+              .filter((f) => f.id !== role.role_family_id)
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+          </select>
+          <button onClick={onCancelMove} className="text-xs text-gray-400 hover:text-gray-900">
+            Cancel
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function RolesSection({
   roleLevels,
   setRoleLevels,
+  roleFamilies,
+  setRoleFamilies,
   setReports,
   onError,
 }: {
   roleLevels: RoleLevel[];
   setRoleLevels: React.Dispatch<React.SetStateAction<RoleLevel[]>>;
+  roleFamilies: RoleFamily[];
+  setRoleFamilies: React.Dispatch<React.SetStateAction<RoleFamily[]>>;
   setReports: React.Dispatch<React.SetStateAction<DirectReport[]>>;
   onError: (m: string | null) => void;
 }) {
-  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editingLevelId, setEditingLevelId] = useState<string | null>(null);
+  const [addingLevelFamilyId, setAddingLevelFamilyId] = useState<string | null>(null);
+  const [movingLevelId, setMovingLevelId] = useState<string | null>(null);
+  const [renamingFamilyId, setRenamingFamilyId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [addingLadder, setAddingLadder] = useState(false);
+  const [expandedJdIds, setExpandedJdIds] = useState<Set<string>>(new Set());
 
-  async function addRole(input: RoleFormValues) {
+  const groups = groupRoleLevelsByFamily(roleLevels, roleFamilies);
+
+  async function addLevel(familyId: string | null, input: RoleFormValues) {
     try {
       const created = await createRoleLevel({
         job_role: input.jobRole,
         job_level: input.jobLevel,
         job_responsibilities: input.responsibilities || undefined,
+        role_family_id: familyId,
       });
       setRoleLevels((r) => [...r, created]);
+      setAddingLevelFamilyId(null);
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to add role");
     }
   }
 
+  async function createLadder(input: RoleFormValues) {
+    try {
+      const family = await createRoleFamily({ name: input.jobRole });
+      setRoleFamilies((fs) => [...fs, family]);
+      const created = await createRoleLevel({
+        job_role: input.jobRole,
+        job_level: input.jobLevel,
+        job_responsibilities: input.responsibilities || undefined,
+        role_family_id: family.id,
+      });
+      setRoleLevels((r) => [...r, created]);
+      setAddingLadder(false);
+      onError(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to add ladder");
+    }
+  }
+
   // Takes the full role, not just its id, so the PUT (which replaces the
   // whole role_levels row server-side) can carry the existing
-  // functional_team through unchanged. RoleForm doesn't expose that field
-  // (deprecated in favor of org_unit_id since Session 11), so without this
-  // an edit would silently null it out for any role that still has one set
-  // from before Session 11 — same "read, tweak one field, PUT the whole
-  // record" preservation pattern as assignReportRole/assignReportOrgUnit.
+  // functional_team and role_family_id through unchanged. RoleForm doesn't
+  // expose either field, so without this an edit would silently null them
+  // out — same "read, tweak one field, PUT the whole record" preservation
+  // pattern as assignReportRole/assignReportOrgUnit.
   async function saveEdit(role: RoleLevel, input: RoleFormValues) {
     try {
       const updated = await updateRoleLevel(role.id, {
@@ -394,16 +639,17 @@ function RolesSection({
         job_level: input.jobLevel,
         job_responsibilities: input.responsibilities || undefined,
         functional_team: role.functional_team ?? undefined,
+        role_family_id: role.role_family_id,
       });
       setRoleLevels((r) => r.map((x) => (x.id === role.id ? updated : x)));
       onError(null);
-      setEditingRoleId(null);
+      setEditingLevelId(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to save role");
     }
   }
 
-  async function removeRole(id: string) {
+  async function removeLevel(id: string) {
     try {
       await deleteRoleLevel(id);
       setRoleLevels((r) => r.filter((x) => x.id !== id));
@@ -412,61 +658,239 @@ function RolesSection({
       // already-loaded `reports` state doesn't show a stale role pointing
       // at a role_level that no longer exists until the next full reload.
       setReports((rs) => rs.map((r) => (r.role_level_id === id ? { ...r, role_level_id: null } : r)));
-      setEditingRoleId((current) => (current === id ? null : current));
+      setEditingLevelId((current) => (current === id ? null : current));
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to delete role");
     }
+  }
+
+  // The whole merge mechanic (per the plan): a PUT changing role_family_id.
+  // familyId === null moves the level to "Ungrouped".
+  async function moveLevel(role: RoleLevel, familyId: string | null) {
+    try {
+      const updated = await updateRoleLevel(role.id, {
+        job_role: role.job_role,
+        job_level: role.job_level,
+        job_responsibilities: role.job_responsibilities ?? undefined,
+        functional_team: role.functional_team ?? undefined,
+        role_family_id: familyId,
+      });
+      setRoleLevels((r) => r.map((x) => (x.id === role.id ? updated : x)));
+      setMovingLevelId(null);
+      onError(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to move role");
+    }
+  }
+
+  async function renameFamily(id: string) {
+    if (!renameValue.trim()) return;
+    try {
+      const updated = await updateRoleFamily(id, { name: renameValue.trim() });
+      setRoleFamilies((fs) => fs.map((f) => (f.id === id ? updated : f)));
+      // Keep every level's embedded role_families.name in sync client-side
+      // so the rename shows immediately everywhere without a refetch.
+      setRoleLevels((r) =>
+        r.map((x) => (x.role_family_id === id ? { ...x, role_families: { id, name: updated.name } } : x))
+      );
+      setRenamingFamilyId(null);
+      onError(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to rename ladder");
+    }
+  }
+
+  async function removeFamily(id: string) {
+    try {
+      await deleteRoleFamily(id);
+      setRoleFamilies((fs) => fs.filter((f) => f.id !== id));
+      // Mirrors the backend's ON DELETE SET NULL — any level still in this
+      // family falls into "Ungrouped" client-side immediately too.
+      setRoleLevels((r) =>
+        r.map((x) => (x.role_family_id === id ? { ...x, role_family_id: null, role_families: null } : x))
+      );
+      onError(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to delete ladder");
+    }
+  }
+
+  function toggleJd(id: string) {
+    setExpandedJdIds((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleMove(role: RoleLevel, choice: string | null) {
+    if (choice === "__ungrouped__") moveLevel(role, null);
+    else moveLevel(role, choice);
   }
 
   return (
     <div>
       <h2 className="font-medium text-gray-900">Roles on your team</h2>
       <p className="mt-1 text-sm text-gray-500">
-        A role + level is the anchor everything else attaches to — expectations now, ratings later. Assigning
-        people to roles and teams now lives in <span className="font-medium text-gray-700">Team</span>.
+        A role family is a ladder — L1, L2, L3&hellip; are levels inside it. Everything else (expectations now,
+        ratings later) attaches to a level. Assigning people to roles and teams lives in{" "}
+        <span className="font-medium text-gray-700">Team</span>.
       </p>
 
-      <ul className="mt-4 space-y-2">
-        {roleLevels.map((rl) =>
-          rl.id === editingRoleId ? (
-            <li key={rl.id}>
-              <RoleForm
-                initialRole={rl}
-                onCancel={() => setEditingRoleId(null)}
-                onSubmit={(input) => saveEdit(rl, input)}
-                submitLabel="Save changes"
-                savingLabel="Saving..."
-              />
-            </li>
-          ) : (
-            <li key={rl.id} className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">{roleLabel(rl)}</p>
-                {rl.job_responsibilities && (
-                  <p className="mt-1 text-xs text-gray-500">{rl.job_responsibilities}</p>
+      <div className="mt-4 space-y-5">
+        {groups.map((g) => {
+          if (!g.family) {
+            // "Ungrouped" bucket — levels with no family (never assigned
+            // one, or their family was deleted). Flat list, not a ladder
+            // card, with an inline "Move to a ladder" picker per row.
+            if (g.levels.length === 0) return null;
+            return (
+              <div key="ungrouped">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">{UNGROUPED_LABEL}</h3>
+                <ul className="mt-2 space-y-2">
+                  {g.levels.map((rl) => (
+                    <LevelRow
+                      key={rl.id}
+                      role={rl}
+                      allFamilies={roleFamilies}
+                      isEditing={editingLevelId === rl.id}
+                      onStartEdit={() => setEditingLevelId(rl.id)}
+                      onCancelEdit={() => setEditingLevelId(null)}
+                      onSaveEdit={(input) => saveEdit(rl, input)}
+                      onRemove={() => removeLevel(rl.id)}
+                      isMoving={movingLevelId === rl.id}
+                      onStartMove={() => setMovingLevelId(rl.id)}
+                      onCancelMove={() => setMovingLevelId(null)}
+                      onMove={(choice) => handleMove(rl, choice)}
+                      jdExpanded={expandedJdIds.has(rl.id)}
+                      onToggleJd={() => toggleJd(rl.id)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            );
+          }
+
+          const family = g.family;
+          const nextLevel = g.levels.length > 0 ? Math.max(...g.levels.map((l) => l.job_level)) + 1 : 1;
+          const lastLevel = g.levels[g.levels.length - 1];
+
+          return (
+            <div key={family.id} className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                {renamingFamilyId === family.id ? (
+                  <div className="flex flex-1 items-center gap-2">
+                    <input
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      className={`${inputCls} max-w-xs`}
+                      autoFocus
+                    />
+                    <button onClick={() => renameFamily(family.id)} className="text-xs font-medium text-gray-900 hover:underline">
+                      Save
+                    </button>
+                    <button onClick={() => setRenamingFamilyId(null)} className="text-xs text-gray-500 hover:text-gray-900">
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <h3 className="font-medium text-gray-900">
+                    {family.name}
+                    <span className="ml-2 text-xs font-normal text-gray-400">
+                      {g.levels.length} level{g.levels.length === 1 ? "" : "s"}
+                    </span>
+                  </h3>
+                )}
+                {renamingFamilyId !== family.id && (
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setRenamingFamilyId(family.id);
+                        setRenameValue(family.name);
+                      }}
+                      className="text-xs text-gray-400 hover:text-gray-700"
+                    >
+                      Rename
+                    </button>
+                    {g.levels.length === 0 && (
+                      <button onClick={() => removeFamily(family.id)} className="text-xs text-gray-400 hover:text-red-500">
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <button
-                  onClick={() => setEditingRoleId(rl.id)}
-                  className="text-xs text-gray-400 hover:text-gray-700"
-                  title="Edit role"
-                >
-                  Edit
-                </button>
-                <button onClick={() => removeRole(rl.id)} className="text-xs text-gray-400 hover:text-red-500" title="Delete role">
-                  Remove
-                </button>
-              </div>
-            </li>
-          )
-        )}
-        {roleLevels.length === 0 && (
-          <p className="py-2 text-sm text-gray-500">No roles yet. Add the first role on your team below.</p>
-        )}
-      </ul>
 
-      <RoleForm onSubmit={addRole} submitLabel="Add role" savingLabel="Adding..." />
+              {g.levels.length === 0 ? (
+                <p className="mt-2 text-xs text-gray-400">No levels yet — add the first one below, or delete this ladder.</p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {g.levels.map((rl) => (
+                    <LevelRow
+                      key={rl.id}
+                      role={rl}
+                      allFamilies={roleFamilies}
+                      isEditing={editingLevelId === rl.id}
+                      onStartEdit={() => setEditingLevelId(rl.id)}
+                      onCancelEdit={() => setEditingLevelId(null)}
+                      onSaveEdit={(input) => saveEdit(rl, input)}
+                      onRemove={() => removeLevel(rl.id)}
+                      isMoving={movingLevelId === rl.id}
+                      onStartMove={() => setMovingLevelId(rl.id)}
+                      onCancelMove={() => setMovingLevelId(null)}
+                      onMove={(choice) => handleMove(rl, choice)}
+                      jdExpanded={expandedJdIds.has(rl.id)}
+                      onToggleJd={() => toggleJd(rl.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+
+              {addingLevelFamilyId === family.id ? (
+                <RoleForm
+                  initialValues={{
+                    jobRole: lastLevel?.job_role ?? family.name,
+                    jobLevel: nextLevel,
+                    responsibilities: lastLevel?.job_responsibilities ?? "",
+                  }}
+                  onCancel={() => setAddingLevelFamilyId(null)}
+                  onSubmit={(input) => addLevel(family.id, input)}
+                  submitLabel={`Add L${nextLevel}`}
+                  savingLabel="Adding..."
+                  roleLabelText="Title for this level"
+                />
+              ) : (
+                <button
+                  onClick={() => setAddingLevelFamilyId(family.id)}
+                  className="mt-3 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                >
+                  + Add L{nextLevel}
+                </button>
+              )}
+            </div>
+          );
+        })}
+
+        {roleLevels.length === 0 && roleFamilies.length === 0 && (
+          <p className="text-sm text-gray-500">No roles yet. Add your first ladder below.</p>
+        )}
+      </div>
+
+      {addingLadder ? (
+        <RoleForm
+          onCancel={() => setAddingLadder(false)}
+          onSubmit={createLadder}
+          submitLabel="Add ladder"
+          savingLabel="Adding..."
+          roleLabelText="Ladder name"
+          rolePlaceholder="e.g. Corporate CSM"
+        />
+      ) : (
+        <button onClick={() => setAddingLadder(true)} className={`${primaryBtnCls} mt-4`}>
+          + Add a new ladder
+        </button>
+      )}
     </div>
   );
 }
@@ -480,6 +904,7 @@ function TeamSection({
   reports,
   setReports,
   roleLevels,
+  roleFamilies,
   orgUnits,
   onNavigateToRoles,
   onError,
@@ -487,6 +912,7 @@ function TeamSection({
   reports: DirectReport[];
   setReports: React.Dispatch<React.SetStateAction<DirectReport[]>>;
   roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
   orgUnits: OrgUnit[];
   onNavigateToRoles: () => void;
   onError: (m: string | null) => void;
@@ -531,18 +957,14 @@ function TeamSection({
               {r.role_title && <p className="truncate text-xs text-gray-500">{r.role_title}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <select
+              <GroupedRoleSelect
+                roleLevels={roleLevels}
+                roleFamilies={roleFamilies}
                 value={r.role_level_id ?? ""}
-                onChange={(e) => assign(r, e.target.value)}
+                onChange={(id) => assign(r, id)}
                 className="w-48 truncate rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-              >
-                <option value="">No role assigned</option>
-                {roleLevels.map((rl) => (
-                  <option key={rl.id} value={rl.id}>
-                    {roleLabel(rl)}
-                  </option>
-                ))}
-              </select>
+                placeholder="No role assigned"
+              />
               <select
                 value={r.org_unit_id ?? ""}
                 onChange={(e) => assignOrgUnit(r, e.target.value)}
@@ -581,6 +1003,7 @@ function TeamSection({
 
 function ExpectationsSection({
   roleLevels,
+  roleFamilies,
   roleLevelId,
   setRoleLevelId,
   kind,
@@ -588,6 +1011,7 @@ function ExpectationsSection({
   onError,
 }: {
   roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
   roleLevelId: string;
   setRoleLevelId: (id: string) => void;
   kind: ExpectationKind;
@@ -652,6 +1076,7 @@ function ExpectationsSection({
         ) : (
           <CoverageGrid
             roleLevels={roleLevels}
+            roleFamilies={roleFamilies}
             coverage={coverage}
             onCell={openCell}
             onDraft={(id) => setDraftingRoleId(id)}
@@ -660,6 +1085,7 @@ function ExpectationsSection({
       ) : (
         <ExpectationDetail
           roleLevels={roleLevels}
+          roleFamilies={roleFamilies}
           roleLevelId={roleLevelId}
           setRoleLevelId={setRoleLevelId}
           kind={kind}
@@ -690,16 +1116,21 @@ function ExpectationsSection({
 // zero) that opens the per-role editor, plus a Draft with AI shortcut.
 function CoverageGrid({
   roleLevels,
+  roleFamilies,
   coverage,
   onCell,
   onDraft,
 }: {
   roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
   coverage: ExpectationsCoverage | null;
   onCell: (roleId: string, kind: ExpectationKind) => void;
   onDraft: (roleId: string) => void;
 }) {
   const countsByRole = new Map((coverage?.roles ?? []).map((r) => [r.role_level_id, r]));
+  // Grouped by ladder (Session 40) — rows sub-headed by family instead of
+  // one flat list of 13, same grouping used by the role selects.
+  const groups = groupRoleLevelsByFamily(roleLevels, roleFamilies).filter((g) => g.levels.length > 0);
 
   return (
     <div className="mt-4">
@@ -721,38 +1152,47 @@ function CoverageGrid({
             </tr>
           </thead>
           <tbody>
-            {roleLevels.map((rl) => {
-              const c = countsByRole.get(rl.id);
-              const cells: { kind: ExpectationKind; count: number }[] = [
-                { kind: "metrics", count: c?.metrics_count ?? 0 },
-                { kind: "skills", count: c?.skills_count ?? 0 },
-                { kind: "values", count: c?.values_count ?? 0 },
-              ];
-              return (
-                <tr key={rl.id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-4 py-2.5 font-medium text-gray-900">{roleLabel(rl)}</td>
-                  {cells.map((cell) => (
-                    <td key={cell.kind} className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={() => onCell(rl.id, cell.kind)}
-                        className={`min-w-[2.5rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          cell.count === 0
-                            ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        {cell.count}
-                      </button>
-                    </td>
-                  ))}
-                  <td className="px-3 py-2.5 text-right">
-                    <button onClick={() => onDraft(rl.id)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
-                      Draft with AI
-                    </button>
+            {groups.map((g) => (
+              <Fragment key={g.family?.id ?? "ungrouped"}>
+                <tr className="border-b border-gray-100 bg-gray-50/60">
+                  <td colSpan={5} className="px-4 py-1.5 text-xs font-medium text-gray-500">
+                    {g.family?.name ?? UNGROUPED_LABEL}
                   </td>
                 </tr>
-              );
-            })}
+                {g.levels.map((rl) => {
+                  const c = countsByRole.get(rl.id);
+                  const cells: { kind: ExpectationKind; count: number }[] = [
+                    { kind: "metrics", count: c?.metrics_count ?? 0 },
+                    { kind: "skills", count: c?.skills_count ?? 0 },
+                    { kind: "values", count: c?.values_count ?? 0 },
+                  ];
+                  return (
+                    <tr key={rl.id} className="border-b border-gray-100 last:border-0">
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{roleLabel(rl)}</td>
+                      {cells.map((cell) => (
+                        <td key={cell.kind} className="px-3 py-2.5 text-center">
+                          <button
+                            onClick={() => onCell(rl.id, cell.kind)}
+                            className={`min-w-[2.5rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              cell.count === 0
+                                ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                          >
+                            {cell.count}
+                          </button>
+                        </td>
+                      ))}
+                      <td className="px-3 py-2.5 text-right">
+                        <button onClick={() => onDraft(rl.id)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                          Draft with AI
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>
@@ -765,6 +1205,7 @@ function CoverageGrid({
 // view. Values tab also renders the org-wide values block above the list.
 function ExpectationDetail({
   roleLevels,
+  roleFamilies,
   roleLevelId,
   setRoleLevelId,
   kind,
@@ -774,6 +1215,7 @@ function ExpectationDetail({
   onError,
 }: {
   roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
   roleLevelId: string;
   setRoleLevelId: (id: string) => void;
   kind: ExpectationKind;
@@ -844,13 +1286,13 @@ function ExpectationDetail({
       </button>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <select value={roleLevelId} onChange={(e) => setRoleLevelId(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
-          {roleLevels.map((rl) => (
-            <option key={rl.id} value={rl.id}>
-              {roleLabel(rl)}
-            </option>
-          ))}
-        </select>
+        <GroupedRoleSelect
+          roleLevels={roleLevels}
+          roleFamilies={roleFamilies}
+          value={roleLevelId}
+          onChange={setRoleLevelId}
+          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+        />
         <div className="flex rounded-md border border-gray-200 p-0.5">
           {KIND_TABS.map((t) => (
             <button
@@ -1417,9 +1859,11 @@ function DraftReviewPanel({
 
 function CapacitySection({
   roleLevels,
+  roleFamilies,
   onError,
 }: {
   roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
   onError: (m: string | null) => void;
 }) {
   const [settings, setSettings] = useState<CapacitySettings | null>(null);
@@ -1604,13 +2048,13 @@ function CapacitySection({
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className={labelCls}>Role</label>
-                  <select value={wuRoleLevelId} onChange={(e) => setWuRoleLevelId(e.target.value)} className={inputCls}>
-                    {roleLevelsWithoutUnit.map((rl) => (
-                      <option key={rl.id} value={rl.id}>
-                        {roleLabel(rl)}
-                      </option>
-                    ))}
-                  </select>
+                  <GroupedRoleSelect
+                    roleLevels={roleLevelsWithoutUnit}
+                    roleFamilies={roleFamilies}
+                    value={wuRoleLevelId}
+                    onChange={setWuRoleLevelId}
+                    className={inputCls}
+                  />
                 </div>
                 <div className="flex-1">
                   <label className={labelCls}>Unit name</label>

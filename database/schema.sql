@@ -52,11 +52,31 @@ create table users (
 alter table users enable row level security;
 
 -- -------------------------
+-- ROLE FAMILIES
+-- Groups role_levels rows into ladders (Session 40, 2026-08-18 — Plan S2
+-- from docs/TEAM_SETUP_UX_REVIEW.md §6, see the team_setup_ux_review project
+-- memory note). Created before role_levels so role_levels.role_family_id
+-- below can reference it inline. Org-scoped like role_levels
+-- (org_id = current_org_id()). Once a level has a family, the family name
+-- takes over as the display name ("Corporate CSM · L3"); role_levels.job_role
+-- stays as an optional per-level title override (covers "Senior …" titles).
+-- -------------------------
+create table role_families (
+  id         uuid primary key default uuid_generate_v4(),
+  org_id     uuid references organizations(id) on delete cascade,
+  name       text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table role_families enable row level security;
+
+-- -------------------------
 -- ROLE LEVELS
 -- -------------------------
 create table role_levels (
   id                           uuid primary key default uuid_generate_v4(),
   org_id                       uuid references organizations(id) on delete cascade,
+  role_family_id               uuid references role_families(id) on delete set null,
   job_role                     text not null,
   functional_team              text,
   job_level                    integer not null,
@@ -937,6 +957,11 @@ create policy "users_update_own" on users
   for update using (id = auth.uid()) with check (id = auth.uid());
 create policy "users_insert_own" on users
   for insert with check (id = auth.uid());
+
+-- role_families
+create policy "role_families_all_own_org" on role_families
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
 
 -- role_levels
 create policy "role_levels_all_own_org" on role_levels

@@ -891,12 +891,44 @@ export type Profile = {
   one_on_one_cadence_days: number;
 };
 
+// Role families (Session 40, Plan S2): group role_levels rows into ladders.
+// See routes/role_families.py and the team_setup_ux_review project memory
+// note for the scoping conversation.
+export type RoleFamily = {
+  id: string;
+  name: string;
+  created_at?: string;
+};
+
+export type RoleFamilyIn = {
+  name: string;
+};
+
+export const getRoleFamilies = (): Promise<RoleFamily[]> => authedFetch("/api/role-families");
+
+export const createRoleFamily = (body: RoleFamilyIn): Promise<RoleFamily> =>
+  authedFetch("/api/role-families", { method: "POST", body: JSON.stringify(body) });
+
+export const updateRoleFamily = (id: string, body: RoleFamilyIn): Promise<RoleFamily> =>
+  authedFetch(`/api/role-families/${id}`, { method: "PUT", body: JSON.stringify(body) });
+
+export const deleteRoleFamily = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/role-families/${id}`, { method: "DELETE" });
+
 export type RoleLevel = {
   id: string;
   job_role: string;
   job_level: number;
   functional_team: string | null;
   job_responsibilities: string | null;
+  // Session 40: which ladder this level belongs to. null = "Ungrouped".
+  role_family_id: string | null;
+  // Embedded by GET /api/settings/role-levels (role_families(id, name)) so
+  // callers get the ladder name without a second round-trip. null when
+  // role_family_id is null, or when it points at a family this org's RLS
+  // can no longer see (shouldn't happen in practice — role_family_id is
+  // validated server-side on write).
+  role_families: { id: string; name: string } | null;
 };
 
 export type ExpectationKind = "metrics" | "skills" | "values";
@@ -933,6 +965,7 @@ export type RoleLevelIn = {
   job_level?: number;
   functional_team?: string;
   job_responsibilities?: string;
+  role_family_id?: string | null;
 };
 
 export const createRoleLevel = (body: RoleLevelIn): Promise<RoleLevel> =>
