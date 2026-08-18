@@ -379,15 +379,22 @@ function RoleForm({
   savingLabel,
   roleLabelText = "Role",
   rolePlaceholder = "e.g. Customer Success Manager",
+  dynamicLevelLabel,
 }: {
   initialValues?: RoleFormValues;
   isEdit?: boolean;
   onCancel?: () => void;
   onSubmit: (input: RoleFormValues) => Promise<void>;
-  submitLabel: string;
+  submitLabel?: string;
   savingLabel: string;
   roleLabelText?: string;
   rolePlaceholder?: string;
+  // Session 40 follow-up (Andrew's feedback): the "Add L{n}" button used to
+  // show a level number frozen at open time, so typing a different number
+  // into the Level field (e.g. adding a missing L1 below an existing L2)
+  // left a stale "Add L3" label on submit. When true, the button text
+  // tracks the Level field live instead of using the static submitLabel.
+  dynamicLevelLabel?: boolean;
 }) {
   const [jobRole, setJobRole] = useState(initialValues?.jobRole ?? "");
   const [jobLevel, setJobLevel] = useState(initialValues?.jobLevel ?? 1);
@@ -441,7 +448,7 @@ function RoleForm({
       </div>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={saving} className={primaryBtnCls}>
-          {saving ? savingLabel : submitLabel}
+          {saving ? savingLabel : dynamicLevelLabel ? `Add L${jobLevel}` : submitLabel}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-900">
@@ -583,7 +590,11 @@ function RolesSection({
   onError: (m: string | null) => void;
 }) {
   const [editingLevelId, setEditingLevelId] = useState<string | null>(null);
-  const [addingLevelFamilyId, setAddingLevelFamilyId] = useState<string | null>(null);
+  // Which family card has its "add a level" form open, and which level
+  // number it was opened for — holds both directions (the next level up,
+  // pre-filled from the top of the ladder, and a missing lower level like
+  // L1 below an existing L2, pre-filled from the bottom of the ladder).
+  const [addingLevel, setAddingLevel] = useState<{ familyId: string; level: number } | null>(null);
   const [movingLevelId, setMovingLevelId] = useState<string | null>(null);
   const [renamingFamilyId, setRenamingFamilyId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -601,7 +612,7 @@ function RolesSection({
         role_family_id: familyId,
       });
       setRoleLevels((r) => [...r, created]);
-      setAddingLevelFamilyId(null);
+      setAddingLevel(null);
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to add role");
@@ -773,8 +784,17 @@ function RolesSection({
           }
 
           const family = g.family;
-          const nextLevel = g.levels.length > 0 ? Math.max(...g.levels.map((l) => l.job_level)) + 1 : 1;
+          // g.levels is sorted ascending (groupRoleLevelsByFamily), so the
+          // first/last entries are the ladder's floor and ceiling. Two "add"
+          // affordances: the common case (next level up, pre-filled from the
+          // ceiling) and the gap case Andrew flagged — a ladder that starts
+          // above L1 (e.g. only L2 exists) needs a way to backfill L1 too,
+          // pre-filled from the floor rather than the ceiling.
+          const firstLevel = g.levels[0];
           const lastLevel = g.levels[g.levels.length - 1];
+          const nextLevelUp = g.levels.length > 0 ? lastLevel.job_level + 1 : 1;
+          const nextLevelDown = g.levels.length > 0 && firstLevel.job_level > 1 ? firstLevel.job_level - 1 : null;
+          const isAddingBelow = addingLevel?.familyId === family.id && nextLevelDown !== null && addingLevel.level === nextLevelDown;
 
           return (
             <div key={family.id} className="rounded-lg border border-gray-200 p-4">
@@ -847,26 +867,37 @@ function RolesSection({
                 </ul>
               )}
 
-              {addingLevelFamilyId === family.id ? (
+              {addingLevel?.familyId === family.id ? (
                 <RoleForm
                   initialValues={{
-                    jobRole: lastLevel?.job_role ?? family.name,
-                    jobLevel: nextLevel,
-                    responsibilities: lastLevel?.job_responsibilities ?? "",
+                    jobRole: (isAddingBelow ? firstLevel?.job_role : lastLevel?.job_role) ?? family.name,
+                    jobLevel: addingLevel.level,
+                    responsibilities: (isAddingBelow ? firstLevel?.job_responsibilities : lastLevel?.job_responsibilities) ?? "",
                   }}
-                  onCancel={() => setAddingLevelFamilyId(null)}
+                  onCancel={() => setAddingLevel(null)}
                   onSubmit={(input) => addLevel(family.id, input)}
-                  submitLabel={`Add L${nextLevel}`}
+                  dynamicLevelLabel
                   savingLabel="Adding..."
                   roleLabelText="Title for this level"
                 />
               ) : (
-                <button
-                  onClick={() => setAddingLevelFamilyId(family.id)}
-                  className="mt-3 text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                >
-                  + Add L{nextLevel}
-                </button>
+                <div className="mt-3 flex items-center gap-4">
+                  <button
+                    onClick={() => setAddingLevel({ familyId: family.id, level: nextLevelUp })}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    + Add L{nextLevelUp}
+                  </button>
+                  {nextLevelDown !== null && (
+                    <button
+                      onClick={() => setAddingLevel({ familyId: family.id, level: nextLevelDown })}
+                      className="text-xs font-medium text-gray-500 hover:text-gray-800"
+                      title={`This ladder starts at L${firstLevel.job_level} — add a lower level if one's missing`}
+                    >
+                      + Add L{nextLevelDown} (lower)
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           );
