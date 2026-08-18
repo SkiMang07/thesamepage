@@ -18,6 +18,131 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 44 — 2026-08-18
+
+**Goal:** Build the Role JD Import flow scoped in `docs/ROLE_JD_IMPORT_SCOPING.md` — paste or drop a
+job description, one AI call extracts the role identity + proposes where it belongs among existing
+ladders + drafts its expectations, the manager reviews, one commit creates (or back-fills) the role
+and its expectations. Kills the "type everything by hand" burden that left 13 dogfood roles with 0
+expectations.
+
+**What was done:**
+- **`backend/routes/roles_import.py` (new) — `POST /api/roles/import/draft`.** Multipart, exactly one
+  of `file` / `text` (422 on both or neither). `.pdf` goes to Claude as-is, `.docx` through
+  LibreOffice, `.txt`/`.md` and pasted text inline. ONE AI call returns the whole scoping-§3.1
+  contract: `is_job_description` (+ `reason`), `role` (job_role/job_level/functional_team/
+  job_responsibilities), `match` (attach | create_new | exists, with role_family_id/
+  existing_role_level_id/confidence/rationale), `other_roles_note`, and `expectations`. Rate limit
+  `10/minute`, 25MB cap (applied to pasted text too), **nothing saved, no Storage writes** — same
+  pure-AI contract as `/api/expectations/draft`. Mounted at `/api/roles/import` in `main.py`.
+- **Reuse rather than re-implementation, in four places.** (1) `documents.py`'s
+  `_convert_pptx_to_pdf` generalized to `convert_to_pdf(raw_bytes, kind)` — same subprocess, suffix
+  driven by `kind`, error strings now name the actual input type; its one existing call site passes
+  `"pptx"`. (2) `expectations_ai.py`'s METRICS/SKILLS/VALUES definitions block hoisted to
+  `_EXPECTATION_DEFINITIONS` and interpolated back into `_build_draft_prompt` — verified
+  byte-identical output against the pre-session module, so the coverage-grid draft prompt is
+  unchanged while the JD prompt carries the same definitions verbatim. (3)
+  `_generate_and_parse_draft`'s validation tail split into `parse_draft_items(parsed)` so the JD
+  route runs the identical clamps on its `expectations` sub-object (it can't reuse the call-and-parse
+  wrapper — its one call returns much more than expectations). (4) `_compute_coverage` supplies the
+  per-level "has expectations" counts in the ladders block.
+- **Match proposal.** Every family's ladder/level names go into the prompt (the model needs them all
+  to propose anything), but only a server-side shortlist gets its existing expectations inlined for
+  calibration — `_shortlist_families()` normalizes with the same seniority-prefix stripping as
+  Session 43's ladder-merge nudge (`stripSeniorityPrefix` in `settings/page.tsx`), matching against
+  the pasted text or, for uploads, the filename (a PDF's contents aren't readable server-side without
+  a second extraction call, and one call is the point). `_validate_match()` never trusts the model's
+  ids: a hallucinated/foreign family id degrades to create_new, an `existing_role_level_id` pointing
+  outside its claimed family is dropped, a create_new never carries a ladder, and a level number
+  already occupied in the proposed ladder is forced to `exists` against **that** row — so the
+  frontend's own collision UI only has to handle collisions the manager creates by editing.
+- **`frontend/components/DraftExpectationRows.tsx` (new).** The Plan S3 draft-review rows
+  (keep/edit/discard per item, three kind tabs) lifted verbatim out of `DraftReviewPanel` in
+  `settings/page.tsx` into a shared `DraftExpectationsReview`, plus `draftIncludedCount()` and
+  `commitDraftExpectations()` (one batch call per non-empty kind). `DraftReviewPanel` now renders the
+  shared component and calls the shared commit — same screen, one implementation, so the JD import
+  and the coverage grid can't drift. Empty-state copy is a prop; the defaults are the coverage grid's
+  original wording.
+- **`frontend/components/RoleImportPanel.tsx` (new).** input (paste textarea + drag/drop zone, one
+  control each) → drafting → review → commit. Review is an editable role identity card (title, level
+  stepper, ladder select with the AI's match preselected + "Create new ladder: <title>", optional
+  team, and the extracted responsibilities) above the shared draft-review rows. Collision handling
+  per §3.2: choosing a ladder+level that already exists blocks the commit and offers "Update L{n}
+  instead" (back-fill mode) or "Add as L{next free}". Back-fill mode is **derived** from the current
+  selection, not a stored flag, so editing the ladder or level out from under it drops back to
+  create-mode instead of PUTting the wrong row.
+- **Commit uses only existing endpoints, client-orchestrated.** create_new → `createRoleFamily` →
+  `createRoleLevel` → the three batches; attach → `createRoleLevel` with the existing family → batches;
+  exists → `updateRoleLevel` (whole-record PUT preserving the level's ladder, and its team unless the
+  manager typed one — same preservation pattern as `saveEdit`) → batches. Empty kinds are skipped. No
+  import-specific write endpoint exists.
+- **All three entry points wired (`settings/page.tsx`).** RolesSection's "+ Add a new ladder" now
+  opens the import panel as the hero, with "or start from scratch" inside it falling back to the
+  unchanged `RoleForm`; each ladder card's add-a-level row gains an "Import from a JD" link that
+  opens the panel pinned to that family (its manual prefilled form stays the default, and is what
+  "start from scratch" falls back to there); the People section's inline create-role modal gains
+  "Paste a JD instead", which swaps to the panel and still assigns the imported role to the person
+  the modal was opened from. The coverage grid's "Draft with AI" is untouched.
+
+**Decisions made / locked:**
+- **No migration, confirmed.** Every column this flow writes already exists (`job_responsibilities`,
+  `role_family_id`, nullable `value_configs.role_level_id`) and no new table is involved. The
+  scoping brief asked for a loud flag if the build found otherwise — it did not.
+- Collision resolution is **server-side first** (the draft response already says `exists` when the
+  proposed level is occupied), with the frontend handling only manager-created collisions. One rule,
+  two enforcement points, instead of the model's word being trusted.
+- The definitions block is **shared, not copied**. The scoping brief said "copy verbatim"; a shared
+  constant is the same text with no way to drift, and the pre/post prompt strings were diffed to
+  prove the existing path is byte-identical.
+- `.pptx` is deliberately **not** accepted here even though the conversion path would handle it — a
+  slide deck is not a job description, and the Context Engine is where decks belong.
+- The JD file is never stored (no Storage write, no `documents` row): a JD is role config, not a
+  Context Engine document.
+
+**Verification:** `python3 -m py_compile` clean on every touched backend file; imported `main` and
+confirmed `/api/roles/import/draft` registers with the limiter attached. `npx tsc --noEmit` clean;
+`npx next build` clean, 19/19 routes. Functional: ran the **real route with real Anthropic calls**
+against an in-memory fake Supabase (auth bypassed via a dependency override) seeded with a Corporate
+CSM ladder at L1 + its expectations, an ungrouped Account Executive, and two org-wide values — all
+six scoping-§4 cases pass. (1) Content-marketing JD → `create_new`, 3 metrics + 3 skills. (2) Senior
+CSM JD → `attach` to Corporate CSM at L2, high confidence, rationale "Looks like the next level up
+on your Corporate CSM ladder…". (3) The exact existing L1 JD → `exists` with
+`existing_role_level_id` = that row (the back-fill path). (4) `.pdf` upload (generated with
+`cupsfilter`) drafts end-to-end; `.docx` upload verified through type inference → `convert_to_pdf(…,
+"docx")` dispatch → AI call, with the conversion stubbed since LibreOffice isn't installed on this
+Mac, plus a separate check that the real `convert_to_pdf` shells out as `libreoffice --headless
+--norestore --convert-to pdf` on an `input.docx`. (5) A braised-short-ribs recipe → honest refusal
+("This looks like a cooking recipe…", no role, no expectations). (6) Empty and whitespace-only input
+→ 422; both file and text → 422; `.pptx` → 422. Also confirmed a 3-role job-req document extracts
+the primary role and reports `other_roles_note` naming the other two, unit-tested `_validate_match`'s
+degradation paths and `_validate_role`'s clamps, and validated every commit payload the panel sends
+against the receiving Pydantic models. **Values came back empty on every role draft** — correct: the
+org-wide values were in the prompt and the restraint rule held, so nothing was duplicated per role.
+What's still unverified: the real LibreOffice `.docx` conversion (no binary locally — it runs on
+Railway, same posture as the existing PPTX path), and the whole commit path against a live Supabase.
+
+**Post-build fix (Cowork review, same day):** the `_EXPECTATION_DEFINITIONS` hoist was left
+half-done — the constant was a literal stub (`"""{_EXPECTATION_DEFINITIONS}"""`) while
+`_build_draft_prompt` still carried the definitions inline, which is exactly why the byte-identical
+diff passed: the coverage-grid path never changed, but the JD prompt shipped the placeholder token
+instead of the definitions (drafts still parsed because the JD prompt's RULES section spells out the
+enums — the miss was calibration guidance, invisible in output shape). Cowork filled the constant
+with the real block, made `_build_draft_prompt` interpolate it, and verified programmatically:
+coverage prompt byte-identical pre/post-fix (cases with and without JD/siblings), JD prompt now
+carries the definitions, `parse_draft_items` parity unchanged. Lesson for future sessions: a
+byte-identical diff on the UNCHANGED path proves nothing about the NEW path — render the new prompt
+and assert the shared text actually appears in it.
+
+**Next step:** Live smoke test on Railway/Vercel once pushed — paste a real JD into Settings → Roles &
+expectations → "+ Add a new ladder" and confirm the created ladder/level/expectations all land, then
+paste a JD for one of the 13 expectation-less dogfood roles and confirm the `exists` back-fill path
+updates that role in place rather than creating a duplicate. Upload a real `.docx` JD (the one path
+that can't be exercised locally) to confirm the LibreOffice conversion works in production. If the
+`exists` proposal proves reliable, the fastest way to clear the 13-roles/0-expectations backlog is to
+paste each role's JD in turn.
+
+---
+
 ## Session 43 — 2026-08-18
 
 **Goal:** Build the polish pass from `docs/TEAM_SETUP_UX_REVIEW.md` §7.3 (Pass A + Pass B
@@ -542,105 +667,6 @@ flow — which reads role_family-grouped pickers built here.
 
 ---
 
-## Session 39 — 2026-08-18
-
-**Goal:** Build Plan S3 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (first of the four S1–S5 setup-UX
-sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): an expectations coverage grid plus per-role
-"Draft with AI" that turns each role's stored job description into draft metrics/skills/values for
-review-then-commit, and org-wide values support.
-
-**What was done:**
-- **`backend/routes/expectations_ai.py` (new)**, registered in `main.py` under `/api/expectations`
-  (separate prefix from `settings.py`'s `/api/settings/expectations` CRUD, which is unchanged and
-  still owns manual single-item add/delete):
-  - `GET /coverage` — one row per role_level with metric/skill/value config counts (three grouped
-    queries + one for role_levels, no per-role N+1) plus `org_wide_values_count`
-    (`value_configs.role_level_id IS NULL`).
-  - `POST /draft` — AI drafts metrics/skills/values from the role's `job_responsibilities` text,
-    calibrated against sibling levels' existing configs (same `job_role` string, different
-    `job_level` — Plan S2's `role_family_id` doesn't exist yet). Falls back to drafting from role
-    title + level alone when there's no JD text. Rate-limited (`10/minute`, same as
-    `assessments.py`'s draft endpoint). Nothing is persisted.
-  - `POST /{kind}/batch` — commits a reviewed draft (or any batch) in one insert; reuses
-    `settings.py`'s `_CONFIG_TABLES` / `_expectation_row` / `ExpectationIn` so the row shape can't
-    drift from the manual CRUD path.
-- **`backend/routes/direct_reports.py`** — `fetch_role_expectations()`'s values fetch now uses
-  `.or_("role_level_id.eq.<id>,role_level_id.is.null")` instead of a plain `.eq()`, unioning
-  org-wide values into every role's expectation set. This is the one shared helper behind the DR
-  detail page, 1:1 prep grounding, and assessments' scorecard — fixing it here means all three pick
-  up org-wide values automatically, no per-caller changes needed.
-- **`frontend/app/app/settings/page.tsx`** — Expectations section reworked:
-  - `CoverageGrid` (new default view) replaces the blind role dropdown as the entry point: one row
-    per role, a metrics/skills/values count "pill" per row (amber when zero) that opens the
-    existing per-role editor (now `ExpectationDetail`) on click, plus a per-row "Draft with AI"
-    button. A banner surfaces `org_wide_values_count` when nonzero.
-  - `ExpectationDetail` is the old section body (list + manual add form), now reached via a
-    "← Back to coverage" link instead of being the landing view; unchanged behavior otherwise.
-  - `OrgWideValuesBlock` (new) renders above the list on the Values tab — its own tiny add/remove
-    form writing `value_configs` rows with `role_level_id: null` via the existing
-    `createExpectation`/`deleteExpectation("values", ...)` calls (no new backend endpoint needed for
-    this part).
-  - `DraftReviewPanel` (new, modal overlay) — runs the AI draft on open, renders editable
-    include-checkbox rows per kind tab (name/order type/expectation-or-description/period, all
-    editable before commit), and a "copy from another role" select as the non-AI alternative source
-    (pulls that role's existing configs into the same editable rows via `getExpectations`, no new
-    endpoint). "Add N expectations" batches the included rows per kind through the new
-    `/batch` endpoint, then refreshes the coverage grid.
-- **`frontend/lib/api.ts`** — added `ExpectationsCoverage(Row)`, `Draft{Metric,Skill,Value}Item`,
-  `ExpectationsDraft`, `ExpectationBatchItem` types and `getExpectationsCoverage`,
-  `draftExpectations`, `batchCreateExpectations` calls.
-
-**Decisions made / locked:**
-- Org-wide values = `value_configs.role_level_id IS NULL`, per the plan — no migration (the column
-  was already nullable and RLS is org-scoped, not role_level-scoped, so a null role_level_id needed
-  no policy change either).
-- AI draft leans conservative on values: the prompt tells the model to prefer leaving role-specific
-  values empty unless the JD clearly implies a role-specific behavioral bar, since company values
-  belong in the org-wide block, not duplicated 13x. Confirmed via the smoke test below that an empty
-  `values` array round-trips correctly (draft-then-review treats it as an honest answer, not a
-  failure).
-- "Copy from…" was built as a same-panel alternative source (a role picker that replaces the draft
-  rows with another role's real configs) rather than a separate UI surface — reuses
-  `getExpectations` instead of a new endpoint.
-- Kept `settings.py`'s expectations CRUD completely unchanged; all new logic lives in
-  `expectations_ai.py` and imports the CRUD module's private helpers rather than duplicating the
-  row-shaping logic — same "read-only/AI module sits on top of an existing CRUD module" shape as
-  `assessments.py` on `direct_reports.py`.
-- No scale definitions in drafts this session (per the plan's open question — deferred).
-
-**Verification:** `python3 -m py_compile` on all touched/new backend files, plus a full import of
-`main.py` (not just py_compile) after staging every route module `expectations_ai.py` transitively
-pulls in via `main.py`'s router registration — catches import-order/circular-import bugs py_compile
-alone would miss. Beyond that, three functional smoke tests against a hand-rolled fake Supabase
-client (not real Postgres — no network from this session): (1) `get_coverage()` called directly,
-confirming per-role counts exclude org-wide rows and `org_wide_values_count` is correct; (2)
-`batch_create_expectations()` called directly, confirming the inserted row shape and `org_id`; (3)
-`POST /draft` through a real `FastAPI` `TestClient` (exercises the `@limiter.limit` decorator path,
-which a direct function call would skip) with `generate_text` monkeypatched to a canned
-code-fenced JSON response, confirming the fence-stripping and per-item validation. A fourth test
-confirmed `fetch_role_expectations()`'s new `.or_()` filter actually unions org-wide + role-specific
-values and excludes a third role's values, using a fake that emulates postgrest's `.or_()` filter
-syntax rather than ignoring it. `postgrest-py 0.17.2` (pinned via `supabase==2.9.1`) confirmed to
-expose `.or_()` before relying on it. Frontend: `npx tsc --noEmit` clean; `npx next build` clean,
-all 21 routes — installed dependencies and built directly in this cloud container (this session had
-network access here, unlike the device sandbox Session 38 noted has none for `npm install`).
-**Not done this session:** no live click-through against the production Supabase database (this
-container has no route to it) — Andrew should run the golden-path check from the plan (Draft with AI
-on a real role, e.g. Corporate CSM · L1, commit, confirm the person page + prep grounding pick up
-the result) after deploying.
-
-**Deviations from the plan:** none structural. The plan named the new file `expectations_ai.py` as
-one of two options ("settings.py or new `expectations_ai.py`") — went with the new file. Batch
-commit fields are slightly richer than described (measurement_period/value_type carried through
-per-item) to avoid a second round-trip after commit. No new migration, as expected.
-
-**Next step:** Deploy (Vercel + Railway pick this up on push) and run the live golden-path check
-above. Then Session 2 of the four (`docs/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 2 prompt) builds
-Plan S2 — role families — grouping this session's coverage grid rows by ladder once `role_family_id`
-exists.
-
----
-
 ---
 
 ## Archived sessions (compact index)
@@ -652,6 +678,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 39 — 2026-08-18:** Build Plan S3 — expectations coverage grid + per-role "Draft with AI" (role's stored JD → draft metrics/skills/values, review-then-commit) + org-wide values. **Decided:** Org-wide values = `value_configs.role_level_id IS NULL` — no migration (column already nullable, RLS org-scoped, not role_level-scoped); AI draft leans conservative on role-specific values — prefer empty, company values live in the org-wide block, not duplicated 13x; all new logic in new `expectations_ai.py` on top of settings.py's unchanged CRUD (same shape as assessments.py on direct_reports.py).
 - **Session 38 — 2026-08-17:** Polish pass on the persistent nav shipped in Sessions 36/37: top-bar alignment fix, a sticky-nav scroll bug found during verification, Scribe toggle prominence, and a first-ever avatar menu (Settings + Sign out). **Decided:** Nav content aligns to `max-w-7xl` (matching Dashboard/Team); Scribe toggle prominence solved with styling only, no second toggle location; avatar menu is Settings + Sign out only, no multi-org items.
 - **Session 36 — 2026-08-16:** Nav rework pass 1 (tracked in code comments and DESIGN.md as Session 36/37; documented here retroactively — Andrew asked to hold… **Decided:** all six recorded directly in `docs/DESIGN.md`'s 2026-08-16 rows — hub & orbit locked in from nav_redesign_options.md; ZoneMap.tsx….
 - **Session 37 — 2026-08-16:** Nav rework pass 2 (tracked in code comments as Session 38 — see `docs/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). **Decided:** `resolve_cadence_days()` returns `(days, source)` rather than a bare int — a deliberate deviation from the spec's literal…; `one_on_ones` still has no status column — status stays derived (`planned` = prep_guide set + summary null; `completed` = summary….

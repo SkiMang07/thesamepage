@@ -123,6 +123,24 @@ misleading, don't assume org-scoping from the policy name alone. Like
 `direct_reports`/`one_on_ones`, routes on these tables don't need
 `_ensure_org()` or to populate `org_id` for isolation to work.
 
+### Local verification (schema/RLS changes)
+
+`database/local_verify_stub.sql` (checked in, Session 43) is a reusable stub — bare `auth`/
+`storage` schemas, the `anon`/`authenticated`/`service_role` roles, and the grants real Supabase
+sets by default — that lets the *actual* `database/schema.sql` (and any migration file) run
+against a throwaway local Postgres end to end. Use it, don't rebuild it: `dropdb --if-exists
+tsp_verify && createdb tsp_verify`, then `psql tsp_verify -f database/local_verify_stub.sql`,
+then `psql tsp_verify -f database/schema.sql` (+ migration if testing one), then the public-schema
+grants — full command sequence and the gotchas it already solves (`raw_user_meta_data`, the
+storage stub, RLS/RETURNING bootstrap ordering) are in the file's own header comment. Write a
+throwaway functional-test `.sql` on top of it (`set role authenticated`, `set_config
+('app.current_user_id', ...)`) to actually exercise whatever policy or SECURITY DEFINER function
+changed — the stub only proves the schema applies, not that the policy does what you think.
+
+Always start from a freshly dropped/recreated database — reusing one across runs produces
+duplicate-key errors that look like real bugs and aren't (Session 43 lost real time to this
+before catching it).
+
 ---
 
 ## Database schema (36 tables — aligned with Miro board)
@@ -1247,6 +1265,15 @@ backend/
                           Imports settings.py's _CONFIG_TABLES/_expectation_row/ExpectationIn rather than
                           duplicating the row shape — same "AI/rollup module sits on top of an existing
                           CRUD module" shape as assessments.py on direct_reports.py.
+    roles_import.py      /api/roles/import — POST /draft (Session 44): JD paste or .pdf/.docx/.txt/.md
+                          upload → ONE AI call → role identity + attach/create_new/exists match proposal
+                          + expectations draft. Model ids never trusted (_validate_match: hallucinated
+                          family → create_new; occupied level → forced to exists against that row).
+                          Reuses expectations_ai's _EXPECTATION_DEFINITIONS + parse_draft_items so both
+                          draft paths calibrate identically, and documents.py's convert_to_pdf
+                          (generalized from _convert_pptx_to_pdf, same LibreOffice binary) for .docx.
+                          Pure-AI, nothing saved, no Storage writes; commit is client-orchestrated
+                          through role_families / settings role-levels / expectations batch endpoints.
     assessments.py       /api/assessments — levels, team list, per-report scorecard, AI draft, save (Session 16)
     dashboard.py          GET /api/dashboard/insight — Mission Control's AI insight banner (Session 19),
                           cached + rate-limited (Session 20)

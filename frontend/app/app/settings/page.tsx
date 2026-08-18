@@ -17,11 +17,7 @@ import { useSearchParams } from "next/navigation";
 import {
   CapacitySettings,
   DirectReport,
-  DraftMetricItem,
-  DraftSkillItem,
-  DraftValueItem,
   Expectation,
-  ExpectationBatchItem,
   ExpectationKind,
   ExpectationsCoverage,
   OrgUnit,
@@ -67,6 +63,15 @@ import {
   updateRoleLevel,
   upsertWorkUnitConfig,
 } from "@/lib/api";
+import {
+  DraftExpectationsReview,
+  DraftMetricRow,
+  DraftSkillRow,
+  DraftValueRow,
+  commitDraftExpectations,
+  draftIncludedCount,
+} from "@/components/DraftExpectationRows";
+import RoleImportPanel, { RoleImportResult } from "@/components/RoleImportPanel";
 import {
   GroupedRoleSelect,
   OrgUnitSelect,
@@ -629,6 +634,11 @@ function RolesSection({
   const [renamingFamilyId, setRenamingFamilyId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [addingLadder, setAddingLadder] = useState(false);
+  // Role JD import (Session 44 — docs/ROLE_JD_IMPORT_SCOPING.md, locked
+  // decision 4: AI-first). Non-null opens RoleImportPanel; scopedFamilyId
+  // null = the "Add a new ladder" hero, non-null = "Import from a JD" from
+  // inside one ladder card (that ladder is pinned in the review screen).
+  const [importPanel, setImportPanel] = useState<{ scopedFamilyId: string | null } | null>(null);
   const [expandedJdIds, setExpandedJdIds] = useState<Set<string>>(new Set());
   // Merge nudge (Session 43, Polish Pass B, finding P3) — dismissed
   // suggestions are local/session-only (not persisted), same "one-time
@@ -670,6 +680,27 @@ function RolesSection({
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to add ladder");
     }
+  }
+
+  // RoleImportPanel commits through the same create/update endpoints this
+  // section's own forms use, so all that's left here is merging the result
+  // into local state — created levels are appended, a back-filled level
+  // replaces its existing row. The embedded role_families(name) is attached
+  // client-side because createRoleLevel/updateRoleLevel return the raw row
+  // without the embed (same as addLevel/saveEdit above).
+  async function handleImported(result: RoleImportResult) {
+    if (result.family) setRoleFamilies((fs) => [...fs, result.family as RoleFamily]);
+    const family =
+      result.family ?? roleFamilies.find((f) => f.id === result.roleLevel.role_family_id) ?? null;
+    const withEmbed: RoleLevel = {
+      ...result.roleLevel,
+      role_families: family ? { id: family.id, name: family.name } : null,
+    };
+    setRoleLevels((r) =>
+      r.some((x) => x.id === withEmbed.id) ? r.map((x) => (x.id === withEmbed.id ? withEmbed : x)) : [...r, withEmbed]
+    );
+    setImportPanel(null);
+    onError(null);
   }
 
   // Takes the full role, not just its id, so the PUT (which replaces the
@@ -945,12 +976,21 @@ function RolesSection({
                   roleLabelText="Title for this level"
                 />
               ) : (
-                <div className="mt-3 flex items-center gap-4">
+                <div className="mt-3 flex flex-wrap items-center gap-4">
                   <button
                     onClick={() => setAddingLevel({ familyId: family.id, level: nextLevelUp })}
                     className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                   >
                     + Add L{nextLevelUp}
+                  </button>
+                  {/* Second entry point (scoping §3.2): the manual prefilled
+                      form above stays the default here — it's good — and the
+                      JD import opens pre-scoped to this ladder. */}
+                  <button
+                    onClick={() => setImportPanel({ scopedFamilyId: family.id })}
+                    className="text-xs font-medium text-gray-500 hover:text-gray-800"
+                  >
+                    Import from a JD
                   </button>
                   {nextLevelDown !== null && (
                     <button
@@ -972,6 +1012,10 @@ function RolesSection({
         )}
       </div>
 
+      {/* Locked decision 4 (AI-first): "Add a new ladder" opens the JD
+          import as the hero; the manual RoleForm is the quiet secondary
+          path behind "start from scratch" inside the panel, unchanged from
+          what it always was. */}
       {addingLadder ? (
         <RoleForm
           onCancel={() => setAddingLadder(false)}
@@ -982,9 +1026,30 @@ function RolesSection({
           rolePlaceholder="e.g. Corporate CSM"
         />
       ) : (
-        <button onClick={() => setAddingLadder(true)} className={`${primaryBtnCls} mt-4`}>
+        <button onClick={() => setImportPanel({ scopedFamilyId: null })} className={`${primaryBtnCls} mt-4`}>
           + Add a new ladder
         </button>
+      )}
+
+      {importPanel && (
+        <RoleImportPanel
+          roleLevels={roleLevels}
+          roleFamilies={roleFamilies}
+          scopedFamilyId={importPanel.scopedFamilyId}
+          onClose={() => setImportPanel(null)}
+          onManualFallback={() => {
+            const scoped = importPanel.scopedFamilyId;
+            setImportPanel(null);
+            if (scoped) {
+              const levels = roleLevels.filter((rl) => rl.role_family_id === scoped);
+              const next = levels.length ? Math.max(...levels.map((rl) => rl.job_level)) + 1 : 1;
+              setAddingLevel({ familyId: scoped, level: next });
+            } else {
+              setAddingLadder(true);
+            }
+          }}
+          onCommitted={handleImported}
+        />
       )}
     </div>
   );
@@ -1083,9 +1148,14 @@ function SetupProgressHeader({
 function CreateRoleModal({
   onClose,
   onCreate,
+  onPasteJd,
 }: {
   onClose: () => void;
   onCreate: (name: string) => Promise<void>;
+  // Third entry point for the JD import (scoping §3.2) — swaps this
+  // one-field modal for the full import panel, which creates the same
+  // ladder + L1 but with a job description and expectations attached.
+  onPasteJd: () => void;
 }) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1121,13 +1191,18 @@ function CreateRoleModal({
           className={`${inputCls} mt-3`}
         />
         {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
-            Cancel
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <button type="button" onClick={onPasteJd} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+            Paste a JD instead
           </button>
-          <button type="submit" disabled={saving || !name.trim()} className={primaryBtnCls}>
-            {saving ? "Creating..." : "Create role"}
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving || !name.trim()} className={primaryBtnCls}>
+              {saving ? "Creating..." : "Create role"}
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -1445,6 +1520,10 @@ function PeopleSection({
   // opened from the progress header itself (no row to auto-assign back to).
   const [creatingRoleFor, setCreatingRoleFor] = useState<DirectReport | "header" | null>(null);
   const [creatingTeamFor, setCreatingTeamFor] = useState<DirectReport | "header" | null>(null);
+  // Session 44 — "Paste a JD instead" from the inline create-role modal.
+  // Holds the same row context creatingRoleFor did, so the person the
+  // modal was opened from still gets assigned the imported role.
+  const [importingRoleFor, setImportingRoleFor] = useState<DirectReport | "header" | null>(null);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [addingPerson, setAddingPerson] = useState(false);
@@ -1538,6 +1617,25 @@ function PeopleSection({
     setRoleLevels((ls) => [...ls, level]);
     if (creatingRoleFor && creatingRoleFor !== "header") {
       await assign(creatingRoleFor, level.id);
+    } else {
+      loadSetupStatus();
+    }
+  }
+
+  async function handleImportedRole(result: RoleImportResult) {
+    if (result.family) setRoleFamilies((fs) => [...fs, result.family as RoleFamily]);
+    const family = result.family ?? roleFamilies.find((f) => f.id === result.roleLevel.role_family_id) ?? null;
+    const withEmbed: RoleLevel = {
+      ...result.roleLevel,
+      role_families: family ? { id: family.id, name: family.name } : null,
+    };
+    setRoleLevels((ls) =>
+      ls.some((x) => x.id === withEmbed.id) ? ls.map((x) => (x.id === withEmbed.id ? withEmbed : x)) : [...ls, withEmbed]
+    );
+    const target = importingRoleFor;
+    setImportingRoleFor(null);
+    if (target && target !== "header") {
+      await assign(target, withEmbed.id);
     } else {
       loadSetupStatus();
     }
@@ -1757,8 +1855,29 @@ function PeopleSection({
         </button>
       </form>
 
+      {importingRoleFor && (
+        <RoleImportPanel
+          roleLevels={roleLevels}
+          roleFamilies={roleFamilies}
+          onClose={() => setImportingRoleFor(null)}
+          onManualFallback={() => {
+            const target = importingRoleFor;
+            setImportingRoleFor(null);
+            setCreatingRoleFor(target);
+          }}
+          onCommitted={handleImportedRole}
+        />
+      )}
       {creatingRoleFor && (
-        <CreateRoleModal onClose={() => setCreatingRoleFor(null)} onCreate={handleCreateRole} />
+        <CreateRoleModal
+          onClose={() => setCreatingRoleFor(null)}
+          onCreate={handleCreateRole}
+          onPasteJd={() => {
+            const target = creatingRoleFor;
+            setCreatingRoleFor(null);
+            setImportingRoleFor(target);
+          }}
+        />
       )}
       {creatingTeamFor && (
         <CreateTeamModal onClose={() => setCreatingTeamFor(null)} onCreate={handleCreateTeam} />
@@ -2449,9 +2568,6 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
 // existing expectations into the same editable/include-checkbox rows.
 // ---------------------------------------------------------------------------
 
-type DraftMetricRow = DraftMetricItem & { included: boolean };
-type DraftSkillRow = DraftSkillItem & { included: boolean };
-type DraftValueRow = DraftValueItem & { included: boolean };
 
 function DraftReviewPanel({
   roleLevelId,
@@ -2469,7 +2585,6 @@ function DraftReviewPanel({
   const role = roleLevels.find((rl) => rl.id === roleLevelId);
   const otherRoles = roleLevels.filter((rl) => rl.id !== roleLevelId);
 
-  const [tab, setTab] = useState<ExpectationKind>("metrics");
   const [loading, setLoading] = useState(true);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
@@ -2544,39 +2659,13 @@ function DraftReviewPanel({
     }
   }
 
-  function updateMetric(i: number, patch: Partial<DraftMetricRow>) {
-    setMetrics((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  }
-  function updateSkill(i: number, patch: Partial<DraftSkillRow>) {
-    setSkills((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  }
-  function updateValue(i: number, patch: Partial<DraftValueRow>) {
-    setValues((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  }
-
-  const includedCount =
-    metrics.filter((m) => m.included).length + skills.filter((s) => s.included).length + values.filter((v) => v.included).length;
+  const includedCount = draftIncludedCount(metrics, skills, values);
 
   async function commit() {
     setCommitting(true);
     setPanelError(null);
     try {
-      const incM = metrics.filter((m) => m.included);
-      const incS = skills.filter((s) => s.included);
-      const incV = values.filter((v) => v.included);
-
-      if (incM.length) {
-        const items: ExpectationBatchItem[] = incM.map(({ included, ...rest }) => rest);
-        await batchCreateExpectations("metrics", roleLevelId, items);
-      }
-      if (incS.length) {
-        const items: ExpectationBatchItem[] = incS.map(({ included, ...rest }) => rest);
-        await batchCreateExpectations("skills", roleLevelId, items);
-      }
-      if (incV.length) {
-        const items: ExpectationBatchItem[] = incV.map(({ included, ...rest }) => rest);
-        await batchCreateExpectations("values", roleLevelId, items);
-      }
+      await commitDraftExpectations(roleLevelId, metrics, skills, values);
       onError(null);
       onCommitted();
     } catch (e) {
@@ -2633,138 +2722,15 @@ function DraftReviewPanel({
 
         {panelError && <p className="mt-3 text-sm text-red-500">{panelError}</p>}
 
-        <div className="mt-4 flex rounded-md border border-gray-200 p-0.5">
-          {KIND_TABS.map((t) => {
-            const count = t.id === "metrics" ? metrics.length : t.id === "skills" ? skills.length : values.length;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`rounded px-3 py-1 text-sm ${tab === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
-              >
-                {t.label} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {loading ? (
-          <p className="mt-4 text-sm text-gray-500">Drafting...</p>
-        ) : (
-          <div className="mt-4 space-y-2">
-            {tab === "metrics" &&
-              (metrics.length === 0 ? (
-                <p className="text-sm text-gray-500">No metrics drafted — the manual form still works below.</p>
-              ) : (
-                metrics.map((m, i) => (
-                  <div key={i} className="rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-start gap-2">
-                      <input type="checkbox" checked={m.included} onChange={(e) => updateMetric(i, { included: e.target.checked })} className="mt-1.5" />
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <input value={m.name} onChange={(e) => updateMetric(i, { name: e.target.value })} className={inputCls} />
-                        <div className="flex gap-2">
-                          <select
-                            value={m.order_type ?? "primary"}
-                            onChange={(e) => updateMetric(i, { order_type: e.target.value as "primary" | "secondary" | "tertiary" })}
-                            className={`${inputCls} w-32`}
-                          >
-                            <option value="primary">Primary</option>
-                            <option value="secondary">Secondary</option>
-                            <option value="tertiary">Tertiary</option>
-                          </select>
-                          <select
-                            value={m.measurement_period ?? "month"}
-                            onChange={(e) => updateMetric(i, { measurement_period: e.target.value })}
-                            className={`${inputCls} w-36`}
-                          >
-                            <option value="week">Weekly</option>
-                            <option value="month">Monthly</option>
-                            <option value="quarter">Quarterly</option>
-                            <option value="annual">Annually</option>
-                            <option value="none">Not time-based</option>
-                          </select>
-                        </div>
-                        <textarea
-                          value={m.expectation ?? ""}
-                          onChange={(e) => updateMetric(i, { expectation: e.target.value })}
-                          rows={2}
-                          className={inputCls}
-                          placeholder="What good looks like"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ))}
-
-            {tab === "skills" &&
-              (skills.length === 0 ? (
-                <p className="text-sm text-gray-500">No skills drafted — the manual form still works below.</p>
-              ) : (
-                skills.map((s, i) => (
-                  <div key={i} className="rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-start gap-2">
-                      <input type="checkbox" checked={s.included} onChange={(e) => updateSkill(i, { included: e.target.checked })} className="mt-1.5" />
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <input value={s.name} onChange={(e) => updateSkill(i, { name: e.target.value })} className={inputCls} />
-                        <select
-                          value={s.order_type ?? "primary"}
-                          onChange={(e) => updateSkill(i, { order_type: e.target.value as "primary" | "secondary" | "tertiary" })}
-                          className={`${inputCls} w-32`}
-                        >
-                          <option value="primary">Primary</option>
-                          <option value="secondary">Secondary</option>
-                          <option value="tertiary">Tertiary</option>
-                        </select>
-                        <textarea
-                          value={s.expectation ?? ""}
-                          onChange={(e) => updateSkill(i, { expectation: e.target.value })}
-                          rows={2}
-                          className={inputCls}
-                          placeholder="What good looks like"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ))}
-
-            {tab === "values" &&
-              (values.length === 0 ? (
-                <p className="text-sm text-gray-500">
-                  No role-specific values drafted — that&apos;s often correct (most values belong in Org-wide
-                  values instead). The manual form still works below.
-                </p>
-              ) : (
-                values.map((v, i) => (
-                  <div key={i} className="rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-start gap-2">
-                      <input type="checkbox" checked={v.included} onChange={(e) => updateValue(i, { included: e.target.checked })} className="mt-1.5" />
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <input value={v.name} onChange={(e) => updateValue(i, { name: e.target.value })} className={inputCls} />
-                        <select
-                          value={v.order_type ?? "secondary"}
-                          onChange={(e) => updateValue(i, { order_type: e.target.value as "primary" | "secondary" | "tertiary" })}
-                          className={`${inputCls} w-32`}
-                        >
-                          <option value="primary">Primary</option>
-                          <option value="secondary">Secondary</option>
-                          <option value="tertiary">Tertiary</option>
-                        </select>
-                        <textarea
-                          value={v.description ?? ""}
-                          onChange={(e) => updateValue(i, { description: e.target.value })}
-                          rows={2}
-                          className={inputCls}
-                          placeholder="What living this value looks like"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ))}
-          </div>
-        )}
+        <DraftExpectationsReview
+          metrics={metrics}
+          setMetrics={setMetrics}
+          skills={skills}
+          setSkills={setSkills}
+          values={values}
+          setValues={setValues}
+          loading={loading}
+        />
 
         <div className="mt-6 flex items-center gap-3 border-t border-gray-100 pt-4">
           <button onClick={commit} disabled={committing || loading || includedCount === 0} className={primaryBtnCls}>

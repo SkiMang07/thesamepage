@@ -149,6 +149,19 @@ _VALID_PERIODS = {"month", "week", "quarter", "annual", "none"}
 _VALID_VALUE_TYPES = {"team", "company", "department"}
 
 
+# The METRICS/SKILLS/VALUES definitions + order_type rules, hoisted out of
+# _build_draft_prompt (Session 44) so routes/roles_import.py's one-shot JD
+# prompt can carry the SAME definitions verbatim — the two draft paths have
+# to calibrate identically or a JD-imported role reads differently from one
+# drafted in the coverage grid. Interpolated below, so the prompt this
+# module builds is byte-identical to what it was before the extraction.
+_EXPECTATION_DEFINITIONS = """Definitions, matching this app's schema:
+- METRICS: a small number of measurable outcomes (numbers) this role is accountable for — e.g. "Net revenue retention", measured on a period (weekly/monthly/quarterly/annual/not time-based).
+- SKILLS: the craft/capabilities this role needs to be good at — e.g. "Running discovery calls" — judged qualitatively, not numerically.
+- VALUES: behavioral/cultural expectations — e.g. "Defaults to transparency". Prefer leaving VALUES EMPTY here unless the job description text clearly implies a role-specific behavioral bar beyond generic company values — company-wide values belong in the org-wide values list, not duplicated per role.
+- order_type for every item: "primary" (the 1-3 things that matter most), "secondary", or "tertiary". Most roles should have 2-4 primary items total across metrics+skills, not more."""
+
+
 def _format_existing_configs(configs: list[dict], name_col: str) -> str:
     if not configs:
         return "  (none configured yet)"
@@ -198,11 +211,7 @@ ROLE: {job_role}, level {job_level}
 {jd_section}
 {siblings_block}
 
-Definitions, matching this app's schema:
-- METRICS: a small number of measurable outcomes (numbers) this role is accountable for — e.g. "Net revenue retention", measured on a period (weekly/monthly/quarterly/annual/not time-based).
-- SKILLS: the craft/capabilities this role needs to be good at — e.g. "Running discovery calls" — judged qualitatively, not numerically.
-- VALUES: behavioral/cultural expectations — e.g. "Defaults to transparency". Prefer leaving VALUES EMPTY here unless the job description text clearly implies a role-specific behavioral bar beyond generic company values — company-wide values belong in the org-wide values list, not duplicated per role.
-- order_type for every item: "primary" (the 1-3 things that matter most), "secondary", or "tertiary". Most roles should have 2-4 primary items total across metrics+skills, not more.
+{_EXPECTATION_DEFINITIONS}
 
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
@@ -294,6 +303,21 @@ def _generate_and_parse_draft(prompt: str) -> ExpectationsDraft:
         parsed = json.loads(raw_clean)
     except json.JSONDecodeError:
         parsed = {}
+
+    return parse_draft_items(parsed)
+
+
+def parse_draft_items(parsed: dict) -> ExpectationsDraft:
+    """Validate + clamp an already-parsed {"metrics": [...], "skills": [...],
+    "values": [...]} object into the Draft* models. Split out of
+    _generate_and_parse_draft (Session 44) so routes/roles_import.py can run
+    the identical clamps on the `expectations` sub-object of its own, larger
+    one-shot JSON response — it makes one AI call that returns role identity
+    + match + expectations together, so it can't reuse the call-and-parse
+    wrapper above, only this validation tail. Unknown order_types /
+    measurement_periods / value_types are nulled or defaulted rather than
+    rejected: a draft is reviewed by a human before anything saves, so a
+    partially-usable draft beats a 502."""
 
     def _clean_order_type(v):
         return v if v in _VALID_ORDER_TYPES else None

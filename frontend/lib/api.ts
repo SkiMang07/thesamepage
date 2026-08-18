@@ -1170,6 +1170,61 @@ export const batchCreateExpectations = (
     body: JSON.stringify({ role_level_id: roleLevelId, items }),
   });
 
+// ---------------------------------------------------------------------------
+// Role JD import (Session 44 — see docs/ROLE_JD_IMPORT_SCOPING.md). One AI
+// call turns a pasted/uploaded job description into a role identity + a
+// match proposal against existing ladders + an expectations draft. NOTHING
+// is saved by this call: RoleImportPanel commits what the manager keeps
+// through createRoleFamily / createRoleLevel / updateRoleLevel and the
+// batchCreateExpectations calls above — no import-specific write endpoint
+// exists on purpose (the AI drafts, the client confirms via the same
+// endpoints the manual forms use).
+// ---------------------------------------------------------------------------
+
+export type RoleImportAction = "attach" | "create_new" | "exists";
+
+export type ImportedRole = {
+  job_role: string;
+  job_level: number;
+  functional_team: string | null;
+  job_responsibilities: string | null;
+};
+
+export type RoleImportMatch = {
+  suggested_action: RoleImportAction;
+  // Server-validated against the caller's own ladders before it ships — a
+  // non-null id here always resolves to a real RoleFamily.
+  role_family_id: string | null;
+  role_family_name: string | null;
+  // Set only when suggested_action is "exists" (that exact role+level is
+  // already configured) — the panel then runs in backfill mode.
+  existing_role_level_id: string | null;
+  confidence: "high" | "medium";
+  rationale: string | null;
+};
+
+export type RoleImportDraft = {
+  // false => honest refusal (not a JD). `reason` is the one line to show;
+  // role/match are null and expectations are empty.
+  is_job_description: boolean;
+  reason: string | null;
+  // Multi-role documents: v1 extracts the primary role only and says so.
+  other_roles_note: string | null;
+  role: ImportedRole | null;
+  match: RoleImportMatch | null;
+  expectations: ExpectationsDraft;
+};
+
+// Exactly one of file/text — the backend 422s on both or neither. Can throw
+// (rate limit, LibreOffice failure, AI failure); the panel keeps the pasted
+// text and shows the error rather than losing the input.
+export const draftRoleImport = (input: { file?: File; text?: string }): Promise<RoleImportDraft> => {
+  const formData = new FormData();
+  if (input.file) formData.append("file", input.file);
+  if (input.text) formData.append("text", input.text);
+  return authedFormFetch("/api/roles/import/draft", formData);
+};
+
 export const assignReportRole = (reportId: string, report: DirectReport, roleLevelId: string | null): Promise<DirectReport> =>
   authedFetch(`/api/direct-reports/${reportId}`, {
     method: "PUT",

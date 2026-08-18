@@ -111,15 +111,24 @@ def _infer_file_type(filename: str, content_type: str | None) -> str:
     )
 
 
-def _convert_pptx_to_pdf(pptx_bytes: bytes) -> bytes:
+def convert_to_pdf(raw_bytes: bytes, kind: str) -> bytes:
     """Headless LibreOffice conversion (build-plan resolution #1). Requires
     the `libreoffice` binary on PATH — see backend/nixpacks.toml. Raises a
     502 if the binary is missing or conversion fails; the caller marks the
-    document row status='failed'."""
+    document row status='failed'.
+
+    `kind` is the input's extension without the dot ("pptx", "docx") — the
+    subprocess call is identical either way, LibreOffice picks its filter
+    off the input suffix. Generalized from the old _convert_pptx_to_pdf
+    (Session 44) so routes/roles_import.py can run .docx job descriptions
+    through the same binary that was already installed for decks, instead
+    of adding a second document-conversion path (see
+    docs/ROLE_JD_IMPORT_SCOPING.md §3.1). Public (no leading underscore)
+    since it now has a caller outside this module."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
-        input_path = tmp_path / "input.pptx"
-        input_path.write_bytes(pptx_bytes)
+        input_path = tmp_path / f"input.{kind}"
+        input_path.write_bytes(raw_bytes)
         try:
             subprocess.run(
                 [
@@ -139,14 +148,14 @@ def _convert_pptx_to_pdf(pptx_bytes: bytes) -> bytes:
         except FileNotFoundError:
             raise HTTPException(
                 status_code=502,
-                detail="PPTX conversion is unavailable on this server (libreoffice not installed)",
+                detail=f"{kind.upper()} conversion is unavailable on this server (libreoffice not installed)",
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            raise HTTPException(status_code=502, detail=f"PPTX-to-PDF conversion failed: {e}")
+            raise HTTPException(status_code=502, detail=f"{kind.upper()}-to-PDF conversion failed: {e}")
 
         output_path = tmp_path / "input.pdf"
         if not output_path.exists():
-            raise HTTPException(status_code=502, detail="PPTX-to-PDF conversion produced no output file")
+            raise HTTPException(status_code=502, detail=f"{kind.upper()}-to-PDF conversion produced no output file")
         return output_path.read_bytes()
 
 
@@ -380,7 +389,7 @@ async def upload_document(
             prompt = _build_extraction_prompt(existing_series, embedded_text=embedded_text)
             raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=3000)
         else:
-            pdf_bytes = _convert_pptx_to_pdf(raw_bytes) if file_type == "pptx" else raw_bytes
+            pdf_bytes = convert_to_pdf(raw_bytes, "pptx") if file_type == "pptx" else raw_bytes
             document_b64 = base64.b64encode(pdf_bytes).decode("ascii")
             prompt = _build_extraction_prompt(existing_series)
             raw = generate_text_from_document(
