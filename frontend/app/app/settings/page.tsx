@@ -11,8 +11,9 @@
 // Deferred: evaluation weighting, scale definitions, capacity/recruitment,
 // project settings, permissions (all department-tier — see SESSION_HISTORY).
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   CapacitySettings,
   DirectReport,
@@ -61,18 +62,29 @@ import {
   updateRoleLevel,
   upsertWorkUnitConfig,
 } from "@/lib/api";
+import {
+  GroupedRoleSelect,
+  OrgUnitSelect,
+  UNGROUPED_LABEL,
+  groupRoleLevelsByFamily,
+  orgUnitLabel,
+  roleLabel,
+} from "@/components/RolePicker";
 
 // Session 41 (Plan S1, docs/TEAM_SETUP_UX_REVIEW.md §6): "Team" renamed
 // "People" and promoted to right after Profile & Company — the roster-first
 // guided flow (people → teams → roles → expectations) is now the natural
 // second stop, ahead of the role/expectations definitions it depends on.
-type SectionId = "profile" | "people" | "roles" | "expectations" | "capacity";
+// Session 42 (Plan S4+S5): "Roles & Levels" and "Expectations" merge into
+// one role-centric section, "Roles & expectations" — a manager picks a
+// ladder and sees its levels, JD, and expectations coverage together
+// instead of bouncing between two settings tabs. See §6, Plan S4+S5.
+type SectionId = "profile" | "people" | "roles" | "capacity";
 
 const SECTIONS: { id: SectionId; label: string; blurb: string }[] = [
   { id: "profile", label: "Profile & Company", blurb: "You and your company" },
   { id: "people", label: "People", blurb: "Add your team, wire up roles and teams" },
-  { id: "roles", label: "Roles & Levels", blurb: "The jobs on your team" },
-  { id: "expectations", label: "Expectations", blurb: "What good looks like" },
+  { id: "roles", label: "Roles & expectations", blurb: "The jobs on your team, and what good looks like" },
   { id: "capacity", label: "Capacity", blurb: "Baseline hours & utilization" },
 ];
 
@@ -86,9 +98,31 @@ const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 const labelCls = "mb-1 block text-xs font-medium text-gray-500";
 const primaryBtnCls = "rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50";
 
+// useSearchParams (for ?section=&unit=, the /app/org member-count
+// click-through, Session 42 Plan S4+S5) requires a Suspense boundary — same
+// pattern as app/app/reports/[id]/prep/page.tsx.
 export default function SettingsPage() {
-  const [section, setSection] = useState<SectionId>("profile");
+  return (
+    <Suspense>
+      <SettingsFlow />
+    </Suspense>
+  );
+}
+
+function SettingsFlow() {
+  const searchParams = useSearchParams();
+  const sectionParam = searchParams.get("section");
+  const unitParam = searchParams.get("unit");
+  const [section, setSection] = useState<SectionId>(
+    sectionParam === "people" || sectionParam === "roles" || sectionParam === "capacity" ? sectionParam : "profile"
+  );
   const [error, setError] = useState<string | null>(null);
+  // Set by /app/org's "N people" click-through (Session 42, Plan S4+S5) —
+  // scopes the People roster to one team/department. Cleared from within
+  // PeopleSection itself, not read again from the URL after mount, so
+  // clicking a different person or switching sections and back doesn't
+  // resurrect a stale filter.
+  const [peopleFilterUnitId, setPeopleFilterUnitId] = useState<string | null>(unitParam);
 
   // Shared data
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
@@ -121,7 +155,7 @@ export default function SettingsPage() {
 
   function goDraftExpectations(roleLevelId: string) {
     setDraftForRoleId(roleLevelId);
-    setSection("expectations");
+    setSection("roles");
   }
 
   useEffect(() => {
@@ -163,14 +197,29 @@ export default function SettingsPage() {
         <div className="min-w-0 flex-1">
           {section === "profile" && <ProfileSection onError={setError} />}
           {section === "roles" && (
-            <RolesSection
-              roleLevels={roleLevels}
-              setRoleLevels={setRoleLevels}
-              roleFamilies={roleFamilies}
-              setRoleFamilies={setRoleFamilies}
-              setReports={setReports}
-              onError={setError}
-            />
+            <div className="space-y-12">
+              <RolesSection
+                roleLevels={roleLevels}
+                setRoleLevels={setRoleLevels}
+                roleFamilies={roleFamilies}
+                setRoleFamilies={setRoleFamilies}
+                setReports={setReports}
+                onError={setError}
+              />
+              <div id="expectations-block" className="border-t border-gray-200 pt-10">
+                <ExpectationsSection
+                  roleLevels={roleLevels}
+                  roleFamilies={roleFamilies}
+                  roleLevelId={expRoleLevelId}
+                  setRoleLevelId={setExpRoleLevelId}
+                  kind={expKind}
+                  setKind={setExpKind}
+                  initialDraftRoleId={draftForRoleId}
+                  onConsumeInitialDraft={() => setDraftForRoleId(null)}
+                  onError={setError}
+                />
+              </div>
+            </div>
           )}
           {section === "people" && (
             <PeopleSection
@@ -182,22 +231,11 @@ export default function SettingsPage() {
               setRoleFamilies={setRoleFamilies}
               orgUnits={orgUnits}
               setOrgUnits={setOrgUnits}
+              filterUnitId={peopleFilterUnitId}
+              onClearFilter={() => setPeopleFilterUnitId(null)}
               onNavigateToRoles={() => setSection("roles")}
-              onNavigateToExpectations={() => setSection("expectations")}
+              onNavigateToExpectations={() => setSection("roles")}
               onDraftExpectations={goDraftExpectations}
-              onError={setError}
-            />
-          )}
-          {section === "expectations" && (
-            <ExpectationsSection
-              roleLevels={roleLevels}
-              roleFamilies={roleFamilies}
-              roleLevelId={expRoleLevelId}
-              setRoleLevelId={setExpRoleLevelId}
-              kind={expKind}
-              setKind={setExpKind}
-              initialDraftRoleId={draftForRoleId}
-              onConsumeInitialDraft={() => setDraftForRoleId(null)}
               onError={setError}
             />
           )}
@@ -301,113 +339,6 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
 // "who's in which role" + org_unit assignment moved to PeopleSection below,
 // renamed from TeamSection in Session 41)
 // ---------------------------------------------------------------------------
-
-// Session 40 (Plan S2) display convention: once a level has a family, the
-// family name takes over as the display name ("Corporate CSM · L3");
-// job_role stays as the level's optional title override, shown separately
-// wherever the ladder card itself is rendered (RolesSection), not in this
-// compact label used everywhere else (Team/Expectations/Capacity selects,
-// the coverage grid, "copy from" pickers).
-function roleLabel(rl: RoleLevel) {
-  // functional_team (free text) dropped from the label as of Session 11 —
-  // "which team" now lives on the direct report as a structured org_unit_id,
-  // shown separately in PeopleSection. The column stays in the schema, just
-  // unused here.
-  const name = rl.role_families?.name ?? rl.job_role;
-  return `${name} · L${rl.job_level}`;
-}
-
-function orgUnitLabel(ou: OrgUnit) {
-  return `${ou.unit_type === "department" ? "Department" : "Team"} · ${ou.name}`;
-}
-
-const UNGROUPED_LABEL = "Ungrouped";
-
-// Groups role_levels by family for both the ladder-card view (RolesSection)
-// and every grouped <select> elsewhere. Families with zero levels still
-// appear (the "ghost card" state) since they come from roleFamilies, not
-// from any role_level's embed. "Ungrouped" (role_family_id null, or
-// pointing at a family this org can no longer see) sorts last.
-function groupRoleLevelsByFamily(
-  roleLevels: RoleLevel[],
-  roleFamilies: RoleFamily[]
-): { family: RoleFamily | null; levels: RoleLevel[] }[] {
-  const levelsByFamilyId = new Map<string, RoleLevel[]>();
-  const ungrouped: RoleLevel[] = [];
-  for (const rl of roleLevels) {
-    if (rl.role_family_id) {
-      const bucket = levelsByFamilyId.get(rl.role_family_id) ?? [];
-      bucket.push(rl);
-      levelsByFamilyId.set(rl.role_family_id, bucket);
-    } else {
-      ungrouped.push(rl);
-    }
-  }
-  const sortByLevel = (a: RoleLevel, b: RoleLevel) => a.job_level - b.job_level;
-  const groups: { family: RoleFamily | null; levels: RoleLevel[] }[] = [...roleFamilies]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((family) => ({
-      family,
-      levels: (levelsByFamilyId.get(family.id) ?? []).sort(sortByLevel),
-    }));
-  if (ungrouped.length > 0) {
-    groups.push({ family: null, levels: ungrouped.sort(sortByLevel) });
-  }
-  return groups;
-}
-
-const CREATE_NEW_VALUE = "__create_new__";
-
-// Grouped role <select> — used by People, Expectations, and Capacity so a
-// role dropdown always reads as ~5 ladders instead of 13 flat rows.
-// onCreateNew (Session 41, Plan S1) is optional: when passed, an extra
-// "+ Create new role…" option appears at the top and selecting it calls
-// onCreateNew() instead of onChange(), so People's roster can open an
-// inline create form without touching Expectations'/Capacity's plain usage.
-function GroupedRoleSelect({
-  roleLevels,
-  roleFamilies,
-  value,
-  onChange,
-  onCreateNew,
-  className,
-  placeholder,
-}: {
-  roleLevels: RoleLevel[];
-  roleFamilies: RoleFamily[];
-  value: string;
-  onChange: (id: string) => void;
-  onCreateNew?: () => void;
-  className?: string;
-  placeholder?: string;
-}) {
-  const groups = groupRoleLevelsByFamily(roleLevels, roleFamilies).filter((g) => g.levels.length > 0);
-  return (
-    <select
-      value={value}
-      onChange={(e) => {
-        if (e.target.value === CREATE_NEW_VALUE) {
-          onCreateNew?.();
-        } else {
-          onChange(e.target.value);
-        }
-      }}
-      className={className}
-    >
-      {placeholder !== undefined && <option value="">{placeholder}</option>}
-      {onCreateNew && <option value={CREATE_NEW_VALUE}>+ Create new role…</option>}
-      {groups.map((g) => (
-        <optgroup key={g.family?.id ?? "ungrouped"} label={g.family?.name ?? UNGROUPED_LABEL}>
-          {g.levels.map((rl) => (
-            <option key={rl.id} value={rl.id}>
-              {roleLabel(rl)}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  );
-}
 
 type RoleFormValues = {
   jobRole: string;
@@ -1047,42 +978,6 @@ function SetupProgressHeader({
   );
 }
 
-// Small "+ Create new team…" select — org units aren't grouped by family
-// like roles, just department-then-team ordered (matches orgUnits' own
-// fetch order), so this stays a flat <select> with the same
-// CREATE_NEW_VALUE-sentinel trick GroupedRoleSelect uses.
-function OrgUnitSelect({
-  orgUnits,
-  value,
-  onChange,
-  onCreateNew,
-  className,
-}: {
-  orgUnits: OrgUnit[];
-  value: string;
-  onChange: (id: string) => void;
-  onCreateNew: () => void;
-  className?: string;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => {
-        if (e.target.value === CREATE_NEW_VALUE) onCreateNew();
-        else onChange(e.target.value);
-      }}
-      className={className}
-    >
-      <option value="">No team assigned</option>
-      <option value={CREATE_NEW_VALUE}>+ Create new team…</option>
-      {orgUnits.map((ou) => (
-        <option key={ou.id} value={ou.id}>
-          {orgUnitLabel(ou)}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 // Inline create-role modal — mirrors RolesSection's "+ Add a new ladder"
 // mechanic (create a role_family + its L1 level together) so a role created
@@ -1119,7 +1014,7 @@ function CreateRoleModal({
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-medium text-gray-900">Create a new role</h3>
         <p className="mt-1 text-xs text-gray-500">
-          Starts a new ladder at L1 — add more levels later from Roles &amp; Levels.
+          Starts a new ladder at L1 — add more levels later from Roles &amp; expectations.
         </p>
         <input
           autoFocus
@@ -1242,6 +1137,8 @@ function PeopleSection({
   setRoleFamilies,
   orgUnits,
   setOrgUnits,
+  filterUnitId,
+  onClearFilter,
   onNavigateToRoles,
   onNavigateToExpectations,
   onDraftExpectations,
@@ -1255,6 +1152,10 @@ function PeopleSection({
   setRoleFamilies: React.Dispatch<React.SetStateAction<RoleFamily[]>>;
   orgUnits: OrgUnit[];
   setOrgUnits: React.Dispatch<React.SetStateAction<OrgUnit[]>>;
+  // /app/org's "N people" click-through (Session 42, Plan S4+S5) — non-null
+  // scopes the roster below to one org unit; null shows everyone.
+  filterUnitId: string | null;
+  onClearFilter: () => void;
   onNavigateToRoles: () => void;
   onNavigateToExpectations: () => void;
   onDraftExpectations: (roleLevelId: string) => void;
@@ -1355,8 +1256,16 @@ function PeopleSection({
       }
     } else if (id === "expectations") {
       onNavigateToExpectations();
+      // The merged Roles & expectations section (Session 42, Plan S4+S5)
+      // renders both halves stacked on one tab — scroll straight to the
+      // expectations half instead of leaving the manager at the top of the
+      // ladder cards.
+      setTimeout(() => document.getElementById("expectations-block")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     }
   }
+
+  const visibleReports = filterUnitId ? reports.filter((r) => r.org_unit_id === filterUnitId) : reports;
+  const filterUnitName = filterUnitId ? orgUnits.find((u) => u.id === filterUnitId)?.name : null;
 
   return (
     <div>
@@ -1366,15 +1275,26 @@ function PeopleSection({
         yet. Expectations follow the role automatically. Editing levels within a ladder, or merging near-duplicate roles,
         still happens in{" "}
         <button onClick={onNavigateToRoles} className="underline">
-          Roles &amp; Levels
+          Roles &amp; expectations
         </button>
         .
       </p>
 
       <SetupProgressHeader status={setupStatus} onStep={handleStep} />
 
+      {filterUnitId && (
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm">
+          <span className="text-gray-600">
+            Showing people in <span className="font-medium text-gray-900">{filterUnitName ?? "this unit"}</span>
+          </span>
+          <button onClick={onClearFilter} className="text-gray-500 underline hover:text-gray-700">
+            Clear filter
+          </button>
+        </div>
+      )}
+
       <ul className="mt-6 space-y-2">
-        {reports.map((r) => {
+        {visibleReports.map((r) => {
           const person = peopleById.get(r.id);
           return (
             <li
@@ -1412,6 +1332,15 @@ function PeopleSection({
             </li>
           );
         })}
+        {visibleReports.length === 0 && reports.length > 0 && (
+          <p className="py-2 text-sm text-gray-500">
+            No one in {filterUnitName ?? "this unit"} yet.{" "}
+            <button onClick={onClearFilter} className="underline hover:text-gray-700">
+              Show everyone
+            </button>
+            .
+          </p>
+        )}
         {reports.length === 0 && (
           <p className="py-2 text-sm text-gray-500">No direct reports yet — add your first one below.</p>
         )}
@@ -1538,8 +1467,7 @@ function ExpectationsSection({
   if (roleLevels.length === 0) {
     return (
       <p className="text-sm text-gray-500">
-        Expectations attach to a role — set up your first role in{" "}
-        <span className="font-medium text-gray-700">Roles &amp; Levels</span> and come back here.
+        Expectations attach to a role — add your first role above, then come back here.
       </p>
     );
   }
@@ -2500,7 +2428,7 @@ function CapacitySection({
       {roleLevels.length === 0 ? (
         <p className="mt-4 text-sm text-gray-500">
           Work units attach to a role — set up your first role in{" "}
-          <span className="font-medium text-gray-700">Roles &amp; Levels</span> and come back here.
+          <span className="font-medium text-gray-700">Roles &amp; expectations</span> and come back here.
         </p>
       ) : (
         <>

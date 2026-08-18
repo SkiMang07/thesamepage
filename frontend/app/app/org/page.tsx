@@ -26,6 +26,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  DirectReport,
   GoalsRollupItem,
   OrgMember,
   OrgUnit,
@@ -34,6 +35,7 @@ import {
   ProjectsRollupItem,
   createOrgUnit,
   deleteOrgUnit,
+  getDirectReports,
   getGoalsRollup,
   getLedOrgUnits,
   getOrgMembers,
@@ -102,19 +104,32 @@ export default function OrgPage() {
   // add-child form nested under that node; null = no add-form open.
   const [addParentId, setAddParentId] = useState<string | "root" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Member counts per unit (Session 42, Plan S4+S5) — a cheap client-side
+  // join against direct_reports.org_unit_id rather than a new backend
+  // endpoint, since getDirectReports() already carries it (manager-scoped,
+  // same source People/the direct-report page use).
+  const [directReports, setDirectReports] = useState<DirectReport[]>([]);
 
   useEffect(() => {
-    Promise.all([getOrgUnits(), getProfile(), getOrgMembers()])
-      .then(([u, p, m]) => {
+    Promise.all([getOrgUnits(), getProfile(), getOrgMembers(), getDirectReports()])
+      .then(([u, p, m, drs]) => {
         setUnits(u);
         setCompanyName(p.company_name || "Your company");
         setMembers(m);
+        setDirectReports(drs);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   const tree = useMemo(() => buildTree(units), [units]);
+  const memberCountByUnit = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const dr of directReports) {
+      if (dr.org_unit_id) counts.set(dr.org_unit_id, (counts.get(dr.org_unit_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [directReports]);
 
   async function addUnit(input: UnitInput) {
     try {
@@ -156,7 +171,7 @@ export default function OrgPage() {
     <main className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="text-2xl font-semibold">Org</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Departments and teams, and how they connect under {companyName}.
+        Your teams and departments — the structure everything rolls up through.
       </p>
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
@@ -226,6 +241,7 @@ export default function OrgPage() {
                   depth={0}
                   units={units}
                   members={members}
+                  memberCountByUnit={memberCountByUnit}
                   companyName={companyName}
                   editingId={editingId}
                   addParentId={addParentId}
@@ -257,6 +273,7 @@ function TreeNode({
   depth,
   units,
   members,
+  memberCountByUnit,
   companyName,
   editingId,
   addParentId,
@@ -272,6 +289,7 @@ function TreeNode({
   depth: number;
   units: OrgUnit[];
   members: OrgMember[];
+  memberCountByUnit: Map<string, number>;
   companyName: string;
   editingId: string | null;
   addParentId: string | "root" | null;
@@ -286,6 +304,9 @@ function TreeNode({
   const isEditing = editingId === node.id;
   const isAddingChild = addParentId === node.id;
   const leader = memberName(node.leader_user_id, members);
+  // Member count (Session 42, Plan S4+S5) — click through to People,
+  // pre-filtered to this unit, rather than a plain count with no next step.
+  const memberCount = memberCountByUnit.get(node.id) ?? 0;
 
   return (
     <li style={{ marginLeft: depth * 24 }}>
@@ -307,6 +328,14 @@ function TreeNode({
               {TYPE_LABEL[node.unit_type]}
             </span>
             {leader && <span className="ml-2 text-xs font-normal text-gray-400">Led by {leader}</span>}
+            {memberCount > 0 && (
+              <Link
+                href={`/app/settings?section=people&unit=${node.id}`}
+                className="ml-2 text-xs font-normal text-gray-400 hover:text-gray-700 hover:underline"
+              >
+                {memberCount} {memberCount === 1 ? "person" : "people"}
+              </Link>
+            )}
           </p>
           <div className="flex shrink-0 items-center gap-3">
             <button onClick={() => onStartAddChild(node.id)} className="text-xs text-gray-400 hover:text-gray-700">
@@ -344,6 +373,7 @@ function TreeNode({
               depth={depth + 1}
               units={units}
               members={members}
+              memberCountByUnit={memberCountByUnit}
               companyName={companyName}
               editingId={editingId}
               addParentId={addParentId}

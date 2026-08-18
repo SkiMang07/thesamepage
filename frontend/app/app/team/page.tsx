@@ -46,7 +46,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { averageProgress } from "@/components/CheckInPanel";
 import {
+  DirectReport,
+  OrgUnit,
   Project,
+  RoleFamily,
+  RoleLevel,
+  SetupStatus,
   TeamCallout,
   TeamCommitment,
   TeamGoal,
@@ -55,7 +60,12 @@ import {
   TeamNote,
   createTeamCommitment,
   createTeamNote,
+  getDirectReports,
+  getOrgUnits,
   getProjects,
+  getRoleFamilies,
+  getRoleLevels,
+  getSetupStatus,
   getTeam,
   getTeamCallout,
   getTeamCommitments,
@@ -67,6 +77,7 @@ import {
   updateCommitment,
   updateTeamCallout,
 } from "@/lib/api";
+import { roleLabel } from "@/components/RolePicker";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
@@ -217,6 +228,18 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Setup-status visibility on the roster cards (Session 42, Plan S4+S5) —
+  // role · team chip + amber "no role" badge. TeamMember (from getTeam())
+  // only carries the legacy role_title, so role_level_id/org_unit_id come
+  // from getDirectReports() and get joined client-side by person id; names
+  // resolve against getRoleLevels()/getRoleFamilies()/getOrgUnits(). Reuses
+  // getSetupStatus() for the has_role flag rather than recomputing it here.
+  const [directReports, setDirectReports] = useState<DirectReport[]>([]);
+  const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
+  const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+
   useEffect(() => {
     Promise.all([
       getTeam(),
@@ -225,14 +248,24 @@ export default function TeamPage() {
       getTeamCommitments(),
       getProjects(),
       getTeamCallout(),
+      getDirectReports(),
+      getRoleLevels(),
+      getRoleFamilies(),
+      getOrgUnits(),
+      getSetupStatus(),
     ])
-      .then(([m, g, n, c, p, calloutRow]) => {
+      .then(([m, g, n, c, p, calloutRow, drs, rls, rfs, ous, status]) => {
         setMembers(m);
         setGoals(g);
         setNotes(n);
         setCommitments(c);
         setInitiatives(p.filter((proj) => ACTIVE_STATUSES.has(proj.status)));
         setCallout(calloutRow);
+        setDirectReports(drs);
+        setRoleLevels(rls);
+        setRoleFamilies(rfs);
+        setOrgUnits(ous);
+        setSetupStatus(status);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -279,7 +312,15 @@ export default function TeamPage() {
             </div>
           </div>
 
-          <RosterRow members={members} setMembers={setMembers} />
+          <RosterRow
+            members={members}
+            setMembers={setMembers}
+            directReports={directReports}
+            roleLevels={roleLevels}
+            roleFamilies={roleFamilies}
+            orgUnits={orgUnits}
+            setupStatus={setupStatus}
+          />
         </div>
       )}
     </main>
@@ -898,9 +939,19 @@ function MeetingsPanel({
 function RosterRow({
   members,
   setMembers,
+  directReports,
+  roleLevels,
+  roleFamilies,
+  orgUnits,
+  setupStatus,
 }: {
   members: TeamMember[];
   setMembers: React.Dispatch<React.SetStateAction<TeamMember[]>>;
+  directReports: DirectReport[];
+  roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
+  orgUnits: OrgUnit[];
+  setupStatus: SetupStatus | null;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -909,6 +960,10 @@ function RosterRow({
   }
 
   const expanded = members.find((m) => m.id === expandedId) ?? null;
+  const directReportById = new Map(directReports.map((dr) => [dr.id, dr]));
+  const roleLevelById = new Map(roleLevels.map((rl) => [rl.id, rl]));
+  const orgUnitById = new Map(orgUnits.map((ou) => [ou.id, ou]));
+  const setupPersonById = new Map((setupStatus?.people ?? []).map((p) => [p.id, p]));
 
   return (
     <div>
@@ -924,28 +979,48 @@ function RosterRow({
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {members.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => toggleExpand(m.id)}
-              className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left hover:border-gray-300 ${
-                expandedId === m.id ? "border-gray-900" : "border-gray-200"
-              }`}
-            >
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(
-                  m.id,
-                  members
-                )}`}
+          {members.map((m) => {
+            // has_role (Session 3's setup-status) is the source of truth for
+            // the amber badge — never recomputed locally. When it's true,
+            // resolve the role/team labels client-side for the chip text
+            // (roleLabel/orgUnitLabel formatting, same as Settings and the
+            // direct-report page).
+            const setupPerson = setupPersonById.get(m.id);
+            const hasRole = setupPerson?.has_role ?? false;
+            const dr = directReportById.get(m.id);
+            const rl = dr?.role_level_id ? roleLevelById.get(dr.role_level_id) : undefined;
+            const ou = dr?.org_unit_id ? orgUnitById.get(dr.org_unit_id) : undefined;
+            const chipText = rl ? `${roleLabel(rl)}${ou ? ` · ${ou.name}` : ""}` : null;
+
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleExpand(m.id)}
+                className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left hover:border-gray-300 ${
+                  expandedId === m.id ? "border-gray-900" : "border-gray-200"
+                }`}
               >
-                {initials(m.name)}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-gray-900">{m.name}</p>
-                {m.role_title && <p className="truncate text-xs text-gray-500">{m.role_title}</p>}
-              </div>
-            </button>
-          ))}
+                <div
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(
+                    m.id,
+                    members
+                  )}`}
+                >
+                  {initials(m.name)}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-900">{m.name}</p>
+                  {hasRole ? (
+                    chipText && <p className="truncate text-xs text-gray-500">{chipText}</p>
+                  ) : (
+                    <span className="mt-0.5 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                      No role
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 

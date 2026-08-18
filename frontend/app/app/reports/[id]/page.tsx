@@ -22,6 +22,9 @@ import {
   getScorecard,
   getProfile,
   assignReportCadence,
+  assignReportRole,
+  getRoleFamilies,
+  getRoleLevels,
   DirectReport,
   OneOnOne,
   Commitment,
@@ -33,7 +36,10 @@ import {
   TimeOffEntry,
   TimeOffType,
   Scorecard,
+  RoleFamily,
+  RoleLevel,
 } from "@/lib/api";
+import { GroupedRoleSelect } from "@/components/RolePicker";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
@@ -136,6 +142,14 @@ export default function ReportDetailPage() {
   const [savingCadence, setSavingCadence] = useState(false);
   const [cadenceSaved, setCadenceSaved] = useState(false);
 
+  // Inline "assign a role" picker (Session 42, Plan S4+S5) — the
+  // Expectations block below always renders now, even before a role is
+  // assigned, so a manager can wire this person up without leaving the
+  // page. See docs/TEAM_SETUP_UX_REVIEW.md §6.
+  const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
+  const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
+  const [assigningRole, setAssigningRole] = useState(false);
+
   // Clear page context when leaving this page so it doesn't bleed into
   // other pages that don't know which report was being viewed.
   useEffect(() => {
@@ -154,8 +168,10 @@ export default function ReportDetailPage() {
       getTimeOff(id),
       getScorecard(id),
       getProfile(),
+      getRoleLevels(),
+      getRoleFamilies(),
     ])
-      .then(([dr, h, c, g, p, cp, cs, to, sc, prof]) => {
+      .then(([dr, h, c, g, p, cp, cs, to, sc, prof, rls, rfs]) => {
         setReport(dr);
         setPageContext(`${dr.name}'s direct report page`);
         setHistory(h);
@@ -170,10 +186,33 @@ export default function ReportDetailPage() {
         setScorecard(sc);
         setOrgCadenceDays(prof.one_on_one_cadence_days);
         setCadenceDays(dr.one_on_one_cadence_days != null ? String(dr.one_on_one_cadence_days) : "");
+        setRoleLevels(rls);
+        setRoleFamilies(rfs);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Assigns a role right from this page (Session 42, Plan S4+S5) — preserves
+  // org_unit_id/cadence via assignReportRole, same invariant PeopleSection's
+  // picker relies on. The PUT response doesn't carry `expectations` (only
+  // GET /direct-reports/{id} attaches it — see backend/routes/
+  // direct_reports.py), so re-fetch the full report afterward instead of
+  // hand-assembling the expectations block from roleLevels alone.
+  async function assignRole(roleLevelId: string) {
+    if (!report || assigningRole) return;
+    setAssigningRole(true);
+    try {
+      await assignReportRole(report.id, report, roleLevelId || null);
+      const fresh = await getDirectReport(report.id);
+      setReport(fresh);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to assign role");
+    } finally {
+      setAssigningRole(false);
+    }
+  }
 
   async function saveCadence(e: React.FormEvent) {
     e.preventDefault();
@@ -313,37 +352,66 @@ export default function ReportDetailPage() {
         </div>
       )}
 
-      {/* Role expectations — only when a role is assigned in Settings */}
-      {report.expectations && (
-        <div className="mt-10">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
-            Expectations
-          </h2>
-          <p className="mt-2 text-gray-700">
-            {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
-            {report.expectations.role_level.functional_team &&
-              ` · ${report.expectations.role_level.functional_team}`}
-          </p>
-          {report.expectations.metrics.length +
-            report.expectations.skills.length +
-            report.expectations.values.length ===
-          0 ? (
-            <p className="mt-3 text-gray-500">
-              No expectations configured for this role yet.{" "}
-              <Link href="/app/settings" className="underline hover:text-gray-700">
-                Add them in Settings
+      {/* Expectations — always renders now (Session 42, Plan S4+S5), even
+          before a role is assigned, so half-set-up state is visible right
+          here instead of the section just being absent. See
+          docs/TEAM_SETUP_UX_REVIEW.md §6, F6. */}
+      <div className="mt-10">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+          Expectations
+        </h2>
+        {report.expectations ? (
+          <>
+            <p className="mt-2 text-gray-700">
+              {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
+              {report.expectations.role_level.functional_team &&
+                ` · ${report.expectations.role_level.functional_team}`}
+            </p>
+            {report.expectations.metrics.length +
+              report.expectations.skills.length +
+              report.expectations.values.length ===
+            0 ? (
+              <p className="mt-3 text-gray-500">
+                No expectations configured for this role yet.{" "}
+                <Link href="/app/settings?section=roles" className="underline hover:text-gray-700">
+                  Add them in Settings
+                </Link>
+                .
+              </p>
+            ) : (
+              <>
+                <ExpectationGroup label="Metrics" items={report.expectations.metrics} />
+                <ExpectationGroup label="Skills" items={report.expectations.skills} />
+                <ExpectationGroup label="Values" items={report.expectations.values} />
+              </>
+            )}
+          </>
+        ) : (
+          <div className="mt-3">
+            <p className="text-amber-700">No role assigned.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <GroupedRoleSelect
+                roleLevels={roleLevels}
+                roleFamilies={roleFamilies}
+                value=""
+                onChange={assignRole}
+                className="w-64 rounded-md border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+                placeholder={assigningRole ? "Assigning..." : "Assign a role…"}
+              />
+              {report.role_title && (
+                <span className="text-xs text-gray-400">was: &quot;{report.role_title}&quot;</span>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-gray-400">
+              Expectations follow the role automatically once assigned. Manage roles and their expectations in{" "}
+              <Link href="/app/settings?section=roles" className="underline hover:text-gray-700">
+                Settings
               </Link>
               .
             </p>
-          ) : (
-            <>
-              <ExpectationGroup label="Metrics" items={report.expectations.metrics} />
-              <ExpectationGroup label="Skills" items={report.expectations.skills} />
-              <ExpectationGroup label="Values" items={report.expectations.values} />
-            </>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* Assessment — read-only summary; scoring happens on the dedicated
           scorecard page (Session 16). Always shown, same pattern as
@@ -369,7 +437,7 @@ export default function ReportDetailPage() {
           <p className="mt-3 text-gray-500">
             Not yet assessed.{" "}
             <Link href={`/app/assessments/${id}`} className="underline hover:text-gray-700">
-              Score them against their role&apos;s expectations
+              {report.expectations ? "Score them against their role's expectations" : "Assess them"}
             </Link>
             , or let AI draft a first pass from recent 1:1 notes.
           </p>
