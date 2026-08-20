@@ -176,10 +176,13 @@ team_messages        -- new Session 21; free-text update log per direct report, 
 direct_report_invites -- new Session 22; one-time magic-link invite token per direct report, manager-
                         scoped, 7-day TTL. Claimed via accept_direct_report_invite() (SECURITY DEFINER)
 team_meeting_notes   -- new Session 22; standalone team-wide meeting-notes log, manager-scoped, no
-                        attendee tagging — separate from one_on_ones and team_messages
-team_callouts        -- new Session 24; ONE manager-authored text block per manager (unique on
-                        manager_id), overwritten in place on every edit — not a dated log like
-                        team_meeting_notes. "Key updates" revived, deliberately small
+                        attendee tagging — separate from one_on_ones and team_messages. Session 45:
+                        gained org_unit_id (nullable, ON DELETE SET NULL) — null means "all teams"
+team_callouts        -- new Session 24; ONE manager-authored text block per manager, overwritten in
+                        place on every edit — not a dated log like team_meeting_notes. "Key updates"
+                        revived, deliberately small. Session 45: now one row per (manager, org_unit)
+                        pair via org_unit_id (ON DELETE CASCADE, not SET NULL — see below), replacing
+                        the old plain `unique` on manager_id with two partial unique indexes
 subscriptions        -- Stripe billing
 ```
 
@@ -717,6 +720,56 @@ verification, not just this table). Ran the *entire* `schema.sql` end to end wit
 functionally tested `team_callouts`: upsert-create, upsert-edit in place (confirmed one row, not a
 duplicate), a second manager saw zero rows under RLS, and a second manager's attempted `UPDATE` against
 the first manager's row affected zero rows and did not mutate it.
+
+---
+
+## Team dropdown scoping (Session 45, 2026-08-19)
+
+Andrew flagged that a manager/director leading more than one `org_units` team had no way to tell,
+on `/app/team`, which team they were looking at — the page always showed every direct report
+combined with no label. Scoped via one AskUserQuestion round (all his recommended defaults), then
+built same session — see the team_dropdown_scoping project memory note.
+
+**Dropdown source:** `org_units` where `leader_user_id` = the caller (`GET /api/org-units/led`,
+already existed from Session 15's role-scoped views) — no new "which team am I a member of" concept.
+"All teams" is the default, matching today's combined view exactly.
+
+**Filtering is mostly free.** Roster, initiatives, goals, and commitments all already carried enough
+`org_unit_id` signal to filter client-side with zero backend change: roster/initiatives/commitments
+key off `direct_report_id` → `direct_reports.org_unit_id`, goals already carry `org_unit_id`
+directly. Only `team_meeting_notes` and `team_callouts` had no per-team signal at all, so those two
+gained a real `org_unit_id` column (`database/migrations/2026-08-19_team_dropdown_scoping.sql`, not
+yet run live). Null `org_unit_id` on a note/callout/goal means "applies to all teams" — shown under
+every specific team's filter, not just "All teams."
+
+**Gotcha for future schema changes:** `team_callouts.org_unit_id` uses `ON DELETE CASCADE`, not
+`ON DELETE SET NULL` like `team_meeting_notes` — a deliberate, verified-not-assumed difference. A
+plain `UNIQUE(manager_id, org_unit_id)` doesn't stop duplicate "all teams" rows (Postgres treats
+every NULL as distinct), so uniqueness is two partial unique indexes instead
+(`team_callouts_manager_unit_uq` / `team_callouts_manager_all_teams_uq`, see schema.sql). With
+`SET NULL`, deleting an org_unit that has both a team-specific callout AND a manager already holding
+a separate all-teams callout tries to write a second null-`org_unit_id` row and the whole
+`DELETE FROM org_units` fails outright — reproduced against a real local Postgres instance before
+switching to CASCADE and reproducing the fix. Anywhere else a table gets an `org_unit_id` column
+alongside a per-(owner, org_unit) uniqueness rule, check this same interaction before defaulting to
+`SET NULL`.
+
+`GET /api/team/callout` changed shape because of this: it now returns every callout row for the
+caller (a list — one per led team that's ever had one, plus at most one all-teams row) instead of a
+single object, so the frontend can switch teams without a round trip. `PUT` does a manual
+look-up-then-write keyed on `(manager_id, org_unit_id)` instead of supabase's `upsert()`, since
+`on_conflict=` can't express "conflict on org_unit_id equality including null=null."
+
+**Verification:** cloned the pushed GitHub repo (commit `bbd65c0`) into a scratch sandbox. Backend —
+fresh venv, `main` import with dummy Supabase env vars confirmed all team.py routes register,
+`py_compile` clean. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean (all 21
+routes, `/app/team` at 8.79 kB). Schema — the repo's checked-in `database/local_verify_stub.sql`
+stood up a local Postgres 16, ran the full `schema.sql` + new migration end to end with zero errors,
+then functionally tested as two managers: inserted notes/callouts across two led teams + an
+all-teams row, confirmed both partial unique indexes reject duplicates, confirmed RLS isolation
+(second manager sees 0 rows, an UPDATE against the first manager's row affects 0 rows), and
+specifically exercised the org_unit-delete edge case above — reproduced the SET NULL failure, then
+reproduced the CASCADE fix working — rather than just reasoning about the FK behavior.
 
 ---
 
@@ -1285,6 +1338,9 @@ backend/
                           Session 37/38 bug fix: get_team_goals() now calls check_ins.py's
                           enrich_with_check_ins() (previously never called it) — the KPI tile and
                           progress ring were reading a different, wrong signal than Mission Control
+                          Session 45: notes/callouts gain org_unit_id (team dropdown scoping);
+                          GET /callout now returns a list (one row per led team + all-teams), PUT
+                          does a manual find-then-write instead of upsert()
     documents.py           /api/documents — POST /upload (Context Engine Session II, Session 28):
                           PPTX/PDF/text upload → LibreOffice PPTX→PDF → Storage → Librarian extraction
                           call → pending_review row. GET "" list for manual verification only.
@@ -1311,6 +1367,8 @@ frontend/
     app/team/            Team Mission Control — KPI strip, Initiatives/Goals/Commitments row, Critical
                           callouts + Meetings row, roster row at bottom (Session 21; 3-column rework
                           Session 22; layout rework Session 24)
+                          Session 45: header gains a team-name + dropdown (leader's led org_units,
+                          "All teams" default) that filters every section on the page
     app/context/         The Space (Context Engine Session III, Session 28) — upload form, inline
                           confirm-card queue (ConfirmCard component in-file), failed-upload discard
                           section, recently-confirmed feedback list. Added to Mission Control's NAV_LINKS.

@@ -66,6 +66,28 @@ history, no per-line CRUD — the frontend just splits on newlines to render
 bullets. See the team_page_redesign_options project memory note for the
 scoping conversation (Andrew confirmed this shape via the mockup before it
 was built).
+
+Session 45 (2026-08-19) — team dropdown (see the team_dropdown_scoping
+project memory note). A manager/director who leads more than one org_unit
+had no way to tell, on /app/team, which of their teams they were looking
+at — the roster was always every direct report at once. The fix is mostly
+client-side: roster/initiatives/goals/commitments already carry enough
+org_unit_id signal (via direct_reports.org_unit_id / goals.org_unit_id) for
+the frontend to filter by the selected team without any backend change.
+Meeting notes and callouts had no per-team signal at all, so those two
+gained an org_unit_id column (null = "applies to all teams", shown under
+every team's filter, same treatment as a company-level goal):
+  - GET/POST /notes now carry org_unit_id as-is; still returns every note
+    unfiltered (like before) — the frontend derives which ones apply to the
+    selected team.
+  - GET /callout changed shape: it now returns EVERY callout row for this
+    manager (one per led team, plus at most one org_unit_id-null "all
+    teams" row) instead of a single object, so the frontend can pick the
+    row for whichever team is selected without a round trip per switch.
+    PUT /callout takes org_unit_id in the body to say which row to
+    upsert; since a plain DB-level ON CONFLICT doesn't handle the
+    org_unit_id-null case cleanly (see schema.sql's team_callouts comment),
+    this does a manual look-up-then-write instead of supabase's upsert().
 """
 from datetime import datetime, timezone
 
@@ -101,6 +123,8 @@ class TeamNoteIn(BaseModel):
     # the agenda for an upcoming meeting; omitted/null for a same-day log of
     # a meeting that already happened. See list_team_notes' docstring.
     meeting_date: str | None = None
+    # Which led team this note is for (Session 45) — null means "all teams".
+    org_unit_id: str | None = None
 
 
 class TeamCommitmentIn(BaseModel):
@@ -111,6 +135,10 @@ class TeamCommitmentIn(BaseModel):
 
 class TeamCalloutIn(BaseModel):
     message: str
+    # Which led team this callout is for (Session 45) — null means "all
+    # teams". Identifies which row GET/PUT /callout act on now that a
+    # manager can have more than one.
+    org_unit_id: str | None = None
 
 
 @router.get("")
@@ -276,7 +304,7 @@ async def list_team_notes(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     rows = (
         supabase.table("team_meeting_notes")
-        .select("id,note,meeting_date,created_at")
+        .select("id,note,meeting_date,org_unit_id,created_at")
         .eq("manager_id", user_id)
         .order("created_at", desc=True)
         .execute()
@@ -291,7 +319,7 @@ async def create_team_note(body: TeamNoteIn, auth=Depends(get_authenticated_clie
     note = body.note.strip()
     if not note:
         raise HTTPException(status_code=422, detail="Note cannot be empty")
-    payload = {"manager_id": user_id, "note": note}
+    payload = {"manager_id": user_id, "note": note, "org_unit_id": body.org_unit_id}
     if body.meeting_date:
         payload["meeting_date"] = body.meeting_date
     result = (
@@ -371,41 +399,55 @@ async def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authen
 
 @router.get("/callout")
 async def get_team_callout(auth=Depends(get_authenticated_client)):
-    """The single "critical callouts" block for this manager — see this
-    module's Session 24 docstring note. No row yet reads as an empty
-    callout, not a 404, so the frontend doesn't need a special first-load
-    case."""
+    """Every "critical callouts" row for this manager (Session 45) — one per
+    led team that's ever had a callout saved, plus at most one
+    org_unit_id-null "all teams" row. Used to be a single object; now a list
+    so the frontend can switch teams without a round trip. An empty list is
+    a normal, expected first-load state (no callout for any scope yet), not
+    an error."""
     user_id, supabase = auth
-    rows = (
+    return (
         supabase.table("team_callouts")
-        .select("message,updated_at")
+        .select("message,updated_at,org_unit_id")
         .eq("manager_id", user_id)
         .execute()
         .data
     )
-    if not rows:
-        return {"message": "", "updated_at": None}
-    return rows[0]
 
 
 @router.put("/callout")
 async def update_team_callout(body: TeamCalloutIn, auth=Depends(get_authenticated_client)):
-    """Upserts the manager's one callout row (unique on manager_id) — this is
-    a pinned block that gets overwritten, not a log, so there's no create
-    vs. update distinction for the caller. Empty string is a valid message
-    (clearing the panel), so no emptiness check here unlike the other
-    team.py POST endpoints."""
+    """Upserts the callout row for (manager, org_unit_id) — this is a pinned
+    block that gets overwritten, not a log, so there's no create vs. update
+    distinction for the caller. Empty string is a valid message (clearing
+    the panel), so no emptiness check here unlike the other team.py POST
+    endpoints.
+
+    Session 45: manual look-up-then-write instead of supabase's upsert().
+    team_callouts' uniqueness is now two partial indexes (see schema.sql)
+    because a plain UNIQUE(manager_id, org_unit_id) constraint treats every
+    NULL org_unit_id as distinct — supabase-py's on_conflict= only targets a
+    single named constraint/column list, which can't express "conflict on
+    org_unit_id equality, including when both sides are null.\""""
     user_id, supabase = auth
-    result = (
-        supabase.table("team_callouts")
-        .upsert(
-            {
-                "manager_id": user_id,
-                "message": body.message.strip(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-            on_conflict="manager_id",
+    query = supabase.table("team_callouts").select("id").eq("manager_id", user_id)
+    query = query.is_("org_unit_id", "null") if body.org_unit_id is None else query.eq("org_unit_id", body.org_unit_id)
+    existing = query.execute().data
+
+    payload = {
+        "manager_id": user_id,
+        "org_unit_id": body.org_unit_id,
+        "message": body.message.strip(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if existing:
+        result = (
+            supabase.table("team_callouts")
+            .update(payload)
+            .eq("id", existing[0]["id"])
+            .execute()
         )
-        .execute()
-    )
+    else:
+        result = supabase.table("team_callouts").insert(payload).execute()
     return result.data[0]

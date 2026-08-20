@@ -41,6 +41,20 @@
 // see direct_report_invites). Visual style leans more colorful/engaging
 // than the rest of the app on purpose, Andrew's explicit call over the
 // safer close-to-today option.
+//
+// Session 45 (2026-08-19) — team dropdown. A manager/director who leads more
+// than one org_unit had no way to tell which team they were looking at; the
+// page always showed every direct report combined. Now the header carries a
+// team-name + dropdown (options = getLedOrgUnits(), plus "All teams" as the
+// default, matching today's combined view). Selecting a team filters
+// everything on the page: roster, initiatives, goals, commitments, meeting
+// notes, and callouts. Roster/initiatives/goals/commitments filter
+// client-side off data that already exists (direct_reports.org_unit_id /
+// goals.org_unit_id — no backend change); meeting notes and callouts gained
+// a real org_unit_id column since neither had any per-team signal before
+// (null = "applies to all teams", same treatment as a company-level goal).
+// See the team_dropdown_scoping project memory note for the scoping
+// conversation.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -61,6 +75,7 @@ import {
   createTeamCommitment,
   createTeamNote,
   getDirectReports,
+  getLedOrgUnits,
   getOrgUnits,
   getProjects,
   getRoleFamilies,
@@ -224,7 +239,11 @@ export default function TeamPage() {
   const [notes, setNotes] = useState<TeamNote[]>([]);
   const [commitments, setCommitments] = useState<TeamCommitment[]>([]);
   const [initiatives, setInitiatives] = useState<Project[]>([]);
-  const [callout, setCallout] = useState<TeamCallout>({ message: "", updated_at: null });
+  // Session 45: every callout row for this manager (one per led team that's
+  // ever had one saved, plus at most one org_unit_id-null "all teams" row) —
+  // see lib/api.ts's TeamCallout comment. The row shown/edited is derived
+  // below from selectedTeamId, not stored separately.
+  const [callouts, setCallouts] = useState<TeamCallout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -240,6 +259,11 @@ export default function TeamPage() {
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
 
+  // Session 45: which led org_unit is selected. null = "All teams" (today's
+  // combined view, and the default) — see this file's header comment.
+  const [ledOrgUnits, setLedOrgUnits] = useState<OrgUnit[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       getTeam(),
@@ -253,27 +277,103 @@ export default function TeamPage() {
       getRoleFamilies(),
       getOrgUnits(),
       getSetupStatus(),
+      getLedOrgUnits(),
     ])
-      .then(([m, g, n, c, p, calloutRow, drs, rls, rfs, ous, status]) => {
+      .then(([m, g, n, c, p, calloutRows, drs, rls, rfs, ous, status, led]) => {
         setMembers(m);
         setGoals(g);
         setNotes(n);
         setCommitments(c);
         setInitiatives(p.filter((proj) => ACTIVE_STATUSES.has(proj.status)));
-        setCallout(calloutRow);
+        setCallouts(calloutRows);
         setDirectReports(drs);
         setRoleLevels(rls);
         setRoleFamilies(rfs);
         setOrgUnits(ous);
         setSetupStatus(status);
+        setLedOrgUnits(led);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, []);
 
+  // Team-scoping (Session 45): everything below filters off data already on
+  // the page — no re-fetch on team switch. direct_reports.org_unit_id is the
+  // one source of truth for "which team is this report on"; initiatives and
+  // commitments both key off a direct_report_id, goals carry org_unit_id
+  // directly, and meeting notes/callouts carry their own org_unit_id column
+  // (added this session — see the team_dropdown_scoping project memory
+  // note). null org_unit_id on a goal/note/callout means "applies to all
+  // teams," so it stays visible under every specific team's filter, not just
+  // "All teams."
+  const directReportById = new Map(directReports.map((dr) => [dr.id, dr]));
+  const reportOrgUnitId = (reportId: string | null | undefined): string | null =>
+    reportId ? (directReportById.get(reportId)?.org_unit_id ?? null) : null;
+
+  const visibleMembers =
+    selectedTeamId === null
+      ? members
+      : members.filter((m) => reportOrgUnitId(m.id) === selectedTeamId);
+  const visibleInitiatives =
+    selectedTeamId === null
+      ? initiatives
+      : initiatives.filter(
+          (p) => !p.direct_report_id || reportOrgUnitId(p.direct_report_id) === selectedTeamId
+        );
+  const visibleGoals =
+    selectedTeamId === null
+      ? goals
+      : goals.filter((g) => g.level === "company" || g.org_unit_id === selectedTeamId);
+  const visibleCommitments =
+    selectedTeamId === null
+      ? commitments
+      : commitments.filter((c) => reportOrgUnitId(c.direct_report_id) === selectedTeamId);
+  const visibleNotes =
+    selectedTeamId === null
+      ? notes
+      : notes.filter((n) => n.org_unit_id === null || n.org_unit_id === selectedTeamId);
+  const activeCallout: TeamCallout =
+    callouts.find((c) => c.org_unit_id === selectedTeamId) ?? {
+      message: "",
+      updated_at: null,
+      org_unit_id: selectedTeamId,
+    };
+
+  function upsertCallout(updated: TeamCallout) {
+    setCallouts((cs) => {
+      const idx = cs.findIndex((c) => c.org_unit_id === updated.org_unit_id);
+      if (idx === -1) return [...cs, updated];
+      const copy = [...cs];
+      copy[idx] = updated;
+      return copy;
+    });
+  }
+
+  const selectedTeamName =
+    selectedTeamId === null
+      ? "All teams"
+      : (ledOrgUnits.find((u) => u.id === selectedTeamId)?.name ?? "Team");
+
   return (
     <main className="mx-auto max-w-7xl px-6 py-16">
-      <h1 className="text-2xl font-semibold">Team</h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold">{ledOrgUnits.length > 0 ? selectedTeamName : "Team"}</h1>
+        {ledOrgUnits.length > 0 && (
+          <select
+            value={selectedTeamId ?? ""}
+            onChange={(e) => setSelectedTeamId(e.target.value || null)}
+            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700"
+            aria-label="Select team"
+          >
+            <option value="">All teams</option>
+            {ledOrgUnits.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
       <p className="mt-1 text-sm text-gray-500">
         Everything your team is working on, how goals and commitments are tracking, and a shared space
         for meetings — this week&apos;s must-knows included.
@@ -285,18 +385,23 @@ export default function TeamPage() {
         <p className="mt-8 text-gray-500">Loading...</p>
       ) : (
         <div className="mt-8 space-y-10">
-          <KpiStrip goals={goals} initiatives={initiatives} commitments={commitments} notes={notes} />
+          <KpiStrip
+            goals={visibleGoals}
+            initiatives={visibleInitiatives}
+            commitments={visibleCommitments}
+            notes={visibleNotes}
+          />
 
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
               This week&apos;s focus
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <InitiativesCard initiatives={initiatives} members={members} />
-              <GoalsCard goals={goals} />
+              <InitiativesCard initiatives={visibleInitiatives} members={visibleMembers} />
+              <GoalsCard goals={visibleGoals} />
               <CommitmentsCard
-                members={members}
-                commitments={commitments}
+                members={visibleMembers}
+                commitments={visibleCommitments}
                 setCommitments={setCommitments}
               />
             </div>
@@ -307,13 +412,17 @@ export default function TeamPage() {
               Meetings
             </h2>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.3fr)]">
-              <CalloutsPanel callout={callout} setCallout={setCallout} />
-              <MeetingsPanel notes={notes} setNotes={setNotes} />
+              <CalloutsPanel
+                callout={activeCallout}
+                scopeLabel={selectedTeamName}
+                onSaved={upsertCallout}
+              />
+              <MeetingsPanel notes={visibleNotes} setNotes={setNotes} orgUnitId={selectedTeamId} />
             </div>
           </div>
 
           <RosterRow
-            members={members}
+            members={visibleMembers}
             setMembers={setMembers}
             directReports={directReports}
             roleLevels={roleLevels}
@@ -648,15 +757,26 @@ function CommitmentsCard({
 
 function CalloutsPanel({
   callout,
-  setCallout,
+  scopeLabel,
+  onSaved,
 }: {
   callout: TeamCallout;
-  setCallout: React.Dispatch<React.SetStateAction<TeamCallout>>;
+  scopeLabel: string;
+  onSaved: (updated: TeamCallout) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(callout.message);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Reset local edit state when the selected team changes (Session 45) —
+  // this panel stays mounted across team switches, so without this a
+  // half-written draft for one team could get saved against another.
+  useEffect(() => {
+    setEditing(false);
+    setDraft(callout.message);
+    setError(null);
+  }, [callout.org_unit_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = callout.message
     .split("\n")
@@ -674,8 +794,8 @@ function CalloutsPanel({
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateTeamCallout(draft);
-      setCallout(updated);
+      const updated = await updateTeamCallout(draft, callout.org_unit_id);
+      onSaved(updated);
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save");
@@ -694,7 +814,9 @@ function CalloutsPanel({
           </button>
         )}
       </div>
-      <p className="mt-1 text-xs text-gray-400">This week&apos;s must-knows — written by you, visible to the whole team.</p>
+      <p className="mt-1 text-xs text-gray-400">
+        This week&apos;s must-knows for {scopeLabel} — written by you, visible to the whole team.
+      </p>
 
       {editing ? (
         <div className="mt-3">
@@ -754,9 +876,11 @@ function CalloutsPanel({
 function MeetingsPanel({
   notes,
   setNotes,
+  orgUnitId,
 }: {
   notes: TeamNote[];
   setNotes: React.Dispatch<React.SetStateAction<TeamNote[]>>;
+  orgUnitId: string | null;
 }) {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -782,7 +906,7 @@ function MeetingsPanel({
     setSaving(true);
     setError(null);
     try {
-      const created = await createTeamNote(draft.trim());
+      const created = await createTeamNote(draft.trim(), null, orgUnitId);
       setNotes((n) => [created, ...n]);
       setDraft("");
     } catch (e) {
@@ -797,7 +921,7 @@ function MeetingsPanel({
     setAgendaSaving(true);
     setAgendaError(null);
     try {
-      const created = await createTeamNote(agendaDraft.trim(), agendaDate);
+      const created = await createTeamNote(agendaDraft.trim(), agendaDate, orgUnitId);
       setNotes((n) => [created, ...n]);
       setAgendaDraft("");
       setAgendaDate("");

@@ -610,11 +610,18 @@ create index direct_report_invites_report_idx on direct_report_invites (direct_r
 -- it's a logged past meeting. Derived, never a stored status column, same
 -- pattern as one_on_ones' planned/completed split (see the planned_sessions
 -- project memory note).
+-- org_unit_id (Session 45, 2026-08-19 — see the team_dropdown_scoping
+-- project memory note): which led team this note belongs to. Null means "all
+-- teams" — shown under every specific team's filter on /app/team, same
+-- treatment as a company-level goal. Lets a manager who leads more than one
+-- org_unit keep each team's meeting log separate while still being able to
+-- post an org-wide note.
 create table team_meeting_notes (
   id            uuid primary key default uuid_generate_v4(),
   manager_id    uuid not null references auth.users(id),
   note          text not null,
   meeting_date  date,
+  org_unit_id   uuid references org_units(id) on delete set null,
   created_at    timestamptz not null default now()
 );
 
@@ -631,16 +638,42 @@ alter table team_meeting_notes enable row level security;
 -- the team_page_redesign_options project memory note for the scoping
 -- conversation (Andrew confirmed this shape via a mockup before it was
 -- built).
+--
+-- org_unit_id (Session 45, 2026-08-19): one callout per (manager, org_unit)
+-- pair now, not just one per manager — a manager leading several teams gets
+-- a separate pinned block per team, plus an org_unit_id-null row for the
+-- "all teams" scope. Two partial unique indexes replace the old plain
+-- `unique` on manager_id because a standard composite UNIQUE constraint
+-- treats every NULL org_unit_id as distinct, which would let duplicate
+-- all-teams rows pile up.
+--
+-- org_unit_id is ON DELETE CASCADE here (team_meeting_notes above uses SET
+-- NULL instead — deliberately different, verified by a local functional
+-- test). SET NULL would let deleting an org_unit collide with the
+-- all-teams partial unique index whenever that manager already has both a
+-- team-specific callout for the deleted unit and a separate all-teams
+-- callout — the SET NULL would try to write a second null-org_unit_id row
+-- and the delete would fail outright. CASCADE just removes that team's
+-- callout along with the team.
 -- ============================================================
 
 create table team_callouts (
-  id          uuid primary key default uuid_generate_v4(),
-  manager_id  uuid not null unique references auth.users(id),
-  message     text not null default '',
-  updated_at  timestamptz not null default now()
+  id           uuid primary key default uuid_generate_v4(),
+  manager_id   uuid not null references auth.users(id),
+  message      text not null default '',
+  org_unit_id  uuid references org_units(id) on delete cascade,
+  updated_at   timestamptz not null default now()
 );
 
 alter table team_callouts enable row level security;
+
+create unique index team_callouts_manager_unit_uq
+  on team_callouts (manager_id, org_unit_id)
+  where org_unit_id is not null;
+
+create unique index team_callouts_manager_all_teams_uq
+  on team_callouts (manager_id)
+  where org_unit_id is null;
 
 -- ============================================================
 -- CAPACITY MODEL

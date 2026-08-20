@@ -9,6 +9,132 @@ here.
 
 ---
 
+## Session 40 — 2026-08-18
+
+**Goal:** Build Plan S2 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (second of the four S1–S5 setup-UX
+sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): role families, so 13 flat role_levels cards
+become ~5 ladders — one card per family, levels as rows inside, "Add L{n+1}" pre-filled from L{n},
+JDs collapsed, plus a merge tool for near-duplicate names.
+
+**What was done:**
+- **`database/migrations/2026-08-18_role_families.sql` (new) + mirrored into `database/schema.sql`.**
+  `role_families` (id, org_id, name, created_at), org-scoped RLS via `current_org_id()` (no inline
+  `users` subqueries); `role_levels.role_family_id uuid references role_families(id) on delete set
+  null`. In `schema.sql`, `role_families` is defined *before* `role_levels` (a new "ROLE FAMILIES"
+  section ahead of "ROLE LEVELS") so `role_family_id` can be an inline column on `role_levels`'
+  `CREATE TABLE`, matching the file's forward-reference-free structure — the migration instead
+  `ALTER TABLE`s it in, since the live table already exists. The migration backfills one family per
+  distinct `(org_id, job_role)` and links existing rows (guarded by `where role_family_id is null`,
+  so it's safe to re-run); near-duplicates ("Senior Corporate CSM" vs "Corporate CSM") deliberately
+  stay separate after backfill — merged by hand afterwards via the UI's "Move to another ladder…".
+  Added a `drop policy if exists` guard before the `create policy` (the org_units migration this was
+  modeled on didn't need one, being a first-time table; this one needed it once tested for
+  re-run-safety — see Verification).
+- **`backend/routes/role_families.py` (new)**, registered in `main.py` under `/api/role-families`:
+  standard CRUD (list/create/rename/delete) mirroring `org_units.py`'s shape. Delete does not require
+  the family to be empty first — `role_levels.role_family_id` is `on delete set null`, so any level
+  in a deleted family falls into the "Ungrouped" bucket automatically, same "no manual unparenting"
+  posture as `org_units.py`'s own delete.
+- **`backend/routes/settings.py`** — `RoleLevelIn` gains `role_family_id: str | None`; `GET
+  /role-levels` now embeds `role_families(id, name)` (Supabase/PostgREST embed, same pattern already
+  used in `commitments.py`/`one_on_ones.py`/`team.py` for `direct_reports(name)` /
+  `org_units(name)`) so every caller gets the ladder name for free. New `_validate_role_family()`
+  helper: a `role_family_id` must belong to the caller's org, checked by re-running the id through a
+  `role_families` select — RLS (`org_id = current_org_id()`) means a foreign-org id simply returns no
+  rows, so the isolation check rides on a query that already has to run rather than a manual org_id
+  comparison. This closes a real gap found during schema testing (see Verification) where the FK
+  constraint alone did not stop a level from being pointed at another org's family id if a client
+  sent one directly — RLS hides the row from normal `SELECT`s but doesn't block a raw `UPDATE ...
+  SET role_family_id = '<known-uuid>'`.
+- **`frontend/lib/api.ts`** — `RoleFamily`/`RoleFamilyIn` types + `getRoleFamilies`/`createRoleFamily`/
+  `updateRoleFamily`/`deleteRoleFamily`; `RoleLevel` gains `role_family_id` and the embedded
+  `role_families: {id, name} | null`; `RoleLevelIn` gains `role_family_id?`.
+- **`frontend/app/app/settings/page.tsx`** — Roles & Levels reworked into family-ladder cards:
+  - `groupRoleLevelsByFamily()` (shared by every consumer below) groups `roleLevels` by family,
+    sorted alphabetically, families-with-zero-levels included (the "ghost card" state — they come
+    from the separately-fetched `roleFamilies` list, not from any level's embed), "Ungrouped" last.
+  - `RolesSection` now renders one card per family: level rows (`LevelRow`, JD `line-clamp-2`
+    collapsed by default with a "Show more" toggle when text is long enough to matter, "Move to
+    another ladder…" inline picker, Edit/Remove), "+ Add L{n+1}" pre-filled from the last level's
+    `job_role`/`job_responsibilities` per the plan, family rename (updates the embed client-side
+    everywhere immediately, no refetch), family delete (only offered once 0 levels remain, though the
+    backend itself allows deleting a non-empty family — the UI just steers toward the safer order), a
+    top-level "+ Add a new ladder" that creates the family and its L1 level in one step, and a flat
+    "Ungrouped" section for levels with no family. `RoleForm` was refactored to take plain
+    `initialValues` instead of a whole `RoleLevel` object, so it can pre-fill from a not-yet-created
+    "next level" as easily as from a real row.
+  - `roleLabel()` now prefers the embedded family name over `job_role` ("Corporate CSM · L3"); within
+    a ladder card, a level's `job_role` still shows as a secondary override title when it differs from
+    the family name (covers "Senior …" titles after a merge) — the plan's resolved display
+    convention.
+  - New `GroupedRoleSelect` (`<optgroup>` per family) replaces the flat role `<select>` in
+    `TeamSection` and `ExpectationDetail`, and the work-unit role picker in `CapacitySection`.
+    `CoverageGrid` (Session 39) now renders its rows grouped under family sub-header rows using the
+    same `groupRoleLevelsByFamily()`. The "copy from another role" picker in `DraftReviewPanel` was
+    left as a flat list (not explicitly in scope) but inherits the better family-aware label for free
+    since it also calls `roleLabel()`.
+
+**Decisions made / locked:**
+- Family name takes over as the primary display once a level has one; `job_role` stays as the
+  level's optional per-level title override — resolves the plan's open question with the "lean"
+  option it named.
+- New role creation is two paths: "+ Add a new ladder" (family + L1 together) for a role that doesn't
+  exist yet, "+ Add L{n+1}" (pre-filled) for adding a level to an existing ladder. Not explicitly
+  specified in the plan beyond "Add L3 pre-fills from L2" — this is the natural extension to cover
+  first-time creation, which the plan's backfill-only migration doesn't itself provide for.
+- Family deletion allowed regardless of level count (matches `role_levels.role_family_id`'s `on
+  delete set null` and `org_units.py`'s established posture); the UI only *offers* the delete button
+  once a card is empty, steering toward moving levels out first without a hard backend block.
+
+**Schema note — new migration, not yet run live.** `database/migrations/2026-08-18_role_families.sql`
+must be run in the Supabase SQL editor before any of this works against the live database — role
+levels will 500 on read/write until then (`role_families` embed + `role_family_id` column don't exist
+yet live). No dependency on any migration not already confirmed live.
+
+**Verification:** `python3 -m py_compile` on all touched/new backend files, plus a real `main` import
+(fresh venv, dummy Supabase/Anthropic env vars) confirming both new routes register
+(`/api/role-families`, `/api/role-families/{family_id}`) alongside the unchanged `/role-levels`
+routes, 102 routes total. A fake-Supabase-client unit test exercised `_validate_role_family()`
+directly: `None` no-ops, a visible (same-org) id no-ops, a foreign-org id (empty select result) raises
+422 — the three paths that matter. Frontend: fresh `npm install`, `tsc --noEmit` clean after one type
+fix (an inferred non-nullable array type needed an explicit `{family: RoleFamily | null, ...}[]`
+annotation), `next build` clean (19/19 routes, `/app/settings` at 9.93 kB). Schema — spun up a local
+Postgres 16 with the same minimal Supabase `auth` schema stub as prior sessions (`auth.users` +
+session-variable-backed `auth.uid()`), ran the *entire* `schema.sql` end to end (only the known,
+pre-existing `storage.buckets` error from the Context Engine build, unrelated to this migration, and
+occurring after every table/policy/function in this change already succeeded). Beyond that: reverted
+a fresh copy back to pre-migration state, seeded role_levels across two orgs including a real
+near-duplicate case ("Corporate CSM" L1/L2 + "Senior Corporate CSM" L3 in one org, "Corporate CSM" L1
+in a second org), ran the actual migration file, and confirmed the backfill produced exactly the
+right 4 families with correct org scoping; re-ran the same migration file a second time and confirmed
+it was now fully idempotent (0 unintended inserts/updates/errors) after adding the `drop policy if
+exists` guard the first re-run attempt showed was missing. Tested RLS directly as an `authenticated`
+session (`auth.uid()` backed by `request.jwt.claim.sub`): an Org A user saw exactly Org A's 3
+families and 4 role_levels, not Org B's. Tested the merge mechanic for real: moved the "Senior
+Corporate CSM" level into the "Corporate CSM" family via a raw `UPDATE` (the same operation the PUT
+endpoint performs) and confirmed the row now groups correctly with `job_role` preserved as the
+override title — this is the plan's own suggested "live" test ("merge the Senior variants into their
+ladders as the real-data test"), done here against a realistic seeded dataset since this sandbox has
+no route to the real production Supabase. Also specifically tried to break cross-org isolation: a
+subquery-based attempt to move a level into another org's family returned no rows (RLS hid the target
+before the id could even be read), but a raw `UPDATE ... SET role_family_id = '<literal Org B
+uuid>'` succeeded at the SQL level despite RLS — this is what `_validate_role_family()` in
+`settings.py` was added to close at the application layer (see What was done); documented as a known
+residual limitation (no DB-level trigger backstop) in `role_families.py`'s module docstring, same
+posture as `org_units.py`'s existing parent-cycle note.
+
+**Deviations from the plan:** none structural. Two additions beyond the literal text, both noted
+above as decisions: the "+ Add a new ladder" creation path (the plan only describes "Add L3" for an
+existing ladder), and the `_validate_role_family()` cross-org check (found during this session's own
+schema testing, not called out in the plan, but a direct consequence of adding a client-writable
+foreign key without one).
+
+**Next step:** Run the migration in Supabase, then Session 3 of the four
+(`docs/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 3 prompt) builds Plan S1 — the guided "People" setup
+flow — which reads role_family-grouped pickers built here.
+
+---
+
 ## Session 39 — 2026-08-18
 
 **Goal:** Build Plan S3 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (first of the four S1–S5 setup-UX

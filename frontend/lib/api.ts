@@ -763,19 +763,27 @@ export const getTeamGoals = (): Promise<TeamGoal[]> => authedFetch("/api/team/go
 // meeting_date (Session 23) is optional/nullable — set to today-or-later to
 // make this note the surfaced "next meeting's agenda"; null means it's a
 // logged past meeting. Derived client-side, not a stored status field.
+// org_unit_id (Session 45, team dropdown): which led team this note is for;
+// null means "all teams" — shown regardless of which team is selected. See
+// the team_dropdown_scoping project memory note.
 export type TeamNote = {
   id: string;
   note: string;
   meeting_date: string | null;
+  org_unit_id: string | null;
   created_at: string;
 };
 
 export const getTeamNotes = (): Promise<TeamNote[]> => authedFetch("/api/team/notes");
 
-export const createTeamNote = (note: string, meetingDate?: string | null): Promise<TeamNote> =>
+export const createTeamNote = (
+  note: string,
+  meetingDate?: string | null,
+  orgUnitId?: string | null
+): Promise<TeamNote> =>
   authedFetch("/api/team/notes", {
     method: "POST",
-    body: JSON.stringify({ note, meeting_date: meetingDate ?? null }),
+    body: JSON.stringify({ note, meeting_date: meetingDate ?? null, org_unit_id: orgUnitId ?? null }),
   });
 
 // Team-level commitments (Session 23) — same Commitment shape as the
@@ -808,15 +816,26 @@ export const createTeamCommitment = (body: {
 // writes renders as its own bullet on the page. See team.py's
 // get_team_callout/update_team_callout and the team_page_redesign_options
 // project memory note.
+//
+// org_unit_id (Session 45, team dropdown): which led team this callout is
+// for; null means "all teams". getTeamCallout() now returns every row for
+// the manager (one per team that's ever had a callout, plus at most one
+// org_unit_id-null row) instead of a single object, so the frontend picks
+// the row matching whichever team is selected. See the
+// team_dropdown_scoping project memory note.
 export type TeamCallout = {
   message: string;
   updated_at: string | null;
+  org_unit_id: string | null;
 };
 
-export const getTeamCallout = (): Promise<TeamCallout> => authedFetch("/api/team/callout");
+export const getTeamCallout = (): Promise<TeamCallout[]> => authedFetch("/api/team/callout");
 
-export const updateTeamCallout = (message: string): Promise<TeamCallout> =>
-  authedFetch("/api/team/callout", { method: "PUT", body: JSON.stringify({ message }) });
+export const updateTeamCallout = (message: string, orgUnitId: string | null): Promise<TeamCallout> =>
+  authedFetch("/api/team/callout", {
+    method: "PUT",
+    body: JSON.stringify({ message, org_unit_id: orgUnitId }),
+  });
 
 // Returns a link the manager copies and sends themselves — no email is sent
 // from the backend (same manual-delivery posture Session 21 chose for
