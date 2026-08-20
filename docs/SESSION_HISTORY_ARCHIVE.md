@@ -9,6 +9,170 @@ here.
 
 ---
 
+## Session 41 — 2026-08-18
+
+**Goal:** Build Plan S1 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (third of the four S1-S5
+setup-UX sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): rebuild Settings → Team as a
+roster-first "People" section that walks people → teams → roles → expectations in one place —
+progress header, inline creation of roles/teams from the pickers, and a fix for Quick add's
+dead-end free-text Role field.
+
+**What was done:**
+- **`backend/routes/expectations_ai.py`** — extracted `_compute_coverage(supabase)` out of
+  `get_coverage()` so it takes a bare supabase client (no auth dependency) and can be called
+  from another route's handler without a second HTTP round-trip. `GET /coverage` is now a thin
+  wrapper. Behavior unchanged.
+- **`backend/routes/setup_status.py` (new)**, registered in `main.py` under `/api/setup-status`
+  (single `GET ""` route — no sub-paths): per-person `{has_role, has_team,
+  role_has_expectations}` (the last is `null`, not `false`, when no role is assigned — the
+  roster chip needs to tell "no role" apart from "role has zero configured expectations") plus
+  aggregate counts (`people_count`, `teams_count`, `roles_count`,
+  `roles_with_expectations_count`, `people_without_role_count`, `people_without_team_count`).
+  Reuses `expectations_ai._compute_coverage()` for the per-role "has expectations" check, per
+  the plan's own note. `teams_count` reads `org_units` org-scoped (same list `GET
+  /api/org-units` returns), not leader-scoped like the role-scoped-views rollups — every team in
+  the org should count toward setup progress, not just ones the caller leads.
+- **`backend/routes/direct_reports.py`** — `POST ""` already accepted `role_level_id`/
+  `org_unit_id` (no change needed there — Session 6's original `DirectReportIn` had them from
+  the start). Added a create-only `DirectReportCreateIn(DirectReportIn)` subclass with an
+  `email: str | None` field, used only by `POST`, so the add-person row can take an optional
+  email at creation time. Deliberately **not** added to the shared `DirectReportIn` that `PUT`
+  uses: every existing PUT caller (`assignReportRole`/`assignReportOrgUnit`/
+  `assignReportCadence` in `api.ts`) does a full `body.model_dump()` replace that omits fields
+  it doesn't know about — if `email` were on the shared model, an omitted key would resolve to
+  Pydantic's `None` default and silently wipe out an email set via the invite flow (`POST
+  /{report_id}/invite`, which writes email with its own raw `.update()`, bypassing this model
+  entirely). Keeping `email` create-only sidesteps that risk instead of requiring every PUT
+  caller to remember to round-trip it.
+- **`frontend/lib/api.ts`** — `createDirectReport()` gains `email`/`role_level_id`/
+  `org_unit_id` params; new `SetupStatus`/`SetupStatusPerson` types + `getSetupStatus()`.
+- **`frontend/app/app/settings/page.tsx`** — the biggest change:
+  - Settings section renamed **People** (was "Team") and promoted to the second tab, right after
+    Profile & Company (`SectionId` changed from `"team"` to `"people"`).
+  - `PeopleSection` (was `TeamSection`) rebuilt roster-first: a `SetupProgressHeader` (four
+    steps — people / teams / roles assigned / expectations covered — each a count pill that
+    deep-links: people focuses the add-person input, teams opens the create-team modal, roles
+    scrolls to and briefly highlights the first unassigned person, expectations switches to the
+    Expectations section); the roster itself (name, role picker, team picker, an
+    `ExpectationsChip` per row — ✓ green / amber "Draft expectations" deep-linking into
+    Expectations' AI-draft flow for that exact role / amber "No role"); an add-person row at the
+    bottom (name + optional email).
+  - **Inline creation**: `GroupedRoleSelect` gained an optional `onCreateNew` prop — passing it
+    adds a "+ Create new role…" option that opens `CreateRoleModal` instead of assigning
+    (Expectations'/Capacity's existing callers don't pass it, so their plain dropdown behavior
+    is unchanged). New `OrgUnitSelect` component is the team-picker equivalent with its own "+
+    Create new team…" option opening `CreateTeamModal`. Both modals, when opened from a specific
+    roster row, auto-assign the newly created role/team back onto that row after creation
+    (`creatingRoleFor`/`creatingTeamFor` state holds the triggering row, or the literal string
+    `"header"` when opened from the progress header's Teams step, which just creates without
+    assigning). `CreateRoleModal` mirrors Roles & Levels' own "+ Add a new ladder" mechanic
+    (creates a `role_family` + its L1 `role_level` together) so a role created from People shows
+    up correctly as its own ladder, not an orphaned "Ungrouped" level.
+  - **Expectations deep-link**: clicking a roster row's "Draft expectations" chip, or the header's
+    Expectations step, needs to land on the Expectations section with the right role's AI-draft
+    panel already open. `draftForRoleId` state was lifted to `SettingsPage` (same reason
+    `expRoleLevelId`/`expKind` already live there — it has to survive the section swap that
+    unmounts `ExpectationsSection`); `ExpectationsSection` gained an `initialDraftRoleId` prop
+    consumed once in a `useEffect` that opens `DraftReviewPanel` then calls
+    `onConsumeInitialDraft()` to clear it, so a later plain visit to Expectations doesn't
+    reopen a stale draft.
+  - `role_title` fallback hint: a roster row with no `role_level_id` but a non-empty legacy
+    `role_title` shows `was: "Account Executive"` under the name (muted, not editable) — the
+    column stays in the schema and un-migrated, per the plan.
+- **`frontend/components/QuickAddModal.tsx`** — the F1 fix. The free-text "Role (optional)"
+  input is replaced with the same grouped-by-ladder `<select>` + "+ Create new role…" mechanic
+  as People's picker (duplicated locally as `groupRolesByFamily()`/`roleLabel()` — `settings/
+  page.tsx`'s versions aren't exported, and this is a small enough duplication for one extra
+  caller rather than promoting page-local helpers to a shared module). Selecting "+ Create new
+  role…" swaps in an inline name field + Create button (same family+L1 mechanic as
+  `CreateRoleModal`). `createDirectReport()` now sends `role_level_id` instead of `role_title` —
+  **this UI path no longer writes `role_title` at all**, closing F1 (the free-text trap) for
+  both entry points into the app (Quick add and People's add-person row, which never wrote
+  `role_title` to begin with — only email, per the plan). Role levels/families are fetched once
+  per modal open (fine at this scale, same posture as every other list fetch in this codebase).
+- **`frontend/components/ZoneMap.tsx`** — the Foundation door's Settings state previously read
+  only `profile.org_ready` (true the moment a manager saves Profile & Company once — a much
+  lower bar than "setup is actually done"). Now reads `getSetupStatus()` and requires all four
+  steps done (`people_count > 0 && teams_count > 0 && people_without_role_count === 0 &&
+  roles_count > 0 && roles_with_expectations_count === roles_count`) before clearing the "not
+  finished" warning — the same data People's progress header and roster badges read, so all
+  three surfaces can't disagree about what "done" means. Falls back to the old `org_ready` check
+  only if the `setup-status` fetch itself fails.
+
+**Decisions made / locked:**
+- `role_has_expectations` is `null` (not `false`) when a person has no role — the roster chip
+  and any future consumer need to distinguish "nothing to check yet" from "checked and found
+  nothing," same honesty convention Capacity's `off_hours_source: "logged" | "assumed"` already
+  established in this codebase.
+- Inline role/team creation always creates a *new* role_family+L1 or org_unit — there's no
+  "search existing roles fuzzy-match" step. A manager with a near-duplicate role in mind still
+  ends up merging it later via Roles & Levels' existing "Move to another ladder…" tool (Session
+  40) — not rebuilt here, kept as the one designated place for that mechanic.
+- `email` on create is fire-and-forget (no invite is sent) — it's stored for a future invite,
+  the same manual-delivery posture Sessions 21/22 established; the add-person row doesn't try to
+  also trigger `POST /{report_id}/invite` in the same step.
+- People's progress header always shows all four steps, even before anything exists — a
+  brand-new org shows "0 people · 0 teams · –/0 roles · –/0 expectations," which reads as the
+  literal starting line of the golden path rather than an error state (the plan's "the flow *is*
+  the empty state" note).
+- Kept `SectionId`'s internal string values as short codenames independent of their display
+  labels (`"people"` displays "People", `"roles"` displays "Roles & Levels") — consistent with
+  how `"capacity"`/`"expectations"` already worked before this session.
+
+**Verification:** `python3 -m py_compile` on every backend `.py` file; a real `main` import
+(fresh venv, dummy Supabase/Anthropic env vars) confirming `/api/setup-status` registers
+alongside the unchanged `/api/direct-reports`, 71 distinct route paths total, `app.state.limiter`
+attached. A hand-rolled fake-Supabase-client functional test called `get_setup_status()` directly
+with three seeded people (one fully wired, one bare, one with a role but zero configured
+expectations) across two org units and two roles (one with a metric config, one without) and
+confirmed every count and every per-person field matched by hand — including the
+`role_has_expectations: null` vs `false` distinction. Frontend: fresh `npm install`, `npx tsc
+--noEmit` clean (zero errors) across the whole project, `next build` clean (19/19 routes,
+`/app/settings` at 11.9 kB). **Not done this session:** no live click-through against the
+production Supabase database or a real browser (this cloud container has no route to either,
+same standing caveat as every session since Session 21) — see the golden-path walkthrough note
+below for what a live check should confirm. No new migration — `setup-status` and the
+create-only `email` field both read/write existing, already-live columns.
+
+**Golden-path walkthrough (code-traced, not live-clicked — flagging honestly rather than
+implying a stopwatch was run against a real browser):** add fake person → role → team → AI-draft
+expectations, per the plan's exit bar. Traced interaction count: Settings → People (1 click,
+already the second tab) → fill name (+ optional email) → Add person (1 click, person appears in
+roster immediately from local state, no refetch needed) → open that row's role picker → "+
+Create new role…" → type a name → Create role (auto-assigns back to the row) → open the same
+row's team picker → "+ Create new team…" → type a name → Create team (auto-assigns) → click the
+row's now-amber "Draft expectations" chip → lands on Expectations with `DraftReviewPanel` already
+open for that exact role → AI draft runs → review → "Add N expectations" commits. Roughly 10-12
+clicks/keystrokes across three short text entries (person name, role name, team name), no page
+navigation and no bounce to another Settings section except the one deliberate deep-link into
+Expectations for the draft step. Comfortably under the plan's 5-minutes-per-person target by
+interaction count alone; **Andrew should still run this live** on the deployed app to confirm
+timing and that nothing about the real Supabase round-trips (AI draft latency especially) changes
+that picture.
+
+**Deviations from the plan:** none structural. Two additions beyond the literal text: (1) the
+progress header's Teams step opens the create-team modal unconditionally rather than only when
+`teams_count === 0` (a quick way to add another team from the header at any point, not just when
+starting from zero) — the plan only specified this behavior for the empty-teams state; (2) an
+"Editing levels within a ladder, or merging near-duplicate roles, still happens in Roles &
+Levels" link was kept in People's intro copy (using the `onNavigateToRoles` prop the old
+`TeamSection` already had) rather than being dropped, since ladder-level editing genuinely isn't
+rebuilt here.
+
+**Open item carried forward from Session 40:** `database/migrations/2026-08-18_role_families.sql`
+still needs to run in the Supabase SQL editor before role_levels/role_families work live — this
+session's new `/api/setup-status` endpoint also depends on it (it reads `role_levels` and, via
+`_compute_coverage()`, the config tables) but adds no new migration dependency beyond what
+Session 40 already required.
+
+**Next step:** Run the Session 40 migration if it hasn't been already, then Session 4 of the four
+(`docs/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 4 prompt) builds Plan S4+S5 — visibility (always-
+render expectations block, roster/org-page badges) and the naming/placement pass. After all four
+land, Andrew brings the per-session reports back to the Cowork review session for a final pass
+per the team_setup_ux_review project memory note.
+
+---
+
 ## Session 40 — 2026-08-18
 
 **Goal:** Build Plan S2 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (second of the four S1–S5 setup-UX

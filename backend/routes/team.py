@@ -88,6 +88,23 @@ every team's filter, same treatment as a company-level goal):
     upsert; since a plain DB-level ON CONFLICT doesn't handle the
     org_unit_id-null case cleanly (see schema.sql's team_callouts comment),
     this does a manual look-up-then-write instead of supabase's upsert().
+
+Session 46 (2026-08-20) — goal/project team hierarchy (see the
+team_project_goal_hierarchy project memory note). Andrew wanted a team's
+goals/initiatives to include its parent org_unit's goals/initiatives too
+(a department OKR should show up on every team beneath it), and for
+projects to get a real team attachment instead of Session 45's
+assignee-proxy. Two changes here:
+  - _MISSION_CONTROL_GOAL_LEVELS now includes "department" (was
+    company/team only) — department-level goals have somewhere to cascade
+    to now that /app/team can walk the org_units tree. GET /goals is
+    otherwise unchanged; the level filter still happens here, but which
+    specific department/team goals apply to a given team is resolved
+    client-side (see page.tsx's ancestorChain()), same "most of this needs
+    no backend change" pattern as Session 45.
+  - Initiatives no longer proxy through the assignee's org_unit_id —
+    projects.py now carries a real org_unit_id (Session 46 there too), and
+    the frontend filters on that directly.
 """
 from datetime import datetime, timezone
 
@@ -105,12 +122,13 @@ router = APIRouter()
 # and /app/goals.
 _ACTIVE_STATUSES = ("active", "on_track", "at_risk")
 
-# Team Mission Control's middle column shows ONLY company- and team-level
-# goal progress, not department or individual (Andrew's explicit scoping
-# call) — department stays a rollup concept for role-scoped views, and
-# individual priorities are already the left column's per-report Priorities
-# list.
-_MISSION_CONTROL_GOAL_LEVELS = ("company", "team")
+# Team Mission Control's middle column shows company/department/team-level
+# goal progress, never individual (individual priorities are already the
+# left column's per-report Priorities list). Department was excluded until
+# Session 46 — see this module's docstring — added once the team dropdown
+# (Session 45) gave department-level goals somewhere to cascade to via
+# org_units' parent_unit_id hierarchy.
+_MISSION_CONTROL_GOAL_LEVELS = ("company", "department", "team")
 
 
 class TeamMessageIn(BaseModel):
@@ -261,8 +279,9 @@ async def send_team_message(report_id: str, body: TeamMessageIn, auth=Depends(ge
 
 @router.get("/goals")
 async def get_team_goals(auth=Depends(get_authenticated_client)):
-    """Company- and team-level goal progress for Mission Control's middle
-    column. Goals are owner-scoped everywhere in this codebase (see
+    """Company/department/team-level goal progress for Mission Control's
+    middle column (department added Session 46 — see this module's
+    docstring). Goals are owner-scoped everywhere in this codebase (see
     goals.py's RLS note — the "*_all_own_org" policy names are misleading,
     it's actually owner_id = auth.uid()), so this is just the manager's own
     goals filtered by level — no org rollup needed.

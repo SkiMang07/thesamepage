@@ -345,9 +345,16 @@ functions exist, all SECURITY DEFINER, all gated by `led_org_unit_ids()`:
 - `org_unit_goals_rollup()` — status counts for department/team-level goals
   (`org_unit_id` set directly). Individual-level goals aren't included — a
   deliberate v1 scope limit.
-- `org_unit_projects_rollup()` — status counts, scope derived the same way
-  Projects derives scope everywhere else: its goal's `org_unit_id` first,
-  falling back to its assigned direct report's `org_unit_id`.
+- `org_unit_projects_rollup()` — status counts, scope derived from a
+  project's goal's `org_unit_id` first, falling back to its assigned
+  direct report's `org_unit_id`. **Diverges from Session 46:** projects
+  gained a direct `org_unit_id` column that session, and `/app/team` /
+  `/app/projects` both filter on it now — this rollup function was
+  deliberately left on the old goal/assignee-derived logic (aggregate *up*
+  to a leader is a different concept from `/app/team`'s cascade *down*
+  from a parent team), flagged as a follow-up rather than fixed. Check
+  which of the two scoping mechanisms a given surface actually needs
+  before assuming they agree.
 - `org_unit_people_rollup()` — headcount + a `job_role`/count breakdown
   (never a name) per unit.
 
@@ -770,6 +777,45 @@ all-teams row, confirmed both partial unique indexes reject duplicates, confirme
 (second manager sees 0 rows, an UPDATE against the first manager's row affects 0 rows), and
 specifically exercised the org_unit-delete edge case above — reproduced the SET NULL failure, then
 reproduced the CASCADE fix working — rather than just reasoning about the FK behavior.
+
+## Team/project/goal hierarchy (Session 46, 2026-08-20)
+
+Andrew noticed, right after Session 45 shipped, that projects had no way to attach to a specific
+team, and that `/app/team`'s Goals/Initiatives sections only matched a team's `org_unit_id` exactly
+— a parent department's goals/projects should cascade down to every team under it. Scoped via one
+AskUserQuestion round (all his recommended defaults), then built same session — see the
+team_project_goal_hierarchy project memory note.
+
+**Projects gain a real `org_unit_id`,** same mechanism `goals.org_unit_id` has had since Session 11
+(`database/migrations/2026-08-20_projects_org_unit.sql`, not yet run live — depends on Session 45's
+migration being live first). Unlike goals, projects have no level enum, so the picker on
+`/app/projects` isn't filtered by `unit_type`: any team or department is selectable. The migration
+backfills every existing project's `org_unit_id` from its assignee's `direct_reports.org_unit_id`
+(same one-time-backfill posture as Session 40's role_families migration) so nothing silently drops
+out of a team-filtered view the moment this ships. `projects.py`'s `_SELECT_COLUMNS`/`_shape_rows()`
+join and flatten `org_units(name)` the same way `goals.py` already did; `list_projects()` gained an
+`org_unit_id` filter param.
+
+**Hierarchy is client-side only — no new endpoint.** `frontend/app/app/team/page.tsx` gained
+`ancestorChain()`, which walks `org_units.parent_unit_id` upward from the selected team using the
+already-fetched `orgUnits` list, building a Set of the selected team's id plus every ancestor's id.
+`visibleInitiatives`/`visibleGoals` match against that set instead of exact `org_unit_id` equality;
+an item whose `org_unit_id` isn't the exact selected team is labeled "inherited from parent." To make
+department-level goals eligible to surface on team pages at all, `team.py`'s
+`_MISSION_CONTROL_GOAL_LEVELS` widened from `("company", "team")` to
+`("company", "department", "team")` — the hierarchy filter above decides which specific teams a given
+department goal actually shows on.
+
+**Scope limit, deliberate:** hierarchy inheritance applies only to goals and projects/initiatives on
+`/app/team` — commitments, roster, meeting notes, and callouts stay exact-match-only, same as Session
+45. `org_unit_projects_rollup()` was NOT updated to prefer the new column — see the flagged divergence
+in the Role-scoped views section above.
+
+**Verification:** real local Postgres 16 functional test via `database/local_verify_stub.sql` (full
+schema.sql + the standalone migration run separately — its `ALTER TABLE ADD COLUMN` step hit an
+expected "already exists" since schema.sql already carried the final shape, but the backfill `UPDATE`
+ran clean and produced correct results). Backend `py_compile` + fresh `main` import with dummy
+Supabase env vars. Frontend fresh `npm install`, `tsc --noEmit` clean, `next build` clean.
 
 ---
 
@@ -1305,7 +1351,7 @@ backend/
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10) + /rollup (Session 15)
                           + GET/POST /{id}/check-ins, list enriched with progress/trend/freshness (Session 26)
-    projects.py          GET/POST/PUT/PATCH/DELETE /api/projects — goal_id + direct_report_id, no level (Session 13) + /rollup (Session 15)
+    projects.py          GET/POST/PUT/PATCH/DELETE /api/projects — goal_id + direct_report_id, no level (Session 13) + /rollup (Session 15) + org_unit_id filter (Session 46)
                           + GET/POST /{id}/check-ins, list enriched with progress/trend/freshness (Session 26)
     check_ins.py         shared helpers, NOT a router (Session 26) — create_check_in (ownership 404 + status
                           write-through to the parent), list_check_ins, enrich_with_check_ins

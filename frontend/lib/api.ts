@@ -395,6 +395,14 @@ export const deleteGoal = (id: string): Promise<{ deleted: boolean }> =>
 // level/org_unit_id of its own: scope is derived from whatever it's linked
 // to rather than duplicating goals' hierarchy fields. Commitments -> project
 // linking (source_type='project', already in schema) stays deferred.
+//
+// org_unit_id (Session 46, team_project_goal_hierarchy project memory note):
+// reverses the "no independent scope" call above — Andrew wanted a project
+// attachable to a team/department directly, same mechanism goals already
+// had, so /app/team's Initiatives card can filter by team instead of
+// proxying through the assignee's own org_unit_id. Unlike goals, projects
+// have no level enum — org_unit_id can point at either a team or a
+// department org_unit.
 // ---------------------------------------------------------------------------
 
 export type ProjectStatus = GoalStatus; // same enum shape (active/on_track/at_risk/completed/cancelled)
@@ -411,6 +419,11 @@ export type Project = {
   // Only populated when goals.py's join resolves it — see projects.py's
   // _shape_rows.
   goal_title?: string | null;
+  // Session 46: which team/department this project belongs to. Null means
+  // no team assigned. org_unit_name only populated when projects.py's join
+  // resolves it, same pattern as goal_title above.
+  org_unit_id: string | null;
+  org_unit_name?: string | null;
   created_at: string;
 } & CheckInDerived;
 
@@ -421,12 +434,14 @@ export type ProjectIn = {
   due_date?: string | null;
   direct_report_id?: string | null;
   goal_id?: string | null;
+  org_unit_id?: string | null;
 };
 
-export const getProjects = (params?: { directReportId?: string; goalId?: string; status?: ProjectStatus }): Promise<Project[]> => {
+export const getProjects = (params?: { directReportId?: string; goalId?: string; orgUnitId?: string; status?: ProjectStatus }): Promise<Project[]> => {
   const q = new URLSearchParams();
   if (params?.directReportId) q.set("direct_report_id", params.directReportId);
   if (params?.goalId) q.set("goal_id", params.goalId);
+  if (params?.orgUnitId) q.set("org_unit_id", params.orgUnitId);
   if (params?.status) q.set("status", params.status);
   const qs = q.toString();
   return authedFetch(`/api/projects${qs ? `?${qs}` : ""}`);

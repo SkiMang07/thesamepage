@@ -10,12 +10,9 @@ Decisions locked before this file was written (mirrors the Goals/Org/Team
     unlike Settings' "configure once" tables.
   - A project can be assigned to a specific direct report (direct_report_id,
     added this session) or left unassigned (the manager's own initiative).
-  - Deliberately NOT given its own level/org_unit_id like goals. Per
-    PRODUCT_VISION.md, "goals = what, projects = how" — a project's scope is
-    derived from whatever it's linked to (its parent goal's level, or the
-    report it's assigned to), not duplicated as a parallel hierarchy. If a
-    project needs independent scope later (e.g. a team-level project with no
-    goal attached), org_unit_id/level can be added then.
+  - Deliberately NOT given its own level/org_unit_id like goals at this
+    point — see Session 46 below, which reverses this once Andrew had a real
+    need for it.
   - Commitments -> project linking (commitments.source_type = 'project',
     already in schema.sql's check constraint) stays deferred this pass, same
     scope discipline as Goals shipping without rollup calculation.
@@ -27,10 +24,24 @@ documented in goals.py. This router does not populate org_id.
 Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md and
 the role_scoped_views project memory note): GET /rollup returns status
 counts across the org units the caller leads, scoped the same way a
-project's own scope is derived elsewhere (its goal's org_unit_id first,
-falling back to its assigned direct report's org_unit_id). Calls
+project's own scope was derived before Session 46 (its goal's org_unit_id
+first, falling back to its assigned direct report's org_unit_id). Calls
 org_unit_projects_rollup() (SECURITY DEFINER, gated by led_org_unit_ids()),
-mirroring capacity.py's get_rollup.
+mirroring capacity.py's get_rollup. Session 46 did NOT touch this function
+to prefer the new direct org_unit_id column — flagged as a follow-up, not
+done this pass (see the team_project_goal_hierarchy project memory note).
+
+Session 46 (2026-08-20, team_project_goal_hierarchy project memory note):
+projects gain a real org_unit_id, same mechanism as goals.org_unit_id
+(Session 11) — this is the "project needs independent scope later" case the
+original docstring above anticipated. Andrew wanted /app/team's Initiatives
+card to filter by an explicitly-assigned team instead of proxying through
+whoever the project happened to be assigned to. Unlike goals, projects have
+no level enum, so org_unit_id can point at any org_unit regardless of
+unit_type (team or department) — the picker on /app/projects shows both.
+`database/migrations/2026-08-20_projects_org_unit.sql` backfills existing
+projects' org_unit_id from their assignee's org_unit_id so nothing silently
+drops out of a team-filtered view the moment this ships.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -43,8 +54,8 @@ router = APIRouter()
 _STATUSES = ("active", "on_track", "at_risk", "completed", "cancelled")
 
 _SELECT_COLUMNS = (
-    "id,title,description,goal_id,status,due_date,direct_report_id,"
-    "created_at,direct_reports(name),goals(title)"
+    "id,title,description,goal_id,status,due_date,direct_report_id,org_unit_id,"
+    "created_at,direct_reports(name),goals(title),org_units(name)"
 )
 
 
@@ -57,6 +68,11 @@ class ProjectIn(BaseModel):
     # Optional — a project can stand alone or hang off a goal (goals=what,
     # projects=how).
     goal_id: str | None = None
+    # Session 46: which team/department this project belongs to. Null means
+    # no team assigned — visible only under /app/team's "All teams", not
+    # under any specific team's filter (same posture as an unassigned
+    # direct report).
+    org_unit_id: str | None = None
 
 
 class ProjectStatusUpdate(BaseModel):
@@ -69,13 +85,15 @@ def _validate_status(status: str):
 
 
 def _shape_rows(rows: list[dict]) -> list[dict]:
-    """Flatten the joined direct_reports.name and goals.title, same pattern
-    as goals.py's _shape_rows."""
+    """Flatten the joined direct_reports.name/goals.title/org_units.name,
+    same pattern as goals.py's _shape_rows."""
     for row in rows:
         joined_report = row.pop("direct_reports", None) or {}
         row["direct_report_name"] = joined_report.get("name")
         joined_goal = row.pop("goals", None) or {}
         row["goal_title"] = joined_goal.get("title")
+        joined_unit = row.pop("org_units", None) or {}
+        row["org_unit_name"] = joined_unit.get("name")
     return rows
 
 
@@ -83,6 +101,7 @@ def _shape_rows(rows: list[dict]) -> list[dict]:
 async def list_projects(
     direct_report_id: str | None = None,
     goal_id: str | None = None,
+    org_unit_id: str | None = None,
     status: str | None = None,
     auth=Depends(get_authenticated_client),
 ):
@@ -92,6 +111,8 @@ async def list_projects(
         query = query.eq("direct_report_id", direct_report_id)
     if goal_id:
         query = query.eq("goal_id", goal_id)
+    if org_unit_id:
+        query = query.eq("org_unit_id", org_unit_id)
     if status:
         query = query.eq("status", status)
     rows = query.order("created_at", desc=True).execute().data

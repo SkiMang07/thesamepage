@@ -4,9 +4,12 @@
 // projects get created and status-updated regularly, unlike Settings'
 // "configure once" sections. Per PRODUCT_VISION.md, "goals = what, projects
 // = how" — a project can stand alone, hang off a goal, and/or be assigned to
-// a direct report. No level/org_unit_id of its own (see the projects_scoping
-// project memory note and projects.py's docstring) — scope comes from
-// whatever it's linked to. See docs/SESSION_HISTORY.md Session 13.
+// a direct report. See docs/SESSION_HISTORY.md Session 13.
+//
+// Session 46 (team_project_goal_hierarchy project memory note): projects
+// gain org_unit_id — a direct team/department attachment, the same picker
+// pattern Goals already had (Session 11). Unlike Goals, there's no level
+// enum here, so the picker offers every org_unit regardless of unit_type.
 
 import { useEffect, useMemo, useState } from "react";
 import CheckInPanel from "@/components/CheckInPanel";
@@ -14,6 +17,7 @@ import {
   CheckIn,
   DirectReport,
   Goal,
+  OrgUnit,
   Project,
   ProjectStatus,
   createProject,
@@ -21,6 +25,7 @@ import {
   deleteProject,
   getDirectReports,
   getGoals,
+  getOrgUnits,
   getProjectCheckIns,
   getProjects,
   updateProject,
@@ -52,6 +57,7 @@ type ProjectFormValues = {
   description: string;
   directReportId: string;
   goalId: string;
+  orgUnitId: string;
   status: ProjectStatus;
   dueDate: string;
 };
@@ -72,6 +78,7 @@ function toProjectPayload(input: ProjectFormValues) {
     due_date: input.dueDate || undefined,
     direct_report_id: input.directReportId || undefined,
     goal_id: input.goalId || undefined,
+    org_unit_id: input.orgUnitId || undefined,
   };
 }
 
@@ -79,17 +86,19 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getProjects(), getDirectReports(), getGoals()])
-      .then(([p, r, g]) => {
+    Promise.all([getProjects(), getDirectReports(), getGoals(), getOrgUnits()])
+      .then(([p, r, g, ou]) => {
         setProjects(p);
         setReports(r);
         setGoals(g);
+        setOrgUnits(ou);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -171,6 +180,7 @@ export default function ProjectsPage() {
     onCheckedIn: applyCheckIn,
     reports,
     goals,
+    orgUnits,
   };
 
   return (
@@ -198,6 +208,7 @@ export default function ProjectsPage() {
         <ProjectForm
           reports={reports}
           goals={goals}
+          orgUnits={orgUnits}
           onCancel={() => setShowForm(false)}
           onSubmit={addProject}
           submitLabel="Add project"
@@ -234,6 +245,7 @@ function ProjectList({
   onCheckedIn,
   reports,
   goals,
+  orgUnits,
 }: {
   projects: Project[];
   onSetStatus: (id: string, status: ProjectStatus) => void;
@@ -245,6 +257,7 @@ function ProjectList({
   onCheckedIn: (projectId: string, ci: CheckIn) => void;
   reports: DirectReport[];
   goals: Goal[];
+  orgUnits: OrgUnit[];
 }) {
   return (
     <ul className="mt-3 space-y-2">
@@ -255,6 +268,7 @@ function ProjectList({
               initialProject={p}
               reports={reports}
               goals={goals}
+              orgUnits={orgUnits}
               onCancel={onCancelEdit}
               onSubmit={(input) => onSaveEdit(p.id, input)}
               submitLabel="Save changes"
@@ -266,6 +280,9 @@ function ProjectList({
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-gray-900">{p.title}</p>
+                {p.org_unit_name && (
+                  <p className="mt-0.5 text-xs text-gray-400">Team: {p.org_unit_name}</p>
+                )}
                 {p.goal_title && (
                   <p className="mt-0.5 text-xs text-gray-400">Supports goal: {p.goal_title}</p>
                 )}
@@ -320,6 +337,7 @@ function ProjectForm({
   initialProject,
   reports,
   goals,
+  orgUnits,
   onCancel,
   onSubmit,
   submitLabel,
@@ -328,6 +346,7 @@ function ProjectForm({
   initialProject?: Project | null;
   reports: DirectReport[];
   goals: Goal[];
+  orgUnits: OrgUnit[];
   onCancel: () => void;
   onSubmit: (input: ProjectFormValues) => Promise<void>;
   submitLabel: string;
@@ -337,6 +356,7 @@ function ProjectForm({
   const [description, setDescription] = useState(initialProject?.description ?? "");
   const [directReportId, setDirectReportId] = useState(initialProject?.direct_report_id ?? "");
   const [goalId, setGoalId] = useState(initialProject?.goal_id ?? "");
+  const [orgUnitId, setOrgUnitId] = useState(initialProject?.org_unit_id ?? "");
   const [status, setStatus] = useState<ProjectStatus>(initialProject?.status ?? "active");
   const [dueDate, setDueDate] = useState(initialProject?.due_date ?? "");
   const [saving, setSaving] = useState(false);
@@ -348,12 +368,13 @@ function ProjectForm({
     if (!title.trim() || saving) return;
     setSaving(true);
     try {
-      await onSubmit({ title, description, directReportId, goalId, status, dueDate });
+      await onSubmit({ title, description, directReportId, goalId, orgUnitId, status, dueDate });
       if (!isEdit) {
         setTitle("");
         setDescription("");
         setDirectReportId("");
         setGoalId("");
+        setOrgUnitId("");
         setStatus("active");
         setDueDate("");
       }
@@ -408,6 +429,22 @@ function ProjectForm({
             ))}
           </select>
         </div>
+      </div>
+
+      <div>
+        <label className={labelCls}>Team (optional)</label>
+        <select value={orgUnitId} onChange={(e) => setOrgUnitId(e.target.value)} className={inputCls}>
+          <option value="">No team assigned</option>
+          {orgUnits.map((ou) => (
+            <option key={ou.id} value={ou.id}>
+              {ou.name} ({ou.unit_type})
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-gray-400">
+          Drives which team page this shows up on under /app/team — a parent team&apos;s page also shows
+          this project.
+        </p>
       </div>
 
       <div>

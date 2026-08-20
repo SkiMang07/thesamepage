@@ -467,11 +467,14 @@ create table projects (
   goal_id           uuid references goals(id) on delete set null,
   -- Activated Session 13 (was null-only up to here). Which direct report
   -- this project belongs to — null means it's the manager's own initiative.
-  -- Deliberately NOT given its own level/org_unit_id like goals: a project's
-  -- scope is derived from whatever it's linked to (its goal's level, or the
-  -- direct report it's assigned to, or nothing for a standalone manager
-  -- initiative) rather than duplicating goals' hierarchy fields.
   direct_report_id  uuid references direct_reports(id) on delete cascade,
+  -- Session 46: which specific team/department this project belongs to,
+  -- same mechanism as goals.org_unit_id (Session 11) — null means no team
+  -- assigned yet (visible only under "All teams" on /app/team, not under
+  -- any specific team's filter). Originally left off deliberately (see
+  -- Session 13's docstring in projects.py) until a real need for
+  -- independent project scope showed up; this is that need.
+  org_unit_id       uuid references org_units(id) on delete set null,
   owner_id          uuid references auth.users(id),
   status            text not null default 'active'
                     check (status in ('active', 'on_track', 'at_risk', 'completed', 'cancelled')),

@@ -55,6 +55,19 @@
 // (null = "applies to all teams", same treatment as a company-level goal).
 // See the team_dropdown_scoping project memory note for the scoping
 // conversation.
+//
+// Session 46 (2026-08-20) — goal/project team hierarchy. Andrew wanted a
+// team's goals and initiatives to also include anything attached to a
+// PARENT org_unit (a department's goal should show on every team beneath
+// it), and wanted projects attachable to a team directly instead of only
+// via their assignee. ancestorChain() (below) walks org_units'
+// parent_unit_id upward from the selected team, client-side, off the
+// already-fetched orgUnits list — goals/initiatives now filter against that
+// whole chain instead of an exact org_unit_id match. Projects gained a real
+// org_unit_id column (projects.py, Session 46) — the assignee-proxy
+// filtering Session 45 used as a stand-in is gone. See the
+// team_project_goal_hierarchy project memory note for the scoping
+// conversation.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -233,6 +246,26 @@ function deriveNextAgenda(notes: TeamNote[]): TeamNote | null {
   return upcoming[0] ?? null;
 }
 
+// Session 46 (team_project_goal_hierarchy project memory note): the set of
+// org_unit ids "relevant to" a selected team — itself plus every ancestor
+// walking up parent_unit_id, so a department's goal/project also shows on
+// every team beneath it. Capped at 20 hops as a cycle guard: org_units.py
+// only blocks a unit being its own DIRECT parent, not a deeper cycle (see
+// its module docstring), so an unguarded walk on bad data could loop
+// forever.
+function ancestorChain(orgUnitId: string, orgUnits: OrgUnit[]): Set<string> {
+  const byId = new Map(orgUnits.map((u) => [u.id, u]));
+  const chain = new Set<string>();
+  let current: string | null | undefined = orgUnitId;
+  let hops = 0;
+  while (current && !chain.has(current) && hops < 20) {
+    chain.add(current);
+    current = byId.get(current)?.parent_unit_id;
+    hops++;
+  }
+  return chain;
+}
+
 export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [goals, setGoals] = useState<TeamGoal[]>([]);
@@ -299,31 +332,43 @@ export default function TeamPage() {
 
   // Team-scoping (Session 45): everything below filters off data already on
   // the page — no re-fetch on team switch. direct_reports.org_unit_id is the
-  // one source of truth for "which team is this report on"; initiatives and
-  // commitments both key off a direct_report_id, goals carry org_unit_id
-  // directly, and meeting notes/callouts carry their own org_unit_id column
-  // (added this session — see the team_dropdown_scoping project memory
-  // note). null org_unit_id on a goal/note/callout means "applies to all
-  // teams," so it stays visible under every specific team's filter, not just
-  // "All teams."
+  // one source of truth for "which team is this report on"; commitments key
+  // off a direct_report_id, goals/initiatives carry org_unit_id directly
+  // (initiatives as of Session 46 — see below), and meeting notes/callouts
+  // carry their own org_unit_id column (Session 45). null org_unit_id on a
+  // goal/note/callout means "applies to all teams," so it stays visible
+  // under every specific team's filter, not just "All teams."
   const directReportById = new Map(directReports.map((dr) => [dr.id, dr]));
   const reportOrgUnitId = (reportId: string | null | undefined): string | null =>
     reportId ? (directReportById.get(reportId)?.org_unit_id ?? null) : null;
+
+  // Session 46 (team_project_goal_hierarchy project memory note): goals and
+  // initiatives now also inherit down from a selected team's PARENT
+  // org_units — a department's goal shows on every team beneath it, not
+  // just an exact org_unit_id match. ancestorChain() walks parent_unit_id
+  // upward from the selected team using the already-fetched orgUnits list,
+  // so this stays client-side like the rest of Session 45's filtering.
+  const ancestorIds = selectedTeamId ? ancestorChain(selectedTeamId, orgUnits) : null;
 
   const visibleMembers =
     selectedTeamId === null
       ? members
       : members.filter((m) => reportOrgUnitId(m.id) === selectedTeamId);
+  // Initiatives no longer proxy through the assignee's org_unit_id (that was
+  // a Session 45 stand-in for projects having no team of their own) —
+  // projects.py now carries a real org_unit_id (Session 46), so a project
+  // with none set is simply unassigned, same posture as an unassigned
+  // direct report.
   const visibleInitiatives =
     selectedTeamId === null
       ? initiatives
-      : initiatives.filter(
-          (p) => !p.direct_report_id || reportOrgUnitId(p.direct_report_id) === selectedTeamId
-        );
+      : initiatives.filter((p) => p.org_unit_id != null && (ancestorIds?.has(p.org_unit_id) ?? false));
   const visibleGoals =
     selectedTeamId === null
       ? goals
-      : goals.filter((g) => g.level === "company" || g.org_unit_id === selectedTeamId);
+      : goals.filter(
+          (g) => g.level === "company" || (g.org_unit_id != null && (ancestorIds?.has(g.org_unit_id) ?? false))
+        );
   const visibleCommitments =
     selectedTeamId === null
       ? commitments
@@ -397,8 +442,8 @@ export default function TeamPage() {
               This week&apos;s focus
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <InitiativesCard initiatives={visibleInitiatives} members={visibleMembers} />
-              <GoalsCard goals={visibleGoals} />
+              <InitiativesCard initiatives={visibleInitiatives} members={visibleMembers} selectedTeamId={selectedTeamId} />
+              <GoalsCard goals={visibleGoals} selectedTeamId={selectedTeamId} />
               <CommitmentsCard
                 members={visibleMembers}
                 commitments={visibleCommitments}
@@ -498,7 +543,15 @@ function KpiStrip({
 // This week's focus row — Initiatives / Goals / Commitments
 // ---------------------------------------------------------------------------
 
-function InitiativesCard({ initiatives, members }: { initiatives: Project[]; members: TeamMember[] }) {
+function InitiativesCard({
+  initiatives,
+  members,
+  selectedTeamId,
+}: {
+  initiatives: Project[];
+  members: TeamMember[];
+  selectedTeamId: string | null;
+}) {
   const sorted = [...initiatives].sort((a, b) => {
     if (!a.due_date) return 1;
     if (!b.due_date) return -1;
@@ -519,20 +572,28 @@ function InitiativesCard({ initiatives, members }: { initiatives: Project[]; mem
         <p className="text-sm text-gray-400">No active initiatives.</p>
       ) : (
         <ul className="space-y-2.5">
-          {sorted.map((p) => (
-            <li key={p.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[p.status]}`}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm text-gray-700">{p.title}</span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
-                  {STATUS_LABELS[p.status]}
-                </span>
-              </div>
-              <p className="text-xs text-gray-400">
-                {p.direct_report_name ?? "You"}
-                {p.due_date ? ` · Due ${formatDate(p.due_date)}` : ""}
-              </p>
-            </li>
-          ))}
+          {sorted.map((p) => {
+            // Session 46: a project whose org_unit_id isn't the exact
+            // selected team is here via hierarchy (inherited from a parent
+            // department) — name the source so it doesn't read as "this
+            // team's own" work.
+            const inherited = selectedTeamId != null && p.org_unit_id !== selectedTeamId && p.org_unit_name;
+            return (
+              <li key={p.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[p.status]}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm text-gray-700">{p.title}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
+                    {STATUS_LABELS[p.status]}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  {p.direct_report_name ?? "You"}
+                  {p.due_date ? ` · Due ${formatDate(p.due_date)}` : ""}
+                  {inherited ? ` · From ${p.org_unit_name}` : ""}
+                </p>
+              </li>
+            );
+          })}
         </ul>
       )}
       <Link href="/app/projects" className="mt-3 inline-block text-xs text-gray-500 underline hover:text-gray-700">
@@ -542,7 +603,7 @@ function InitiativesCard({ initiatives, members }: { initiatives: Project[]; mem
   );
 }
 
-function GoalsCard({ goals }: { goals: TeamGoal[] }) {
+function GoalsCard({ goals, selectedTeamId }: { goals: TeamGoal[]; selectedTeamId: string | null }) {
   const scored = goals.filter((g) => g.status !== "cancelled");
   // Data-trust fix (2026-08-12 review, spec section 8 #3): this ring used to
   // compute "% of goals with status on_track" — a status count, not actual
@@ -585,19 +646,31 @@ function GoalsCard({ goals }: { goals: TeamGoal[] }) {
             </text>
           </svg>
           <ul className="min-w-0 flex-1 space-y-1.5">
-            {sorted.map((g) => (
-              <li key={g.id} className="flex items-center justify-between gap-2 text-xs">
-                <span className="truncate text-gray-700" title={g.title}>
-                  {g.title}
-                </span>
-                <span
-                  className={`shrink-0 h-2 w-2 rounded-full ${
-                    g.status === "on_track" ? "bg-green-500" : g.status === "at_risk" ? "bg-amber-500" : "bg-gray-300"
-                  }`}
-                  title={STATUS_LABELS[g.status]}
-                />
-              </li>
-            ))}
+            {sorted.map((g) => {
+              // Session 46: name where an inherited goal comes from —
+              // company-wide, or a parent department — so it doesn't read
+              // as this team's own goal when it's really cascading down.
+              const sourceLabel =
+                selectedTeamId == null || g.org_unit_id === selectedTeamId
+                  ? null
+                  : g.level === "company"
+                    ? "Company"
+                    : g.org_unit_name;
+              return (
+                <li key={g.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="min-w-0 truncate text-gray-700" title={g.title}>
+                    {g.title}
+                    {sourceLabel && <span className="text-gray-400"> · {sourceLabel}</span>}
+                  </span>
+                  <span
+                    className={`shrink-0 h-2 w-2 rounded-full ${
+                      g.status === "on_track" ? "bg-green-500" : g.status === "at_risk" ? "bg-amber-500" : "bg-gray-300"
+                    }`}
+                    title={STATUS_LABELS[g.status]}
+                  />
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
