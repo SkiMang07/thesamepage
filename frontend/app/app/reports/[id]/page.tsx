@@ -27,6 +27,7 @@ import {
   getRoleLevels,
   getOrgUnits,
   getDevelopmentPlan,
+  updateDevPlanText,
   upsertAspiration,
   createOpportunity,
   deleteOpportunity,
@@ -35,7 +36,7 @@ import {
   deleteTraining,
   createDevManagerNote,
   draftDevelopment,
-  reviseDevManagerNote,
+  reviseDevText,
   DirectReport,
   OneOnOne,
   Commitment,
@@ -987,24 +988,34 @@ function DevelopmentSection({
   const [addingTraining, setAddingTraining] = useState(false);
   const [removingTrainingId, setRemovingTrainingId] = useState<string | null>(null);
 
-  // Manager notes — append-only. The textarea is always manually writable
-  // (createDevManagerNote never depended on AI); AI is an optional assist
-  // via the two buttons below, not a gate.
+  // Development plan — the primary, always-writable narrative (Session 49).
+  // A single field on the plan row, upserted in place (unlike manager notes
+  // below, which is an append-only log). This is what "Draft with AI"
+  // suggests into and "Revise with AI" improves — not manager notes, which
+  // Andrew explicitly wants kept as a separate, private, unrelated concept.
+  const [planText, setPlanText] = useState(bundle.development_plan.plan_text ?? "");
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [revisingPlan, setRevisingPlan] = useState(false);
+  const planDirty = planText.trim() !== (bundle.development_plan.plan_text ?? "").trim();
+
+  // Manager notes — append-only, private, not shared with the report. The
+  // textarea is always manually writable (createDevManagerNote never
+  // depended on AI); Revise with AI is an optional assist here too, but
+  // this box has nothing to do with the plan-text box above.
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [revisingNote, setRevisingNote] = useState(false);
 
-  // AI assist (follow-up, same session — see development.py's docstring
-  // follow-up note). "Draft with AI" surfaces non-blocking suggestions
-  // instead of a full-panel review: AI-suggested opportunities render
-  // alongside the assessment-based suggestions below (same "Add" action),
-  // and an AI-suggested note (if any) offers a "Use this" that fills the
-  // always-present note textarea rather than replacing it silently.
-  // "Revise with AI" (further below) works on whatever the manager already
-  // typed and never depends on there being evidence at all.
+  // AI assist (Session 48/49 follow-ups — see development.py's docstring).
+  // "Draft with AI" surfaces non-blocking suggestions: AI-suggested
+  // opportunities render alongside the assessment-based suggestions below
+  // (same "Add" action), and an AI-suggested plan note (if any) offers a
+  // "Use this" that fills the plan-text box above rather than replacing it
+  // silently. "Revise with AI" (on both the plan box and manager notes)
+  // works on whatever's already typed and never depends on evidence.
   const [drafting, setDrafting] = useState(false);
   const [aiOpportunities, setAiOpportunities] = useState<DevelopmentDraft["opportunities"]>([]);
-  const [aiNoteSuggestion, setAiNoteSuggestion] = useState<string | null>(null);
+  const [aiPlanSuggestion, setAiPlanSuggestion] = useState<string | null>(null);
   const [draftHint, setDraftHint] = useState<string | null>(null);
   const [addingAiOppIndex, setAddingAiOppIndex] = useState<number | null>(null);
 
@@ -1132,7 +1143,6 @@ function DevelopmentSection({
       await createDevManagerNote(directReportId, content);
       await onRefresh();
       setNewNote("");
-      setAiNoteSuggestion(null);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add note");
@@ -1141,9 +1151,45 @@ function DevelopmentSection({
     }
   }
 
+  async function savePlanText() {
+    setSavingPlan(true);
+    try {
+      await updateDevPlanText(directReportId, planText.trim() || null);
+      await onRefresh();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save development plan");
+    } finally {
+      setSavingPlan(false);
+    }
+  }
+
+  async function revisePlanText() {
+    const text = planText.trim();
+    if (!text || revisingPlan) return;
+    setRevisingPlan(true);
+    try {
+      const result = await reviseDevText(directReportId, text);
+      setPlanText(result.note);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to revise with AI");
+    } finally {
+      setRevisingPlan(false);
+    }
+  }
+
+  function usePlanSuggestion() {
+    if (aiPlanSuggestion) {
+      setPlanText(aiPlanSuggestion);
+      setAiPlanSuggestion(null);
+    }
+  }
+
   // Non-blocking: on a report with no evidence yet this just comes back
   // with nothing to suggest (draftHint explains why) — it never prevents
-  // writing an opportunity or note by hand, those forms are always usable.
+  // writing an opportunity or plan text by hand, those forms are always
+  // usable.
   async function runDraft() {
     setDrafting(true);
     setDraftHint(null);
@@ -1153,8 +1199,8 @@ function DevelopmentSection({
         (o) => !(o.source_config_id && existingSourceIds.has(o.source_config_id))
       );
       setAiOpportunities(freshOpps);
-      setAiNoteSuggestion(d.manager_note);
-      if (freshOpps.length === 0 && !d.manager_note) {
+      setAiPlanSuggestion(d.plan_note);
+      if (freshOpps.length === 0 && !d.plan_note) {
         setDraftHint("Not enough evidence yet for a draft — write your own below, or add more 1:1 history and assessment scores first.");
       }
       setError(null);
@@ -1186,22 +1232,16 @@ function DevelopmentSection({
     }
   }
 
-  function useNoteSuggestion() {
-    if (aiNoteSuggestion) {
-      setNewNote(aiNoteSuggestion);
-      setAiNoteSuggestion(null);
-    }
-  }
-
   // Always answerable, unlike runDraft above — it revises text the manager
   // already wrote rather than inferring from nothing, so a thin-evidence
-  // report doesn't block it. See development.py's /notes/revise.
+  // report doesn't block it. Same generic revise call the plan-text box
+  // above uses (revisePlanText) — see development.py's /notes/revise.
   async function reviseNote() {
     const text = newNote.trim();
     if (!text || revisingNote) return;
     setRevisingNote(true);
     try {
-      const result = await reviseDevManagerNote(directReportId, text);
+      const result = await reviseDevText(directReportId, text);
       setNewNote(result.note);
       setError(null);
     } catch (e) {
@@ -1226,13 +1266,53 @@ function DevelopmentSection({
 
       {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
 
-      {/* Non-blocking hint when a draft comes back with nothing to suggest
-          — the manual fields below always work regardless. */}
-      {draftHint && (
-        <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
-          {draftHint}
-        </p>
-      )}
+      {/* Development plan — the primary, always-writable narrative
+          (Session 49). "Draft with AI" above offers a suggestion via the
+          callout below; "Revise with AI" improves whatever's already
+          typed. Neither is required — this box works with zero AI
+          involvement, which is the whole point of this follow-up. */}
+      <div className="mt-3">
+        {aiPlanSuggestion && (
+          <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2">
+            <p className="text-xs font-medium text-blue-600">AI suggested</p>
+            <p className="mt-1 text-sm text-blue-800">{aiPlanSuggestion}</p>
+            <div className="mt-2 flex gap-3">
+              <button onClick={usePlanSuggestion} className="text-xs font-medium text-blue-700 hover:text-blue-900">
+                Use this
+              </button>
+              <button onClick={() => setAiPlanSuggestion(null)} className="text-xs text-blue-400 hover:text-blue-600">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+        <textarea
+          value={planText}
+          onChange={(e) => setPlanText(e.target.value)}
+          rows={4}
+          placeholder={`Write ${reportName.split(" ")[0]}'s development plan — growth focus, what's next, whatever's useful...`}
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={savePlanText}
+            disabled={savingPlan || !planDirty}
+            className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            {savingPlan ? "Saving..." : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={revisePlanText}
+            disabled={!planText.trim() || revisingPlan}
+            className="rounded-md border border-blue-300 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+          >
+            {revisingPlan ? "Revising..." : "Revise with AI"}
+          </button>
+          {draftHint && <span className="text-sm text-gray-400">{draftHint}</span>}
+        </div>
+      </div>
 
       {/* Aspiration */}
       <div className="mt-4">
@@ -1523,24 +1603,6 @@ function DevelopmentSection({
               </li>
             ))}
           </ul>
-        )}
-
-        {/* AI-suggested note from "Draft with AI" — offered, never forced;
-            "Use this" fills the textarea below so the manager can still edit
-            before saving. */}
-        {aiNoteSuggestion && (
-          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2">
-            <p className="text-xs font-medium text-blue-600">AI suggested note</p>
-            <p className="mt-1 text-sm text-blue-800">{aiNoteSuggestion}</p>
-            <div className="mt-2 flex gap-3">
-              <button onClick={useNoteSuggestion} className="text-xs font-medium text-blue-700 hover:text-blue-900">
-                Use this
-              </button>
-              <button onClick={() => setAiNoteSuggestion(null)} className="text-xs text-blue-400 hover:text-blue-600">
-                Dismiss
-              </button>
-            </div>
-          </div>
         )}
 
         <form onSubmit={addNote} className="mt-3 flex items-start gap-2">

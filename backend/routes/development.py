@@ -45,6 +45,23 @@ but not blocked by its absence — revising given text is a fundamentally
 different, always-answerable task from drafting from nothing. _fetch_
 evidence() below factors out the 1:1/commitment lookups both /draft and
 /notes/revise need.
+
+Follow-up (Session 49, 2026-08-21): Andrew tried it live and pushed back
+harder — the note textarea from the previous follow-up was labeled/scoped
+as "manager notes" (private commentary about the person), which is a real,
+separate concept he wants kept as-is. What he actually meant by "a place to
+write things myself" was the development PLAN itself — the narrative a
+manager builds up over time (growth focus, what's next), not a private
+aside. Fixed by adding development_plans.plan_text: a single freeform field
+on the plan row (upserted in place via PUT /{id}/plan, unlike
+dev_plan_manager_notes' append-only log) that's the primary, always-visible
+writing surface. DevelopmentDraft.manager_note is renamed plan_note to
+match — /draft's synthesis suggestion now targets this field, not manager
+notes. POST /{id}/notes/revise is now dual-purpose: the same
+evidence-grounded, always-answerable revise operation backs both this new
+plan-text box and the (unchanged, still separate) manager notes box — the
+operation doesn't care which field the text belongs to, so one endpoint
+serves both rather than duplicating logic.
 """
 import json
 from datetime import date, datetime, timezone
@@ -303,10 +320,10 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
   "opportunities": [
     {{"type": "skill", "description": "1-2 sentences on the specific gap and how to close it", "source_kind": "skill", "source_config_id": "..."}}
   ],
-  "manager_note": "1-3 sentences synthesizing this person's overall growth focus right now, or null if there isn't enough evidence yet"
+  "plan_note": "2-4 sentences drafting the start of this person's development plan narrative — their overall growth focus right now, synthesized from the evidence — or null if there isn't enough evidence yet"
 }}
 
-"type" is "skill" or "knowledge". Prefer grounding each opportunity in one of the low-scoring items above (set source_kind/source_config_id to match); you may also propose a knowledge-gap opportunity from 1:1 history alone with source_kind/source_config_id set to null if there's real evidence for it in the notes. Do not force coverage of every low-scoring item — only include what the evidence actually supports acting on right now. Empty opportunities and a null manager_note are valid, honest answers."""
+"type" is "skill" or "knowledge". Prefer grounding each opportunity in one of the low-scoring items above (set source_kind/source_config_id to match); you may also propose a knowledge-gap opportunity from 1:1 history alone with source_kind/source_config_id set to null if there's real evidence for it in the notes. Do not force coverage of every low-scoring item — only include what the evidence actually supports acting on right now. Empty opportunities and a null plan_note are valid, honest answers."""
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +331,10 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
 # above. Draft starts from nothing and is allowed to come back empty when
 # there's no evidence; revise starts from the manager's own text, which is
 # itself the primary input, so it should reliably return something even
-# when assessment/1:1 evidence is thin.
+# when assessment/1:1 evidence is thin. Deliberately generic about WHAT
+# text it's revising (Session 49) — it backs both the plan-text box and
+# the manager-notes box, which are separate concepts on the frontend but
+# an identical operation here.
 # ---------------------------------------------------------------------------
 
 def _build_revise_prompt(
@@ -342,7 +362,7 @@ def _build_revise_prompt(
         f"  • {c['description']} (due: {c.get('due_date') or 'unspecified'})" for c in open_commitments
     ) or "  (none)"
 
-    return f"""You are helping a manager refine a development note they've already started writing about {report_name}. Today's date: {today_iso}.
+    return f"""You are helping a manager refine development-plan text they've already started writing about {report_name}. Today's date: {today_iso}.
 
 THE MANAGER'S DRAFT (your starting point — this is the primary source, not the evidence below; preserve their intent, meaning, and voice):
 ---
@@ -400,6 +420,14 @@ class ManagerNoteIn(BaseModel):
     content: str
 
 
+class PlanTextIn(BaseModel):
+    """The development plan's freeform narrative (Session 49) — a single
+    field on development_plans, upserted in place. Distinct from
+    ManagerNoteIn/dev_plan_manager_notes, which stays an append-only
+    private log unrelated to this."""
+    text: str | None = None
+
+
 class DraftOpportunity(BaseModel):
     type: str
     description: str
@@ -411,7 +439,7 @@ class DevelopmentDraft(BaseModel):
     """AI-drafted opportunities + a synthesis note for the manager to
     review — nothing is saved until the manager POSTs what they keep."""
     opportunities: list[DraftOpportunity] = []
-    manager_note: str | None = None
+    plan_note: str | None = None
 
 
 class ReviseNoteIn(BaseModel):
@@ -430,6 +458,20 @@ class ReviseNoteOut(BaseModel):
 async def get_development_plan(direct_report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     return _fetch_bundle(user_id, supabase, direct_report_id)
+
+
+@router.put("/{direct_report_id}/plan")
+async def update_plan_text(direct_report_id: str, body: PlanTextIn, auth=Depends(get_authenticated_client)):
+    """Upserts development_plans.plan_text in place (Session 49) — the
+    primary, always-writable development-plan narrative. Unlike
+    dev_plan_manager_notes (append-only, private, unrelated), this is a
+    single field the manager edits over time, same "update the one row"
+    shape as upsert_aspiration below, just simpler (no separate table)."""
+    user_id, supabase = auth
+    _, plan = _get_or_create_plan(user_id, supabase, direct_report_id)
+    text = (body.text or "").strip() or None
+    supabase.table("development_plans").update({"plan_text": text}).eq("id", plan["id"]).execute()
+    return {"plan_text": text}
 
 
 @router.put("/{direct_report_id}/aspiration")
@@ -598,10 +640,10 @@ async def draft_development(
     auth=Depends(get_authenticated_client),
     authorization: str = Header(None),
 ):
-    """Pure AI-call route — nothing is saved. Manager reviews the draft
-    (checks which opportunities to keep, edits the note), then the frontend
-    calls create_opportunity/create_manager_note for whatever survives
-    review."""
+    """Pure AI-call route — nothing is saved. Manager reviews the draft; the
+    frontend calls create_opportunity for opportunities kept, and offers
+    plan_note as a "Use this" suggestion for the plan-text box (PUT
+    /{id}/plan) — neither commits automatically."""
     user_id, supabase = auth
     report, plan = _get_or_create_plan(user_id, supabase, direct_report_id)
 
@@ -661,10 +703,10 @@ async def draft_development(
             type=o_type, description=description, source_kind=source_kind, source_config_id=source_config_id,
         ))
 
-    manager_note = parsed.get("manager_note")
-    manager_note = manager_note.strip() if isinstance(manager_note, str) and manager_note.strip() else None
+    plan_note = parsed.get("plan_note")
+    plan_note = plan_note.strip() if isinstance(plan_note, str) and plan_note.strip() else None
 
-    return DevelopmentDraft(opportunities=opportunities, manager_note=manager_note)
+    return DevelopmentDraft(opportunities=opportunities, plan_note=plan_note)
 
 
 @router.post("/{direct_report_id}/notes/revise", response_model=ReviseNoteOut)
@@ -676,10 +718,11 @@ async def revise_note(
     auth=Depends(get_authenticated_client),
 ):
     """The always-answerable counterpart to /draft (see this module's
-    docstring follow-up note). Takes text the manager already wrote in the
-    manager-note composer and returns an improved/expanded version, grounded
-    in whatever evidence exists — unlike /draft, this never comes back empty
-    on a thin-evidence report, because the manager's own text is the primary
+    docstring follow-up notes). Takes text the manager already wrote —
+    either the plan-text box or a manager note, the route doesn't
+    distinguish — and returns an improved/expanded version, grounded in
+    whatever evidence exists. Unlike /draft, this never comes back empty on
+    a thin-evidence report, because the manager's own text is the primary
     input, not something to be inferred from scratch."""
     user_id, supabase = auth
     text = body.text.strip()

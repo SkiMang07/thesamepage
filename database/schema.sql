@@ -770,6 +770,11 @@ create table development_plans (
   manager_id       uuid not null references auth.users(id),
   status           text not null default 'active'
                    check (status in ('active', 'completed', 'archived')),
+  -- Freeform plan narrative (Session 49, 2026-08-21) — the primary,
+  -- always-writable surface for building the plan itself. Upserted in
+  -- place via PUT /{id}/plan; distinct from dev_plan_manager_notes below,
+  -- which is a separate, append-only, private log.
+  plan_text        text,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );

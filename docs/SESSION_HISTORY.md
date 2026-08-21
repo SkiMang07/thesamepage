@@ -18,6 +18,60 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 49 — 2026-08-21
+
+**Goal:** Andrew's second round of feedback on Development (Sessions 47/48): the AI-assist he asked
+for had landed on Manager Notes (private commentary he explicitly said is fine as-is), not on the
+actual development plan. He wants a dedicated place to write and build the plan itself, with Draft
+with AI / Revise with AI as optional assists on that surface specifically.
+
+**What was done:**
+- New `development_plans.plan_text` column (migration `2026-08-21_development_plan_text.sql`) — a
+  single freeform field, upserted in place (unlike the append-only `dev_plan_manager_notes`), the
+  primary always-writable plan narrative.
+- `backend/routes/development.py`: new `PUT /{direct_report_id}/plan` — updates `plan_text` via
+  `_get_or_create_plan` plus a plain update, same "update the one row" shape as `upsert_aspiration`
+  but simpler (no separate table). `DevelopmentDraft.manager_note` renamed `plan_note` (draft
+  prompt's JSON key/wording updated to match) so `/draft`'s synthesis suggestion targets the
+  plan-text box, not manager notes. `POST /{id}/notes/revise` is now dual-purpose — the same
+  evidence-grounded, always-answerable revise operation backs both the plan-text box and the
+  (unchanged) manager-notes box, since the operation doesn't care which field the text belongs to.
+- `frontend/lib/api.ts`: `DevelopmentPlan.plan_text`, new `updateDevPlanText()`,
+  `DevelopmentDraft.plan_note`, `reviseDevManagerNote` renamed `reviseDevText` (generic, shared by
+  both surfaces now).
+- `frontend/app/app/reports/[id]/page.tsx`'s `DevelopmentSection`: new "Development plan" text box
+  at the top of the section, under the "Draft with AI" header button — always editable, `Save`
+  (enabled only when dirty), `Revise with AI`, and an "AI suggested" callout with "Use this"/
+  "Dismiss" when `runDraft()` returns a `plan_note`. Manager Notes reverted to exactly its Session
+  48 shape (textarea, Add, Revise with AI) minus the AI-suggestion callout that had been misrouted
+  there.
+
+**Decisions made / locked:**
+- Manager notes and the development plan are two genuinely separate concepts — private commentary
+  vs. the actual plan artifact — and stay on separate DB fields/UI surfaces rather than merging, per
+  Andrew's explicit correction.
+- `/notes/revise` is intentionally reused, not duplicated into a second endpoint, for both surfaces
+  — revising text the manager already wrote is the same operation regardless of destination field;
+  only the frontend caller differs.
+- Opportunities/Training/Aspiration were left untouched — legitimate structured sub-objects
+  (assessment-linked, budget/career decisions) that the freeform plan-text box complements rather
+  than replaces.
+
+**Verification:** `python3 -m py_compile` clean; sandboxed `main.py` import confirms 121 total
+routes with the new `PUT /api/development/{direct_report_id}/plan` registered, no collisions.
+Frontend: `npx tsc --noEmit` and `next build` both clean (19/19 routes). Schema: fresh `schema.sql`
+apply against a local Postgres 16 (Supabase auth/storage stub) — zero errors, `plan_text` column
+present with the right type/nullability; migration applies and is idempotent on re-run. Functional:
+bootstrapped a plan, updated `plan_text` in place, confirmed a second manager sees zero rows (RLS
+isolation holds).
+
+**Next step:** Run `database/migrations/2026-08-21_development_plan_text.sql` against live Supabase
+— the plan-text box 500s until that column exists. Then Andrew dogfoods the new box directly: write
+a plan from scratch on a thin-evidence report, try "Draft with AI" (should suggest into the new box,
+not Manager Notes), try "Revise with AI" on hand-typed text.
+
+---
+
 ## Session 48 — 2026-08-21
 
 **Goal:** Andrew dogfooded Session 47's Development feature immediately and hit a real dead
@@ -284,131 +338,6 @@ at least one `org_units` row with himself as `leader_user_id` before the dropdow
 
 ---
 
-## Session 44 — 2026-08-18
-
-**Goal:** Build the Role JD Import flow scoped in `docs/ROLE_JD_IMPORT_SCOPING.md` — paste or drop a
-job description, one AI call extracts the role identity + proposes where it belongs among existing
-ladders + drafts its expectations, the manager reviews, one commit creates (or back-fills) the role
-and its expectations. Kills the "type everything by hand" burden that left 13 dogfood roles with 0
-expectations.
-
-**What was done:**
-- **`backend/routes/roles_import.py` (new) — `POST /api/roles/import/draft`.** Multipart, exactly one
-  of `file` / `text` (422 on both or neither). `.pdf` goes to Claude as-is, `.docx` through
-  LibreOffice, `.txt`/`.md` and pasted text inline. ONE AI call returns the whole scoping-§3.1
-  contract: `is_job_description` (+ `reason`), `role` (job_role/job_level/functional_team/
-  job_responsibilities), `match` (attach | create_new | exists, with role_family_id/
-  existing_role_level_id/confidence/rationale), `other_roles_note`, and `expectations`. Rate limit
-  `10/minute`, 25MB cap (applied to pasted text too), **nothing saved, no Storage writes** — same
-  pure-AI contract as `/api/expectations/draft`. Mounted at `/api/roles/import` in `main.py`.
-- **Reuse rather than re-implementation, in four places.** (1) `documents.py`'s
-  `_convert_pptx_to_pdf` generalized to `convert_to_pdf(raw_bytes, kind)` — same subprocess, suffix
-  driven by `kind`, error strings now name the actual input type; its one existing call site passes
-  `"pptx"`. (2) `expectations_ai.py`'s METRICS/SKILLS/VALUES definitions block hoisted to
-  `_EXPECTATION_DEFINITIONS` and interpolated back into `_build_draft_prompt` — verified
-  byte-identical output against the pre-session module, so the coverage-grid draft prompt is
-  unchanged while the JD prompt carries the same definitions verbatim. (3)
-  `_generate_and_parse_draft`'s validation tail split into `parse_draft_items(parsed)` so the JD
-  route runs the identical clamps on its `expectations` sub-object (it can't reuse the call-and-parse
-  wrapper — its one call returns much more than expectations). (4) `_compute_coverage` supplies the
-  per-level "has expectations" counts in the ladders block.
-- **Match proposal.** Every family's ladder/level names go into the prompt (the model needs them all
-  to propose anything), but only a server-side shortlist gets its existing expectations inlined for
-  calibration — `_shortlist_families()` normalizes with the same seniority-prefix stripping as
-  Session 43's ladder-merge nudge (`stripSeniorityPrefix` in `settings/page.tsx`), matching against
-  the pasted text or, for uploads, the filename (a PDF's contents aren't readable server-side without
-  a second extraction call, and one call is the point). `_validate_match()` never trusts the model's
-  ids: a hallucinated/foreign family id degrades to create_new, an `existing_role_level_id` pointing
-  outside its claimed family is dropped, a create_new never carries a ladder, and a level number
-  already occupied in the proposed ladder is forced to `exists` against **that** row — so the
-  frontend's own collision UI only has to handle collisions the manager creates by editing.
-- **`frontend/components/DraftExpectationRows.tsx` (new).** The Plan S3 draft-review rows
-  (keep/edit/discard per item, three kind tabs) lifted verbatim out of `DraftReviewPanel` in
-  `settings/page.tsx` into a shared `DraftExpectationsReview`, plus `draftIncludedCount()` and
-  `commitDraftExpectations()` (one batch call per non-empty kind). `DraftReviewPanel` now renders the
-  shared component and calls the shared commit — same screen, one implementation, so the JD import
-  and the coverage grid can't drift. Empty-state copy is a prop; the defaults are the coverage grid's
-  original wording.
-- **`frontend/components/RoleImportPanel.tsx` (new).** input (paste textarea + drag/drop zone, one
-  control each) → drafting → review → commit. Review is an editable role identity card (title, level
-  stepper, ladder select with the AI's match preselected + "Create new ladder: <title>", optional
-  team, and the extracted responsibilities) above the shared draft-review rows. Collision handling
-  per §3.2: choosing a ladder+level that already exists blocks the commit and offers "Update L{n}
-  instead" (back-fill mode) or "Add as L{next free}". Back-fill mode is **derived** from the current
-  selection, not a stored flag, so editing the ladder or level out from under it drops back to
-  create-mode instead of PUTting the wrong row.
-- **Commit uses only existing endpoints, client-orchestrated.** create_new → `createRoleFamily` →
-  `createRoleLevel` → the three batches; attach → `createRoleLevel` with the existing family → batches;
-  exists → `updateRoleLevel` (whole-record PUT preserving the level's ladder, and its team unless the
-  manager typed one — same preservation pattern as `saveEdit`) → batches. Empty kinds are skipped. No
-  import-specific write endpoint exists.
-- **All three entry points wired (`settings/page.tsx`).** RolesSection's "+ Add a new ladder" now
-  opens the import panel as the hero, with "or start from scratch" inside it falling back to the
-  unchanged `RoleForm`; each ladder card's add-a-level row gains an "Import from a JD" link that
-  opens the panel pinned to that family (its manual prefilled form stays the default, and is what
-  "start from scratch" falls back to there); the People section's inline create-role modal gains
-  "Paste a JD instead", which swaps to the panel and still assigns the imported role to the person
-  the modal was opened from. The coverage grid's "Draft with AI" is untouched.
-
-**Decisions made / locked:**
-- **No migration, confirmed.** Every column this flow writes already exists (`job_responsibilities`,
-  `role_family_id`, nullable `value_configs.role_level_id`) and no new table is involved. The
-  scoping brief asked for a loud flag if the build found otherwise — it did not.
-- Collision resolution is **server-side first** (the draft response already says `exists` when the
-  proposed level is occupied), with the frontend handling only manager-created collisions. One rule,
-  two enforcement points, instead of the model's word being trusted.
-- The definitions block is **shared, not copied**. The scoping brief said "copy verbatim"; a shared
-  constant is the same text with no way to drift, and the pre/post prompt strings were diffed to
-  prove the existing path is byte-identical.
-- `.pptx` is deliberately **not** accepted here even though the conversion path would handle it — a
-  slide deck is not a job description, and the Context Engine is where decks belong.
-- The JD file is never stored (no Storage write, no `documents` row): a JD is role config, not a
-  Context Engine document.
-
-**Verification:** `python3 -m py_compile` clean on every touched backend file; imported `main` and
-confirmed `/api/roles/import/draft` registers with the limiter attached. `npx tsc --noEmit` clean;
-`npx next build` clean, 19/19 routes. Functional: ran the **real route with real Anthropic calls**
-against an in-memory fake Supabase (auth bypassed via a dependency override) seeded with a Corporate
-CSM ladder at L1 + its expectations, an ungrouped Account Executive, and two org-wide values — all
-six scoping-§4 cases pass. (1) Content-marketing JD → `create_new`, 3 metrics + 3 skills. (2) Senior
-CSM JD → `attach` to Corporate CSM at L2, high confidence, rationale "Looks like the next level up
-on your Corporate CSM ladder…". (3) The exact existing L1 JD → `exists` with
-`existing_role_level_id` = that row (the back-fill path). (4) `.pdf` upload (generated with
-`cupsfilter`) drafts end-to-end; `.docx` upload verified through type inference → `convert_to_pdf(…,
-"docx")` dispatch → AI call, with the conversion stubbed since LibreOffice isn't installed on this
-Mac, plus a separate check that the real `convert_to_pdf` shells out as `libreoffice --headless
---norestore --convert-to pdf` on an `input.docx`. (5) A braised-short-ribs recipe → honest refusal
-("This looks like a cooking recipe…", no role, no expectations). (6) Empty and whitespace-only input
-→ 422; both file and text → 422; `.pptx` → 422. Also confirmed a 3-role job-req document extracts
-the primary role and reports `other_roles_note` naming the other two, unit-tested `_validate_match`'s
-degradation paths and `_validate_role`'s clamps, and validated every commit payload the panel sends
-against the receiving Pydantic models. **Values came back empty on every role draft** — correct: the
-org-wide values were in the prompt and the restraint rule held, so nothing was duplicated per role.
-What's still unverified: the real LibreOffice `.docx` conversion (no binary locally — it runs on
-Railway, same posture as the existing PPTX path), and the whole commit path against a live Supabase.
-
-**Post-build fix (Cowork review, same day):** the `_EXPECTATION_DEFINITIONS` hoist was left
-half-done — the constant was a literal stub (`"""{_EXPECTATION_DEFINITIONS}"""`) while
-`_build_draft_prompt` still carried the definitions inline, which is exactly why the byte-identical
-diff passed: the coverage-grid path never changed, but the JD prompt shipped the placeholder token
-instead of the definitions (drafts still parsed because the JD prompt's RULES section spells out the
-enums — the miss was calibration guidance, invisible in output shape). Cowork filled the constant
-with the real block, made `_build_draft_prompt` interpolate it, and verified programmatically:
-coverage prompt byte-identical pre/post-fix (cases with and without JD/siblings), JD prompt now
-carries the definitions, `parse_draft_items` parity unchanged. Lesson for future sessions: a
-byte-identical diff on the UNCHANGED path proves nothing about the NEW path — render the new prompt
-and assert the shared text actually appears in it.
-
-**Next step:** Live smoke test on Railway/Vercel once pushed — paste a real JD into Settings → Roles &
-expectations → "+ Add a new ladder" and confirm the created ladder/level/expectations all land, then
-paste a JD for one of the 13 expectation-less dogfood roles and confirm the `exists` back-fill path
-updates that role in place rather than creating a duplicate. Upload a real `.docx` JD (the one path
-that can't be exercised locally) to confirm the LibreOffice conversion works in production. If the
-`exists` proposal proves reliable, the fastest way to clear the 13-roles/0-expectations backlog is to
-paste each role's JD in turn.
-
----
-
 ---
 
 ## Archived sessions (compact index)
@@ -420,6 +349,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 44 — 2026-08-18:** Build Role JD Import (`docs/ROLE_JD_IMPORT_SCOPING.md`): paste/drop a JD, one AI call proposes role identity + ladder match + drafts expectations, manager reviews, one commit lands it. **Decided:** No migration needed — every column this flow writes already existed; collision resolution is server-side first (draft already flags `exists`), frontend only handles manager-created collisions; the JD file is never stored (role config, not a Context Engine document).
 - **Session 43 — 2026-08-18:** Polish pass (Plan §7.3, last of 5 team-setup UX sessions): People archive/edit, People-row rework, data-trust fixes, org-wide values, ladder-merge nudge. **Decided:** Two mutually-exclusive lists (active/archived), not one client-filtered list — archived fetch only pays when a manager expands "Show archived"; `teams_count` keeps its pre-existing meaning (total org units), tile-display split lives in two new fields instead.
 - **Session 42 — 2026-08-18:** Build Plan S4+S5 (last of the four S1-S5 setup-UX sessions, `docs/TEAM_SETUP_UX_REVIEW.md` §6) — make half-configured setup state visible everywhere a person appears, and rename/consolidate the setup surfaces (Roles & Levels + Expectations merged into one "Roles & expectations" tab).
 - **Session 41 — 2026-08-18:** Build Plan S1 — rebuild Settings → Team as a roster-first "People" section (progress header, inline role/team creation, fix for Quick add's free-text Role dead-end). **Decided:** `role_has_expectations` is null (not false) when no role is assigned, distinguishing "nothing to check" from "checked, found nothing"; inline role/team creation always creates new (no fuzzy-match merge — Roles & Levels' existing merge tool stays the one place for that); email on create is fire-and-forget, no auto-invite.

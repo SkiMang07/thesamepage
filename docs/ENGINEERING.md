@@ -242,6 +242,8 @@ dedicated top-level page. Team-level counterpart is `team_dev_focus` (a
 new table, mirrors `team_callouts`) — see team.py's GET/PUT /dev-focus.
 
 Follow-up (Session 48, 2026-08-21): added `POST /{id}/notes/revise` — an always-answerable counterpart to `/draft` for manager notes. `/draft` stays evidence-gated (an honest empty result is valid); `/notes/revise` takes the manager's own already-written text as the primary input and is never blocked by thin evidence. `_fetch_evidence()`/`_role_label()` in development.py are the shared helpers both routes ground themselves in.
+
+Follow-up (Session 49, 2026-08-21): added `development_plans.plan_text` — a single freeform, upserted-in-place field that's the primary always-writable plan narrative, separate from `dev_plan_manager_notes` (append-only, private, a distinct concept Andrew wants kept as-is). New `PUT /{id}/plan` writes it. `/draft`'s synthesis suggestion (`DevelopmentDraft.plan_note`, renamed from `manager_note`) now targets this field, not manager notes. `POST /{id}/notes/revise` is reused unchanged for both surfaces — revising manager-written text is the same operation regardless of which field it lands in.
 ```
 development_plans      -- one per direct report, bootstrapped on first access
 dev_plan_aspirations    -- career aspiration: desired role/path + timeline; one row per

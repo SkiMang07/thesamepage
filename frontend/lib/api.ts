@@ -1485,6 +1485,10 @@ export type DevelopmentPlan = {
   id: string;
   direct_report_id: string;
   status: "active" | "completed" | "archived";
+  // Freeform plan narrative (Session 49) — the primary, always-writable
+  // surface for building the plan itself. Distinct from DevManagerNote
+  // below, which is a separate, append-only, private log.
+  plan_text: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1555,6 +1559,11 @@ export type DevelopmentBundle = {
 export const getDevelopmentPlan = (directReportId: string): Promise<DevelopmentBundle> =>
   authedFetch(`/api/development/${directReportId}`);
 
+// Session 49: the plan's freeform narrative — upserted in place, unlike
+// createDevManagerNote's append-only log below.
+export const updateDevPlanText = (directReportId: string, text: string | null): Promise<{ plan_text: string | null }> =>
+  authedFetch(`/api/development/${directReportId}/plan`, { method: "PUT", body: JSON.stringify({ text }) });
+
 export const upsertAspiration = (
   directReportId: string,
   body: { desired_role?: string | null; timeline?: string | null; notes?: string | null }
@@ -1589,8 +1598,10 @@ export const createDevManagerNote = (directReportId: string, content: string): P
   authedFetch(`/api/development/${directReportId}/notes`, { method: "POST", body: JSON.stringify({ content }) });
 
 // AI-drafted opportunities + a synthesis note — reviewed by the manager
-// before create Opportunity/createDevManagerNote persist whatever survives
-// review. Sparse by design, same restraint as AssessmentDraft.
+// before createOpportunity/updateDevPlanText persist whatever survives
+// review. Sparse by design, same restraint as AssessmentDraft. plan_note
+// (Session 49, was manager_note) targets the plan-text box, not manager
+// notes — those are a separate, unrelated concept.
 export type DevelopmentDraft = {
   opportunities: {
     type: OpportunityType;
@@ -1598,19 +1609,20 @@ export type DevelopmentDraft = {
     source_kind: "skill" | "value" | null;
     source_config_id: string | null;
   }[];
-  manager_note: string | null;
+  plan_note: string | null;
 };
 
 export const draftDevelopment = (directReportId: string): Promise<DevelopmentDraft> =>
   authedFetch(`/api/development/${directReportId}/draft`, { method: "POST" });
 
-// Follow-up (same session, 2026-08-20): draftDevelopment() is evidence-gated
-// by design and can come back empty — Andrew hit that dead end immediately
-// with a report that had no assessment/1:1 history yet. reviseDevManagerNote
-// is the always-answerable counterpart: takes text the manager already
-// wrote and returns an improved/expanded version, grounded in evidence when
-// it exists but never blocked by its absence.
-export const reviseDevManagerNote = (directReportId: string, text: string): Promise<{ note: string }> =>
+// Follow-up (Session 48): draftDevelopment() is evidence-gated by design
+// and can come back empty — Andrew hit that dead end immediately with a
+// report that had no assessment/1:1 history yet. reviseDevText is the
+// always-answerable counterpart: takes text the manager already wrote
+// (either the plan-text box or a manager note — the backend doesn't care
+// which) and returns an improved/expanded version, grounded in evidence
+// when it exists but never blocked by its absence.
+export const reviseDevText = (directReportId: string, text: string): Promise<{ note: string }> =>
   authedFetch(`/api/development/${directReportId}/notes/revise`, { method: "POST", body: JSON.stringify({ text }) });
 
 // ---------------------------------------------------------------------------
