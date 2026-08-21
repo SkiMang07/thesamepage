@@ -29,6 +29,22 @@ v1 scope (scoped with Andrew via AskUserQuestion):
   _fetch_low_scoring_items() below is the shared "what's evidence for a
   development opportunity" helper — used both to surface suggestions in
   GET /{direct_report_id} and to ground the AI draft prompt.
+
+Follow-up (same session, 2026-08-20): Andrew dogfooded this immediately and
+caught a real gap — /{id}/draft is evidence-gated by design (it won't
+fabricate a note/opportunities with nothing to go on), but the frontend had
+NO other way to write a manager note. A report with no assessment history
+yet (the common case for a brand-new plan) hit a dead end. Manual entry was
+never actually missing for opportunities/training/aspiration (those always
+had their own forms, independent of /draft) — only the manager note flow
+was AI-gated. Fixed by making manual entry for the note the default (the
+textarea was already there; POST /{id}/notes never depended on AI) and
+adding POST /{id}/notes/revise: an AI-assist that takes text the manager
+already wrote and improves/expands it, grounded in whatever evidence exists
+but not blocked by its absence — revising given text is a fundamentally
+different, always-answerable task from drafting from nothing. _fetch_
+evidence() below factors out the 1:1/commitment lookups both /draft and
+/notes/revise need.
 """
 import json
 from datetime import date, datetime, timezone
@@ -137,6 +153,47 @@ def _fetch_low_scoring_items(supabase, direct_report_id: str, role_level_id: str
                     "scale_max": scale_max,
                 })
     return out
+
+
+def _fetch_evidence(user_id: str, supabase, direct_report_id: str) -> tuple[list[str], list[dict]]:
+    """Recent 1:1 summaries + open commitments — the non-assessment half of
+    the evidence base, shared by /draft and /notes/revise so both ground
+    themselves in identical context."""
+    history_rows = (
+        supabase.table("one_on_ones")
+        .select("summary,created_at")
+        .eq("direct_report_id", direct_report_id)
+        .eq("manager_id", user_id)
+        .not_.is_("summary", "null")
+        .order("created_at", desc=True)
+        .limit(5)
+        .execute()
+        .data
+    )
+    recent_summaries = [r["summary"] for r in history_rows if r.get("summary")]
+
+    commitments = (
+        supabase.table("commitments")
+        .select("description,due_date,status")
+        .eq("direct_report_id", direct_report_id)
+        .eq("owner_id", user_id)
+        .eq("status", "open")
+        .order("created_at", desc=True)
+        .limit(20)
+        .execute()
+        .data
+    )
+    return recent_summaries, commitments
+
+
+def _role_label(role: dict | None) -> str | None:
+    role_level = (role or {}).get("role_level")
+    if not role_level:
+        return None
+    label = f"{role_level['job_role']}, level {role_level['job_level']}"
+    if role_level.get("functional_team"):
+        label += f" ({role_level['functional_team']})"
+    return label
 
 
 def _fetch_bundle(user_id: str, supabase, direct_report_id: str) -> dict:
@@ -253,6 +310,64 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
 
 # ---------------------------------------------------------------------------
+# Revise prompt — the always-answerable counterpart to the draft prompt
+# above. Draft starts from nothing and is allowed to come back empty when
+# there's no evidence; revise starts from the manager's own text, which is
+# itself the primary input, so it should reliably return something even
+# when assessment/1:1 evidence is thin.
+# ---------------------------------------------------------------------------
+
+def _build_revise_prompt(
+    report_name: str,
+    role_label: str | None,
+    existing_text: str,
+    low_scoring_items: list[dict],
+    recent_summaries: list[str],
+    open_commitments: list[dict],
+    today_iso: str,
+) -> str:
+    def _low_score_lines() -> str:
+        if not low_scoring_items:
+            return "  (none on record)"
+        lines = []
+        for it in low_scoring_items:
+            line = f"  {it['name']} — scored {it['evaluation_point']}/{it['scale_max']}"
+            if it.get("description"):
+                line += f" — {it['description']}"
+            lines.append(line)
+        return "\n".join(lines)
+
+    history_block = "\n".join(f"  • {s}" for s in recent_summaries) or "  (none on record)"
+    commitments_block = "\n".join(
+        f"  • {c['description']} (due: {c.get('due_date') or 'unspecified'})" for c in open_commitments
+    ) or "  (none)"
+
+    return f"""You are helping a manager refine a development note they've already started writing about {report_name}. Today's date: {today_iso}.
+
+THE MANAGER'S DRAFT (your starting point — this is the primary source, not the evidence below; preserve their intent, meaning, and voice):
+---
+{existing_text}
+---
+
+Tighten the language and improve clarity. Where the evidence below genuinely supports it, you may add a specific, concrete grounding detail (an example from a 1:1, a commitment, an assessment score) — but do not invent evidence that isn't listed, and do not pad the note with generic advice just to make it longer. If the draft is already clear and well-grounded, light editing is a valid, honest output. Do not change the manager's overall assessment or add claims they didn't make.
+
+---
+ROLE: {role_label or "No role assigned"}
+
+LOW-SCORING SKILLS/VALUES FROM RECENT ASSESSMENTS:
+{_low_score_lines()}
+
+Recent 1:1 history (last few meetings, newest first):
+{history_block}
+
+Open commitments:
+{commitments_block}
+
+---
+Return ONLY the revised note text — no commentary, no markdown headers, no code fences, no quotation marks around it. Just the note itself, ready to save as-is."""
+
+
+# ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
 
@@ -297,6 +412,14 @@ class DevelopmentDraft(BaseModel):
     review — nothing is saved until the manager POSTs what they keep."""
     opportunities: list[DraftOpportunity] = []
     manager_note: str | None = None
+
+
+class ReviseNoteIn(BaseModel):
+    text: str
+
+
+class ReviseNoteOut(BaseModel):
+    note: str
 
 
 # ---------------------------------------------------------------------------
@@ -483,40 +606,12 @@ async def draft_development(
     report, plan = _get_or_create_plan(user_id, supabase, direct_report_id)
 
     role = fetch_role_expectations(supabase, report.get("role_level_id"))
-    role_label = None
-    role_level = (role or {}).get("role_level")
-    if role_level:
-        role_label = f"{role_level['job_role']}, level {role_level['job_level']}"
-        if role_level.get("functional_team"):
-            role_label += f" ({role_level['functional_team']})"
+    role_label = _role_label(role)
 
     low_scoring_items = _fetch_low_scoring_items(supabase, direct_report_id, report.get("role_level_id"))
     known_config_ids = {it["config_id"] for it in low_scoring_items}
 
-    history_rows = (
-        supabase.table("one_on_ones")
-        .select("summary,created_at")
-        .eq("direct_report_id", direct_report_id)
-        .eq("manager_id", user_id)
-        .not_.is_("summary", "null")
-        .order("created_at", desc=True)
-        .limit(5)
-        .execute()
-        .data
-    )
-    recent_summaries = [r["summary"] for r in history_rows if r.get("summary")]
-
-    commitments = (
-        supabase.table("commitments")
-        .select("description,due_date,status")
-        .eq("direct_report_id", direct_report_id)
-        .eq("owner_id", user_id)
-        .eq("status", "open")
-        .order("created_at", desc=True)
-        .limit(20)
-        .execute()
-        .data
-    )
+    recent_summaries, commitments = _fetch_evidence(user_id, supabase, direct_report_id)
 
     existing_opportunities = (
         supabase.table("dev_plan_opportunities")
@@ -570,3 +665,50 @@ async def draft_development(
     manager_note = manager_note.strip() if isinstance(manager_note, str) and manager_note.strip() else None
 
     return DevelopmentDraft(opportunities=opportunities, manager_note=manager_note)
+
+
+@router.post("/{direct_report_id}/notes/revise", response_model=ReviseNoteOut)
+@limiter.limit("10/minute")
+async def revise_note(
+    request: Request,
+    direct_report_id: str,
+    body: ReviseNoteIn,
+    auth=Depends(get_authenticated_client),
+):
+    """The always-answerable counterpart to /draft (see this module's
+    docstring follow-up note). Takes text the manager already wrote in the
+    manager-note composer and returns an improved/expanded version, grounded
+    in whatever evidence exists — unlike /draft, this never comes back empty
+    on a thin-evidence report, because the manager's own text is the primary
+    input, not something to be inferred from scratch."""
+    user_id, supabase = auth
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Write a draft first — there's nothing to revise yet")
+
+    report, _ = _get_or_create_plan(user_id, supabase, direct_report_id)
+    role = fetch_role_expectations(supabase, report.get("role_level_id"))
+    role_label = _role_label(role)
+    low_scoring_items = _fetch_low_scoring_items(supabase, direct_report_id, report.get("role_level_id"))
+    recent_summaries, commitments = _fetch_evidence(user_id, supabase, direct_report_id)
+
+    prompt = _build_revise_prompt(
+        report_name=report["name"],
+        role_label=role_label,
+        existing_text=text,
+        low_scoring_items=low_scoring_items,
+        recent_summaries=recent_summaries,
+        open_commitments=commitments,
+        today_iso=date.today().isoformat(),
+    )
+
+    raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=600)
+    revised = raw.strip()
+    if revised.startswith("```"):
+        revised = revised.strip("`").strip()
+    # Strip a wrapping pair of quotes the model sometimes adds despite the
+    # prompt's instruction not to.
+    if len(revised) >= 2 and revised[0] == revised[-1] and revised[0] in ('"', "'"):
+        revised = revised[1:-1].strip()
+
+    return ReviseNoteOut(note=revised or text)

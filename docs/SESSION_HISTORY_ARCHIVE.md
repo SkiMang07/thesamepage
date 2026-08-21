@@ -9,6 +9,142 @@ here.
 
 ---
 
+## Session 43 — 2026-08-18
+
+**Goal:** Build the polish pass from `docs/TEAM_SETUP_UX_REVIEW.md` §7.3 (Pass A + Pass B
+combined, the fifth and last of the team-setup UX sessions — see
+`docs/TEAM_SETUP_BUILD_SESSIONS.md`, Session 5): person management on Settings → People (edit,
+open profile, archive), a People-row layout rethink, data-trust fixes on tiles/labels/links, the
+org-wide values story, and a ladder-merge nudge.
+
+**What was done:**
+- **Archive, not delete (`database/migrations/2026-08-18_direct_reports_archive.sql` +
+  `database/schema.sql`).** `direct_reports.archived_at timestamptz null` + a supporting index.
+  No cascade changes — 1:1s, assessments, goals, and metric entries all stay intact for an
+  archived person. Every listing/rollup query that lists direct reports now filters
+  `archived_at is null`: `backend/routes/direct_reports.py` (`list_direct_reports` — new
+  `?archived=true` param for the opposite list, `get_team_overview`), `setup_status.py`,
+  `team.py`'s roster, `capacity.py`'s overview, `dashboard.py`'s insight, `assessments.py`'s
+  list, `assistant.py`'s `list_direct_reports` tool, and `one_on_ones.py`'s 1:1s-overview query.
+  A specific-report fetch by id (person page, 1:1 prep, scorecard, `save_assessment`) is
+  deliberately **not** filtered — an archived person's history must stay reachable. The two
+  SECURITY DEFINER rollup functions that count people (`org_unit_people_rollup`,
+  `org_unit_capacity_rollup`) also gained `and dr.archived_at is null` — the audit finding P1
+  explicitly called these out. `org_unit_goals_rollup`/`org_unit_projects_rollup` were left
+  alone — they aggregate over `goals`/`projects` directly, not a people count.
+- **Backend: `POST /{id}/archive`, `POST /{id}/unarchive`, `PATCH /{id}/profile`
+  (`direct_reports.py`).** Archive/unarchive are separate one-field POSTs rather than folded
+  into the existing PUT, so the People row's Archive action can't be triggered by an unrelated
+  field update. The profile PATCH is its own small model (`name` + `email`) rather than routed
+  through `DirectReportIn` (the shared PUT body) — that model deliberately has no `email` field
+  (see its docstring: an omitted key on a full-record PUT would silently wipe a previously-set
+  email), so editing email needed a model that carries exactly these two fields.
+- **`frontend/app/app/settings/page.tsx` — People row rework (finding P1).** Two-line layout:
+  line 1 is the person's name as a real `Link` to `/app/reports/[id]` (never truncated) with the
+  expectations status chip and a new `PersonRowMenu` ("⋯") on the right; line 2 is the
+  role/team pickers, unchanged otherwise. The menu opens `EditPersonModal` (name + email,
+  `updateDirectReportProfile`) or `ArchiveConfirmModal` (states explicitly that history is
+  kept). A "Show archived (N)" toggle below the roster lazy-fetches
+  `getArchivedDirectReports()` on first expand and renders a dimmed list with per-row
+  Unarchive.
+- **Setup tiles (finding P2).** `setup_status.py` now returns `team_units_count` +
+  `department_units_count` (split by `unit_type`) alongside the existing `teams_count` (kept,
+  unchanged meaning — total units — since `ZoneMap.tsx`'s Foundation-door check reads it that
+  way). The People tile now renders "6 teams · 2 departments" instead of one ambiguous number.
+  The expectations tile's label changed from "Expectations" to "Roles with expectations" so
+  "1/13" reads unambiguously. All four tiles were already buttons/links as of Session 41 — no
+  change needed there, and the "Draft expectations" chip already deep-links straight into the
+  AI-draft modal (`draftForRoleId`/`initialDraftRoleId`, wired since Session 41) rather than
+  just the section — both were flagged in §7.2 (P2/P5) but verified already correct in code, so
+  left alone rather than rebuilt.
+- **Coverage grid level labels (finding P5).** New `levelOnlyLabel()` in
+  `frontend/components/RolePicker.tsx` — under a family header row, a level now shows "L1" (or
+  "Senior Corporate CSM · L3" when the level has a title override), not the full family name
+  repeated on every row. Mirrors `LevelRow`'s existing `overrideTitle` logic, just returning a
+  string. (`setup_status.py`'s new `archived_people_count` field, mentioned above, is what feeds
+  the People row rework's "Show archived (N)" toggle count without a second round-trip.)
+- **Ladder merge nudge (finding P3, `settings/page.tsx`).** `suggestLadderMerges()` — a 1-level
+  family whose name (after stripping a Senior/Sr/Lead/Staff/Principal prefix) matches or is
+  contained by another family's name is flagged with a dismissible one-line banner in
+  `RolesSection` ("Senior Corporate CSM looks like a level of Corporate Customer Success
+  Manager — use Move… to merge"). Heuristic + session-local dismiss only, per the plan — no
+  auto-merge; the actual merge still goes through the existing "Move to another ladder…" tool.
+- **Org-wide values story (item 8).** `POST /api/expectations/draft-org-values`
+  (`expectations_ai.py`) — drafts 3-5 company-wide values from the org's name/context (not a
+  JD, since there's no role here); shares the existing `_generate_and_parse_draft()` tail
+  (extracted from `draft_expectations` so both routes parse the same way) and the existing
+  `/values/batch` commit endpoint with `role_level_id: null`. `OrgWideValuesBlock` gained its
+  own "Draft with AI" button + an include-checkbox review panel, same draft-then-review
+  contract as the per-role flow. Also lifted `OrgWideValuesBlock` to the top of `CoverageGrid`
+  (previously only reachable after picking a specific role's Values tab) so it's visible
+  immediately on landing in Roles & expectations, satisfying the plan's "at the top of the
+  Values view" framing more literally. `fetch_role_expectations()`'s union of org-wide
+  (`role_level_id is null`) values into every role's expectation set was already live (Plan
+  S3) — confirmed unchanged, still the one place that union happens for prep grounding, the
+  person page, and assessments.
+- **Org page zero-people (finding P5, `frontend/app/app/org/page.tsx`).** The Build tab's
+  member-count link was gated on `memberCount > 0`, so an empty unit showed no count at all,
+  indistinguishable from a loading state — now renders plain "0 people" text (not a link,
+  nothing to filter to). The Rollup tab's `RollupNode` already rendered "0 people" correctly
+  (ungated) — no change needed there.
+- **Person page subtitle (finding P5, `frontend/app/app/reports/[id]/page.tsx`).** The H1
+  subtitle used to show only the legacy free-text `role_title`. Now resolves the real assigned
+  `role_level` (via `roleLabel()`, family-aware) and `org_unit` (via `orgUnitLabel()`) once
+  either is set, falling back to `role_title` only when neither is assigned yet — same "was:
+  ..." hint pattern PeopleSection already uses. Fetches `getOrgUnits()` alongside the
+  role_levels/role_families this page already loaded for the inline role picker.
+- **Copy sweep (finding P4).** `RolesSection`'s blurb still said "Assigning people to roles and
+  teams lives in **Team**" — the section is now People (renamed Session 41). Fixed. Swept the
+  rest of the frontend for the same stale pattern (`grep -i "lives in Team"` and similar) —
+  nothing else found; `ZoneMap.tsx`'s `team`-id door legitimately points at `/app/team` (Team
+  Mission Control), a different page, not a stale reference.
+- **Optgroup role selects (item 11).** Verified, not rebuilt: `GroupedRoleSelect` (extracted to
+  `RolePicker.tsx` in Session 42) was already in use on both the People rows and the person
+  page's inline "assign a role" picker — §7.1's claim that these were still flat selects didn't
+  match the code as found. No typeahead added, per the plan's explicit "no typeahead this
+  session."
+
+**Decisions made / locked:**
+- Two mutually-exclusive lists (active via `GET /api/direct-reports`, archived via
+  `?archived=true`), not one combined list filtered client-side — the People section only pays
+  for the archived fetch when a manager actually expands "Show archived."
+- `teams_count` keeps its pre-existing meaning (total org units) rather than being repurposed —
+  `ZoneMap.tsx`'s Foundation-door "is anything set up" check reads it that way; the tile-display
+  split lives in two new fields instead.
+- Several §7.2 findings (P2's tile-click-through, P5's deep-link chip, item 11's grouped
+  selects) turned out to already be fixed in the code at HEAD, contradicting the post-build
+  review's text. Trusted the code over the doc in each case and spent the session's effort on
+  what was actually still missing, rather than re-doing already-correct work.
+
+**Verification:** `python3 -m py_compile` clean on every touched backend file; imported `main`
+in an isolated venv (`pip install -r requirements.txt`) with dummy env vars and confirmed all
+new routes register (`POST/PATCH .../archive`, `.../unarchive`, `.../profile`,
+`POST /api/expectations/draft-org-values`) alongside the existing 107-route total, limiter
+attached. `npx tsc --noEmit` clean; isolated `npm install` + `npx next build` clean, 19/19
+routes. Schema: spun up a local Postgres 16 with the established minimal Supabase `auth` schema
+stub (extended this session with `raw_user_meta_data` on `auth.users`, needed by
+`handle_new_user()`) plus a minimal `storage` schema stub (`buckets`/`objects`/`foldername()`,
+same shape Session 27's Context Engine verification used) — ran the **entire** `schema.sql` end
+to end with zero errors. Separately applied the pre-session `schema.sql` (without
+`archived_at`) then the migration file on top, confirming it applies cleanly against a
+live-like pre-migration state and is idempotent on re-run. Functional RLS test: two managers,
+archived and active reports for manager 1, confirmed active-only and archived-only queries each
+return the right person, confirmed an archived person is still fetchable by id, and confirmed
+manager 2 sees zero of manager 1's reports (archived or not). Separately confirmed
+`org_unit_people_rollup()` and `org_unit_capacity_rollup()` both exclude an archived report from
+their counts. What's still unverified: the AI draft-with-AI calls (org-wide values and the
+existing role-level draft) against a real Anthropic key, and the actual live migration run.
+
+**Next step:** Run `database/migrations/2026-08-18_direct_reports_archive.sql` in the Supabase
+SQL editor — nothing archive-related works live until it does. Then a live smoke test: archive a
+person from People, confirm they drop off the roster/tiles/org counts/capacity, confirm their
+person page and 1:1 history are still reachable directly, then unarchive and confirm they
+reappear. Also worth clicking "Draft with AI" on the org-wide values block once against a real
+company to sanity-check the prompt's output quality, same way Session 39 spot-checked the
+role-level draft.
+
+---
+
 ## Session 42 — 2026-08-18
 
 **Goal:** Build Plan S4+S5 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (last of the four S1-S5

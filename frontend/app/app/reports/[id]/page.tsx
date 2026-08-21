@@ -35,6 +35,7 @@ import {
   deleteTraining,
   createDevManagerNote,
   draftDevelopment,
+  reviseDevManagerNote,
   DirectReport,
   OneOnOne,
   Commitment,
@@ -986,16 +987,26 @@ function DevelopmentSection({
   const [addingTraining, setAddingTraining] = useState(false);
   const [removingTrainingId, setRemovingTrainingId] = useState<string | null>(null);
 
-  // Manager notes — append-only.
+  // Manager notes — append-only. The textarea is always manually writable
+  // (createDevManagerNote never depended on AI); AI is an optional assist
+  // via the two buttons below, not a gate.
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [revisingNote, setRevisingNote] = useState(false);
 
-  // AI draft — draft-then-review, same rule as Assessments/1:1 wrap-up.
+  // AI assist (follow-up, same session — see development.py's docstring
+  // follow-up note). "Draft with AI" surfaces non-blocking suggestions
+  // instead of a full-panel review: AI-suggested opportunities render
+  // alongside the assessment-based suggestions below (same "Add" action),
+  // and an AI-suggested note (if any) offers a "Use this" that fills the
+  // always-present note textarea rather than replacing it silently.
+  // "Revise with AI" (further below) works on whatever the manager already
+  // typed and never depends on there being evidence at all.
   const [drafting, setDrafting] = useState(false);
-  const [draft, setDraft] = useState<DevelopmentDraft | null>(null);
-  const [draftIncluded, setDraftIncluded] = useState<boolean[]>([]);
-  const [draftNote, setDraftNote] = useState("");
-  const [savingDraft, setSavingDraft] = useState(false);
+  const [aiOpportunities, setAiOpportunities] = useState<DevelopmentDraft["opportunities"]>([]);
+  const [aiNoteSuggestion, setAiNoteSuggestion] = useState<string | null>(null);
+  const [draftHint, setDraftHint] = useState<string | null>(null);
+  const [addingAiOppIndex, setAddingAiOppIndex] = useState<number | null>(null);
 
   const existingSourceIds = new Set(
     bundle.opportunities.map((o) => o.source_config_id).filter(Boolean) as string[]
@@ -1121,6 +1132,7 @@ function DevelopmentSection({
       await createDevManagerNote(directReportId, content);
       await onRefresh();
       setNewNote("");
+      setAiNoteSuggestion(null);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add note");
@@ -1129,13 +1141,22 @@ function DevelopmentSection({
     }
   }
 
+  // Non-blocking: on a report with no evidence yet this just comes back
+  // with nothing to suggest (draftHint explains why) — it never prevents
+  // writing an opportunity or note by hand, those forms are always usable.
   async function runDraft() {
     setDrafting(true);
+    setDraftHint(null);
     try {
       const d = await draftDevelopment(directReportId);
-      setDraft(d);
-      setDraftIncluded(d.opportunities.map(() => true));
-      setDraftNote(d.manager_note ?? "");
+      const freshOpps = d.opportunities.filter(
+        (o) => !(o.source_config_id && existingSourceIds.has(o.source_config_id))
+      );
+      setAiOpportunities(freshOpps);
+      setAiNoteSuggestion(d.manager_note);
+      if (freshOpps.length === 0 && !d.manager_note) {
+        setDraftHint("Not enough evidence yet for a draft — write your own below, or add more 1:1 history and assessment scores first.");
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to draft with AI");
@@ -1144,29 +1165,49 @@ function DevelopmentSection({
     }
   }
 
-  async function saveDraft() {
-    if (!draft || savingDraft) return;
-    setSavingDraft(true);
+  async function addAiOpportunity(index: number) {
+    const o = aiOpportunities[index];
+    if (!o) return;
+    setAddingAiOppIndex(index);
     try {
-      const toSave = draft.opportunities.filter((_, i) => draftIncluded[i]);
-      for (const o of toSave) {
-        await createOpportunity(directReportId, {
-          type: o.type,
-          description: o.description,
-          source_kind: o.source_kind,
-          source_config_id: o.source_config_id,
-        });
-      }
-      if (draftNote.trim()) {
-        await createDevManagerNote(directReportId, draftNote.trim());
-      }
+      await createOpportunity(directReportId, {
+        type: o.type,
+        description: o.description,
+        source_kind: o.source_kind,
+        source_config_id: o.source_config_id,
+      });
       await onRefresh();
-      setDraft(null);
+      setAiOpportunities((list) => list.filter((_, i) => i !== index));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save draft");
+      setError(e instanceof Error ? e.message : "Failed to add opportunity");
     } finally {
-      setSavingDraft(false);
+      setAddingAiOppIndex(null);
+    }
+  }
+
+  function useNoteSuggestion() {
+    if (aiNoteSuggestion) {
+      setNewNote(aiNoteSuggestion);
+      setAiNoteSuggestion(null);
+    }
+  }
+
+  // Always answerable, unlike runDraft above — it revises text the manager
+  // already wrote rather than inferring from nothing, so a thin-evidence
+  // report doesn't block it. See development.py's /notes/revise.
+  async function reviseNote() {
+    const text = newNote.trim();
+    if (!text || revisingNote) return;
+    setRevisingNote(true);
+    try {
+      const result = await reviseDevManagerNote(directReportId, text);
+      setNewNote(result.note);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to revise with AI");
+    } finally {
+      setRevisingNote(false);
     }
   }
 
@@ -1185,69 +1226,12 @@ function DevelopmentSection({
 
       {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
 
-      {/* AI draft review — nothing above is touched until Save. */}
-      {draft && (
-        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/40 px-4 py-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-blue-500">AI draft — review before saving</p>
-          {draft.opportunities.length === 0 && !draft.manager_note ? (
-            <p className="mt-2 text-sm text-gray-500">
-              Not enough evidence yet for a draft — more 1:1 history or assessment scores will help.
-            </p>
-          ) : (
-            <>
-              {draft.opportunities.length > 0 && (
-                <ul className="mt-2 space-y-1.5">
-                  {draft.opportunities.map((o, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={draftIncluded[i] ?? false}
-                        onChange={(e) =>
-                          setDraftIncluded((inc) => inc.map((v, idx) => (idx === i ? e.target.checked : v)))
-                        }
-                        className="mt-1 h-4 w-4 cursor-pointer rounded border-gray-300"
-                      />
-                      <span className="text-sm text-gray-700">
-                        <span className="mr-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
-                          {OPPORTUNITY_TYPE_LABELS[o.type]}
-                        </span>
-                        {o.description}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {draft.manager_note !== null && (
-                <div className="mt-3">
-                  <label className="mb-1 block text-xs font-medium text-gray-500">Synthesis note (private)</label>
-                  <textarea
-                    value={draftNote}
-                    onChange={(e) => setDraftNote(e.target.value)}
-                    rows={2}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </div>
-              )}
-            </>
-          )}
-          <div className="mt-3 flex justify-end gap-2">
-            <button
-              onClick={() => setDraft(null)}
-              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-white"
-            >
-              Discard
-            </button>
-            {(draft.opportunities.length > 0 || draft.manager_note) && (
-              <button
-                onClick={saveDraft}
-                disabled={savingDraft}
-                className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-              >
-                {savingDraft ? "Saving..." : "Save selected"}
-              </button>
-            )}
-          </div>
-        </div>
+      {/* Non-blocking hint when a draft comes back with nothing to suggest
+          — the manual fields below always work regardless. */}
+      {draftHint && (
+        <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+          {draftHint}
+        </p>
       )}
 
       {/* Aspiration */}
@@ -1351,6 +1335,42 @@ function DevelopmentSection({
                   </button>
                 </div>
               ))}
+          </div>
+        )}
+
+        {/* AI-suggested opportunities from "Draft with AI" — non-blocking,
+            dismissible one at a time via Add (which removes it from this list
+            and adds it to the real list below). */}
+        {aiOpportunities.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            {aiOpportunities.map((o, i) => (
+              <div
+                key={`${o.description}-${i}`}
+                className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2"
+              >
+                <p className="text-sm text-blue-800">
+                  <span className="mr-1.5 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-600">
+                    AI suggested
+                  </span>
+                  {o.description}
+                </p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => addAiOpportunity(i)}
+                    disabled={addingAiOppIndex === i}
+                    className="rounded-md border border-blue-300 bg-white px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                  >
+                    {addingAiOppIndex === i ? "Adding..." : "Add"}
+                  </button>
+                  <button
+                    onClick={() => setAiOpportunities((list) => list.filter((_, idx) => idx !== i))}
+                    className="text-xs text-blue-400 hover:text-blue-600"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -1504,6 +1524,25 @@ function DevelopmentSection({
             ))}
           </ul>
         )}
+
+        {/* AI-suggested note from "Draft with AI" — offered, never forced;
+            "Use this" fills the textarea below so the manager can still edit
+            before saving. */}
+        {aiNoteSuggestion && (
+          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2">
+            <p className="text-xs font-medium text-blue-600">AI suggested note</p>
+            <p className="mt-1 text-sm text-blue-800">{aiNoteSuggestion}</p>
+            <div className="mt-2 flex gap-3">
+              <button onClick={useNoteSuggestion} className="text-xs font-medium text-blue-700 hover:text-blue-900">
+                Use this
+              </button>
+              <button onClick={() => setAiNoteSuggestion(null)} className="text-xs text-blue-400 hover:text-blue-600">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={addNote} className="mt-3 flex items-start gap-2">
           <textarea
             value={newNote}
@@ -1513,9 +1552,17 @@ function DevelopmentSection({
             className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
           <button
+            type="button"
+            onClick={reviseNote}
+            disabled={!newNote.trim() || revisingNote}
+            className="shrink-0 rounded-md border border-blue-300 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+          >
+            {revisingNote ? "Revising..." : "Revise with AI"}
+          </button>
+          <button
             type="submit"
             disabled={addingNote}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="shrink-0 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             {addingNote ? "Adding..." : "Add"}
           </button>

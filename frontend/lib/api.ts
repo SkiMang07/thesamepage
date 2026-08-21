@@ -1604,6 +1604,15 @@ export type DevelopmentDraft = {
 export const draftDevelopment = (directReportId: string): Promise<DevelopmentDraft> =>
   authedFetch(`/api/development/${directReportId}/draft`, { method: "POST" });
 
+// Follow-up (same session, 2026-08-20): draftDevelopment() is evidence-gated
+// by design and can come back empty — Andrew hit that dead end immediately
+// with a report that had no assessment/1:1 history yet. reviseDevManagerNote
+// is the always-answerable counterpart: takes text the manager already
+// wrote and returns an improved/expanded version, grounded in evidence when
+// it exists but never blocked by its absence.
+export const reviseDevManagerNote = (directReportId: string, text: string): Promise<{ note: string }> =>
+  authedFetch(`/api/development/${directReportId}/notes/revise`, { method: "POST", body: JSON.stringify({ text }) });
+
 // ---------------------------------------------------------------------------
 // Context Engine (Session 28 upload/extraction, Session III confirm-card) —
 // see docs/CONTEXT_ENGINE.md (framework) and docs/CONTEXT_ENGINE_BUILD_PLAN.md
