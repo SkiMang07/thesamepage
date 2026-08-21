@@ -105,6 +105,16 @@ assignee-proxy. Two changes here:
   - Initiatives no longer proxy through the assignee's org_unit_id —
     projects.py now carries a real org_unit_id (Session 46 there too), and
     the frontend filters on that directly.
+
+Session 47 (2026-08-20) — Development (see the development_scoping project
+memory note). GET/PUT /dev-focus is the team-level half of the Development
+feature (individual plans live in routes/development.py, on the direct
+report detail page): a lightweight "this month's training focus" pinned
+note per (manager, org_unit), new team_dev_focus table. Deliberately copies
+/callout's shape exactly (same manual look-up-then-write upsert, same
+org_unit_id-null-means-all-teams convention, same every-row-at-once GET) —
+a distinct table so it doesn't collide with Critical Callouts' "key
+updates" concept in one text block.
 """
 from datetime import datetime, timezone
 
@@ -156,6 +166,13 @@ class TeamCalloutIn(BaseModel):
     # Which led team this callout is for (Session 45) — null means "all
     # teams". Identifies which row GET/PUT /callout act on now that a
     # manager can have more than one.
+    org_unit_id: str | None = None
+
+
+class TeamDevFocusIn(BaseModel):
+    message: str
+    # Which led team this focus note is for (Session 47) — null means "all
+    # teams", same convention as TeamCalloutIn.org_unit_id.
     org_unit_id: str | None = None
 
 
@@ -469,4 +486,51 @@ async def update_team_callout(body: TeamCalloutIn, auth=Depends(get_authenticate
         )
     else:
         result = supabase.table("team_callouts").insert(payload).execute()
+    return result.data[0]
+
+
+@router.get("/dev-focus")
+async def get_team_dev_focus(auth=Depends(get_authenticated_client)):
+    """Every "training focus" row for this manager — one per led team that's
+    ever had a focus note saved, plus at most one org_unit_id-null "all
+    teams" row. Same list-not-single-object shape as GET /callout (Session
+    45) for the same reason: the frontend switches teams without a round
+    trip. An empty list is a normal first-load state, not an error."""
+    user_id, supabase = auth
+    return (
+        supabase.table("team_dev_focus")
+        .select("message,updated_at,org_unit_id")
+        .eq("manager_id", user_id)
+        .execute()
+        .data
+    )
+
+
+@router.put("/dev-focus")
+async def update_team_dev_focus(body: TeamDevFocusIn, auth=Depends(get_authenticated_client)):
+    """Upserts the focus-note row for (manager, org_unit_id) — a pinned
+    block that gets overwritten, same manual look-up-then-write as
+    update_team_callout (see that function's docstring for why a plain
+    supabase upsert() can't express the null-org_unit_id case)."""
+    user_id, supabase = auth
+    query = supabase.table("team_dev_focus").select("id").eq("manager_id", user_id)
+    query = query.is_("org_unit_id", "null") if body.org_unit_id is None else query.eq("org_unit_id", body.org_unit_id)
+    existing = query.execute().data
+
+    payload = {
+        "manager_id": user_id,
+        "org_unit_id": body.org_unit_id,
+        "message": body.message.strip(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if existing:
+        result = (
+            supabase.table("team_dev_focus")
+            .update(payload)
+            .eq("id", existing[0]["id"])
+            .execute()
+        )
+    else:
+        result = supabase.table("team_dev_focus").insert(payload).execute()
     return result.data[0]

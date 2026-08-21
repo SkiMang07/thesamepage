@@ -852,6 +852,26 @@ export const updateTeamCallout = (message: string, orgUnitId: string | null): Pr
     body: JSON.stringify({ message, org_unit_id: orgUnitId }),
   });
 
+// Team dev focus (Session 47, 2026-08-20) — the team-level half of
+// Development: a lightweight "this month's training focus" pinned note per
+// (manager, org_unit). Deliberately mirrors TeamCallout's shape exactly
+// (see team.py's get_team_dev_focus/update_team_dev_focus) — a separate
+// type/table so it doesn't collide with Critical Callouts' "key updates"
+// concept in the same panel.
+export type TeamDevFocus = {
+  message: string;
+  updated_at: string | null;
+  org_unit_id: string | null;
+};
+
+export const getTeamDevFocus = (): Promise<TeamDevFocus[]> => authedFetch("/api/team/dev-focus");
+
+export const updateTeamDevFocus = (message: string, orgUnitId: string | null): Promise<TeamDevFocus> =>
+  authedFetch("/api/team/dev-focus", {
+    method: "PUT",
+    body: JSON.stringify({ message, org_unit_id: orgUnitId }),
+  });
+
 // Returns a link the manager copies and sends themselves — no email is sent
 // from the backend (same manual-delivery posture Session 21 chose for
 // team_messages).
@@ -1451,6 +1471,138 @@ export type SaveAssessmentBody = {
 
 export const saveAssessment = (directReportId: string, body: SaveAssessmentBody): Promise<unknown> =>
   authedFetch(`/api/assessments/${directReportId}`, { method: "POST", body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------------------
+// Development plans (Session 47, 2026-08-20) — see the development_scoping
+// project memory note. Individual plans only here (team-level "training
+// focus" is TeamDevFocus above); placement is a section on the direct
+// report detail page, no dedicated top-level page. Activates the dormant
+// development_plans/dev_plan_* tables — see backend/routes/development.py's
+// docstring for the full scoping context.
+// ---------------------------------------------------------------------------
+
+export type DevelopmentPlan = {
+  id: string;
+  direct_report_id: string;
+  status: "active" | "completed" | "archived";
+  created_at: string;
+  updated_at: string;
+};
+
+export type Aspiration = {
+  id: string;
+  development_plan_id: string;
+  desired_role: string | null;
+  timeline: string | null;
+  notes: string | null;
+  updated_at: string;
+};
+
+export type OpportunityType = "skill" | "knowledge";
+
+export type Opportunity = {
+  id: string;
+  development_plan_id: string;
+  type: OpportunityType;
+  description: string;
+  // Trace back to the assessment item that prompted this (Andrew's
+  // "connect to assessment scores" scoping decision) — null for manually
+  // added opportunities.
+  source_kind: "skill" | "value" | null;
+  source_config_id: string | null;
+  created_at: string;
+};
+
+export type TrainingItem = {
+  id: string;
+  development_plan_id: string;
+  description: string;
+  completion_date: string | null;
+  projected_cost: number | null;
+  created_at: string;
+};
+
+export type DevManagerNote = {
+  id: string;
+  development_plan_id: string;
+  content: string;
+  created_at: string;
+};
+
+// A skill/value from this person's role expectations whose latest recorded
+// assessment score sits at or below the midpoint of its own scale — the
+// evidence base for "suggested from assessment" prompts in the UI and for
+// the AI draft below. See development.py's _fetch_low_scoring_items.
+export type LowScoringItem = {
+  kind: "skill" | "value";
+  config_id: string;
+  name: string;
+  description: string | null;
+  evaluation_point: number;
+  scale_min: number;
+  scale_max: number;
+};
+
+export type DevelopmentBundle = {
+  development_plan: DevelopmentPlan;
+  aspiration: Aspiration | null;
+  opportunities: Opportunity[];
+  training: TrainingItem[];
+  manager_notes: DevManagerNote[];
+  low_scoring_items: LowScoringItem[];
+};
+
+export const getDevelopmentPlan = (directReportId: string): Promise<DevelopmentBundle> =>
+  authedFetch(`/api/development/${directReportId}`);
+
+export const upsertAspiration = (
+  directReportId: string,
+  body: { desired_role?: string | null; timeline?: string | null; notes?: string | null }
+): Promise<Aspiration> =>
+  authedFetch(`/api/development/${directReportId}/aspiration`, { method: "PUT", body: JSON.stringify(body) });
+
+export const createOpportunity = (
+  directReportId: string,
+  body: { type: OpportunityType; description: string; source_kind?: "skill" | "value" | null; source_config_id?: string | null }
+): Promise<Opportunity> =>
+  authedFetch(`/api/development/${directReportId}/opportunities`, { method: "POST", body: JSON.stringify(body) });
+
+export const deleteOpportunity = (opportunityId: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/development/opportunities/${opportunityId}`, { method: "DELETE" });
+
+export const createTraining = (
+  directReportId: string,
+  body: { description: string; completion_date?: string | null; projected_cost?: number | null }
+): Promise<TrainingItem> =>
+  authedFetch(`/api/development/${directReportId}/training`, { method: "POST", body: JSON.stringify(body) });
+
+export const updateTraining = (
+  trainingId: string,
+  body: { description?: string; completion_date?: string | null; projected_cost?: number | null }
+): Promise<TrainingItem> =>
+  authedFetch(`/api/development/training/${trainingId}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const deleteTraining = (trainingId: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/development/training/${trainingId}`, { method: "DELETE" });
+
+export const createDevManagerNote = (directReportId: string, content: string): Promise<DevManagerNote> =>
+  authedFetch(`/api/development/${directReportId}/notes`, { method: "POST", body: JSON.stringify({ content }) });
+
+// AI-drafted opportunities + a synthesis note — reviewed by the manager
+// before create Opportunity/createDevManagerNote persist whatever survives
+// review. Sparse by design, same restraint as AssessmentDraft.
+export type DevelopmentDraft = {
+  opportunities: {
+    type: OpportunityType;
+    description: string;
+    source_kind: "skill" | "value" | null;
+    source_config_id: string | null;
+  }[];
+  manager_note: string | null;
+};
+
+export const draftDevelopment = (directReportId: string): Promise<DevelopmentDraft> =>
+  authedFetch(`/api/development/${directReportId}/draft`, { method: "POST" });
 
 // ---------------------------------------------------------------------------
 // Context Engine (Session 28 upload/extraction, Session III confirm-card) —

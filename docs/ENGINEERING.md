@@ -234,13 +234,21 @@ metric_entries       -- activated Session 16; time-series metric value + period 
                         report, scored against that metric_config's own scale
 ```
 
-**Development plans (still dormant):**
+**Development plans (activated Session 47, 2026-08-20):** individual only —
+see backend/routes/development.py for the AI-draft/assessment-linkage
+details and the development_scoping project memory note for the scoping
+conversation. Placement is a section on the direct report detail page, no
+dedicated top-level page. Team-level counterpart is `team_dev_focus` (a
+new table, mirrors `team_callouts`) — see team.py's GET/PUT /dev-focus.
 ```
-development_plans    -- one per direct report
-dev_plan_aspirations    -- career aspiration: desired role/path + timeline
-dev_plan_opportunities  -- areas of opportunity: skills + knowledge
+development_plans      -- one per direct report, bootstrapped on first access
+dev_plan_aspirations    -- career aspiration: desired role/path + timeline; one row per
+                           plan (dev_plan_aspirations_plan_uq), upserted as a unit
+dev_plan_opportunities  -- areas of opportunity: skills + knowledge; source_kind/
+                           source_config_id (Session 47) optionally trace an opportunity
+                           back to the skill/value assessment item that prompted it
 dev_plan_training       -- training needed + projected cost
-dev_plan_manager_notes  -- private to manager
+dev_plan_manager_notes  -- private to manager, append-only (no edit/delete in v1)
 ```
 
 **Privacy boundary (enforced by RLS):**

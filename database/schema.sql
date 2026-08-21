@@ -753,6 +753,15 @@ alter table work_unit_configs enable row level security;
 
 -- ============================================================
 -- DEVELOPMENT PLANS
+-- Activated Session 47 (2026-08-20) — see database/migrations/
+-- 2026-08-20_development_plans_and_team_focus.sql and the
+-- development_scoping project memory note. These tables sat dormant since
+-- the original scaffold, same "dormant table, just needs activating"
+-- pattern as Goals/Assessments/Capacity. One development_plans row per
+-- direct report, bootstrapped on first access (see development.py's
+-- _get_or_create_plan) rather than a unique constraint — mirrors
+-- assessment_levels' on-demand-seed idea, just for a single row instead of
+-- five.
 -- ============================================================
 
 create table development_plans (
@@ -767,6 +776,11 @@ create table development_plans (
 
 alter table development_plans enable row level security;
 
+-- One row per plan — a single "current aspiration" (desired role/timeline/
+-- notes), upserted as a unit from the Development section's aspiration
+-- form, same one-row-per-key shape as capacity_profiles. Uniqueness added
+-- Session 47 (dev_plan_aspirations_plan_uq below), before any real data
+-- existed to conflict with it.
 create table dev_plan_aspirations (
   id                  uuid primary key default uuid_generate_v4(),
   development_plan_id uuid not null references development_plans(id) on delete cascade,
@@ -778,11 +792,20 @@ create table dev_plan_aspirations (
 
 alter table dev_plan_aspirations enable row level security;
 
+create unique index dev_plan_aspirations_plan_uq on dev_plan_aspirations (development_plan_id);
+
+-- source_kind/source_config_id (Session 47): optional trace back to the
+-- assessment item (a skill_configs or value_configs row) that prompted this
+-- opportunity — Andrew's "connect to assessment scores" scoping decision.
+-- Null for manually-added opportunities. No FK (one of two possible source
+-- tables) — same posture as commitments.source_type/source_id.
 create table dev_plan_opportunities (
   id                  uuid primary key default uuid_generate_v4(),
   development_plan_id uuid not null references development_plans(id) on delete cascade,
   type                text check (type in ('skill', 'knowledge')),
   description         text not null,
+  source_kind         text check (source_kind in ('skill', 'value')),
+  source_config_id    uuid,
   created_at          timestamptz not null default now()
 );
 
@@ -807,6 +830,35 @@ create table dev_plan_manager_notes (
 );
 
 alter table dev_plan_manager_notes enable row level security;
+
+-- ============================================================
+-- TEAM DEV FOCUS
+-- Session 47 (2026-08-20) — lightweight team-level counterpart to
+-- individual development plans ("this month's training focus" for a team).
+-- Deliberately mirrors team_callouts (Session 24, org_unit_id split Session
+-- 45) rather than a new relational model: one pinned, manager-authored text
+-- block per (manager, org_unit), overwritten in place, no history. Kept as
+-- its own table so it doesn't collide with team_callouts' "key updates"
+-- concept in the same text block/UI panel.
+-- ============================================================
+
+create table team_dev_focus (
+  id           uuid primary key default uuid_generate_v4(),
+  manager_id   uuid not null references auth.users(id),
+  message      text not null default '',
+  org_unit_id  uuid references org_units(id) on delete cascade,
+  updated_at   timestamptz not null default now()
+);
+
+alter table team_dev_focus enable row level security;
+
+create unique index team_dev_focus_manager_unit_uq
+  on team_dev_focus (manager_id, org_unit_id)
+  where org_unit_id is not null;
+
+create unique index team_dev_focus_manager_all_teams_uq
+  on team_dev_focus (manager_id)
+  where org_unit_id is null;
 
 -- -------------------------
 -- SUBSCRIPTIONS
@@ -1172,6 +1224,10 @@ create policy "dev_plan_manager_notes_all_own" on dev_plan_manager_notes
   for all using (
     development_plan_id in (select id from development_plans where manager_id = auth.uid())
   );
+
+-- team_dev_focus — manager-scoped, same pattern as team_callouts
+create policy "team_dev_focus_all_own" on team_dev_focus
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
 -- subscriptions — read-only for the user; backend service-role handles writes
 create policy "subscriptions_select_own" on subscriptions

@@ -18,6 +18,85 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 47 — 2026-08-20
+
+**Goal:** Andrew wanted to discuss "Development" (Personal Development / Career Plan / Development
+Plan) for individuals on the team — PRODUCT_VISION.md's Mission Control taxonomy lists "Growth and
+Development" alongside Performance Reviews/Improvement Plans/Recruiting. He floated both an
+individual angle and a full-team angle (a training focus for the month).
+
+**What was done:**
+- Scoped via one AskUserQuestion round (4 questions). Andrew picked the fuller option on the scope
+  question (individual + a lightweight team layer, not individual-only) and confirmed the recommended
+  defaults on the other three (AI-assisted draft, DR-detail-section placement, connect to assessment
+  scores).
+- Discovered mid-scoping that `development_plans`/`dev_plan_aspirations`/`dev_plan_opportunities`/
+  `dev_plan_training`/`dev_plan_manager_notes` were already in `database/schema.sql` from the original
+  project scaffold, dormant since Session 3 — same "dormant table, just needs activating" pattern as
+  Goals/Assessments/Capacity before it.
+- **Individual plans** — `backend/routes/development.py` (new): `GET /{direct_report_id}` returns the
+  full bundle (plan, aspiration, opportunities, training, manager_notes, low_scoring_items) and
+  bootstraps the `development_plans` row on first access; `PUT /{id}/aspiration` upserts the single
+  aspiration row; `POST`/`DELETE` for opportunities and training; `PATCH` for training (e.g. mark
+  complete); `POST /{id}/notes` (append-only, no edit/delete, same posture as team_meeting_notes);
+  `POST /{id}/draft` — AI-assisted draft (opportunities + a synthesis note only, NOT aspirations or
+  training — those are a career conversation / budget decision, not evidence to infer), same
+  draft-then-review rule as Assessments/1:1 wrap-up.
+- **Connect to assessment scores:** `dev_plan_opportunities` gained `source_kind`/`source_config_id`
+  (nullable, no FK — same posture as `commitments.source_type/source_id`) so an opportunity can trace
+  back to the skill/value assessment item that prompted it. `_fetch_low_scoring_items()` in
+  development.py — a skill/value scores "low" at or below the midpoint of its own configured scale —
+  is the shared evidence base for both the "suggested from assessment" quick-add prompts in the UI and
+  the AI draft prompt's grounding.
+- **Team layer** — `team_dev_focus` (new table, migration
+  `2026-08-20_development_plans_and_team_focus.sql`) deliberately mirrors `team_callouts` exactly: one
+  pinned, manager-authored text block per (manager, org_unit), overwritten in place, no history. Kept
+  as its own table rather than folded into team_callouts so "training focus" doesn't collide with
+  "key updates" in one text block. `team.py` gained `GET`/`PUT /dev-focus`, copying
+  `get_team_callout`/`update_team_callout`'s manual look-up-then-write upsert exactly.
+- **Placement:** no new top-level nav item. `frontend/app/app/reports/[id]/page.tsx` gained a
+  `DevelopmentSection` subcomponent (aspiration form, opportunities list + suggested-from-assessment
+  quick-adds, training list, private manager notes, "Draft with AI" review flow) — the first
+  subcomponent that file has ever used (everything else on that page is inlined into
+  `ReportDetailPage` directly); broken out here because Development's CRUD surface is too large to
+  inline without making an already-dense page unreadable, same reasoning team/page.tsx's
+  CalloutsPanel/MeetingsPanel already follow. `/app/team/page.tsx` gained a `DevFocusPanel` (near-copy
+  of `CalloutsPanel`) in a new "Development" row below Meetings.
+- Migration also adds `dev_plan_aspirations_plan_uq` (unique index on `development_plan_id`) — the
+  original scaffold created this table without a uniqueness guarantee even though the app has always
+  treated it as one row per plan; added now, before any real data exists, so a double-submit race
+  can't silently create two competing rows.
+
+**Decisions made / locked:**
+- Aspirations and training are NOT AI-drafted — only opportunities and a synthesis manager note, where
+  evidence-grounding (low assessment scores, 1:1 history, open commitments) actually applies. A career
+  aspiration is Andrew's/the report's own conversation, not something to infer from data.
+- Team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than inventing a new
+  pattern — same tradeoff already accepted there (manual look-up-then-write since a plain
+  `ON CONFLICT` can't express the null-org_unit_id "applies to all teams" case cleanly).
+
+**Verification:** backend `py_compile` clean; sandboxed `main.py` import (dummy Supabase env vars)
+confirms all 9 new `/api/development/*` routes and both new `/api/team/dev-focus` routes register with
+no path-ordering collisions against the existing 108. Frontend: fresh `npm install`, `tsc --noEmit`
+clean, `next build` clean (19/19 routes, including `/app/reports/[id]` and `/app/team`). **Went further
+given the schema changes** (same posture as Sessions 21–23): spun up local Postgres 16 with the
+Supabase `auth`/`storage` stub, ran the *entire* `schema.sql` end to end with zero errors, then
+functionally exercised the new tables as the `authenticated` role — a development plan bootstrap, an
+aspiration upsert, an opportunity linked to a real low-scoring skill assessment (2/4, correctly
+flagged low by the midpoint rule), a `team_dev_focus` all-teams row, and confirmed both new unique
+indexes actually reject a duplicate row (`dev_plan_aspirations_plan_uq`,
+`team_dev_focus_manager_all_teams_uq`). RLS isolation confirmed: a second manager's session saw 0 rows
+across `development_plans`/`dev_plan_opportunities`/`team_dev_focus`.
+
+**Next step:** Andrew needs to run `database/migrations/2026-08-20_development_plans_and_team_focus.sql`
+against live Supabase (adds `dev_plan_aspirations_plan_uq`, the two `dev_plan_opportunities` columns,
+and the new `team_dev_focus` table+policy — the five pre-existing `development_plans`/`dev_plan_*`
+tables are already live, confirmed by the same scaffold that shipped Session 3). Then this is the
+first real dogfooding of Development — expect small gaps to surface the way Goals'/Assessments' first
+live passes did (e.g. Goals' missing Edit button, Session 10).
+
+---
+
 ## Session 46 — 2026-08-20
 
 **Goal:** Andrew noticed, right after Session 45 shipped, that projects had no way to attach to a
@@ -409,104 +488,6 @@ role-level draft.
 
 ---
 
-## Session 42 — 2026-08-18
-
-**Goal:** Build Plan S4+S5 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (last of the four S1-S5
-setup-UX sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): make half-configured setup state
-visible everywhere a person appears, and rename/consolidate the setup surfaces.
-
-**What was done:**
-- **`frontend/components/RolePicker.tsx` (new)** — `roleLabel()`, `orgUnitLabel()`,
-  `groupRoleLevelsByFamily()`, `GroupedRoleSelect`, and `OrgUnitSelect` extracted out of
-  `settings/page.tsx`, which is the only place they used to live. The direct-report page and
-  Team roster cards both needed the identical "ladder-grouped role label" formatting this
-  session, so page-local was no longer viable — `settings/page.tsx` now imports these from the
-  shared module instead of defining them (behavior unchanged there; `CREATE_NEW_VALUE`/
-  `UNGROUPED_LABEL` moved too). `QuickAddModal.tsx`'s own separate `groupRolesByFamily()`
-  duplicate (Session 41) was **not** touched — out of scope for this session, noted as a future
-  small cleanup.
-- **`frontend/app/app/reports/[id]/page.tsx`** (F6) — the Expectations block now always renders
-  instead of being absent when no role is assigned. No role: amber "No role assigned." plus an
-  inline `GroupedRoleSelect` that calls `assignReportRole()` (preserving `org_unit_id`/cadence,
-  same invariant the People picker relies on) then re-fetches the full report via
-  `getDirectReport()` — the PUT response doesn't carry the `expectations` object (only GET
-  attaches it, per `backend/routes/direct_reports.py`), so a local patch of `role_level_id`
-  alone can't render the metrics/skills/values block correctly. Role assigned: unchanged
-  behavior. The Assessment section's "Score them against their role's expectations" link now
-  reads "Assess them" when no role is assigned (reworded, not hidden — the AI-draft-from-notes
-  path still works without a role) and keeps the original phrase once one exists.
-- **`frontend/app/app/team/page.tsx`** (F6) — roster cards get a role · team chip or an amber
-  "No role" badge, reading Session 41's `getSetupStatus()` for the `has_role` boolean (never
-  recomputed locally, per the plan) and resolving display text from `getDirectReports()` +
-  `getRoleLevels()`/`getRoleFamilies()`/`getOrgUnits()` joined client-side by person id —
-  `TeamMember` (from `getTeam()`) only carries the legacy `role_title`, which the chip no longer
-  reads.
-- **`frontend/app/app/org/page.tsx`** (F6) — Build-view unit cards (the default `/app/org` view;
-  Chart/Rollup views weren't touched — scope call, flagged as a deviation below) show a member
-  count ("3 people") next to the leader line, computed client-side from `getDirectReports()`
-  grouped by `org_unit_id` — no backend endpoint needed, `DirectReport.org_unit_id` was already
-  there. The count links to `/app/settings?section=people&unit={id}`. Blurb changed from
-  "Departments and teams, and how they connect under {companyName}." to "Your teams and
-  departments — the structure everything rolls up through," per the plan.
-- **`frontend/app/app/settings/page.tsx`** (S5) — Roles & Levels and Expectations merged into one
-  tab, **Roles & expectations** (`SectionId` drops `"expectations"`; `RolesSection` renders
-  first, `ExpectationsSection` right below it inside the same `"roles"` tab, separated by a
-  divider and an `id="expectations-block"` anchor). Every internal deep-link that used to call
-  `setSection("expectations")` now targets `"roles"` (People's expectations-step deep-link and
-  `onDraftExpectations`'s section switch); the People step's `handleStep` scrolls to
-  `#expectations-block` after switching so a manager lands on the right half, not the top of the
-  ladder cards. User-facing "Roles & Levels" copy renamed to "Roles & expectations" (nav label +
-  blurb, the "add more levels" ladder-creation hint, Capacity's empty-state pointer); the
-  Expectations section's own "no roles yet" empty state was rewritten to "add your first role
-  above" instead of naming a now-nonexistent separate tab, since `RolesSection` renders directly
-  above it now. Historical session-comment references to the old name were left as-is (this
-  file's established convention — see Session 41's own comments still saying "Team").
-  Additionally: `SettingsPage` now wraps a `SettingsFlow` inner component in `<Suspense>` and
-  reads `?section=` and `?unit=` from `useSearchParams()` (same pattern as
-  `reports/[id]/prep/page.tsx`) — `?section=people` opens the People tab directly, `?unit={id}`
-  scopes the People roster to one org unit with a "Showing people in X · Clear filter" banner.
-  This is what `/app/org`'s new member-count links land on.
-- **`frontend/components/ZoneMap.tsx`** — reviewed, not touched. Its Foundation-zone "Settings"
-  door already reads `getSetupStatus()` generically (Session 41) and doesn't name any Settings
-  sub-section, and neither "Org" nor "Settings" nav labels changed this session — no stale copy
-  found there to sweep.
-
-**Verification:**
-- `npx tsc --noEmit` — clean, no errors.
-- Isolated `next build` (fresh `npm install` in a scratch copy of `frontend/`) — compiled
-  successfully; `/app/settings` still prerenders as a static route despite the new
-  `useSearchParams()` usage, confirming the `<Suspense>` wrapper is doing its job.
-- Grepped the whole frontend for stale "Roles & Levels" / `section === "expectations"` /
-  `SectionId` references post-edit — none outside historical comments in `settings/page.tsx`.
-- **Not done live**: no access to the live deploy or a running backend from this session, so the
-  "click-through of every renamed surface from the zone map" the plan asked for was done
-  statically (link/query-param audit above) rather than by actually clicking through the app.
-  Recommend a real click-through before calling S4+S5 fully closed.
-- Migration: none — this session was frontend-only, matching the plan's expectation.
-
-**Deviations from the plan / open items:**
-- `/app/org`'s member count was added to the Build (tree) view only, not Chart or Rollup — the
-  plan's example ("US Success · 3 people") didn't specify which view, and Build is the default/
-  primary one. Extending to Chart is a small follow-up if Andrew wants it there too.
-- `QuickAddModal.tsx`'s duplicate role-grouping helpers weren't folded into the new
-  `RolePicker.tsx` — flagged above, not done, to keep this session's diff scoped to what the
-  plan asked for.
-- Assessments page's two "Add them in Settings" links (`app/app/assessments/[reportId]/
-  page.tsx`) weren't changed to deep-link into `?section=roles` — outside this session's active
-  file list, left alone.
-- This session's changes were committed locally (`git commit`) but **not pushed** — the sandbox
-  this session ran in has no network access for git operations (confirmed: `git fetch` returned
-  a 403 from a proxy). Andrew needs to run `git push` from his own machine to get this live.
-
-**Next step:**
-All four S1-S5 sessions from `docs/TEAM_SETUP_UX_REVIEW.md` §6 are now built. Recommended next:
-(1) `git push` this session's commit, (2) a real click-through of Settings, /app/team, /app/org,
-and a role-less direct-report page against the live/dev deploy to close the "not done live" gap
-above, (3) decide whether to fold `QuickAddModal`'s duplicate role-grouping helpers into
-`RolePicker.tsx` and whether to extend `/app/org`'s member count to the Chart view.
-
----
-
 ---
 
 ## Archived sessions (compact index)
@@ -518,6 +499,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 42 — 2026-08-18:** Build Plan S4+S5 (last of the four S1-S5 setup-UX sessions, `docs/TEAM_SETUP_UX_REVIEW.md` §6) — make half-configured setup state visible everywhere a person appears, and rename/consolidate the setup surfaces (Roles & Levels + Expectations merged into one "Roles & expectations" tab).
 - **Session 41 — 2026-08-18:** Build Plan S1 — rebuild Settings → Team as a roster-first "People" section (progress header, inline role/team creation, fix for Quick add's free-text Role dead-end). **Decided:** `role_has_expectations` is null (not false) when no role is assigned, distinguishing "nothing to check" from "checked, found nothing"; inline role/team creation always creates new (no fuzzy-match merge — Roles & Levels' existing merge tool stays the one place for that); email on create is fire-and-forget, no auto-invite.
 - **Session 40 — 2026-08-18:** Build Plan S2 — role families, so 13 flat role_levels cards become ~5 ladders (one card per family, levels as rows, "Add L{n+1}" pre-filled, merge tool for near-duplicates). **Decided:** Family name takes over as primary display once a level has one, `job_role` stays as an optional per-level override title; new role creation splits into "+ Add a new ladder" (family+L1 together) vs. "+ Add L{n+1}" (pre-filled, existing ladder); family deletion allowed regardless of level count, UI just steers toward emptying it first.
 - **Session 39 — 2026-08-18:** Build Plan S3 — expectations coverage grid + per-role "Draft with AI" (role's stored JD → draft metrics/skills/values, review-then-commit) + org-wide values. **Decided:** Org-wide values = `value_configs.role_level_id IS NULL` — no migration (column already nullable, RLS org-scoped, not role_level-scoped); AI draft leans conservative on role-specific values — prefer empty, company values live in the org-wide block, not duplicated 13x; all new logic in new `expectations_ai.py` on top of settings.py's unchanged CRUD (same shape as assessments.py on direct_reports.py).

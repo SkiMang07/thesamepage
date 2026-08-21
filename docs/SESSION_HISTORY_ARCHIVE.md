@@ -9,6 +9,104 @@ here.
 
 ---
 
+## Session 42 — 2026-08-18
+
+**Goal:** Build Plan S4+S5 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (last of the four S1-S5
+setup-UX sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): make half-configured setup state
+visible everywhere a person appears, and rename/consolidate the setup surfaces.
+
+**What was done:**
+- **`frontend/components/RolePicker.tsx` (new)** — `roleLabel()`, `orgUnitLabel()`,
+  `groupRoleLevelsByFamily()`, `GroupedRoleSelect`, and `OrgUnitSelect` extracted out of
+  `settings/page.tsx`, which is the only place they used to live. The direct-report page and
+  Team roster cards both needed the identical "ladder-grouped role label" formatting this
+  session, so page-local was no longer viable — `settings/page.tsx` now imports these from the
+  shared module instead of defining them (behavior unchanged there; `CREATE_NEW_VALUE`/
+  `UNGROUPED_LABEL` moved too). `QuickAddModal.tsx`'s own separate `groupRolesByFamily()`
+  duplicate (Session 41) was **not** touched — out of scope for this session, noted as a future
+  small cleanup.
+- **`frontend/app/app/reports/[id]/page.tsx`** (F6) — the Expectations block now always renders
+  instead of being absent when no role is assigned. No role: amber "No role assigned." plus an
+  inline `GroupedRoleSelect` that calls `assignReportRole()` (preserving `org_unit_id`/cadence,
+  same invariant the People picker relies on) then re-fetches the full report via
+  `getDirectReport()` — the PUT response doesn't carry the `expectations` object (only GET
+  attaches it, per `backend/routes/direct_reports.py`), so a local patch of `role_level_id`
+  alone can't render the metrics/skills/values block correctly. Role assigned: unchanged
+  behavior. The Assessment section's "Score them against their role's expectations" link now
+  reads "Assess them" when no role is assigned (reworded, not hidden — the AI-draft-from-notes
+  path still works without a role) and keeps the original phrase once one exists.
+- **`frontend/app/app/team/page.tsx`** (F6) — roster cards get a role · team chip or an amber
+  "No role" badge, reading Session 41's `getSetupStatus()` for the `has_role` boolean (never
+  recomputed locally, per the plan) and resolving display text from `getDirectReports()` +
+  `getRoleLevels()`/`getRoleFamilies()`/`getOrgUnits()` joined client-side by person id —
+  `TeamMember` (from `getTeam()`) only carries the legacy `role_title`, which the chip no longer
+  reads.
+- **`frontend/app/app/org/page.tsx`** (F6) — Build-view unit cards (the default `/app/org` view;
+  Chart/Rollup views weren't touched — scope call, flagged as a deviation below) show a member
+  count ("3 people") next to the leader line, computed client-side from `getDirectReports()`
+  grouped by `org_unit_id` — no backend endpoint needed, `DirectReport.org_unit_id` was already
+  there. The count links to `/app/settings?section=people&unit={id}`. Blurb changed from
+  "Departments and teams, and how they connect under {companyName}." to "Your teams and
+  departments — the structure everything rolls up through," per the plan.
+- **`frontend/app/app/settings/page.tsx`** (S5) — Roles & Levels and Expectations merged into one
+  tab, **Roles & expectations** (`SectionId` drops `"expectations"`; `RolesSection` renders
+  first, `ExpectationsSection` right below it inside the same `"roles"` tab, separated by a
+  divider and an `id="expectations-block"` anchor). Every internal deep-link that used to call
+  `setSection("expectations")` now targets `"roles"` (People's expectations-step deep-link and
+  `onDraftExpectations`'s section switch); the People step's `handleStep` scrolls to
+  `#expectations-block` after switching so a manager lands on the right half, not the top of the
+  ladder cards. User-facing "Roles & Levels" copy renamed to "Roles & expectations" (nav label +
+  blurb, the "add more levels" ladder-creation hint, Capacity's empty-state pointer); the
+  Expectations section's own "no roles yet" empty state was rewritten to "add your first role
+  above" instead of naming a now-nonexistent separate tab, since `RolesSection` renders directly
+  above it now. Historical session-comment references to the old name were left as-is (this
+  file's established convention — see Session 41's own comments still saying "Team").
+  Additionally: `SettingsPage` now wraps a `SettingsFlow` inner component in `<Suspense>` and
+  reads `?section=` and `?unit=` from `useSearchParams()` (same pattern as
+  `reports/[id]/prep/page.tsx`) — `?section=people` opens the People tab directly, `?unit={id}`
+  scopes the People roster to one org unit with a "Showing people in X · Clear filter" banner.
+  This is what `/app/org`'s new member-count links land on.
+- **`frontend/components/ZoneMap.tsx`** — reviewed, not touched. Its Foundation-zone "Settings"
+  door already reads `getSetupStatus()` generically (Session 41) and doesn't name any Settings
+  sub-section, and neither "Org" nor "Settings" nav labels changed this session — no stale copy
+  found there to sweep.
+
+**Verification:**
+- `npx tsc --noEmit` — clean, no errors.
+- Isolated `next build` (fresh `npm install` in a scratch copy of `frontend/`) — compiled
+  successfully; `/app/settings` still prerenders as a static route despite the new
+  `useSearchParams()` usage, confirming the `<Suspense>` wrapper is doing its job.
+- Grepped the whole frontend for stale "Roles & Levels" / `section === "expectations"` /
+  `SectionId` references post-edit — none outside historical comments in `settings/page.tsx`.
+- **Not done live**: no access to the live deploy or a running backend from this session, so the
+  "click-through of every renamed surface from the zone map" the plan asked for was done
+  statically (link/query-param audit above) rather than by actually clicking through the app.
+  Recommend a real click-through before calling S4+S5 fully closed.
+- Migration: none — this session was frontend-only, matching the plan's expectation.
+
+**Deviations from the plan / open items:**
+- `/app/org`'s member count was added to the Build (tree) view only, not Chart or Rollup — the
+  plan's example ("US Success · 3 people") didn't specify which view, and Build is the default/
+  primary one. Extending to Chart is a small follow-up if Andrew wants it there too.
+- `QuickAddModal.tsx`'s duplicate role-grouping helpers weren't folded into the new
+  `RolePicker.tsx` — flagged above, not done, to keep this session's diff scoped to what the
+  plan asked for.
+- Assessments page's two "Add them in Settings" links (`app/app/assessments/[reportId]/
+  page.tsx`) weren't changed to deep-link into `?section=roles` — outside this session's active
+  file list, left alone.
+- This session's changes were committed locally (`git commit`) but **not pushed** — the sandbox
+  this session ran in has no network access for git operations (confirmed: `git fetch` returned
+  a 403 from a proxy). Andrew needs to run `git push` from his own machine to get this live.
+
+**Next step:**
+All four S1-S5 sessions from `docs/TEAM_SETUP_UX_REVIEW.md` §6 are now built. Recommended next:
+(1) `git push` this session's commit, (2) a real click-through of Settings, /app/team, /app/org,
+and a role-less direct-report page against the live/dev deploy to close the "not done live" gap
+above, (3) decide whether to fold `QuickAddModal`'s duplicate role-grouping helpers into
+`RolePicker.tsx` and whether to extend `/app/org`'s member count to the Chart view.
+
+---
+
 ## Session 41 — 2026-08-18
 
 **Goal:** Build Plan S1 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (third of the four S1-S5

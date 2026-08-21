@@ -26,6 +26,15 @@ import {
   getRoleFamilies,
   getRoleLevels,
   getOrgUnits,
+  getDevelopmentPlan,
+  upsertAspiration,
+  createOpportunity,
+  deleteOpportunity,
+  createTraining,
+  updateTraining,
+  deleteTraining,
+  createDevManagerNote,
+  draftDevelopment,
   DirectReport,
   OneOnOne,
   Commitment,
@@ -40,6 +49,9 @@ import {
   RoleFamily,
   RoleLevel,
   OrgUnit,
+  DevelopmentBundle,
+  DevelopmentDraft,
+  OpportunityType,
 } from "@/lib/api";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
 
@@ -137,6 +149,11 @@ export default function ReportDetailPage() {
   // as Goals/Projects.
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
 
+  // Development (Session 47) — full inline CRUD here, same depth as
+  // Capacity above, since this feature has no dedicated page of its own
+  // (Andrew's scoping call: DR-detail-section-only placement).
+  const [devBundle, setDevBundle] = useState<DevelopmentBundle | null>(null);
+
   // 1:1 cadence override (nav rework pass 2, Session 38) — same "blank
   // means inherit the org default" pattern as the Capacity fields above.
   const [orgCadenceDays, setOrgCadenceDays] = useState<number>(21);
@@ -178,8 +195,9 @@ export default function ReportDetailPage() {
       getRoleLevels(),
       getRoleFamilies(),
       getOrgUnits(),
+      getDevelopmentPlan(id),
     ])
-      .then(([dr, h, c, g, p, cp, cs, to, sc, prof, rls, rfs, ous]) => {
+      .then(([dr, h, c, g, p, cp, cs, to, sc, prof, rls, rfs, ous, dev]) => {
         setReport(dr);
         setPageContext(`${dr.name}'s direct report page`);
         setHistory(h);
@@ -197,10 +215,24 @@ export default function ReportDetailPage() {
         setRoleLevels(rls);
         setRoleFamilies(rfs);
         setOrgUnits(ous);
+        setDevBundle(dev);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Every Development mutation refetches the bundle rather than hand-
+  // patching local state — same "re-fetch after write" posture as
+  // assignRole above, and simplest to keep correct given how many pieces
+  // (aspiration/opportunities/training/notes/low_scoring_items) can shift
+  // together (e.g. adding an opportunity sourced from a low-scoring item
+  // doesn't remove it from low_scoring_items — the manager may want more
+  // than one opportunity from the same score).
+  async function refreshDevBundle() {
+    const fresh = await getDevelopmentPlan(id);
+    setDevBundle(fresh);
+    return fresh;
+  }
 
   // Assigns a role right from this page (Session 42, Plan S4+S5) — preserves
   // org_unit_id/cadence via assignReportRole, same invariant PeopleSection's
@@ -469,6 +501,19 @@ export default function ReportDetailPage() {
           </p>
         )}
       </div>
+
+      {/* Development (Session 47) — career aspiration, skill/knowledge
+          opportunities (optionally traced back to a low assessment score),
+          training, and private manager notes. Full inline CRUD here, no
+          dedicated page. */}
+      {devBundle && (
+        <DevelopmentSection
+          directReportId={id}
+          reportName={report.name}
+          bundle={devBundle}
+          onRefresh={refreshDevBundle}
+        />
+      )}
 
       {/* 1:1 cadence (nav rework pass 2, Session 38) — per-person override
           of the org default set in Settings > Profile & Company. Blank =
@@ -890,5 +935,592 @@ export default function ReportDetailPage() {
         )}
       </div>
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Development (Session 47) — career aspiration, skill/knowledge
+// opportunities (some traced back to a low assessment score via
+// source_kind/source_config_id), training, and a private manager-notes log.
+// Self-contained subcomponent (same "props in, refresh callback out"
+// pattern as team/page.tsx's CalloutsPanel/MeetingsPanel) rather than
+// inlining another dozen pieces of state into ReportDetailPage, which is
+// already the densest page in the app.
+// ---------------------------------------------------------------------------
+
+const OPPORTUNITY_TYPE_LABELS: Record<OpportunityType, string> = {
+  skill: "Skill",
+  knowledge: "Knowledge",
+};
+
+function DevelopmentSection({
+  directReportId,
+  reportName,
+  bundle,
+  onRefresh,
+}: {
+  directReportId: string;
+  reportName: string;
+  bundle: DevelopmentBundle;
+  onRefresh: () => Promise<DevelopmentBundle>;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  // Aspiration — single upserted row.
+  const [editingAspiration, setEditingAspiration] = useState(false);
+  const [desiredRole, setDesiredRole] = useState(bundle.aspiration?.desired_role ?? "");
+  const [timeline, setTimeline] = useState(bundle.aspiration?.timeline ?? "");
+  const [aspirationNotes, setAspirationNotes] = useState(bundle.aspiration?.notes ?? "");
+  const [savingAspiration, setSavingAspiration] = useState(false);
+
+  // Opportunities.
+  const [newOppType, setNewOppType] = useState<OpportunityType>("skill");
+  const [newOppDescription, setNewOppDescription] = useState("");
+  const [addingOpp, setAddingOpp] = useState(false);
+  const [removingOppId, setRemovingOppId] = useState<string | null>(null);
+
+  // Training.
+  const [newTrainingDesc, setNewTrainingDesc] = useState("");
+  const [newTrainingDate, setNewTrainingDate] = useState("");
+  const [newTrainingCost, setNewTrainingCost] = useState("");
+  const [addingTraining, setAddingTraining] = useState(false);
+  const [removingTrainingId, setRemovingTrainingId] = useState<string | null>(null);
+
+  // Manager notes — append-only.
+  const [newNote, setNewNote] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
+
+  // AI draft — draft-then-review, same rule as Assessments/1:1 wrap-up.
+  const [drafting, setDrafting] = useState(false);
+  const [draft, setDraft] = useState<DevelopmentDraft | null>(null);
+  const [draftIncluded, setDraftIncluded] = useState<boolean[]>([]);
+  const [draftNote, setDraftNote] = useState("");
+  const [savingDraft, setSavingDraft] = useState(false);
+
+  const existingSourceIds = new Set(
+    bundle.opportunities.map((o) => o.source_config_id).filter(Boolean) as string[]
+  );
+
+  function startEditingAspiration() {
+    setDesiredRole(bundle.aspiration?.desired_role ?? "");
+    setTimeline(bundle.aspiration?.timeline ?? "");
+    setAspirationNotes(bundle.aspiration?.notes ?? "");
+    setEditingAspiration(true);
+  }
+
+  async function saveAspiration(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingAspiration(true);
+    try {
+      await upsertAspiration(directReportId, {
+        desired_role: desiredRole.trim() || null,
+        timeline: timeline.trim() || null,
+        notes: aspirationNotes.trim() || null,
+      });
+      await onRefresh();
+      setEditingAspiration(false);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save aspiration");
+    } finally {
+      setSavingAspiration(false);
+    }
+  }
+
+  async function addOpportunity(
+    description: string,
+    type: OpportunityType,
+    sourceKind: "skill" | "value" | null = null,
+    sourceConfigId: string | null = null
+  ) {
+    const trimmed = description.trim();
+    if (!trimmed || addingOpp) return;
+    setAddingOpp(true);
+    try {
+      await createOpportunity(directReportId, {
+        type,
+        description: trimmed,
+        source_kind: sourceKind,
+        source_config_id: sourceConfigId,
+      });
+      await onRefresh();
+      setNewOppDescription("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add opportunity");
+    } finally {
+      setAddingOpp(false);
+    }
+  }
+
+  async function removeOpportunity(id: string) {
+    setRemovingOppId(id);
+    try {
+      await deleteOpportunity(id);
+      await onRefresh();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove opportunity");
+    } finally {
+      setRemovingOppId(null);
+    }
+  }
+
+  async function addTraining(e: React.FormEvent) {
+    e.preventDefault();
+    const desc = newTrainingDesc.trim();
+    if (!desc || addingTraining) return;
+    setAddingTraining(true);
+    try {
+      await createTraining(directReportId, {
+        description: desc,
+        completion_date: newTrainingDate || null,
+        projected_cost: newTrainingCost.trim() ? parseFloat(newTrainingCost) : null,
+      });
+      await onRefresh();
+      setNewTrainingDesc("");
+      setNewTrainingDate("");
+      setNewTrainingCost("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add training");
+    } finally {
+      setAddingTraining(false);
+    }
+  }
+
+  async function markTrainingComplete(trainingId: string) {
+    try {
+      await updateTraining(trainingId, { completion_date: new Date().toISOString().slice(0, 10) });
+      await onRefresh();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update training");
+    }
+  }
+
+  async function removeTraining(id: string) {
+    setRemovingTrainingId(id);
+    try {
+      await deleteTraining(id);
+      await onRefresh();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove training");
+    } finally {
+      setRemovingTrainingId(null);
+    }
+  }
+
+  async function addNote(e: React.FormEvent) {
+    e.preventDefault();
+    const content = newNote.trim();
+    if (!content || addingNote) return;
+    setAddingNote(true);
+    try {
+      await createDevManagerNote(directReportId, content);
+      await onRefresh();
+      setNewNote("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add note");
+    } finally {
+      setAddingNote(false);
+    }
+  }
+
+  async function runDraft() {
+    setDrafting(true);
+    try {
+      const d = await draftDevelopment(directReportId);
+      setDraft(d);
+      setDraftIncluded(d.opportunities.map(() => true));
+      setDraftNote(d.manager_note ?? "");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to draft with AI");
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  async function saveDraft() {
+    if (!draft || savingDraft) return;
+    setSavingDraft(true);
+    try {
+      const toSave = draft.opportunities.filter((_, i) => draftIncluded[i]);
+      for (const o of toSave) {
+        await createOpportunity(directReportId, {
+          type: o.type,
+          description: o.description,
+          source_kind: o.source_kind,
+          source_config_id: o.source_config_id,
+        });
+      }
+      if (draftNote.trim()) {
+        await createDevManagerNote(directReportId, draftNote.trim());
+      }
+      await onRefresh();
+      setDraft(null);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save draft");
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  return (
+    <div className="mt-10">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Development</h2>
+        <button
+          onClick={runDraft}
+          disabled={drafting}
+          className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+        >
+          {drafting ? "Drafting..." : "Draft with AI →"}
+        </button>
+      </div>
+
+      {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+
+      {/* AI draft review — nothing above is touched until Save. */}
+      {draft && (
+        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/40 px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-blue-500">AI draft — review before saving</p>
+          {draft.opportunities.length === 0 && !draft.manager_note ? (
+            <p className="mt-2 text-sm text-gray-500">
+              Not enough evidence yet for a draft — more 1:1 history or assessment scores will help.
+            </p>
+          ) : (
+            <>
+              {draft.opportunities.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {draft.opportunities.map((o, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={draftIncluded[i] ?? false}
+                        onChange={(e) =>
+                          setDraftIncluded((inc) => inc.map((v, idx) => (idx === i ? e.target.checked : v)))
+                        }
+                        className="mt-1 h-4 w-4 cursor-pointer rounded border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">
+                        <span className="mr-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                          {OPPORTUNITY_TYPE_LABELS[o.type]}
+                        </span>
+                        {o.description}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {draft.manager_note !== null && (
+                <div className="mt-3">
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Synthesis note (private)</label>
+                  <textarea
+                    value={draftNote}
+                    onChange={(e) => setDraftNote(e.target.value)}
+                    rows={2}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+            </>
+          )}
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              onClick={() => setDraft(null)}
+              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-white"
+            >
+              Discard
+            </button>
+            {(draft.opportunities.length > 0 || draft.manager_note) && (
+              <button
+                onClick={saveDraft}
+                disabled={savingDraft}
+                className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              >
+                {savingDraft ? "Saving..." : "Save selected"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Aspiration */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">Career aspiration</h3>
+          {!editingAspiration && (
+            <button onClick={startEditingAspiration} className="text-xs text-gray-400 hover:text-gray-600">
+              {bundle.aspiration ? "Edit" : "Add"}
+            </button>
+          )}
+        </div>
+        {editingAspiration ? (
+          <form onSubmit={saveAspiration} className="mt-2 space-y-2">
+            <input
+              type="text"
+              value={desiredRole}
+              onChange={(e) => setDesiredRole(e.target.value)}
+              placeholder="Desired role"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            <input
+              type="text"
+              value={timeline}
+              onChange={(e) => setTimeline(e.target.value)}
+              placeholder="Timeline (e.g. 12-18 months)"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            <textarea
+              value={aspirationNotes}
+              onChange={(e) => setAspirationNotes(e.target.value)}
+              rows={2}
+              placeholder="Notes"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingAspiration(false)}
+                className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingAspiration}
+                className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              >
+                {savingAspiration ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </form>
+        ) : bundle.aspiration && (bundle.aspiration.desired_role || bundle.aspiration.timeline || bundle.aspiration.notes) ? (
+          <div className="mt-2 rounded-lg border border-gray-200 px-4 py-3">
+            {bundle.aspiration.desired_role && (
+              <p className="text-sm font-medium text-gray-900">{bundle.aspiration.desired_role}</p>
+            )}
+            {bundle.aspiration.timeline && <p className="mt-0.5 text-xs text-gray-400">{bundle.aspiration.timeline}</p>}
+            {bundle.aspiration.notes && <p className="mt-1.5 text-sm text-gray-700">{bundle.aspiration.notes}</p>}
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-gray-500">
+            No aspiration on record yet for {reportName.split(" ")[0]}.
+          </p>
+        )}
+      </div>
+
+      {/* Opportunities — suggested-from-assessment prompts first, then the
+          list, then a manual add form. */}
+      <div className="mt-6">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          Opportunities{bundle.opportunities.length > 0 && ` (${bundle.opportunities.length})`}
+        </h3>
+
+        {bundle.low_scoring_items.filter((it) => !existingSourceIds.has(it.config_id)).length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            {bundle.low_scoring_items
+              .filter((it) => !existingSourceIds.has(it.config_id))
+              .map((it) => (
+                <div
+                  key={it.config_id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2"
+                >
+                  <p className="text-sm text-amber-800">
+                    Suggested from assessment: <span className="font-medium">{it.name}</span> scored{" "}
+                    {it.evaluation_point}/{it.scale_max}
+                  </p>
+                  <button
+                    onClick={() =>
+                      addOpportunity(
+                        `Improve ${it.name.toLowerCase()} (scored ${it.evaluation_point}/${it.scale_max} on last assessment).`,
+                        "skill",
+                        it.kind,
+                        it.config_id
+                      )
+                    }
+                    disabled={addingOpp}
+                    className="shrink-0 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    Add as opportunity
+                  </button>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {bundle.opportunities.length === 0 ? (
+          <p className="mt-2 text-sm text-gray-500">No opportunities logged yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {bundle.opportunities.map((o) => (
+              <li key={o.id} className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2">
+                <span className="text-sm text-gray-700">
+                  <span className="mr-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                    {OPPORTUNITY_TYPE_LABELS[o.type]}
+                  </span>
+                  {o.description}
+                </span>
+                <button
+                  onClick={() => removeOpportunity(o.id)}
+                  disabled={removingOppId === o.id}
+                  className="shrink-0 text-xs text-gray-400 hover:text-red-500"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            addOpportunity(newOppDescription, newOppType);
+          }}
+          className="mt-3 flex flex-wrap items-center gap-2"
+        >
+          <select
+            value={newOppType}
+            onChange={(e) => setNewOppType(e.target.value as OpportunityType)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="skill">Skill</option>
+            <option value="knowledge">Knowledge</option>
+          </select>
+          <input
+            type="text"
+            value={newOppDescription}
+            onChange={(e) => setNewOppDescription(e.target.value)}
+            placeholder="Describe the opportunity"
+            className="min-w-[16rem] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={addingOpp}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {addingOpp ? "Adding..." : "Add"}
+          </button>
+        </form>
+      </div>
+
+      {/* Training */}
+      <div className="mt-6">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          Training{bundle.training.length > 0 && ` (${bundle.training.length})`}
+        </h3>
+        {bundle.training.length === 0 ? (
+          <p className="mt-2 text-sm text-gray-500">No training logged yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {bundle.training.map((t) => (
+              <li key={t.id} className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-700">{t.description}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    {t.completion_date ? `Completed ${formatDate(t.completion_date + "T00:00:00")}` : "Not yet completed"}
+                    {t.projected_cost != null && ` · $${t.projected_cost.toLocaleString()}`}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  {!t.completion_date && (
+                    <button onClick={() => markTrainingComplete(t.id)} className="text-xs text-gray-400 hover:text-gray-600">
+                      Mark complete
+                    </button>
+                  )}
+                  <button
+                    onClick={() => removeTraining(t.id)}
+                    disabled={removingTrainingId === t.id}
+                    className="text-xs text-gray-400 hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form onSubmit={addTraining} className="mt-3 flex flex-wrap items-end gap-2">
+          <input
+            type="text"
+            value={newTrainingDesc}
+            onChange={(e) => setNewTrainingDesc(e.target.value)}
+            placeholder="Training / course"
+            className="min-w-[14rem] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Target date</label>
+            <input
+              type="date"
+              value={newTrainingDate}
+              onChange={(e) => setNewTrainingDate(e.target.value)}
+              className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Est. cost</label>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={newTrainingCost}
+              onChange={(e) => setNewTrainingCost(e.target.value)}
+              className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={addingTraining}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {addingTraining ? "Adding..." : "Add"}
+          </button>
+        </form>
+      </div>
+
+      {/* Manager notes — private, append-only, same posture as team meeting
+          notes (no edit/delete in v1). */}
+      <div className="mt-6">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          Manager notes{bundle.manager_notes.length > 0 && ` (${bundle.manager_notes.length})`}
+          <span className="ml-1.5 normal-case text-gray-400">— private, not shared with {reportName.split(" ")[0]}</span>
+        </h3>
+        {bundle.manager_notes.length === 0 ? (
+          <p className="mt-2 text-sm text-gray-500">No notes yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {bundle.manager_notes.map((n) => (
+              <li key={n.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                <p className="text-sm text-gray-700">{n.content}</p>
+                <p className="mt-0.5 text-xs text-gray-400">{formatDate(n.created_at)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form onSubmit={addNote} className="mt-3 flex items-start gap-2">
+          <textarea
+            value={newNote}
+            onChange={(e) => setNewNote(e.target.value)}
+            rows={2}
+            placeholder="Add a private note about this person's growth..."
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={addingNote}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {addingNote ? "Adding..." : "Add"}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }

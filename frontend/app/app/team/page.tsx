@@ -81,6 +81,7 @@ import {
   SetupStatus,
   TeamCallout,
   TeamCommitment,
+  TeamDevFocus,
   TeamGoal,
   TeamMember,
   TeamMessage,
@@ -97,6 +98,7 @@ import {
   getTeam,
   getTeamCallout,
   getTeamCommitments,
+  getTeamDevFocus,
   getTeamGoals,
   getTeamMessages,
   getTeamNotes,
@@ -104,6 +106,7 @@ import {
   sendTeamMessage,
   updateCommitment,
   updateTeamCallout,
+  updateTeamDevFocus,
 } from "@/lib/api";
 import { roleLabel } from "@/components/RolePicker";
 
@@ -277,6 +280,9 @@ export default function TeamPage() {
   // see lib/api.ts's TeamCallout comment. The row shown/edited is derived
   // below from selectedTeamId, not stored separately.
   const [callouts, setCallouts] = useState<TeamCallout[]>([]);
+  // Session 47: same list-of-rows shape as callouts above, for the
+  // "training focus" panel — see lib/api.ts's TeamDevFocus comment.
+  const [devFocuses, setDevFocuses] = useState<TeamDevFocus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -305,6 +311,7 @@ export default function TeamPage() {
       getTeamCommitments(),
       getProjects(),
       getTeamCallout(),
+      getTeamDevFocus(),
       getDirectReports(),
       getRoleLevels(),
       getRoleFamilies(),
@@ -312,13 +319,14 @@ export default function TeamPage() {
       getSetupStatus(),
       getLedOrgUnits(),
     ])
-      .then(([m, g, n, c, p, calloutRows, drs, rls, rfs, ous, status, led]) => {
+      .then(([m, g, n, c, p, calloutRows, devFocusRows, drs, rls, rfs, ous, status, led]) => {
         setMembers(m);
         setGoals(g);
         setNotes(n);
         setCommitments(c);
         setInitiatives(p.filter((proj) => ACTIVE_STATUSES.has(proj.status)));
         setCallouts(calloutRows);
+        setDevFocuses(devFocusRows);
         setDirectReports(drs);
         setRoleLevels(rls);
         setRoleFamilies(rfs);
@@ -394,6 +402,23 @@ export default function TeamPage() {
     });
   }
 
+  const activeDevFocus: TeamDevFocus =
+    devFocuses.find((d) => d.org_unit_id === selectedTeamId) ?? {
+      message: "",
+      updated_at: null,
+      org_unit_id: selectedTeamId,
+    };
+
+  function upsertDevFocus(updated: TeamDevFocus) {
+    setDevFocuses((ds) => {
+      const idx = ds.findIndex((d) => d.org_unit_id === updated.org_unit_id);
+      if (idx === -1) return [...ds, updated];
+      const copy = [...ds];
+      copy[idx] = updated;
+      return copy;
+    });
+  }
+
   const selectedTeamName =
     selectedTeamId === null
       ? "All teams"
@@ -463,6 +488,19 @@ export default function TeamPage() {
                 onSaved={upsertCallout}
               />
               <MeetingsPanel notes={visibleNotes} setNotes={setNotes} orgUnitId={selectedTeamId} />
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+              Development
+            </h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <DevFocusPanel
+                devFocus={activeDevFocus}
+                scopeLabel={selectedTeamName}
+                onSaved={upsertDevFocus}
+              />
             </div>
           </div>
 
@@ -935,6 +973,112 @@ function CalloutsPanel({
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dev focus (Session 47) — the team-level half of Development. Deliberately
+// a near-copy of CalloutsPanel above (same pinned-block-overwritten-in-
+// place shape via team_dev_focus), rendered as its own labeled panel so it
+// doesn't collide with Critical Callouts' "key updates" concept.
+// ---------------------------------------------------------------------------
+
+function DevFocusPanel({
+  devFocus,
+  scopeLabel,
+  onSaved,
+}: {
+  devFocus: TeamDevFocus;
+  scopeLabel: string;
+  onSaved: (updated: TeamDevFocus) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(devFocus.message);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset local edit state when the selected team changes — same reason as
+  // CalloutsPanel's identical effect.
+  useEffect(() => {
+    setEditing(false);
+    setDraft(devFocus.message);
+    setError(null);
+  }, [devFocus.org_unit_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function startEditing() {
+    setDraft(devFocus.message);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateTeamDevFocus(draft, devFocus.org_unit_id);
+      onSaved(updated);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col rounded-xl border border-gray-200 bg-white px-4 py-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Training focus</p>
+        {!editing && (
+          <button onClick={startEditing} className="text-xs text-gray-400 hover:text-gray-600">
+            Edit
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-gray-400">
+        What {scopeLabel} is focused on developing right now — written by you.
+      </p>
+
+      {editing ? (
+        <div className="mt-3">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={4}
+            placeholder={"e.g. Q3 focus: leveling up async communication and stakeholder updates."}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      ) : devFocus.message.trim() === "" ? (
+        <p className="mt-3 text-sm text-gray-400">
+          No focus set yet —{" "}
+          <button onClick={startEditing} className="underline hover:text-gray-600">
+            set this month&apos;s training focus
+          </button>
+          .
+        </p>
+      ) : (
+        <p className="mt-3 whitespace-pre-line text-sm text-gray-700">{devFocus.message}</p>
       )}
     </div>
   );
