@@ -11,3 +11,12 @@ backend/.env
 frontend/next-env.d.ts
 frontend/tsconfig.tsbuildinfo
 frontend/package-lock.json
+# Local tooling config + exploratory drafts never meant to be committed
+# (Session 50) — nav-option-c-v2.html is the shipped mockup and stays
+# tracked; a/b/d plus the pre-v2 c were exploration, not source.
+.claude/
+docs/NOTES_INGESTION_SCOPING.md
+mockups/nav/nav-option-a-grouped-rail.html
+mockups/nav/nav-option-b-command-deck.html
+mockups/nav/nav-option-c-hub-and-orbit.html
+mockups/nav/nav-option-d-dock.html
