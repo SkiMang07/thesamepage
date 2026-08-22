@@ -9,6 +9,70 @@ here.
 
 ---
 
+## Session 45 — 2026-08-19
+
+**Goal:** Andrew flagged that a manager/director leading more than one `org_units` team had no way to
+tell, on `/app/team`, which team's data they were looking at — the page always combined every direct
+report with no label. Add a team name + dropdown to the header, and make picking a team actually
+filter the page.
+
+**What was done:**
+- Scoped via one AskUserQuestion round (3 questions, all Andrew's recommended defaults): dropdown
+  source = `org_units` the caller leads (`leader_user_id`, existing Session 15 mechanism); selecting a
+  team filters everything on the page, not just the label; "All teams" stays the default.
+- **Key simplification found mid-build:** most of "filter everything" needed zero backend changes.
+  Roster, initiatives, and commitments all key off `direct_report_id` → `direct_reports.org_unit_id`
+  (filterable client-side); goals already carry `org_unit_id` directly. Only `team_meeting_notes` and
+  `team_callouts` had no per-team signal at all.
+- `database/migrations/2026-08-19_team_dropdown_scoping.sql` (new) — adds nullable `org_unit_id` to
+  both tables (null = "applies to all teams," shown under every specific team's filter, same
+  treatment as a company-level goal).
+- `backend/routes/team.py` — `TeamNoteIn`/`TeamCalloutIn` gain `org_unit_id`. `GET /callout` changed
+  shape: returns every callout row for the caller (list) instead of one object, so the frontend
+  switches teams without a round trip. `PUT /callout` does a manual look-up-then-write instead of
+  supabase's `upsert()` (see decision below).
+- `frontend/lib/api.ts` — `TeamNote`/`TeamCallout` gain `org_unit_id`; `getTeamCallout()` return type
+  changed to `TeamCallout[]`; `createTeamNote`/`updateTeamCallout` take an `orgUnitId` param.
+- `frontend/app/app/team/page.tsx` — header gains the team name + `<select>` (only rendered if the
+  caller leads at least one org_unit); every section derives a `visible*` filtered view from
+  `selectedTeamId` client-side; `CalloutsPanel` reworked to take `callout`/`scopeLabel`/`onSaved`
+  instead of `callout`/`setCallout`, with a reset-on-team-switch effect so a half-written draft can't
+  get saved against the wrong team.
+
+**Decisions made / locked:**
+- `team_callouts.org_unit_id` is `ON DELETE CASCADE`, not `ON DELETE SET NULL` like
+  `team_meeting_notes` — found and fixed via a real local-Postgres functional test, not reasoned
+  about in the abstract. `team_callouts` needed a uniqueness rule per `(manager, org_unit)` pair plus
+  "at most one all-teams row," which a plain composite `UNIQUE` can't express (Postgres treats every
+  NULL as distinct), so it's two partial unique indexes instead. With `SET NULL`, deleting an
+  org_unit that has both a team-specific callout AND a manager already holding a separate all-teams
+  callout tries to write a second null-`org_unit_id` row — the delete fails outright. Reproduced the
+  failure, then reproduced the fix, against real inserts before delivering.
+- `GET /callout` moved from returning one object to a list — worth flagging because it's a breaking
+  response-shape change for anyone else calling that endpoint (none currently exist besides this
+  page).
+
+**Verification:** cloned the pushed GitHub repo (commit `bbd65c0`) into a scratch sandbox. Backend —
+fresh venv, `main` import with dummy Supabase env vars confirmed all team.py routes register,
+`py_compile` clean. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean (all 21
+routes, `/app/team` at 8.79 kB). Schema — the repo's checked-in `database/local_verify_stub.sql` stood
+up a local Postgres 16, ran the full `schema.sql` + new migration end to end with zero errors, then
+functionally tested as two managers: inserted notes/callouts across two led teams + an all-teams row,
+confirmed both partial unique indexes reject duplicates, confirmed RLS isolation (second manager sees
+0 rows, an UPDATE against the first manager's row affects 0 rows), and specifically exercised the
+org_unit-delete edge case above.
+
+**Schema note — new migration, not yet run live.**
+`database/migrations/2026-08-19_team_dropdown_scoping.sql` must run in the Supabase SQL editor before
+this works against the live database — `team_meeting_notes`/`team_callouts` reads/writes will 500
+until then (`org_unit_id` doesn't exist live yet on either table).
+
+**Next step:** Run the migration in Supabase, then dogfood the dropdown — Andrew's own account needs
+at least one `org_units` row with himself as `leader_user_id` before the dropdown shows up at all
+(zero led units = today's unchanged single-team view).
+
+---
+
 ## Session 44 — 2026-08-18
 
 **Goal:** Build the Role JD Import flow scoped in `docs/ROLE_JD_IMPORT_SCOPING.md` — paste or drop a

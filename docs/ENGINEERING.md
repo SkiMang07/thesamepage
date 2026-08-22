@@ -143,7 +143,7 @@ before catching it).
 
 ---
 
-## Database schema (36 tables — aligned with Miro board)
+## Database schema (37 tables — aligned with Miro board)
 
 Full schema with indexes and RLS policies: `database/schema.sql`.
 
@@ -159,6 +159,9 @@ direct_reports       -- the manager's team; user_id nullable, now claimable via 
                         one_on_one_cadence_days (Session 37/38) — per-report cadence override,
                         null means inherit the org default; see resolve_cadence_days() in utils.py
 one_on_ones          -- 1:1 logs; notes private to writing manager (RLS)
+dr_capture_notes     -- new Session 50; small between-sessions inbox per direct report, manager-scoped
+                        (flat manager_id = auth.uid() RLS, same pattern as commitments). Feeds /prep's
+                        raw-notes textarea (prefilled oldest-first) and deleted once a sheet generates
 commitments          -- polymorphic source_type (one_on_one/goal/project/manual) + source_id;
                         is_team_commitment (Session 23) flags a commitment (still assigned to one
                         direct_report_id) for Team Mission Control's team-wide commitments list
@@ -831,6 +834,45 @@ Supabase env vars. Frontend fresh `npm install`, `tsc --noEmit` clean, `next bui
 
 ---
 
+## Direct-report capture notes (Session 50, 2026-08-21)
+
+Built as part of rebuilding `/app/reports/[id]` (the Person Page) into a "Command Deck" hub — the new
+Conversation column needed somewhere to stash a quick between-sessions note ("she seemed frustrated
+about scope creep") that later lands on the next prep sheet without Andrew having to remember it.
+Scoped via one AskUserQuestion round: new small table vs. attaching a draft column to `one_on_ones`.
+The table won — a capture can happen before any planned session exists, and today a planned
+`one_on_ones` row is only ever created BY `/prep`, so attaching to it would've meant inventing a new
+"draft planned session with no prep_guide yet" state the rest of the app doesn't model.
+
+**`dr_capture_notes`** (`database/migrations/2026-08-21_dr_capture_notes.sql`, folded into
+`schema.sql`): `id`, `manager_id`, `direct_report_id`, `content`, `created_at`, indexed on
+`(direct_report_id, created_at desc)`. Flat `manager_id = auth.uid()` RLS, same pattern as
+`commitments` — no nested subquery, per the rls_recursion project memory note.
+
+**Three new endpoints on `one_on_ones.py`** rather than a new file, since captures are tightly coupled
+to `/prep`, which already owns this router: `GET`/`POST /{direct_report_id}/captures`,
+`DELETE /captures/{capture_id}`.
+
+**Consumption is entirely in `/prep`:** step 1's raw-notes textarea now prefills from a report's
+unconsumed captures (oldest-first, newline-joined) when opening a fresh prep flow (skipped on
+`resumeId`), and once `handleGenerate` succeeds, every fetched capture is deleted
+(`Promise.all(...).catch(() => {})`, best-effort, non-blocking on failure) — that's the "lands on the
+next prep sheet" mechanic end to end, no new backend computation.
+
+**Verification:** same sandboxed-reconstruction approach as Sessions 45/46 (device_bash's ~45s cap
+can't run a full `next build`/`npm ci`/`pip install` on-device) — full frontend + backend rebuilt in
+the cloud sandbox from the connected folder. `tsc --noEmit` clean; fresh `npm ci` + `next build` clean
+(19/19 routes); `py_compile` clean; sandboxed `main` import confirmed 121 → 124 routes with zero path
+collisions; real local Postgres 16 test via `local_verify_stub.sql`, run both against a fresh
+`schema.sql` and against the original `schema.sql` + the standalone migration (what actually happens
+against live Supabase); an RLS functional test confirmed manager-scoped isolation and that a spoofed
+insert (wrong `manager_id`) is blocked by `WITH CHECK`.
+
+**Schema note — new migration, not yet run live.** `database/migrations/2026-08-21_dr_capture_notes.sql`
+must run in the Supabase SQL editor before this works against the live database.
+
+---
+
 ## Check-ins (Session 26, 2026-08-11)
 
 The progress layer for goals and projects (initiatives), built after Andrew's brainstorm about
@@ -1360,6 +1402,8 @@ backend/
                           GET /overview (Session 37/38) — per-report is_due/days_since_last/
                           cadence_days/cadence_source/planned_session/last_completed; the single
                           canonical "who's due" computation, backs /app/1-1s and the zone map
+                          GET/POST /{direct_report_id}/captures, DELETE /captures/{id} (Session 50) —
+                          dr_capture_notes CRUD backing the Person Page capture box
     commitments.py      GET /api/commitments, PATCH /api/commitments/{id}
     goals.py            GET/POST/PUT/PATCH/DELETE /api/goals — full level hierarchy (Session 10) + /rollup (Session 15)
                           + GET/POST /{id}/check-ins, list enriched with progress/trend/freshness (Session 26)

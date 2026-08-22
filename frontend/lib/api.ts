@@ -937,6 +937,34 @@ export const logOneOnOne = (body: {
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 
 // ---------------------------------------------------------------------------
+// Capture notes (Session 50, 2026-08-21) — the Person Page cockpit's
+// between-sessions capture box. A quick-jot inbox that /prep's frontend
+// (prep/page.tsx) folds into the raw-notes box and clears once a sheet is
+// generated. See backend/routes/one_on_ones.py's capture endpoints and
+// database/migrations/2026-08-21_dr_capture_notes.sql for why this is a
+// separate small table rather than a column on one_on_ones.
+// ---------------------------------------------------------------------------
+
+export type CaptureNote = {
+  id: string;
+  direct_report_id: string;
+  content: string;
+  created_at: string;
+};
+
+export const getCaptureNotes = (directReportId: string): Promise<CaptureNote[]> =>
+  authedFetch(`/api/one-on-ones/${directReportId}/captures`);
+
+export const createCaptureNote = (directReportId: string, content: string): Promise<CaptureNote> =>
+  authedFetch(`/api/one-on-ones/${directReportId}/captures`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+
+export const deleteCaptureNote = (id: string): Promise<{ deleted: boolean }> =>
+  authedFetch(`/api/one-on-ones/captures/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
 // 1:1s overview (nav rework pass 2, Session 38, 2026-08-16) — the front door
 // for the 1:1 loop, /app/1-1s. See docs/ONE_ON_ONES_PAGE_SPEC.md section 5.
 // Single canonical "who's due" computation — Mission Control's Individual

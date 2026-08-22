@@ -18,6 +18,10 @@ site for backend/context_engine.py's retrieval helper — see that module's
 docstring for the two-tier design. Wiring the other generate_text() call
 sites in this app (wrapup, assessments, dashboard insights) is future work,
 not done this session.
+
+Capture notes (Session 50, 2026-08-21): a small between-sessions inbox
+(dr_capture_notes) feeding /prep, not a status on this table — see the
+"Capture notes" section near the bottom of this file.
 """
 import json
 from datetime import date, datetime
@@ -825,4 +829,56 @@ async def dismiss_session(one_on_one_id: str, auth=Depends(get_authenticated_cli
         raise HTTPException(status_code=400, detail="Cannot dismiss a completed 1:1")
 
     supabase.table("one_on_ones").delete().eq("id", one_on_one_id).eq("manager_id", user_id).execute()
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Capture notes (Session 50, 2026-08-21) — the Person Page cockpit's
+# between-sessions capture box. A quick-jot inbox, independent of whether a
+# planned session exists for this report yet: /prep's frontend (prep/
+# page.tsx) prefills step 1's raw-notes box from whatever's unconsumed here,
+# then deletes those rows once a sheet is generated (their content is folded
+# into that sheet at that point — see database/migrations/
+# 2026-08-21_dr_capture_notes.sql for why this isn't a column on one_on_ones
+# instead).
+# ---------------------------------------------------------------------------
+
+class CaptureNoteIn(BaseModel):
+    content: str
+
+
+@router.get("/{direct_report_id}/captures")
+async def list_captures(direct_report_id: str, auth=Depends(get_authenticated_client)):
+    user_id, supabase = auth
+    rows = (
+        supabase.table("dr_capture_notes")
+        .select("id,direct_report_id,content,created_at")
+        .eq("manager_id", user_id)
+        .eq("direct_report_id", direct_report_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+    return rows
+
+
+@router.post("/{direct_report_id}/captures")
+async def create_capture(direct_report_id: str, body: CaptureNoteIn, auth=Depends(get_authenticated_client)):
+    user_id, supabase = auth
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Capture note can't be empty")
+    saved = (
+        supabase.table("dr_capture_notes")
+        .insert({"manager_id": user_id, "direct_report_id": direct_report_id, "content": content})
+        .execute()
+        .data[0]
+    )
+    return saved
+
+
+@router.delete("/captures/{capture_id}")
+async def delete_capture(capture_id: str, auth=Depends(get_authenticated_client)):
+    user_id, supabase = auth
+    supabase.table("dr_capture_notes").delete().eq("id", capture_id).eq("manager_id", user_id).execute()
     return {"deleted": True}

@@ -243,6 +243,27 @@ create index commitments_open_idx on commitments (direct_report_id, status) wher
 create index direct_reports_archived_at_idx on direct_reports (archived_at);
 
 -- -------------------------
+-- DIRECT-REPORT CAPTURE NOTES
+-- Session 50 (2026-08-21) — Person Page "Command Deck" rework's between-
+-- sessions capture box. Quick freeform jots that fold into the next /prep
+-- call's raw-notes box and get deleted once that prep sheet is generated.
+-- Its own small inbox table (not a column on one_on_ones) since a capture
+-- can happen before any "planned" session exists — see
+-- database/migrations/2026-08-21_dr_capture_notes.sql.
+-- -------------------------
+create table dr_capture_notes (
+  id                uuid primary key default uuid_generate_v4(),
+  manager_id        uuid not null references auth.users(id),
+  direct_report_id  uuid not null references direct_reports(id) on delete cascade,
+  content           text not null,
+  created_at        timestamptz not null default now()
+);
+
+alter table dr_capture_notes enable row level security;
+
+create index dr_capture_notes_report_idx on dr_capture_notes (direct_report_id, created_at desc);
+
+-- -------------------------
 -- ASSESSMENT LEVELS
 -- -------------------------
 create table assessment_levels (
@@ -1091,6 +1112,10 @@ create policy "one_on_ones_all_own" on one_on_ones
 -- commitments — visible to the owner (manager who made the commitment)
 create policy "commitments_all_own" on commitments
   for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- dr_capture_notes — same flat manager-scoped pattern as commitments
+create policy "dr_capture_notes_all_own" on dr_capture_notes
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
 -- assessment_levels
 create policy "assessment_levels_all_own_org" on assessment_levels

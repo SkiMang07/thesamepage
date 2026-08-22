@@ -18,6 +18,70 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 50 — 2026-08-21
+
+**Goal:** Rebuild `/app/reports/[id]` (the individual DR detail page) from a single-column wall of
+~10 form-heavy sections into an engaging hub, per the "Command Deck" mockup Andrew approved the same
+day (see the person_page_redesign project memory note and the "Person Page" mockup artifact).
+
+**What was done:**
+- `frontend/app/app/reports/[id]/page.tsx` rebuilt in place: an indigo identity band (avatar
+  initials, name, rating pill from `scorecard.overall`, role · team subtitle, About note, Log 1:1 /
+  Resume-or-Start prep CTAs, a gear button); a 4-tile KPI strip (last 1:1 + days to next resolved-
+  cadence-aware, open commitments + overdue count, goals on track with the same data-trust-aware tone
+  logic as `/app/team`'s KpiStrip, capacity available this week via `getCapacityOverview` over a
+  rolling 7-day window); three columns — Conversation (Next-1:1 cockpit with derived "Worth raising"
+  talking points + one-click "+ Agenda", a between-sessions capture box, private Manager Notes), Work
+  (Goals/Initiatives with status-border accents + progress bars only where check-in data exists,
+  Recent 1:1 sessions capped at 6), Person (Open commitments, an inline-SVG Assessment ring, the rest
+  of Development, Expectations as chips instead of paragraph lists — role-assignment flow preserved
+  unchanged). Admin inputs (1:1 cadence, capacity, time off) moved behind the gear into a settings
+  drawer, off the main flow.
+- New `dr_capture_notes` table (`database/migrations/2026-08-21_dr_capture_notes.sql`, folded into
+  `database/schema.sql`) — the capture box's storage, scoped via one AskUserQuestion round before
+  writing the migration (new small table vs. attaching to the planned one_on_ones row; the table won
+  because a capture can happen before any planned session exists, and a planned row today is only
+  ever created BY `/prep`). Flat `manager_id = auth.uid()` RLS policy, same pattern as `commitments`.
+- `backend/routes/one_on_ones.py` — 3 new endpoints: `GET`/`POST /{direct_report_id}/captures`,
+  `DELETE /captures/{capture_id}`. Kept in this router rather than a new file since captures are
+  tightly coupled to `/prep`, which already owns it.
+- `frontend/lib/api.ts` — `CaptureNote` type + `getCaptureNotes`/`createCaptureNote`/`deleteCaptureNote`.
+- `frontend/app/app/reports/[id]/prep/page.tsx` — step 1's raw-notes textarea now prefills from
+  unconsumed captures for that report (oldest first) and deletes them once a sheet generates
+  (best-effort, non-blocking on failure) — this is how a capture "lands on the next prep sheet."
+
+**Decisions made / locked:**
+- `dr_capture_notes` is its own small inbox table, not a column on `one_on_ones` — see above; avoids
+  a new "draft planned session with no prep_guide yet" state the rest of the app doesn't model.
+- `DevelopmentSection` (Session 47-49) keeps ALL its original state/handlers in one component but now
+  takes a `section: "notes" | "growth"` prop and renders only half its JSX per mount — private
+  manager notes in Col 1, plan/aspiration/opportunities/training in Col 3 — rather than being split
+  into two components that would each need their own copy of the bundle-mutate-refetch logic.
+- "Worth raising" talking points and the KPI strip are entirely derived client-side from data the
+  page already fetches (overdue commitments, at-risk goals, dev plan text, last 1:1 summary) — no new
+  backend computation, matching the scoping note's explicit constraint.
+- Goal progress bars only render where `progress` is non-null (a real check-in exists) — same Session
+  19 restraint precedent, not fabricated from status alone.
+
+**Verification:** unusually thorough given the size of the change and device_bash's ~45s per-call
+cap (too short for a full `next build` or fresh `npm ci`/`pip install`) — reconstructed both the
+frontend and backend in the cloud sandbox from the connected folder instead. `npx tsc --noEmit`
+clean; fresh `npm ci` + `next build` clean (19/19 routes, no type/lint errors); `python3 -m py_compile`
+clean on every touched + dependent backend file; a sandboxed `main.py` import (fresh venv, dummy
+`.env`) confirmed 121 → 124 routes with the 3 new capture endpoints and zero path collisions; a real
+local Postgres 16 test via `database/local_verify_stub.sql`'s documented flow, run TWO ways — fresh
+`schema.sql` with the table baked in, and the ORIGINAL pre-session `schema.sql` + the standalone
+migration file (what actually happens against live Supabase) — both clean; an RLS functional test
+(two managers, `set role authenticated` + `set_config`) confirmed manager-scoped isolation and that a
+spoofed insert (wrong `manager_id`) is blocked by the policy's `WITH CHECK`.
+
+**Next step:** Run `database/migrations/2026-08-21_dr_capture_notes.sql` against live Supabase — the
+capture box and "+ Agenda" buttons error until the table exists. Then Andrew dogfoods: try the capture
+box, a few "+ Agenda" clicks, the settings drawer, and sanity-check the assessment ring and goal
+progress bars against a real report.
+
+---
+
 ## Session 49 — 2026-08-21
 
 **Goal:** Andrew's second round of feedback on Development (Sessions 47/48): the AI-assist he asked
@@ -274,72 +338,6 @@ shows up (labeled "inherited from parent") when viewing one of its child teams o
 
 ---
 
-## Session 45 — 2026-08-19
-
-**Goal:** Andrew flagged that a manager/director leading more than one `org_units` team had no way to
-tell, on `/app/team`, which team's data they were looking at — the page always combined every direct
-report with no label. Add a team name + dropdown to the header, and make picking a team actually
-filter the page.
-
-**What was done:**
-- Scoped via one AskUserQuestion round (3 questions, all Andrew's recommended defaults): dropdown
-  source = `org_units` the caller leads (`leader_user_id`, existing Session 15 mechanism); selecting a
-  team filters everything on the page, not just the label; "All teams" stays the default.
-- **Key simplification found mid-build:** most of "filter everything" needed zero backend changes.
-  Roster, initiatives, and commitments all key off `direct_report_id` → `direct_reports.org_unit_id`
-  (filterable client-side); goals already carry `org_unit_id` directly. Only `team_meeting_notes` and
-  `team_callouts` had no per-team signal at all.
-- `database/migrations/2026-08-19_team_dropdown_scoping.sql` (new) — adds nullable `org_unit_id` to
-  both tables (null = "applies to all teams," shown under every specific team's filter, same
-  treatment as a company-level goal).
-- `backend/routes/team.py` — `TeamNoteIn`/`TeamCalloutIn` gain `org_unit_id`. `GET /callout` changed
-  shape: returns every callout row for the caller (list) instead of one object, so the frontend
-  switches teams without a round trip. `PUT /callout` does a manual look-up-then-write instead of
-  supabase's `upsert()` (see decision below).
-- `frontend/lib/api.ts` — `TeamNote`/`TeamCallout` gain `org_unit_id`; `getTeamCallout()` return type
-  changed to `TeamCallout[]`; `createTeamNote`/`updateTeamCallout` take an `orgUnitId` param.
-- `frontend/app/app/team/page.tsx` — header gains the team name + `<select>` (only rendered if the
-  caller leads at least one org_unit); every section derives a `visible*` filtered view from
-  `selectedTeamId` client-side; `CalloutsPanel` reworked to take `callout`/`scopeLabel`/`onSaved`
-  instead of `callout`/`setCallout`, with a reset-on-team-switch effect so a half-written draft can't
-  get saved against the wrong team.
-
-**Decisions made / locked:**
-- `team_callouts.org_unit_id` is `ON DELETE CASCADE`, not `ON DELETE SET NULL` like
-  `team_meeting_notes` — found and fixed via a real local-Postgres functional test, not reasoned
-  about in the abstract. `team_callouts` needed a uniqueness rule per `(manager, org_unit)` pair plus
-  "at most one all-teams row," which a plain composite `UNIQUE` can't express (Postgres treats every
-  NULL as distinct), so it's two partial unique indexes instead. With `SET NULL`, deleting an
-  org_unit that has both a team-specific callout AND a manager already holding a separate all-teams
-  callout tries to write a second null-`org_unit_id` row — the delete fails outright. Reproduced the
-  failure, then reproduced the fix, against real inserts before delivering.
-- `GET /callout` moved from returning one object to a list — worth flagging because it's a breaking
-  response-shape change for anyone else calling that endpoint (none currently exist besides this
-  page).
-
-**Verification:** cloned the pushed GitHub repo (commit `bbd65c0`) into a scratch sandbox. Backend —
-fresh venv, `main` import with dummy Supabase env vars confirmed all team.py routes register,
-`py_compile` clean. Frontend — fresh `npm install`, `tsc --noEmit` clean, `next build` clean (all 21
-routes, `/app/team` at 8.79 kB). Schema — the repo's checked-in `database/local_verify_stub.sql` stood
-up a local Postgres 16, ran the full `schema.sql` + new migration end to end with zero errors, then
-functionally tested as two managers: inserted notes/callouts across two led teams + an all-teams row,
-confirmed both partial unique indexes reject duplicates, confirmed RLS isolation (second manager sees
-0 rows, an UPDATE against the first manager's row affects 0 rows), and specifically exercised the
-org_unit-delete edge case above.
-
-**Schema note — new migration, not yet run live.**
-`database/migrations/2026-08-19_team_dropdown_scoping.sql` must run in the Supabase SQL editor before
-this works against the live database — `team_meeting_notes`/`team_callouts` reads/writes will 500
-until then (`org_unit_id` doesn't exist live yet on either table).
-
-**Next step:** Run the migration in Supabase, then dogfood the dropdown — Andrew's own account needs
-at least one `org_units` row with himself as `leader_user_id` before the dropdown shows up at all
-(zero led units = today's unchanged single-team view).
-
----
-
----
-
 ## Archived sessions (compact index)
 
 Each line below is the goal plus the key decisions locked in that session —
@@ -349,6 +347,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 45 — 2026-08-19:** Add a team name + dropdown to `/app/team` so a manager leading multiple `org_units` can tell which team's data they're viewing, and filter the page by picking one. **Decided:** `team_callouts.org_unit_id` is `ON DELETE CASCADE` (not `SET NULL` like `team_meeting_notes`) — found via a real Postgres test, needed because of the two-partial-unique-index uniqueness rule; `GET /callout` changed from one object to a list, a breaking response-shape change.
 - **Session 44 — 2026-08-18:** Build Role JD Import (`docs/ROLE_JD_IMPORT_SCOPING.md`): paste/drop a JD, one AI call proposes role identity + ladder match + drafts expectations, manager reviews, one commit lands it. **Decided:** No migration needed — every column this flow writes already existed; collision resolution is server-side first (draft already flags `exists`), frontend only handles manager-created collisions; the JD file is never stored (role config, not a Context Engine document).
 - **Session 43 — 2026-08-18:** Polish pass (Plan §7.3, last of 5 team-setup UX sessions): People archive/edit, People-row rework, data-trust fixes, org-wide values, ladder-merge nudge. **Decided:** Two mutually-exclusive lists (active/archived), not one client-filtered list — archived fetch only pays when a manager expands "Show archived"; `teams_count` keeps its pre-existing meaning (total org units), tile-display split lives in two new fields instead.
 - **Session 42 — 2026-08-18:** Build Plan S4+S5 (last of the four S1-S5 setup-UX sessions, `docs/TEAM_SETUP_UX_REVIEW.md` §6) — make half-configured setup state visible everywhere a person appears, and rename/consolidate the setup surfaces (Roles & Levels + Expectations merged into one "Roles & expectations" tab).

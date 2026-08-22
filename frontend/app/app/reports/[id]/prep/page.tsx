@@ -8,9 +8,12 @@ import {
   getOneOnOne,
   prepOneOnOne,
   wrapUpOneOnOne,
+  getCaptureNotes,
+  deleteCaptureNote,
   PrepResponse,
   AgendaItem,
   WrapUpDraft,
+  CaptureNote,
 } from "@/lib/api";
 import WrapUpReview from "../wrap-up-review";
 
@@ -93,6 +96,13 @@ function PrepFlow() {
   const [resumeLoading, setResumeLoading] = useState(!!resumeId);
   const [resumeError, setResumeError] = useState<string | null>(null);
 
+  // Captures (Session 50) — quick between-sessions jots from the Person
+  // Page's cockpit box, folded into step 1's raw-notes textarea so they
+  // "land on the next prep sheet" per the person_page_redesign scoping note.
+  // Only relevant on a fresh /prep pass, not a resumed one (a resumed sheet
+  // was already generated, so its notes are frozen in prep_guide already).
+  const [captures, setCaptures] = useState<CaptureNote[]>([]);
+
   // Step 2 — notes taken during the call (typed live or pasted afterward)
   const [callNotes, setCallNotes] = useState("");
   const [wrappingUp, setWrappingUp] = useState(false);
@@ -104,6 +114,22 @@ function PrepFlow() {
       .then((dr) => setReportName(dr.name))
       .catch(() => {});
   }, [id]);
+
+  useEffect(() => {
+    // Skip when resuming — a resumed sheet is already generated, so there's
+    // no step-1 textarea to prefill.
+    if (resumeId) return;
+    getCaptureNotes(id)
+      .then((cs) => {
+        setCaptures(cs);
+        if (cs.length > 0) {
+          // Oldest first reads as a timeline of what came up since the last
+          // 1:1, same chronological framing as everywhere else notes stack.
+          setNotes([...cs].reverse().map((c) => c.content).join("\n"));
+        }
+      })
+      .catch(() => {});
+  }, [id, resumeId]);
 
   useEffect(() => {
     if (!resumeId) return;
@@ -137,6 +163,14 @@ function PrepFlow() {
       setPrep(result);
       setOneOnOneId(result.id);
       setStep(2);
+      // Captured content is now folded into this sheet — clear the inbox so
+      // it doesn't get pulled in again next time. Best-effort: a failure
+      // here just leaves a stale row to be re-included next prep, not worth
+      // surfacing as an error on an otherwise-successful generate.
+      if (captures.length > 0) {
+        Promise.all(captures.map((c) => deleteCaptureNote(c.id))).catch(() => {});
+        setCaptures([]);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
@@ -192,6 +226,11 @@ function PrepFlow() {
           this person, anything you&apos;re worried about, anything you want to celebrate.
           The more specific, the better the prep sheet.
         </p>
+        {captures.length > 0 && (
+          <p className="mt-2 text-xs text-gray-400">
+            Prefilled with {captures.length} thing{captures.length > 1 ? "s" : ""} you captured since the last 1:1 — edit freely below.
+          </p>
+        )}
 
         <form onSubmit={handleGenerate} className="mt-8">
           <textarea
