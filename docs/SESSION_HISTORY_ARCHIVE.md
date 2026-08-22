@@ -9,6 +9,72 @@ here.
 
 ---
 
+## Session 46 — 2026-08-20
+
+**Goal:** Andrew noticed, right after Session 45 shipped, that projects had no way to attach to a
+specific team, and that `/app/team`'s Goals/Initiatives sections only showed exact org_unit matches —
+a parent department's goals/projects should cascade down to every team under it, not just the exact
+team selected.
+
+**What was done:**
+- Scoped via one AskUserQuestion round (3 questions, all Andrew's recommended defaults): project
+  picker lives on `/app/projects` (not inline on `/app/team`); department-level goals are included
+  when viewing a child team; unassigned goals/projects stay hidden under any specific team filter,
+  visible only under "All teams."
+- `projects` gains `org_unit_id` (nullable, `references org_units(id) on delete set null`) — same
+  mechanism `goals.org_unit_id` has had since Session 11. Unlike goals, projects have no level enum,
+  so the org_unit picker isn't filtered by `unit_type` — any team or department is selectable.
+- `database/migrations/2026-08-20_projects_org_unit.sql` (new) — adds the column, then backfills
+  every existing project's `org_unit_id` from its assignee's `direct_reports.org_unit_id` so nothing
+  silently drops out of a team-filtered view the moment this ships (same one-time-backfill posture as
+  Session 40's role_families migration).
+- `backend/routes/projects.py` — `_SELECT_COLUMNS`/`_shape_rows()` join and flatten `org_units(name)`
+  → `org_unit_name`; `ProjectIn` gains `org_unit_id`; `list_projects()` gains an `org_unit_id` query
+  filter.
+- `backend/routes/team.py` — `_MISSION_CONTROL_GOAL_LEVELS` widened from `("company", "team")` to
+  `("company", "department", "team")` so department-level goals are eligible to surface on team pages
+  at all (the new client-side hierarchy filter decides which specific teams they actually show on).
+- `frontend/app/app/team/page.tsx` — new `ancestorChain()` helper walks `org_units.parent_unit_id`
+  upward from the selected team, building a Set of the selected team's id plus every ancestor's id,
+  entirely client-side off the already-fetched `orgUnits` list. `visibleInitiatives`/`visibleGoals`
+  match against that set instead of exact equality. `InitiativesCard`/`GoalsCard` take a
+  `selectedTeamId` prop and label an item "inherited from parent" when its `org_unit_id` isn't the
+  exact selected team.
+- `frontend/app/app/projects/page.tsx` — new "Team (optional)" picker, "Team: X" label on project
+  cards, `orgUnitId` threaded through `ProjectFormValues`/`toProjectPayload`/`ProjectForm`.
+- `frontend/lib/api.ts` — `Project` type gains `org_unit_id`/`org_unit_name`; `ProjectIn` gains
+  `org_unit_id`; `getProjects()` gains an `orgUnitId` param.
+
+**Decisions made / locked:**
+- Hierarchy inheritance applies only to goals and projects/initiatives on `/app/team`, per Andrew's
+  literal request — commitments, roster, meeting notes, and callouts stay exact-match-only (Session
+  45's behavior, unchanged). Avoids scope creep beyond what was asked.
+- `projects.py`'s `GET /rollup` (`org_unit_projects_rollup()`, Session 15's leadership-rollup
+  function) was deliberately NOT changed to prefer the new direct `org_unit_id` — it's a different
+  hierarchy concept (aggregate *up* to a leader vs. cascade *down* from a parent team), and
+  conflating the two risked a subtler bug than doing it as an explicit follow-up. Flagged, not fixed
+  this pass.
+- `projects.org_unit_id` uses plain `ON DELETE SET NULL` with no uniqueness constraint — checked
+  directly against Session 45's CASCADE-vs-SET NULL lesson (no partial unique index on projects, so
+  no collision risk).
+
+**Verification:** real local Postgres 16 functional test via the repo's `database/local_verify_stub.sql`
+— ran the full `schema.sql` fresh, then the standalone migration file separately (its
+`ALTER TABLE ADD COLUMN` step hit an expected "already exists" since schema.sql already carried the
+final shape; the backfill `UPDATE`, the part that actually matters, ran clean and produced correct
+results). Backend: `py_compile` + fresh `main` import with dummy Supabase env vars. Frontend: fresh
+`npm install`, `tsc --noEmit` clean, `next build` clean.
+
+**Schema note — new migration, not yet run live.** `database/migrations/2026-08-20_projects_org_unit.sql`
+must run in the Supabase SQL editor before this works against the live database. It should run
+*after* Session 45's `2026-08-19_team_dropdown_scoping.sql` is confirmed live.
+
+**Next step:** Run both outstanding migrations (Session 45's, then this one) against live Supabase,
+then dogfood: attach a project to a team on `/app/projects`, and confirm a department-level goal
+shows up (labeled "inherited from parent") when viewing one of its child teams on `/app/team`.
+
+---
+
 ## Session 45 — 2026-08-19
 
 **Goal:** Andrew flagged that a manager/director leading more than one `org_units` team had no way to

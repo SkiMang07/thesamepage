@@ -18,6 +18,81 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 51 — 2026-08-22
+
+**Goal:** Andrew flagged that the persistent nav (Sessions 36-38's "hub & orbit") felt cluttered —
+the header's breadcrumb and the orbit strip's zone chip both restated the same "where am I" context
+in two different idioms stacked on top of each other. Worked through it as a design exploration first
+(a multi-artboard "Top Nav Options" canvas comparing four directions), landed on a combined approach,
+then built it.
+
+**What was done:**
+- Explored via a published Claude Design canvas ("Top Nav Options") comparing four directions against
+  the real AppNav.tsx tokens, then a rough combined-approach pass across Mission Control/Team/an
+  individual page plus a collapsible-sidebar mockup — Andrew approved the combined direction: a fully
+  static top bar everywhere, a persistent left rail on every page except Mission Control, and the
+  roster switcher kept only on person-kind pages.
+- `frontend/components/AppNav.tsx` reworked: removed the breadcrumb ("here" slot) entirely, removed
+  the zone-chip + item-switcher row and the all-areas map overlay (`mapOpen` state and its Escape
+  handler) since the sidebar now covers that job; added a global "+ Quick add" button (moved from the
+  dashboard) next to Scribe. The roster switcher row is unchanged in markup, but now renders only for
+  `ctx.kind === "person"` (previously also rendered, with a zone chip, for "item" kind).
+- `frontend/components/Sidebar.tsx` (new) — persistent left rail built from `ZoneMap.tsx`'s existing
+  `NAV_GROUPS`/`HOME_ITEM`/`HUE_STYLES` (no new nav config, no duplicated route list): a "Mission
+  Control" link, a divider, then every group's items flattened into one list, active item tinted by
+  its group's hue. Collapses to a 56px icon-only rail (native `title` tooltips) via a toggle button;
+  not rendered on `ctx.kind === "home"` or `"none"`.
+- `frontend/lib/sidebar-context.tsx` (new) — collapse state, persisted to `localStorage` (a durable
+  per-device preference, unlike `drawer-context.tsx`'s sessionStorage-backed open state).
+- `frontend/lib/quick-add-context.tsx` (new) — Quick Add's open/close state, lifted out of the
+  dashboard page (mirrors `drawer-context.tsx`'s shape). AppNav renders the actual `<QuickAddModal>`
+  (reusing `useZoneData()`'s already-fetched roster for the `directReports` prop, no new fetch); other
+  pages just call `useQuickAdd().open()`.
+- `frontend/app/app/layout.tsx` — added `SidebarProvider`/`QuickAddProvider`, renders `<Sidebar />` as
+  a flex sibling of the main-content column (same shape as the Scribe drawer on the other side), gated
+  by the same `showNav` check as AppNav.
+- `frontend/app/app/dashboard/page.tsx` — removed the local `quickAddOpen` state, the page's own
+  "+ Quick add" button, and the `<QuickAddModal>` render; the "add your first direct report" empty
+  state now calls the shared `useQuickAdd().open()`.
+
+**Decisions made / locked:**
+- Mission Control gets no sidebar — it already is the map (its own card grid + inline `ZoneMap` are
+  the between-section navigation), so a persistent rail there would restate what's already on screen.
+  Every other page gets one.
+- The all-areas map overlay (opened from the old zone chip) is retired, not preserved behind a new
+  trigger — the sidebar already puts every section one click away from anywhere, so a separate
+  "jump to any zone" sheet no longer earns its keep. Flagged to Andrew rather than silently dropped.
+- Quick Add's `onCreated` now calls `router.refresh()` instead of the dashboard's own `loadDashboard()`
+  reload — a known, accepted regression: pages with client-fetched data (dashboard, team, goals, ...)
+  won't auto-refresh after a global Quick Add the way the dashboard-local button used to. Worth a
+  follow-up if it's annoying in practice; not worth a global data-refresh bus for this pass.
+- Collapsed-sidebar labels use native `title` tooltips, not a custom tooltip component — a reasonable
+  v1, flagged to Andrew at mockup time (docs/DESIGN.md's entry has the rest).
+
+**Verification:** frontend-only change, no schema/backend touch, so no migration and no Postgres test
+this pass. Cloned the repo into the cloud sandbox (device_bash's ~45s cap is too short for `next
+build`) at the exact commit the device-side working copy was on, applied all six file changes there,
+then: fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean (19/19 routes — Mission
+Control, Team, Goals, Projects, Capacity, Org, Knowledge, Settings, and Assessments all statically
+generated without throwing, which exercises the new AppNav/Sidebar/provider tree on every one of
+them). Runtime smoke-testing via `next start` wasn't possible in the sandbox (no live Supabase
+credentials), so middleware-gated pages weren't hit with a real request — build-time render + tsc are
+the verification for this pass.
+
+**Known snag:** the device-side working copy has a stale, zero-byte `.git/index.lock` that this
+session's device-bash bridge can't delete (no delete permission on the mount) — git refuses `add`/
+`commit` until it's cleared. Not caused by this session's changes; the six file writes themselves
+landed fine via the file bridge (confirmed with `git status --short`/`diff --stat` showing exactly the
+expected diff, nothing else). Andrew needs to delete that lock file himself before running the commit
+block (a plain `rm .git/index.lock` in his own terminal, where he has full permissions).
+
+**Next step:** Andrew: delete the stale `.git/index.lock`, then run the commit block. After that,
+dogfood the new nav for real — try the sidebar collapse toggle, jump between a couple of sections,
+open a direct report's page and confirm the roster strip still switches people correctly, and open
+Quick Add from a page other than Mission Control to confirm it still works end-to-end.
+
+---
+
 ## Session 50 — 2026-08-21
 
 **Goal:** Rebuild `/app/reports/[id]` (the individual DR detail page) from a single-column wall of
@@ -272,72 +347,6 @@ live passes did (e.g. Goals' missing Edit button, Session 10).
 
 ---
 
-## Session 46 — 2026-08-20
-
-**Goal:** Andrew noticed, right after Session 45 shipped, that projects had no way to attach to a
-specific team, and that `/app/team`'s Goals/Initiatives sections only showed exact org_unit matches —
-a parent department's goals/projects should cascade down to every team under it, not just the exact
-team selected.
-
-**What was done:**
-- Scoped via one AskUserQuestion round (3 questions, all Andrew's recommended defaults): project
-  picker lives on `/app/projects` (not inline on `/app/team`); department-level goals are included
-  when viewing a child team; unassigned goals/projects stay hidden under any specific team filter,
-  visible only under "All teams."
-- `projects` gains `org_unit_id` (nullable, `references org_units(id) on delete set null`) — same
-  mechanism `goals.org_unit_id` has had since Session 11. Unlike goals, projects have no level enum,
-  so the org_unit picker isn't filtered by `unit_type` — any team or department is selectable.
-- `database/migrations/2026-08-20_projects_org_unit.sql` (new) — adds the column, then backfills
-  every existing project's `org_unit_id` from its assignee's `direct_reports.org_unit_id` so nothing
-  silently drops out of a team-filtered view the moment this ships (same one-time-backfill posture as
-  Session 40's role_families migration).
-- `backend/routes/projects.py` — `_SELECT_COLUMNS`/`_shape_rows()` join and flatten `org_units(name)`
-  → `org_unit_name`; `ProjectIn` gains `org_unit_id`; `list_projects()` gains an `org_unit_id` query
-  filter.
-- `backend/routes/team.py` — `_MISSION_CONTROL_GOAL_LEVELS` widened from `("company", "team")` to
-  `("company", "department", "team")` so department-level goals are eligible to surface on team pages
-  at all (the new client-side hierarchy filter decides which specific teams they actually show on).
-- `frontend/app/app/team/page.tsx` — new `ancestorChain()` helper walks `org_units.parent_unit_id`
-  upward from the selected team, building a Set of the selected team's id plus every ancestor's id,
-  entirely client-side off the already-fetched `orgUnits` list. `visibleInitiatives`/`visibleGoals`
-  match against that set instead of exact equality. `InitiativesCard`/`GoalsCard` take a
-  `selectedTeamId` prop and label an item "inherited from parent" when its `org_unit_id` isn't the
-  exact selected team.
-- `frontend/app/app/projects/page.tsx` — new "Team (optional)" picker, "Team: X" label on project
-  cards, `orgUnitId` threaded through `ProjectFormValues`/`toProjectPayload`/`ProjectForm`.
-- `frontend/lib/api.ts` — `Project` type gains `org_unit_id`/`org_unit_name`; `ProjectIn` gains
-  `org_unit_id`; `getProjects()` gains an `orgUnitId` param.
-
-**Decisions made / locked:**
-- Hierarchy inheritance applies only to goals and projects/initiatives on `/app/team`, per Andrew's
-  literal request — commitments, roster, meeting notes, and callouts stay exact-match-only (Session
-  45's behavior, unchanged). Avoids scope creep beyond what was asked.
-- `projects.py`'s `GET /rollup` (`org_unit_projects_rollup()`, Session 15's leadership-rollup
-  function) was deliberately NOT changed to prefer the new direct `org_unit_id` — it's a different
-  hierarchy concept (aggregate *up* to a leader vs. cascade *down* from a parent team), and
-  conflating the two risked a subtler bug than doing it as an explicit follow-up. Flagged, not fixed
-  this pass.
-- `projects.org_unit_id` uses plain `ON DELETE SET NULL` with no uniqueness constraint — checked
-  directly against Session 45's CASCADE-vs-SET NULL lesson (no partial unique index on projects, so
-  no collision risk).
-
-**Verification:** real local Postgres 16 functional test via the repo's `database/local_verify_stub.sql`
-— ran the full `schema.sql` fresh, then the standalone migration file separately (its
-`ALTER TABLE ADD COLUMN` step hit an expected "already exists" since schema.sql already carried the
-final shape; the backfill `UPDATE`, the part that actually matters, ran clean and produced correct
-results). Backend: `py_compile` + fresh `main` import with dummy Supabase env vars. Frontend: fresh
-`npm install`, `tsc --noEmit` clean, `next build` clean.
-
-**Schema note — new migration, not yet run live.** `database/migrations/2026-08-20_projects_org_unit.sql`
-must run in the Supabase SQL editor before this works against the live database. It should run
-*after* Session 45's `2026-08-19_team_dropdown_scoping.sql` is confirmed live.
-
-**Next step:** Run both outstanding migrations (Session 45's, then this one) against live Supabase,
-then dogfood: attach a project to a team on `/app/projects`, and confirm a department-level goal
-shows up (labeled "inherited from parent") when viewing one of its child teams on `/app/team`.
-
----
-
 ## Archived sessions (compact index)
 
 Each line below is the goal plus the key decisions locked in that session —
@@ -347,6 +356,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 46 — 2026-08-20:** Give projects an optional team attachment and make `/app/team`'s Goals/Initiatives cascade down from parent departments instead of exact-matching only. **Decided:** Hierarchy inheritance applies only to goals/projects on `/app/team` (commitments, roster, meeting notes, callouts stay exact-match); the leadership-rollup endpoint was deliberately left unchanged (different hierarchy concept), flagged as a follow-up.
 - **Session 45 — 2026-08-19:** Add a team name + dropdown to `/app/team` so a manager leading multiple `org_units` can tell which team's data they're viewing, and filter the page by picking one. **Decided:** `team_callouts.org_unit_id` is `ON DELETE CASCADE` (not `SET NULL` like `team_meeting_notes`) — found via a real Postgres test, needed because of the two-partial-unique-index uniqueness rule; `GET /callout` changed from one object to a list, a breaking response-shape change.
 - **Session 44 — 2026-08-18:** Build Role JD Import (`docs/ROLE_JD_IMPORT_SCOPING.md`): paste/drop a JD, one AI call proposes role identity + ladder match + drafts expectations, manager reviews, one commit lands it. **Decided:** No migration needed — every column this flow writes already existed; collision resolution is server-side first (draft already flags `exists`), frontend only handles manager-created collisions; the JD file is never stored (role config, not a Context Engine document).
 - **Session 43 — 2026-08-18:** Polish pass (Plan §7.3, last of 5 team-setup UX sessions): People archive/edit, People-row rework, data-trust fixes, org-wide values, ladder-merge nudge. **Decided:** Two mutually-exclusive lists (active/archived), not one client-filtered list — archived fetch only pays when a manager expands "Show archived"; `teams_count` keeps its pre-existing meaning (total org units), tile-display split lives in two new fields instead.

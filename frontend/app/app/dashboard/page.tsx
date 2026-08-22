@@ -29,7 +29,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import QuickAddModal from "@/components/QuickAddModal";
+import { useQuickAdd } from "@/lib/quick-add-context";
 import { TrendArrow, isStale } from "@/components/CheckInPanel";
 import {
   CadenceSource,
@@ -211,7 +211,11 @@ export default function DashboardPage() {
   // data-trust bug #4). Degrades visibly but quietly: a small muted line,
   // not an error banner.
   const [insightFailed, setInsightFailed] = useState(false);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  // Quick Add's own open/close state moved to the global quick-add context
+  // (Session 51 nav rework) — the button now lives in AppNav's header, not
+  // here. This page still triggers it from the "add your first direct
+  // report" empty state below, via the shared open() from that context.
+  const { open: openQuickAdd } = useQuickAdd();
 
   const weekRange = useMemo(() => {
     const start = startOfWeek(new Date());
@@ -351,22 +355,13 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10 sm:px-8">
-      {/* Header — cross-page nav (Team/Goals/etc links), the Scribe toggle,
-          and the account avatar all moved into the persistent global nav
-          (components/AppNav.tsx) rendered from app/app/layout.tsx. Quick add
-          stays here — it's still page-specific (needs the fetched team list
-          + reloads this page's own sections on create). */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Mission Control</h1>
-          <p className="mt-1 text-sm text-gray-500">Your team, at a glance.</p>
-        </div>
-        <button
-          onClick={() => setQuickAddOpen(true)}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
-        >
-          + Quick add
-        </button>
+      {/* Header — cross-page nav (Team/Goals/etc links), Quick add, the
+          Scribe toggle, and the account avatar all moved into the
+          persistent global nav (components/AppNav.tsx + Sidebar.tsx)
+          rendered from app/app/layout.tsx (Session 51 nav rework). */}
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">Mission Control</h1>
+        <p className="mt-1 text-sm text-gray-500">Your team, at a glance.</p>
       </div>
 
       {loadError && <p className="mt-4 text-sm text-red-500">{loadError}</p>}
@@ -435,7 +430,7 @@ export default function DashboardPage() {
             team={team}
             dueTeam={dueTeam}
             healthyTeam={healthyTeam}
-            onAddFirst={() => setQuickAddOpen(true)}
+            onAddFirst={openQuickAdd}
           />
 
           {/* Goals — exception-first (Session 26) */}
@@ -527,7 +522,6 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <QuickAddModal open={quickAddOpen} onClose={() => setQuickAddOpen(false)} directReports={team} onCreated={loadDashboard} />
     </main>
   );
 }

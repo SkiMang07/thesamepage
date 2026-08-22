@@ -20,6 +20,17 @@
 // skipped on /app/login (unauthenticated) and /app/ic (IC stub landing —
 // wrong audience for a manager-oriented nav).
 //
+// Session 51 change: <Sidebar /> joins AppNav as a second persistent piece
+// of chrome — a left rail for section-to-section nav, replacing AppNav's
+// old breadcrumb + zone-chip (see AppNav.tsx's header comment for why).
+// It's a flex sibling of the main-content column, same shape as the Scribe
+// drawer on the other side, so collapsing/expanding it (SidebarProvider,
+// internal to Sidebar.tsx) just reflows the flex row — no coordination
+// needed here. QuickAddProvider joins DrawerProvider at the same level:
+// Quick Add is now a global action (AppNav's header button) instead of a
+// dashboard-page-local one, so its open/close state has to outlive any one
+// page the same way the drawer's does.
+//
 // Keyboard: ⌘J summons the drawer with the composer focused; Esc closes.
 //
 // Sticky-nav fix (this pass): `overflow-x-hidden` used to live on the same
@@ -36,8 +47,11 @@
 import { useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { DrawerProvider, useDrawer } from "@/lib/drawer-context";
+import { SidebarProvider } from "@/lib/sidebar-context";
+import { QuickAddProvider } from "@/lib/quick-add-context";
 import ScribeDrawer from "@/components/ScribeDrawer";
 import AppNav from "@/components/AppNav";
+import Sidebar from "@/components/Sidebar";
 
 const NO_NAV_PATHS = new Set(["/app/login", "/app/ic"]);
 
@@ -67,9 +81,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      {/* Main content — flex-1 so it gives up space to the drawer. AppNav
-          lives outside the overflow-x-hidden div (see note above) so its
-          sticky header/strip resolve against the real page scroll. */}
+      {showNav && <Sidebar />}
+
+      {/* Main content — flex-1 so it gives up space to the sidebar/drawer.
+          AppNav lives outside the overflow-x-hidden div (see note above) so
+          its sticky header/strip resolve against the real page scroll. */}
       <div className="flex-1 min-w-0">
         {showNav && <AppNav />}
         <div className="overflow-x-hidden">{children}</div>
@@ -91,7 +107,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <DrawerProvider>
-      <AppShell>{children}</AppShell>
+      <SidebarProvider>
+        <QuickAddProvider>
+          <AppShell>{children}</AppShell>
+        </QuickAddProvider>
+      </SidebarProvider>
     </DrawerProvider>
   );
 }
