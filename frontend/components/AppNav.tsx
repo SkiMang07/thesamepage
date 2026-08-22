@@ -13,7 +13,8 @@
 //   - Section-to-section navigation ("which zone am I in") moved to a
 //     persistent left rail — components/Sidebar.tsx — whose highlighted
 //     item IS the "you are here" signal the breadcrumb used to carry.
-//     Not rendered on Mission Control (that page already is the map).
+//     Session 52: now renders on Mission Control too, for consistency
+//     across every page (see Sidebar.tsx's header comment for why).
 //   - The only thing that stays a second contextual row under the top bar
 //     is the roster switcher on person-kind pages (which direct report
 //     you're looking at) — that's a within-section switch, a genuinely

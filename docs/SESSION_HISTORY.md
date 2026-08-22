@@ -18,6 +18,52 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 52 — 2026-08-22
+
+**Goal:** Andrew saw the new persistent sidebar (Session 51) and initially read Mission Control's
+missing rail as an oversight, then clarified he knew it was a deliberate Session 51 call ("that page
+already is the map") but wanted it reversed anyway — every other page has the rail, and that read as
+inconsistent rather than as a deliberate simplification. Also asked to bring Goals and Projects into
+the same visual language Team (Session 24) and the Person page (Session 50) already share.
+
+**What was done:**
+- `frontend/components/Sidebar.tsx` — now renders on Mission Control too; only `ctx.kind === "none"`
+  (login/IC) still suppresses it. The Home link takes an "active" treatment (`bg-black/5 font-semibold
+  text-gray-900`) since none of `NAV_GROUPS`' items apply on the home page itself. Header comment
+  rewritten to record why Session 51's original call got reversed.
+- `frontend/components/AppNav.tsx` — one comment line updated to stop saying the sidebar skips Mission
+  Control.
+- Goals/Projects: no code touched this session. Scoped via one AskUserQuestion round (Andrew picked
+  "mockups first," same process as Team/Person) — mined real tokens from `frontend/app/app/team/page.tsx`
+  (KpiStrip's gradient tiles, STATUS_BORDER/STATUS_STYLES hex values, the inline-SVG donut ring) and
+  published a 3-option design canvas, "Goals and Projects Redesign Options"
+  (https://claude.ai/code/artifact/16006c11-c6ad-49a0-985f-717731b4001e): Option A (direct KPI-strip/
+  card port of the Team page pattern), Option B (hierarchy made visually explicit via nested/indented
+  company→department→team→individual groups, tabs retired), Option C (exception-first triage mirroring
+  Mission Control's own Goals card, plus a scope switcher folding in the org-unit rollup need) — plus
+  one Projects artboard applying Option A's treatment as a concrete example.
+
+**Decisions made / locked:**
+- Mission Control gets the sidebar after all — Session 51's "already the map" reasoning was sound on
+  paper but read as inconsistent in practice; every authenticated page now shows the same rail.
+- Goals/Projects redesign direction: **Option A** — KPI strip (4 gradient tiles) + card grid using the
+  border-l-4 status accent + inline-SVG progress ring, level tabs on Goals kept as a pill-style filter
+  rather than retired. Locked in; not yet built.
+
+**Verification:** Frontend-only change (Sidebar/AppNav), no schema/backend touch. Repo tarred from the
+device's working copy (git status was clean going in — Session 51's own changes were already committed,
+its stale `.git/index.lock` resolved before this session started) and rebuilt in the cloud sandbox since
+`next build` exceeds device_bash's ~45s per-call cap: fresh `npm install`, `npx tsc --noEmit` clean,
+`next build` clean (21/21 routes). The mockup canvas is exploration only — no build/type verification
+applies to it.
+
+**Next step:** Build Goals and Projects per Option A — KPI strip + border-l-4 card grid, matching the
+token values in the published canvas and in `frontend/app/app/team/page.tsx`. Widen both pages from
+`max-w-3xl` to `max-w-7xl`. Leave the add/edit forms alone this pass (out of scope per the canvas
+brief) — just fit the "+ Add" affordance into the new layout.
+
+---
+
 ## Session 51 — 2026-08-22
 
 **Goal:** Andrew flagged that the persistent nav (Sessions 36-38's "hub & orbit") felt cluttered —
@@ -268,85 +314,6 @@ assessment-suggested ones.
 
 ---
 
-## Session 47 — 2026-08-20
-
-**Goal:** Andrew wanted to discuss "Development" (Personal Development / Career Plan / Development
-Plan) for individuals on the team — PRODUCT_VISION.md's Mission Control taxonomy lists "Growth and
-Development" alongside Performance Reviews/Improvement Plans/Recruiting. He floated both an
-individual angle and a full-team angle (a training focus for the month).
-
-**What was done:**
-- Scoped via one AskUserQuestion round (4 questions). Andrew picked the fuller option on the scope
-  question (individual + a lightweight team layer, not individual-only) and confirmed the recommended
-  defaults on the other three (AI-assisted draft, DR-detail-section placement, connect to assessment
-  scores).
-- Discovered mid-scoping that `development_plans`/`dev_plan_aspirations`/`dev_plan_opportunities`/
-  `dev_plan_training`/`dev_plan_manager_notes` were already in `database/schema.sql` from the original
-  project scaffold, dormant since Session 3 — same "dormant table, just needs activating" pattern as
-  Goals/Assessments/Capacity before it.
-- **Individual plans** — `backend/routes/development.py` (new): `GET /{direct_report_id}` returns the
-  full bundle (plan, aspiration, opportunities, training, manager_notes, low_scoring_items) and
-  bootstraps the `development_plans` row on first access; `PUT /{id}/aspiration` upserts the single
-  aspiration row; `POST`/`DELETE` for opportunities and training; `PATCH` for training (e.g. mark
-  complete); `POST /{id}/notes` (append-only, no edit/delete, same posture as team_meeting_notes);
-  `POST /{id}/draft` — AI-assisted draft (opportunities + a synthesis note only, NOT aspirations or
-  training — those are a career conversation / budget decision, not evidence to infer), same
-  draft-then-review rule as Assessments/1:1 wrap-up.
-- **Connect to assessment scores:** `dev_plan_opportunities` gained `source_kind`/`source_config_id`
-  (nullable, no FK — same posture as `commitments.source_type/source_id`) so an opportunity can trace
-  back to the skill/value assessment item that prompted it. `_fetch_low_scoring_items()` in
-  development.py — a skill/value scores "low" at or below the midpoint of its own configured scale —
-  is the shared evidence base for both the "suggested from assessment" quick-add prompts in the UI and
-  the AI draft prompt's grounding.
-- **Team layer** — `team_dev_focus` (new table, migration
-  `2026-08-20_development_plans_and_team_focus.sql`) deliberately mirrors `team_callouts` exactly: one
-  pinned, manager-authored text block per (manager, org_unit), overwritten in place, no history. Kept
-  as its own table rather than folded into team_callouts so "training focus" doesn't collide with
-  "key updates" in one text block. `team.py` gained `GET`/`PUT /dev-focus`, copying
-  `get_team_callout`/`update_team_callout`'s manual look-up-then-write upsert exactly.
-- **Placement:** no new top-level nav item. `frontend/app/app/reports/[id]/page.tsx` gained a
-  `DevelopmentSection` subcomponent (aspiration form, opportunities list + suggested-from-assessment
-  quick-adds, training list, private manager notes, "Draft with AI" review flow) — the first
-  subcomponent that file has ever used (everything else on that page is inlined into
-  `ReportDetailPage` directly); broken out here because Development's CRUD surface is too large to
-  inline without making an already-dense page unreadable, same reasoning team/page.tsx's
-  CalloutsPanel/MeetingsPanel already follow. `/app/team/page.tsx` gained a `DevFocusPanel` (near-copy
-  of `CalloutsPanel`) in a new "Development" row below Meetings.
-- Migration also adds `dev_plan_aspirations_plan_uq` (unique index on `development_plan_id`) — the
-  original scaffold created this table without a uniqueness guarantee even though the app has always
-  treated it as one row per plan; added now, before any real data exists, so a double-submit race
-  can't silently create two competing rows.
-
-**Decisions made / locked:**
-- Aspirations and training are NOT AI-drafted — only opportunities and a synthesis manager note, where
-  evidence-grounding (low assessment scores, 1:1 history, open commitments) actually applies. A career
-  aspiration is Andrew's/the report's own conversation, not something to infer from data.
-- Team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than inventing a new
-  pattern — same tradeoff already accepted there (manual look-up-then-write since a plain
-  `ON CONFLICT` can't express the null-org_unit_id "applies to all teams" case cleanly).
-
-**Verification:** backend `py_compile` clean; sandboxed `main.py` import (dummy Supabase env vars)
-confirms all 9 new `/api/development/*` routes and both new `/api/team/dev-focus` routes register with
-no path-ordering collisions against the existing 108. Frontend: fresh `npm install`, `tsc --noEmit`
-clean, `next build` clean (19/19 routes, including `/app/reports/[id]` and `/app/team`). **Went further
-given the schema changes** (same posture as Sessions 21–23): spun up local Postgres 16 with the
-Supabase `auth`/`storage` stub, ran the *entire* `schema.sql` end to end with zero errors, then
-functionally exercised the new tables as the `authenticated` role — a development plan bootstrap, an
-aspiration upsert, an opportunity linked to a real low-scoring skill assessment (2/4, correctly
-flagged low by the midpoint rule), a `team_dev_focus` all-teams row, and confirmed both new unique
-indexes actually reject a duplicate row (`dev_plan_aspirations_plan_uq`,
-`team_dev_focus_manager_all_teams_uq`). RLS isolation confirmed: a second manager's session saw 0 rows
-across `development_plans`/`dev_plan_opportunities`/`team_dev_focus`.
-
-**Next step:** Andrew needs to run `database/migrations/2026-08-20_development_plans_and_team_focus.sql`
-against live Supabase (adds `dev_plan_aspirations_plan_uq`, the two `dev_plan_opportunities` columns,
-and the new `team_dev_focus` table+policy — the five pre-existing `development_plans`/`dev_plan_*`
-tables are already live, confirmed by the same scaffold that shipped Session 3). Then this is the
-first real dogfooding of Development — expect small gaps to surface the way Goals'/Assessments' first
-live passes did (e.g. Goals' missing Edit button, Session 10).
-
----
-
 ## Archived sessions (compact index)
 
 Each line below is the goal plus the key decisions locked in that session —
@@ -356,6 +323,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 47 — 2026-08-20:** Scope and build Development (individual plans + a lightweight team "training focus" note), activating dormant `development_plans`/`dev_plan_*` schema from the original scaffold. **Decided:** Aspirations and training are never AI-drafted — only opportunities + a synthesis note, where evidence-grounding actually applies; team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than a new pattern.
 - **Session 46 — 2026-08-20:** Give projects an optional team attachment and make `/app/team`'s Goals/Initiatives cascade down from parent departments instead of exact-matching only. **Decided:** Hierarchy inheritance applies only to goals/projects on `/app/team` (commitments, roster, meeting notes, callouts stay exact-match); the leadership-rollup endpoint was deliberately left unchanged (different hierarchy concept), flagged as a follow-up.
 - **Session 45 — 2026-08-19:** Add a team name + dropdown to `/app/team` so a manager leading multiple `org_units` can tell which team's data they're viewing, and filter the page by picking one. **Decided:** `team_callouts.org_unit_id` is `ON DELETE CASCADE` (not `SET NULL` like `team_meeting_notes`) — found via a real Postgres test, needed because of the two-partial-unique-index uniqueness rule; `GET /callout` changed from one object to a list, a breaking response-shape change.
 - **Session 44 — 2026-08-18:** Build Role JD Import (`docs/ROLE_JD_IMPORT_SCOPING.md`): paste/drop a JD, one AI call proposes role identity + ladder match + drafts expectations, manager reviews, one commit lands it. **Decided:** No migration needed — every column this flow writes already existed; collision resolution is server-side first (draft already flags `exists`), frontend only handles manager-created collisions; the JD file is never stored (role config, not a Context Engine document).

@@ -6,11 +6,20 @@
 // + item-switcher row: instead of a contextual "which items are in this
 // zone" strip that only appeared per-page, every section is always
 // reachable from a persistent rail, so the highlighted item IS the "you
-// are here" signal AppNav's breadcrumb used to carry. Not rendered on
-// Mission Control itself (ctx.kind === "home") — that page already is the
-// map, via its own card grid + inline ZoneMap, so a persistent rail there
-// would just restate what's already on screen. Also not rendered on
-// /app/login or /app/ic, matching AppNav's NO_NAV_PATHS.
+// are here" signal AppNav's breadcrumb used to carry.
+//
+// Session 52 change: now renders on Mission Control too. Session 51's call
+// was to skip it there — "that page already is the map" — but after living
+// with it, Andrew's read was simpler: every other page has the rail, Mission
+// Control was the lone exception, and that read as inconsistent rather than
+// as a deliberate simplification (see design_consistency_pass_brief project
+// memory note). Mission Control's own inline ZoneMap grid is unchanged and
+// still does its own job (the door-state overview); the rail sits alongside
+// it like it does everywhere else. None of NAV_GROUPS' items is "active" on
+// Mission Control, so the Home link itself takes the active treatment
+// instead (see isHome below).
+//
+// Also not rendered on /app/login or /app/ic, matching AppNav's NO_NAV_PATHS.
 //
 // The roster switcher (which direct report you're looking at) stays a
 // separate, second row under the top bar on person-kind pages — see
@@ -35,8 +44,9 @@ export default function Sidebar() {
   const { collapsed, toggle } = useSidebar();
 
   const ctx = getNavContext(pathname ?? "", params ?? {});
-  if (ctx.kind === "home" || ctx.kind === "none") return null;
+  if (ctx.kind === "none") return null;
 
+  const isHome = ctx.kind === "home";
   const activeItemId = ctx.kind === "item" ? ctx.item.id : ctx.kind === "person" ? ctx.viaItem.id : null;
 
   return (
@@ -59,9 +69,9 @@ export default function Sidebar() {
         <Link
           href={HOME_ITEM.href}
           title={HOME_ITEM.label}
-          className={`flex items-center gap-2.5 rounded-lg text-[13px] text-gray-600 hover:bg-black/5 hover:text-gray-900 ${
+          className={`flex items-center gap-2.5 rounded-lg text-[13px] transition ${
             collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
-          }`}
+          } ${isHome ? "bg-black/5 font-semibold text-gray-900" : "text-gray-600 hover:bg-black/5 hover:text-gray-900"}`}
         >
           <Icon name={HOME_ITEM.icon} className="h-4 w-4 shrink-0" />
           {!collapsed && <span className="truncate">{HOME_ITEM.label}</span>}

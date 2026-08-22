@@ -9,6 +9,85 @@ here.
 
 ---
 
+## Session 47 — 2026-08-20
+
+**Goal:** Andrew wanted to discuss "Development" (Personal Development / Career Plan / Development
+Plan) for individuals on the team — PRODUCT_VISION.md's Mission Control taxonomy lists "Growth and
+Development" alongside Performance Reviews/Improvement Plans/Recruiting. He floated both an
+individual angle and a full-team angle (a training focus for the month).
+
+**What was done:**
+- Scoped via one AskUserQuestion round (4 questions). Andrew picked the fuller option on the scope
+  question (individual + a lightweight team layer, not individual-only) and confirmed the recommended
+  defaults on the other three (AI-assisted draft, DR-detail-section placement, connect to assessment
+  scores).
+- Discovered mid-scoping that `development_plans`/`dev_plan_aspirations`/`dev_plan_opportunities`/
+  `dev_plan_training`/`dev_plan_manager_notes` were already in `database/schema.sql` from the original
+  project scaffold, dormant since Session 3 — same "dormant table, just needs activating" pattern as
+  Goals/Assessments/Capacity before it.
+- **Individual plans** — `backend/routes/development.py` (new): `GET /{direct_report_id}` returns the
+  full bundle (plan, aspiration, opportunities, training, manager_notes, low_scoring_items) and
+  bootstraps the `development_plans` row on first access; `PUT /{id}/aspiration` upserts the single
+  aspiration row; `POST`/`DELETE` for opportunities and training; `PATCH` for training (e.g. mark
+  complete); `POST /{id}/notes` (append-only, no edit/delete, same posture as team_meeting_notes);
+  `POST /{id}/draft` — AI-assisted draft (opportunities + a synthesis note only, NOT aspirations or
+  training — those are a career conversation / budget decision, not evidence to infer), same
+  draft-then-review rule as Assessments/1:1 wrap-up.
+- **Connect to assessment scores:** `dev_plan_opportunities` gained `source_kind`/`source_config_id`
+  (nullable, no FK — same posture as `commitments.source_type/source_id`) so an opportunity can trace
+  back to the skill/value assessment item that prompted it. `_fetch_low_scoring_items()` in
+  development.py — a skill/value scores "low" at or below the midpoint of its own configured scale —
+  is the shared evidence base for both the "suggested from assessment" quick-add prompts in the UI and
+  the AI draft prompt's grounding.
+- **Team layer** — `team_dev_focus` (new table, migration
+  `2026-08-20_development_plans_and_team_focus.sql`) deliberately mirrors `team_callouts` exactly: one
+  pinned, manager-authored text block per (manager, org_unit), overwritten in place, no history. Kept
+  as its own table rather than folded into team_callouts so "training focus" doesn't collide with
+  "key updates" in one text block. `team.py` gained `GET`/`PUT /dev-focus`, copying
+  `get_team_callout`/`update_team_callout`'s manual look-up-then-write upsert exactly.
+- **Placement:** no new top-level nav item. `frontend/app/app/reports/[id]/page.tsx` gained a
+  `DevelopmentSection` subcomponent (aspiration form, opportunities list + suggested-from-assessment
+  quick-adds, training list, private manager notes, "Draft with AI" review flow) — the first
+  subcomponent that file has ever used (everything else on that page is inlined into
+  `ReportDetailPage` directly); broken out here because Development's CRUD surface is too large to
+  inline without making an already-dense page unreadable, same reasoning team/page.tsx's
+  CalloutsPanel/MeetingsPanel already follow. `/app/team/page.tsx` gained a `DevFocusPanel` (near-copy
+  of `CalloutsPanel`) in a new "Development" row below Meetings.
+- Migration also adds `dev_plan_aspirations_plan_uq` (unique index on `development_plan_id`) — the
+  original scaffold created this table without a uniqueness guarantee even though the app has always
+  treated it as one row per plan; added now, before any real data exists, so a double-submit race
+  can't silently create two competing rows.
+
+**Decisions made / locked:**
+- Aspirations and training are NOT AI-drafted — only opportunities and a synthesis manager note, where
+  evidence-grounding (low assessment scores, 1:1 history, open commitments) actually applies. A career
+  aspiration is Andrew's/the report's own conversation, not something to infer from data.
+- Team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than inventing a new
+  pattern — same tradeoff already accepted there (manual look-up-then-write since a plain
+  `ON CONFLICT` can't express the null-org_unit_id "applies to all teams" case cleanly).
+
+**Verification:** backend `py_compile` clean; sandboxed `main.py` import (dummy Supabase env vars)
+confirms all 9 new `/api/development/*` routes and both new `/api/team/dev-focus` routes register with
+no path-ordering collisions against the existing 108. Frontend: fresh `npm install`, `tsc --noEmit`
+clean, `next build` clean (19/19 routes, including `/app/reports/[id]` and `/app/team`). **Went further
+given the schema changes** (same posture as Sessions 21–23): spun up local Postgres 16 with the
+Supabase `auth`/`storage` stub, ran the *entire* `schema.sql` end to end with zero errors, then
+functionally exercised the new tables as the `authenticated` role — a development plan bootstrap, an
+aspiration upsert, an opportunity linked to a real low-scoring skill assessment (2/4, correctly
+flagged low by the midpoint rule), a `team_dev_focus` all-teams row, and confirmed both new unique
+indexes actually reject a duplicate row (`dev_plan_aspirations_plan_uq`,
+`team_dev_focus_manager_all_teams_uq`). RLS isolation confirmed: a second manager's session saw 0 rows
+across `development_plans`/`dev_plan_opportunities`/`team_dev_focus`.
+
+**Next step:** Andrew needs to run `database/migrations/2026-08-20_development_plans_and_team_focus.sql`
+against live Supabase (adds `dev_plan_aspirations_plan_uq`, the two `dev_plan_opportunities` columns,
+and the new `team_dev_focus` table+policy — the five pre-existing `development_plans`/`dev_plan_*`
+tables are already live, confirmed by the same scaffold that shipped Session 3). Then this is the
+first real dogfooding of Development — expect small gaps to surface the way Goals'/Assessments' first
+live passes did (e.g. Goals' missing Edit button, Session 10).
+
+---
+
 ## Session 46 — 2026-08-20
 
 **Goal:** Andrew noticed, right after Session 45 shipped, that projects had no way to attach to a
