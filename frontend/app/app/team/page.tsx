@@ -109,6 +109,7 @@ import {
   updateTeamDevFocus,
 } from "@/lib/api";
 import { roleLabel } from "@/components/RolePicker";
+import PageShell from "@/components/PageShell";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
@@ -425,7 +426,7 @@ export default function TeamPage() {
       : (ledOrgUnits.find((u) => u.id === selectedTeamId)?.name ?? "Team");
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-16">
+    <PageShell maxWidth="7xl">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{ledOrgUnits.length > 0 ? selectedTeamName : "Team"}</h1>
         {ledOrgUnits.length > 0 && (
@@ -515,7 +516,7 @@ export default function TeamPage() {
           />
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }
 

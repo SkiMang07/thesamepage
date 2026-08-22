@@ -18,6 +18,54 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 54 — 2026-08-22
+
+**Goal:** Andrew reviewed Session 53's Goals/Projects rebuild live and flagged that alignment/spacing
+felt "not perfect" now that Session 51/52 added the persistent header + sidebar. Asked me to review
+as a product/UX lead and identify what to fix; after the review, asked me to act on the top finding.
+
+**What was done:**
+- Audited every `/app/*` page's top-level `<main>` wrapper against `AppNav.tsx`'s header container.
+  Confirmed by grep: `AppNav`'s header uses `mx-auto max-w-7xl px-6 sm:px-8`; every page except
+  Dashboard used `px-6` with no `sm:` bump, and top/bottom padding was scattered (`py-10` Dashboard,
+  `py-16` most pages, `py-12` the direct-report detail page, `py-24` login/ic) — drift accumulated
+  across ~50 sessions of each page copying its own `<main>` line independently, invisible until
+  Session 51/52 gave the app a fixed header/sidebar to visibly drift away from.
+- New `frontend/components/PageShell.tsx` — one shared container: `mx-auto max-w-{size} px-6 py-10
+  sm:px-8`, matching AppNav's header exactly; a `maxWidth` prop (`2xl`/`3xl`/`4xl`/`6xl`/`7xl`) lets
+  each page keep its own width (that dimension varies legitimately; the padding/breakpoint recipe
+  didn't).
+- Migrated all 14 pages that render under the sidebar/header onto `PageShell`: `dashboard`, `team`,
+  `goals`, `projects`, `capacity`, `org`, `context`, `settings`, `assessments`,
+  `assessments/[reportId]`, `1-1s`, `reports/[id]`, `reports/[id]/log`, and `reports/[id]/prep`
+  (which has 3 separate `<main>` branches — loading/error, step 1, step 2 — each its own
+  `PageShell` instance). `login`/`ic` deliberately left untouched — they render outside
+  AppNav/Sidebar entirely (`layout.tsx`'s `NO_NAV_PATHS`), so they have no header to align against.
+
+**Decisions made / locked:**
+- Standardized top/bottom padding on `py-10` app-wide (down from the `py-16` most pages had drifted
+  to) — Dashboard's own pre-existing value, chosen because it was the one page that already
+  (accidentally) matched the header's breakpoint padding, not a new invented number.
+- Container recipe (`px-6 sm:px-8`, vertical padding) is now owned by one component; per-page
+  max-width stays a prop rather than being folded into a fixed set of page "types," since widths
+  vary for legitimate content reasons (a single-column form vs. a card grid).
+- `login`/`ic` are explicitly out of scope for this shell — different rendering context (no
+  persistent chrome above them), not an oversight.
+
+**Verification:** Frontend-only change (14 files + 1 new component, no schema/backend touch). Repo
+already present in the cloud sandbox from Session 53's tar; re-verified there: `npx tsc --noEmit`
+clean, `next build` clean (21/21 routes). All 15 files written back to Andrew's disk via the device
+bridge.
+
+**Next step:** Andrew to eyeball the app again for the two follow-on items flagged in the same UX
+review but deliberately not acted on this pass: (1) give the sidebar's top row and AppNav's header an
+explicit shared height token so the rail and header read as one coordinated unit rather than two
+independently-padded rows that happen to look close; (2) decide whether Mission Control's pastel
+"Your people/The work/Foundation" summary cards should move onto the same bold gradient-tile
+convention as the Team/Goals/Projects KPI strips, or stay a deliberately calmer "home" treatment.
+
+---
+
 ## Session 53 — 2026-08-22
 
 **Goal:** Build Goals and Projects per the Option A direction Session 52 locked (KPI strip + border-l-4
@@ -250,60 +298,6 @@ progress bars against a real report.
 
 ---
 
-## Session 49 — 2026-08-21
-
-**Goal:** Andrew's second round of feedback on Development (Sessions 47/48): the AI-assist he asked
-for had landed on Manager Notes (private commentary he explicitly said is fine as-is), not on the
-actual development plan. He wants a dedicated place to write and build the plan itself, with Draft
-with AI / Revise with AI as optional assists on that surface specifically.
-
-**What was done:**
-- New `development_plans.plan_text` column (migration `2026-08-21_development_plan_text.sql`) — a
-  single freeform field, upserted in place (unlike the append-only `dev_plan_manager_notes`), the
-  primary always-writable plan narrative.
-- `backend/routes/development.py`: new `PUT /{direct_report_id}/plan` — updates `plan_text` via
-  `_get_or_create_plan` plus a plain update, same "update the one row" shape as `upsert_aspiration`
-  but simpler (no separate table). `DevelopmentDraft.manager_note` renamed `plan_note` (draft
-  prompt's JSON key/wording updated to match) so `/draft`'s synthesis suggestion targets the
-  plan-text box, not manager notes. `POST /{id}/notes/revise` is now dual-purpose — the same
-  evidence-grounded, always-answerable revise operation backs both the plan-text box and the
-  (unchanged) manager-notes box, since the operation doesn't care which field the text belongs to.
-- `frontend/lib/api.ts`: `DevelopmentPlan.plan_text`, new `updateDevPlanText()`,
-  `DevelopmentDraft.plan_note`, `reviseDevManagerNote` renamed `reviseDevText` (generic, shared by
-  both surfaces now).
-- `frontend/app/app/reports/[id]/page.tsx`'s `DevelopmentSection`: new "Development plan" text box
-  at the top of the section, under the "Draft with AI" header button — always editable, `Save`
-  (enabled only when dirty), `Revise with AI`, and an "AI suggested" callout with "Use this"/
-  "Dismiss" when `runDraft()` returns a `plan_note`. Manager Notes reverted to exactly its Session
-  48 shape (textarea, Add, Revise with AI) minus the AI-suggestion callout that had been misrouted
-  there.
-
-**Decisions made / locked:**
-- Manager notes and the development plan are two genuinely separate concepts — private commentary
-  vs. the actual plan artifact — and stay on separate DB fields/UI surfaces rather than merging, per
-  Andrew's explicit correction.
-- `/notes/revise` is intentionally reused, not duplicated into a second endpoint, for both surfaces
-  — revising text the manager already wrote is the same operation regardless of destination field;
-  only the frontend caller differs.
-- Opportunities/Training/Aspiration were left untouched — legitimate structured sub-objects
-  (assessment-linked, budget/career decisions) that the freeform plan-text box complements rather
-  than replaces.
-
-**Verification:** `python3 -m py_compile` clean; sandboxed `main.py` import confirms 121 total
-routes with the new `PUT /api/development/{direct_report_id}/plan` registered, no collisions.
-Frontend: `npx tsc --noEmit` and `next build` both clean (19/19 routes). Schema: fresh `schema.sql`
-apply against a local Postgres 16 (Supabase auth/storage stub) — zero errors, `plan_text` column
-present with the right type/nullability; migration applies and is idempotent on re-run. Functional:
-bootstrapped a plan, updated `plan_text` in place, confirmed a second manager sees zero rows (RLS
-isolation holds).
-
-**Next step:** Run `database/migrations/2026-08-21_development_plan_text.sql` against live Supabase
-— the plan-text box 500s until that column exists. Then Andrew dogfoods the new box directly: write
-a plan from scratch on a thin-evidence report, try "Draft with AI" (should suggest into the new box,
-not Manager Notes), try "Revise with AI" on hand-typed text.
-
----
-
 ## Archived sessions (compact index)
 
 Each line below is the goal plus the key decisions locked in that session —
@@ -313,6 +307,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 49 — 2026-08-21:** Give the development plan its own dedicated, always-editable text box (Manager Notes had been accidentally absorbing the AI-assist meant for the plan itself). **Decided:** Manager notes and the development plan are genuinely separate concepts and stay on separate fields/surfaces, not merged; `/notes/revise` is reused for both rather than duplicated.
 - **Session 48 — 2026-08-21:** Fix the manager-note flow being accidentally AI-gated by adding manual entry as the default everywhere, with AI as an optional assist (new "Revise with AI" alongside the existing "Draft with AI"). **Decided:** Draft (evidence-gated, can honestly return nothing) and revise (always answerable, evidence only for grounding) are intentionally different-shaped operations, not one prompt behind a flag.
 - **Session 47 — 2026-08-20:** Scope and build Development (individual plans + a lightweight team "training focus" note), activating dormant `development_plans`/`dev_plan_*` schema from the original scaffold. **Decided:** Aspirations and training are never AI-drafted — only opportunities + a synthesis note, where evidence-grounding actually applies; team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than a new pattern.
 - **Session 46 — 2026-08-20:** Give projects an optional team attachment and make `/app/team`'s Goals/Initiatives cascade down from parent departments instead of exact-matching only. **Decided:** Hierarchy inheritance applies only to goals/projects on `/app/team` (commitments, roster, meeting notes, callouts stay exact-match); the leadership-rollup endpoint was deliberately left unchanged (different hierarchy concept), flagged as a follow-up.

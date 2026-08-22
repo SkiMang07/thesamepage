@@ -41,6 +41,7 @@ import {
   updateProject,
   updateProjectStatus,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
   { id: "active", label: "Active" },
@@ -223,7 +224,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-16">
+    <PageShell maxWidth="7xl">
       <h1 className="text-2xl font-semibold">Projects</h1>
       <p className="mt-1 text-sm text-gray-500">
         How your goals get done — standalone or linked to a goal, yours or a direct report&apos;s.
@@ -277,7 +278,7 @@ export default function ProjectsPage() {
           )}
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }
 

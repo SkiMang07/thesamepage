@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getTeamAssessments, TeamAssessmentItem } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -42,7 +43,7 @@ export default function AssessmentsPage() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
+    <PageShell maxWidth="2xl">
       <h1 className="text-2xl font-semibold">Assessments</h1>
       <p className="mt-1 text-sm text-gray-500">
         How each person is doing against their role&apos;s configured expectations — metrics, skills, and values.
@@ -84,6 +85,6 @@ export default function AssessmentsPage() {
           ))}
         </ul>
       )}
-    </main>
+    </PageShell>
   );
 }

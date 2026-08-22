@@ -38,6 +38,7 @@ import {
   getProfile,
   getWorkUnitConfigs,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 type PeriodKind = "week" | "month" | "quarter";
 
@@ -184,7 +185,7 @@ export default function CapacityPage() {
   const teamTotalHours = overview.reduce((sum, o) => sum + o.available_hours, 0);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <PageShell maxWidth="3xl">
       <h1 className="text-2xl font-semibold">Capacity</h1>
       <p className="mt-1 text-sm text-gray-500">
         How much bandwidth your team has right now — not what&apos;s using it up yet.
@@ -323,7 +324,7 @@ export default function CapacityPage() {
           </div>
         </>
       )}
-    </main>
+    </PageShell>
   );
 }
 

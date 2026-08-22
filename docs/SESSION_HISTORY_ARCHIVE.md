@@ -9,6 +9,60 @@ here.
 
 ---
 
+## Session 49 — 2026-08-21
+
+**Goal:** Andrew's second round of feedback on Development (Sessions 47/48): the AI-assist he asked
+for had landed on Manager Notes (private commentary he explicitly said is fine as-is), not on the
+actual development plan. He wants a dedicated place to write and build the plan itself, with Draft
+with AI / Revise with AI as optional assists on that surface specifically.
+
+**What was done:**
+- New `development_plans.plan_text` column (migration `2026-08-21_development_plan_text.sql`) — a
+  single freeform field, upserted in place (unlike the append-only `dev_plan_manager_notes`), the
+  primary always-writable plan narrative.
+- `backend/routes/development.py`: new `PUT /{direct_report_id}/plan` — updates `plan_text` via
+  `_get_or_create_plan` plus a plain update, same "update the one row" shape as `upsert_aspiration`
+  but simpler (no separate table). `DevelopmentDraft.manager_note` renamed `plan_note` (draft
+  prompt's JSON key/wording updated to match) so `/draft`'s synthesis suggestion targets the
+  plan-text box, not manager notes. `POST /{id}/notes/revise` is now dual-purpose — the same
+  evidence-grounded, always-answerable revise operation backs both the plan-text box and the
+  (unchanged) manager-notes box, since the operation doesn't care which field the text belongs to.
+- `frontend/lib/api.ts`: `DevelopmentPlan.plan_text`, new `updateDevPlanText()`,
+  `DevelopmentDraft.plan_note`, `reviseDevManagerNote` renamed `reviseDevText` (generic, shared by
+  both surfaces now).
+- `frontend/app/app/reports/[id]/page.tsx`'s `DevelopmentSection`: new "Development plan" text box
+  at the top of the section, under the "Draft with AI" header button — always editable, `Save`
+  (enabled only when dirty), `Revise with AI`, and an "AI suggested" callout with "Use this"/
+  "Dismiss" when `runDraft()` returns a `plan_note`. Manager Notes reverted to exactly its Session
+  48 shape (textarea, Add, Revise with AI) minus the AI-suggestion callout that had been misrouted
+  there.
+
+**Decisions made / locked:**
+- Manager notes and the development plan are two genuinely separate concepts — private commentary
+  vs. the actual plan artifact — and stay on separate DB fields/UI surfaces rather than merging, per
+  Andrew's explicit correction.
+- `/notes/revise` is intentionally reused, not duplicated into a second endpoint, for both surfaces
+  — revising text the manager already wrote is the same operation regardless of destination field;
+  only the frontend caller differs.
+- Opportunities/Training/Aspiration were left untouched — legitimate structured sub-objects
+  (assessment-linked, budget/career decisions) that the freeform plan-text box complements rather
+  than replaces.
+
+**Verification:** `python3 -m py_compile` clean; sandboxed `main.py` import confirms 121 total
+routes with the new `PUT /api/development/{direct_report_id}/plan` registered, no collisions.
+Frontend: `npx tsc --noEmit` and `next build` both clean (19/19 routes). Schema: fresh `schema.sql`
+apply against a local Postgres 16 (Supabase auth/storage stub) — zero errors, `plan_text` column
+present with the right type/nullability; migration applies and is idempotent on re-run. Functional:
+bootstrapped a plan, updated `plan_text` in place, confirmed a second manager sees zero rows (RLS
+isolation holds).
+
+**Next step:** Run `database/migrations/2026-08-21_development_plan_text.sql` against live Supabase
+— the plan-text box 500s until that column exists. Then Andrew dogfoods the new box directly: write
+a plan from scratch on a thin-evidence report, try "Draft with AI" (should suggest into the new box,
+not Manager Notes), try "Revise with AI" on hand-typed text.
+
+---
+
 ## Session 48 — 2026-08-21
 
 **Goal:** Andrew dogfooded Session 47's Development feature immediately and hit a real dead

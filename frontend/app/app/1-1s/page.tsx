@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CadenceSource, OneOnOneOverviewItem, getOneOnOnesOverview } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -84,7 +85,7 @@ export default function OneOnOnesPage() {
   if (error) return <p className="p-8 text-red-500">{error}</p>;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <PageShell maxWidth="3xl">
       <h1 className="text-2xl font-semibold">1:1s</h1>
       <p className="mt-1 text-sm text-gray-500">Who you owe a conversation, and what&apos;s already in flight.</p>
 
@@ -203,6 +204,6 @@ export default function OneOnOnesPage() {
           </section>
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }

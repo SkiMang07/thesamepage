@@ -63,6 +63,7 @@ import {
   updateRoleLevel,
   upsertWorkUnitConfig,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 import {
   DraftExpectationsReview,
   DraftMetricRow,
@@ -181,7 +182,7 @@ function SettingsFlow() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16">
+    <PageShell maxWidth="4xl">
       <h1 className="text-2xl font-semibold">Settings</h1>
       <p className="mt-1 text-sm text-gray-500">
         Set up roles and expectations once — everything else builds on them.
@@ -255,7 +256,7 @@ function SettingsFlow() {
           )}
         </div>
       </div>
-    </main>
+    </PageShell>
   );
 }
 

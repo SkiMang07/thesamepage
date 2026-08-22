@@ -24,6 +24,7 @@ import {
   LatestSkillValueScore,
   LatestMetricEntry,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 type SkillValuePending = { evaluation_point: number | null; notes: string };
 type MetricPending = { value: string; period: string; notes: string };
@@ -283,7 +284,7 @@ export default function AssessmentScorecardPage() {
   const { direct_report: report, role, levels } = scorecard;
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
+    <PageShell maxWidth="2xl">
       <div className="flex items-start justify-between">
         <div>
           <Link href="/app/assessments" className="text-sm text-gray-500 hover:underline">
@@ -423,6 +424,6 @@ export default function AssessmentScorecardPage() {
         </button>
         <p className="text-xs text-gray-400">Only items you&apos;ve scored above will be saved.</p>
       </div>
-    </main>
+    </PageShell>
   );
 }

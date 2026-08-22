@@ -42,6 +42,7 @@ import {
   updateGoal,
   updateGoalStatus,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 const LEVEL_TABS: { id: GoalLevel; label: string; blurb: string }[] = [
   { id: "individual", label: "Individual", blurb: "Goals for one direct report" },
@@ -259,7 +260,7 @@ export default function GoalsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-16">
+    <PageShell maxWidth="7xl">
       <h1 className="text-2xl font-semibold">Goals</h1>
       <p className="mt-1 text-sm text-gray-500">
         Company, department, team, and individual goals in one place.
@@ -340,7 +341,7 @@ export default function GoalsPage() {
           )}
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }
 

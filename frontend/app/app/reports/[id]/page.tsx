@@ -97,6 +97,7 @@ import {
   OpportunityType,
   CaptureNote,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
@@ -584,7 +585,7 @@ export default function ReportDetailPage() {
   });
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-12">
+    <PageShell maxWidth="7xl">
       {/* Identity band */}
       <div className="rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-950 px-6 py-6 text-white">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1098,7 +1099,7 @@ export default function ReportDetailPage() {
           removeTimeOff={removeTimeOff}
         />
       )}
-    </main>
+    </PageShell>
   );
 }
 

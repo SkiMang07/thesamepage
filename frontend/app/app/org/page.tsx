@@ -45,6 +45,7 @@ import {
   getProjectsRollup,
   updateOrgUnit,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 const labelCls = "mb-1 block text-xs font-medium text-gray-500";
@@ -168,7 +169,7 @@ export default function OrgPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <PageShell maxWidth="3xl">
       <h1 className="text-2xl font-semibold">Org</h1>
       <p className="mt-1 text-sm text-gray-500">
         Your teams and departments — the structure everything rolls up through.
@@ -264,7 +265,7 @@ export default function OrgPage() {
           )}
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }
 

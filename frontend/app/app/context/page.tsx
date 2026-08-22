@@ -56,6 +56,7 @@ import {
   getOrgUnits,
   uploadDocument,
 } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 const CATEGORY_LABELS: Record<DocumentCategory, string> = {
   where_we_are_going: "Where we're going",
@@ -165,7 +166,7 @@ export default function ContextEnginePage() {
     .slice(0, 10);
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16">
+    <PageShell maxWidth="4xl">
       <h1 className="text-2xl font-semibold">The Space</h1>
       <p className="mt-1 text-sm text-gray-500">
         Teach the Librarian about your team — strategy, values, customers, offerings, career paths.
@@ -336,7 +337,7 @@ export default function ContextEnginePage() {
           )}
         </>
       )}
-    </main>
+    </PageShell>
   );
 }
 

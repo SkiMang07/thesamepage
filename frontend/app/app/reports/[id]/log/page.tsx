@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getDirectReport, wrapUpOneOnOne, WrapUpDraft } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 import WrapUpReview from "../wrap-up-review";
 
 export default function LogOneOnOnePage() {
@@ -54,7 +55,7 @@ export default function LogOneOnOnePage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
+    <PageShell maxWidth="2xl">
       <Link href={`/app/reports/${id}`} className="text-sm text-gray-500 hover:underline">
         ← Back
       </Link>
@@ -84,6 +85,6 @@ export default function LogOneOnOnePage() {
           {wrappingUp ? "Drafting your log…" : "Wrap up & log →"}
         </button>
       </form>
-    </main>
+    </PageShell>
   );
 }

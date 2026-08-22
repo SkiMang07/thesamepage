@@ -51,6 +51,7 @@ import {
   getTeamOverview,
 } from "@/lib/api";
 import { useZoneData, ZoneMap } from "@/components/ZoneMap";
+import PageShell from "@/components/PageShell";
 
 function daysSince(iso: string) {
   const then = new Date(iso).getTime();
@@ -354,7 +355,7 @@ export default function DashboardPage() {
   const maxCapacityHours = Math.max(1, ...capacity.map((c) => c.available_hours));
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10 sm:px-8">
+    <PageShell maxWidth="7xl">
       {/* Header — cross-page nav (Team/Goals/etc links), Quick add, the
           Scribe toggle, and the account avatar all moved into the
           persistent global nav (components/AppNav.tsx + Sidebar.tsx)
@@ -522,7 +523,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-    </main>
+    </PageShell>
   );
 }
 

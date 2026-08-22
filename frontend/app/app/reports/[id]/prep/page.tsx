@@ -16,6 +16,7 @@ import {
   CaptureNote,
 } from "@/lib/api";
 import WrapUpReview from "../wrap-up-review";
+import PageShell from "@/components/PageShell";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -202,12 +203,12 @@ function PrepFlow() {
   }
   if (resumeError) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
+      <PageShell maxWidth="2xl">
         <Link href={`/app/reports/${id}`} className="text-sm text-gray-500 hover:underline">
           ← Back
         </Link>
         <p className="mt-4 text-gray-700">{resumeError}</p>
-      </main>
+      </PageShell>
     );
   }
 
@@ -216,7 +217,7 @@ function PrepFlow() {
   // ---------------------------------------------------------------------------
   if (step === 1) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
+      <PageShell maxWidth="2xl">
         <Link href={`/app/reports/${id}`} className="text-sm text-gray-500 hover:underline">
           ← Back
         </Link>
@@ -249,7 +250,7 @@ function PrepFlow() {
             {loading ? "Generating prep sheet…" : "Generate prep sheet →"}
           </button>
         </form>
-      </main>
+      </PageShell>
     );
   }
 
@@ -258,7 +259,7 @@ function PrepFlow() {
   // ---------------------------------------------------------------------------
   if (step === 2 && prep) {
     return (
-      <main className="mx-auto max-w-6xl px-6 py-16">
+      <PageShell maxWidth="6xl">
         <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:underline">
           ← Edit prep notes
         </button>
@@ -337,7 +338,7 @@ function PrepFlow() {
             </button>
           </div>
         </div>
-      </main>
+      </PageShell>
     );
   }
 
