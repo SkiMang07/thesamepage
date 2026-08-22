@@ -50,6 +50,14 @@ Rewrote the `tsp-push` skill (delivered as a `.skill` file for Andrew to save).
   paste fails on `git add` in a way that reads like a git problem. Recorded in CLAUDE.md and in
   `tsp-push` Step 8.
 
+**Folder hygiene (same session):** rewrote `README.md`, which was stale the same way CLAUDE.md was
+(2 route files, "production deploy not yet built") and duplicated CLAUDE.md's file map — it now points
+at CLAUDE.md as the entry point rather than carrying a second map to keep in sync. Gitignored
+`_to_delete/` (55 MB of sandbox rebuild tarballs) and `docs/branding/` + `docs/marketing/` (31 MB of
+logo/palette PNGs, kept on disk, deliberately out of git history). Removed
+`docs/NOTES_INGESTION_SCOPING.md` from `.gitignore` — CLAUDE.md routes sessions to it as the one live
+scoping doc, so an ignored copy would vanish on any clone or sandbox rebuild.
+
 **Found along the way:** `assistant_messages` is live (migration applied 13 Aug) but was never folded
 into `schema.sql`, so a local verification run from `schema.sql` alone is missing a table production
 has. Recorded under "Known drift" in ENGINEERING.md; the new hard rule #4 is what prevents the next one.
