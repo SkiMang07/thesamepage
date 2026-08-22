@@ -35,7 +35,7 @@ import { usePathname, useParams, useRouter } from "next/navigation";
 import { useDrawer } from "@/lib/drawer-context";
 import { useQuickAdd } from "@/lib/quick-add-context";
 import { createClient } from "@/lib/supabase";
-import { Icon, getNavContext, useZoneData } from "@/components/ZoneMap";
+import { Icon, NAV_STRIP_HEIGHT, getNavContext, useZoneData } from "@/components/ZoneMap";
 import QuickAddModal from "@/components/QuickAddModal";
 
 function initialsOf(name: string | null) {
@@ -99,7 +99,7 @@ export default function AppNav() {
           wrapper (mx-auto max-w-7xl) aligns the actual content with the
           page's own <main> below it. */}
       <header className="sticky top-0 z-40 border-b border-[#e7e5e0] bg-[#faf9f6]/92 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-2.5 sm:px-8">
+        <div className={`mx-auto flex ${NAV_STRIP_HEIGHT} max-w-7xl items-center gap-3 px-6 sm:px-8`}>
           <Link href="/app/dashboard" className="flex shrink-0 items-center gap-2 text-[14.5px] font-semibold text-gray-900">
             <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#4f46e5] to-[#7c4ddb] text-xs text-white">
               ●
@@ -175,12 +175,13 @@ export default function AppNav() {
       {/* Roster switcher — the one contextual row that survives, only for
           person-kind pages (which direct report am I looking at). Not a
           duplicate of the sidebar: the sidebar switches section, this
-          switches person within "Your people". top-[55px] matches the
-          header's measured rendered height (unchanged from the previous
-          nav's header — same padding/button sizes, see Session 36/37's
-          note on why this isn't the naive 45px estimate). */}
+          switches person within "Your people". top-14 matches the header's
+          fixed NAV_STRIP_HEIGHT exactly (Session 55 follow-up — previously
+          top-[55px], a measured approximation of the old padding-derived
+          height; now an exact match since the header's height is a fixed
+          token rather than something to measure). */}
       {ctx.kind === "person" && (
-        <div className="sticky top-[55px] z-30 border-b border-[#f1efeb] bg-[#faf9f6]/92 backdrop-blur">
+        <div className="sticky top-14 z-30 border-b border-[#f1efeb] bg-[#faf9f6]/92 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-6 py-2 sm:px-8">
             {zone.roster.map((p) => {
               const active = p.id === ctx.reportId;

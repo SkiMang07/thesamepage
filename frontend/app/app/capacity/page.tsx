@@ -9,6 +9,10 @@
 // allocation/demand view yet, deliberately (see api.ts's Capacity section
 // comment). Own top-level page, same reasoning as Goals/Projects/Org.
 //
+// Session 56 white-space audit — this page's section gaps had drifted to
+// mt-8/mt-8/mt-10 for what are structurally the same kind of transition;
+// all now use the shared SECTION_GAP token (components/ZoneMap.tsx).
+//
 // Two sections:
 //   - "Your team" — your own direct reports, full detail (this is your own
 //     private data, same as everywhere else in the app).
@@ -39,6 +43,7 @@ import {
   getWorkUnitConfigs,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 type PeriodKind = "week" | "month" | "quarter";
 
@@ -194,7 +199,7 @@ export default function CapacityPage() {
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
       {/* Period selector */}
-      <div className="mt-8 flex items-center justify-between gap-4">
+      <div className={`${SECTION_GAP} flex items-center justify-between gap-4`}>
         <div className="flex rounded-md border border-gray-200 p-0.5">
           {(Object.keys(PERIOD_LABEL) as PeriodKind[]).map((k) => (
             <button
@@ -220,11 +225,11 @@ export default function CapacityPage() {
       </div>
 
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
       ) : (
         <>
           {/* Your team */}
-          <div className="mt-8">
+          <div className={SECTION_GAP}>
             <div className="flex items-baseline justify-between">
               <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Your team</h2>
               {overview.length > 0 && <span className="text-xs text-gray-400">{formatHours(teamTotalHours)} total</span>}
@@ -290,7 +295,7 @@ export default function CapacityPage() {
           </div>
 
           {/* By department */}
-          <div className="mt-10">
+          <div className={SECTION_GAP}>
             <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">By department</h2>
             <p className="mt-1 text-xs text-gray-400">
               Rolled up across every unit you lead in {companyName}&apos;s org chart, regardless of who manages

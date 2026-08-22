@@ -19,6 +19,15 @@
 // their own progress ring. Level tabs are kept as a pill-style filter, not
 // retired — that was the one explicit "don't change this" in the brief.
 // Add/edit forms are untouched, just refit into the new shell.
+//
+// Session 56 white-space audit — this page was the worked example in the
+// "White Space Audit" comparison canvas (128px of margin between the
+// header and the KPI strip, three independent mt-8's stacked on PageShell's
+// own old py-10). Now widened further to max-w-[1600px] (PageShell's new
+// `8xl` tier — this is a wide card-grid page, one of the ones the audit
+// flagged as most starved for width) and its section gaps use the shared
+// SECTION_GAP token instead of ad hoc mt-8's; the card grid's own gap
+// tightened gap-4 -> gap-3 to match.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -43,6 +52,7 @@ import {
   updateGoalStatus,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 const LEVEL_TABS: { id: GoalLevel; label: string; blurb: string }[] = [
   { id: "individual", label: "Individual", blurb: "Goals for one direct report" },
@@ -260,7 +270,7 @@ export default function GoalsPage() {
   };
 
   return (
-    <PageShell maxWidth="7xl">
+    <PageShell maxWidth="8xl">
       <h1 className="text-2xl font-semibold">Goals</h1>
       <p className="mt-1 text-sm text-gray-500">
         Company, department, team, and individual goals in one place.
@@ -269,12 +279,12 @@ export default function GoalsPage() {
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
       ) : (
-        <div className="mt-8">
+        <div className={SECTION_GAP}>
           <KpiStrip goals={levelGoals} projects={projects} />
 
-          <div className="mt-8 flex items-center justify-between gap-4">
+          <div className={`${SECTION_GAP} flex items-center justify-between gap-4`}>
             <div className="flex flex-wrap rounded-md border border-gray-200 p-0.5">
               {LEVEL_TABS.map((t) => (
                 <button
@@ -316,7 +326,7 @@ export default function GoalsPage() {
           )}
 
           {level === "individual" ? (
-            <div className="mt-8 space-y-8">
+            <div className={`${SECTION_GAP} space-y-8`}>
               {(groupedIndividual ?? []).map((group) => (
                 <div key={group.name}>
                   <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
@@ -332,7 +342,7 @@ export default function GoalsPage() {
               )}
             </div>
           ) : (
-            <div className="mt-8">
+            <div className={SECTION_GAP}>
               <GoalGrid goals={levelGoals} {...goalListProps} />
               {levelGoals.length === 0 && (
                 <p className="text-gray-500">No {level} goals yet. Add the first one above.</p>
@@ -460,7 +470,7 @@ function GoalGrid({
   projects: Project[];
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {goals.map((g) =>
         g.id === editingGoalId ? (
           <div key={g.id} className="md:col-span-2 xl:col-span-3">

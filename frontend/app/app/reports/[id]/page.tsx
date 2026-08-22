@@ -28,6 +28,12 @@
 //        (plan/aspiration/opportunities/training — DevelopmentSection's
 //        non-notes half), Expectations (chips).
 //
+// Session 56 white-space audit — this page's own mt-5/mt-6 top-level gaps
+// (already tighter than most other pages, no mt-8 anywhere in the main
+// flow) now use the shared SECTION_GAP token (components/ZoneMap.tsx) for
+// consistency with the rest of the app; column-internal spacing (space-y-5,
+// the various card dividers) is untouched.
+//
 // DevelopmentSection (Session 47-49) is kept as one component with all its
 // original state/handlers, but now takes a `section` prop and renders only
 // half its JSX per mount: "notes" (private manager notes, amber card, Col 1)
@@ -98,6 +104,7 @@ import {
   CaptureNote,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
@@ -641,7 +648,7 @@ export default function ReportDetailPage() {
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
       {/* KPI strip */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className={`${SECTION_GAP} grid grid-cols-2 gap-3 sm:grid-cols-4`}>
         <div className="rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 px-4 py-3 text-white">
           <p className="text-2xl font-semibold">{daysSinceLast != null ? `${daysSinceLast}d` : "—"}</p>
           <p className="text-xs text-white/80">
@@ -682,7 +689,7 @@ export default function ReportDetailPage() {
       </div>
 
       {/* Three columns */}
-      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className={`${SECTION_GAP} grid grid-cols-1 gap-5 lg:grid-cols-3`}>
         {/* Col 1 — Conversation */}
         <div className="space-y-5">
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">

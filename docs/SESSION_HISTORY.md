@@ -18,6 +18,59 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 56 — 2026-08-22
+
+**Goal:** Close out the last open item from Session 54's UX review — give AppNav's header and
+Sidebar's top row a shared height token so the nav chrome reads as one coordinated strip — then open
+a new UX discussion about excessive white space/margins across the app, bring a concrete before/after
+direction, and (once approved) build it.
+
+**What was done:**
+- `frontend/components/ZoneMap.tsx` — added `NAV_STRIP_HEIGHT = "h-14"`, a shared height token
+  importable by both nav components instead of each deriving its height independently from padding +
+  tallest child (previously off by ~4px). `AppNav.tsx`'s header inner div and `Sidebar.tsx`'s top row
+  both now use it; AppNav's roster-switcher sticky offset (`top-[55px]` → `top-14`) follows the same
+  fixed value.
+- Published a "White Space Audit" comparison canvas (Claude Design skill,
+  https://claude.ai/code/artifact/4727ef04-4a36-422d-a931-de015dadc36e) proposing two directions
+  against real content: tightened page-level vertical rhythm via one shared spacing token, and a wider
+  `PageShell` tier for grid-heavy pages. Andrew approved both ("i am good with this - lets
+  change/update").
+- Added `SECTION_GAP = "mt-5"` to `ZoneMap.tsx` and a new `8xl` (`max-w-[1600px]`) tier to
+  `PageShell.tsx`'s `MAX_WIDTHS`; also tightened `PageShell`'s own vertical padding (`py-10` → `py-8`).
+- Replaced ad hoc `mt-4/5/6/8/10` page-level transition margins with `SECTION_GAP` across 13 pages
+  (dashboard, goals, projects, team, capacity, org, context, assessments, 1-1s, settings,
+  reports/[id], reports/[id]/log, reports/[id]/prep) and widened Dashboard/Goals/Projects/Team to the
+  new `8xl` tier. Deliberately left untouched any spacing that was already internally consistent
+  rather than drifting ad hoc (Team's and 1-1s' inter-section `space-y-10`, the assessment scorecard's
+  `mt-10`, nested column-internal spacing on the Person page and prep step 2, and Settings' internal
+  sub-section spacing) — each exception is documented inline in that file's own header comment.
+
+**Decisions made / locked:**
+- Nav chrome height is now a single named token (`NAV_STRIP_HEIGHT`) rather than an emergent property
+  of independently-chosen padding — prevents this specific 4px drift from recurring as either
+  component changes.
+- `SECTION_GAP` (`mt-5`) is the app-wide standard for page-level block transitions, chosen because it
+  was already the tightest value in active use (`reports/[id]`) rather than an invented number — it's
+  for the "compounding independent per-block choice" pattern the audit measured, not for tight
+  same-thought-group spacing or already-uniform internal rhythm, which stay as-is by design.
+- Four grid-heavy pages (Dashboard, Goals, Projects, Team) get a new `8xl` (1600px) `PageShell` tier to
+  close the dead space measured on wide monitors; narrower content pages (Capacity, Org, Context,
+  Settings, Assessments, 1-1s, reports/[id]) keep their existing widths.
+
+**Verification:** Frontend-only change (17 files, no schema/backend touch). Repo tarred from the
+device's working copy and rebuilt in the cloud sandbox (device_bash's ~45s cap is too short for `next
+build`): fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean (all 19 routes, no
+type/lint errors) — run twice, once for the height-token fix alone and once for the full white-space
+change set. All 15 content-changed files (PageShell.tsx, ZoneMap.tsx, plus 13 page files) written back
+to Andrew's disk via the device bridge, mtime-guarded.
+
+**Next step:** Andrew to dogfood the tightened rhythm and wider grid pages live, especially on a wide
+monitor where the 8xl tier matters most. `KpiStrip` remains duplicated across team/goals/projects
+pages (a pre-existing Session 53 choice) — worth a shared-component pass if a 4th page ever needs it.
+
+---
+
 ## Session 55 — 2026-08-22
 
 **Goal:** Finish the one open item from Session 54's UX review: whether Mission Control's pastel
@@ -205,81 +258,6 @@ brief) — just fit the "+ Add" affordance into the new layout.
 
 ---
 
-## Session 51 — 2026-08-22
-
-**Goal:** Andrew flagged that the persistent nav (Sessions 36-38's "hub & orbit") felt cluttered —
-the header's breadcrumb and the orbit strip's zone chip both restated the same "where am I" context
-in two different idioms stacked on top of each other. Worked through it as a design exploration first
-(a multi-artboard "Top Nav Options" canvas comparing four directions), landed on a combined approach,
-then built it.
-
-**What was done:**
-- Explored via a published Claude Design canvas ("Top Nav Options") comparing four directions against
-  the real AppNav.tsx tokens, then a rough combined-approach pass across Mission Control/Team/an
-  individual page plus a collapsible-sidebar mockup — Andrew approved the combined direction: a fully
-  static top bar everywhere, a persistent left rail on every page except Mission Control, and the
-  roster switcher kept only on person-kind pages.
-- `frontend/components/AppNav.tsx` reworked: removed the breadcrumb ("here" slot) entirely, removed
-  the zone-chip + item-switcher row and the all-areas map overlay (`mapOpen` state and its Escape
-  handler) since the sidebar now covers that job; added a global "+ Quick add" button (moved from the
-  dashboard) next to Scribe. The roster switcher row is unchanged in markup, but now renders only for
-  `ctx.kind === "person"` (previously also rendered, with a zone chip, for "item" kind).
-- `frontend/components/Sidebar.tsx` (new) — persistent left rail built from `ZoneMap.tsx`'s existing
-  `NAV_GROUPS`/`HOME_ITEM`/`HUE_STYLES` (no new nav config, no duplicated route list): a "Mission
-  Control" link, a divider, then every group's items flattened into one list, active item tinted by
-  its group's hue. Collapses to a 56px icon-only rail (native `title` tooltips) via a toggle button;
-  not rendered on `ctx.kind === "home"` or `"none"`.
-- `frontend/lib/sidebar-context.tsx` (new) — collapse state, persisted to `localStorage` (a durable
-  per-device preference, unlike `drawer-context.tsx`'s sessionStorage-backed open state).
-- `frontend/lib/quick-add-context.tsx` (new) — Quick Add's open/close state, lifted out of the
-  dashboard page (mirrors `drawer-context.tsx`'s shape). AppNav renders the actual `<QuickAddModal>`
-  (reusing `useZoneData()`'s already-fetched roster for the `directReports` prop, no new fetch); other
-  pages just call `useQuickAdd().open()`.
-- `frontend/app/app/layout.tsx` — added `SidebarProvider`/`QuickAddProvider`, renders `<Sidebar />` as
-  a flex sibling of the main-content column (same shape as the Scribe drawer on the other side), gated
-  by the same `showNav` check as AppNav.
-- `frontend/app/app/dashboard/page.tsx` — removed the local `quickAddOpen` state, the page's own
-  "+ Quick add" button, and the `<QuickAddModal>` render; the "add your first direct report" empty
-  state now calls the shared `useQuickAdd().open()`.
-
-**Decisions made / locked:**
-- Mission Control gets no sidebar — it already is the map (its own card grid + inline `ZoneMap` are
-  the between-section navigation), so a persistent rail there would restate what's already on screen.
-  Every other page gets one.
-- The all-areas map overlay (opened from the old zone chip) is retired, not preserved behind a new
-  trigger — the sidebar already puts every section one click away from anywhere, so a separate
-  "jump to any zone" sheet no longer earns its keep. Flagged to Andrew rather than silently dropped.
-- Quick Add's `onCreated` now calls `router.refresh()` instead of the dashboard's own `loadDashboard()`
-  reload — a known, accepted regression: pages with client-fetched data (dashboard, team, goals, ...)
-  won't auto-refresh after a global Quick Add the way the dashboard-local button used to. Worth a
-  follow-up if it's annoying in practice; not worth a global data-refresh bus for this pass.
-- Collapsed-sidebar labels use native `title` tooltips, not a custom tooltip component — a reasonable
-  v1, flagged to Andrew at mockup time (docs/DESIGN.md's entry has the rest).
-
-**Verification:** frontend-only change, no schema/backend touch, so no migration and no Postgres test
-this pass. Cloned the repo into the cloud sandbox (device_bash's ~45s cap is too short for `next
-build`) at the exact commit the device-side working copy was on, applied all six file changes there,
-then: fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean (19/19 routes — Mission
-Control, Team, Goals, Projects, Capacity, Org, Knowledge, Settings, and Assessments all statically
-generated without throwing, which exercises the new AppNav/Sidebar/provider tree on every one of
-them). Runtime smoke-testing via `next start` wasn't possible in the sandbox (no live Supabase
-credentials), so middleware-gated pages weren't hit with a real request — build-time render + tsc are
-the verification for this pass.
-
-**Known snag:** the device-side working copy has a stale, zero-byte `.git/index.lock` that this
-session's device-bash bridge can't delete (no delete permission on the mount) — git refuses `add`/
-`commit` until it's cleared. Not caused by this session's changes; the six file writes themselves
-landed fine via the file bridge (confirmed with `git status --short`/`diff --stat` showing exactly the
-expected diff, nothing else). Andrew needs to delete that lock file himself before running the commit
-block (a plain `rm .git/index.lock` in his own terminal, where he has full permissions).
-
-**Next step:** Andrew: delete the stale `.git/index.lock`, then run the commit block. After that,
-dogfood the new nav for real — try the sidebar collapse toggle, jump between a couple of sections,
-open a direct report's page and confirm the roster strip still switches people correctly, and open
-Quick Add from a page other than Mission Control to confirm it still works end-to-end.
-
----
-
 ## Archived sessions (compact index)
 
 Each line below is the goal plus the key decisions locked in that session —
@@ -289,6 +267,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 51 — 2026-08-22:** Simplify the persistent nav (Sessions 36-38) by retiring the duplicated breadcrumb + zone-chip idiom in favor of a fully static top bar and a persistent left rail (`Sidebar.tsx`) on every page except Mission Control. **Decided:** Mission Control gets no sidebar since its own card grid + inline ZoneMap already is the map; the all-areas map overlay is retired outright, not rehomed, since the sidebar already puts every section one click away.
 - **Session 50 — 2026-08-21:** Rebuild `/app/reports/[id]` from a single-column form wall into the "Command Deck" hub (identity band, KPI strip, 3-column layout, settings drawer). **Decided:** new `dr_capture_notes` is its own inbox table (not a column on `one_on_ones`); goal progress bars only render with a real check-in, never fabricated from status alone.
 - **Session 49 — 2026-08-21:** Give the development plan its own dedicated, always-editable text box (Manager Notes had been accidentally absorbing the AI-assist meant for the plan itself). **Decided:** Manager notes and the development plan are genuinely separate concepts and stay on separate fields/surfaces, not merged; `/notes/revise` is reused for both rather than duplicated.
 - **Session 48 — 2026-08-21:** Fix the manager-note flow being accidentally AI-gated by adding manual entry as the default everywhere, with AI as an optional assist (new "Revise with AI" alongside the existing "Draft with AI"). **Decided:** Draft (evidence-gated, can honestly return nothing) and revise (always answerable, evidence only for grounding) are intentionally different-shaped operations, not one prompt behind a flag.
@@ -296,7 +275,7 @@ specific decision.
 - **Session 46 — 2026-08-20:** Give projects an optional team attachment and make `/app/team`'s Goals/Initiatives cascade down from parent departments instead of exact-matching only. **Decided:** Hierarchy inheritance applies only to goals/projects on `/app/team` (commitments, roster, meeting notes, callouts stay exact-match); the leadership-rollup endpoint was deliberately left unchanged (different hierarchy concept), flagged as a follow-up.
 - **Session 45 — 2026-08-19:** Add a team name + dropdown to `/app/team` so a manager leading multiple `org_units` can tell which team's data they're viewing, and filter the page by picking one. **Decided:** `team_callouts.org_unit_id` is `ON DELETE CASCADE` (not `SET NULL` like `team_meeting_notes`) — found via a real Postgres test, needed because of the two-partial-unique-index uniqueness rule; `GET /callout` changed from one object to a list, a breaking response-shape change.
 - **Session 44 — 2026-08-18:** Build Role JD Import (`docs/ROLE_JD_IMPORT_SCOPING.md`): paste/drop a JD, one AI call proposes role identity + ladder match + drafts expectations, manager reviews, one commit lands it. **Decided:** No migration needed — every column this flow writes already existed; collision resolution is server-side first (draft already flags `exists`), frontend only handles manager-created collisions; the JD file is never stored (role config, not a Context Engine document).
-- **Session 43 — 2026-08-18:** Polish pass (Plan §7.3, last of 5 team-setup UX sessions): People archive/edit, People-row rework, data-trust fixes, org-wide values, ladder-merge nudge. **Decided:** Two mutually-exclusive lists (active/archived), not one client-filtered list — archived fetch only pays when a manager expands "Show archived"; `teams_count` keeps its pre-existing meaning (total org units), tile-display split lives in two new fields instead.
+- **Session 43 — 2026-08-18:** Polish pass (Plan §7.3, last of 5 team-setup UX sessions): People archive/edit, People-row rework, data-trust fixes, org-wide values. **Decided:** Two mutually-exclusive lists (active/archived), not one client-filtered list — archived fetch only pays when a manager expands "Show archived"; `teams_count` keeps its pre-existing meaning (total org units), tile-display split lives in two new fields instead.
 - **Session 42 — 2026-08-18:** Build Plan S4+S5 (last of the four S1-S5 setup-UX sessions, `docs/TEAM_SETUP_UX_REVIEW.md` §6) — make half-configured setup state visible everywhere a person appears, and rename/consolidate the setup surfaces (Roles & Levels + Expectations merged into one "Roles & expectations" tab).
 - **Session 41 — 2026-08-18:** Build Plan S1 — rebuild Settings → Team as a roster-first "People" section (progress header, inline role/team creation, fix for Quick add's free-text Role dead-end). **Decided:** `role_has_expectations` is null (not false) when no role is assigned, distinguishing "nothing to check" from "checked, found nothing"; inline role/team creation always creates new (no fuzzy-match merge — Roles & Levels' existing merge tool stays the one place for that); email on create is fire-and-forget, no auto-invite.
 - **Session 40 — 2026-08-18:** Build Plan S2 — role families, so 13 flat role_levels cards become ~5 ladders (one card per family, levels as rows, "Add L{n+1}" pre-filled, merge tool for near-duplicates). **Decided:** Family name takes over as primary display once a level has one, `job_role` stays as an optional per-level override title; new role creation splits into "+ Add a new ladder" (family+L1 together) vs. "+ Add L{n+1}" (pre-filled, existing ladder); family deletion allowed regardless of level count, UI just steers toward emptying it first.

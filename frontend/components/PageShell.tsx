@@ -12,17 +12,37 @@
 //
 // This component is the fix: one place that owns the horizontal recipe
 // (`px-6 sm:px-8`, matching AppNav's header exactly) and a standardized
-// vertical rhythm (`py-10`, tightened from the mix of py-10/12/16 pages had
-// drifted to — py-10 was Dashboard's own value, the one page that happened
-// to already match the header's breakpoint, so it's the value every other
-// page is moving to rather than a new invention). Each page keeps its own
-// max-width via the `maxWidth` prop — that dimension varies legitimately
-// (a single-column form doesn't need 7xl) and isn't part of what drifted.
+// vertical rhythm. Each page keeps its own max-width via the `maxWidth` prop
+// — that dimension varies legitimately (a single-column form doesn't need
+// 7xl) and isn't part of what drifted.
 //
 // login/page.tsx and ic/page.tsx deliberately do NOT use this — they render
 // outside AppNav/Sidebar entirely (see layout.tsx's NO_NAV_PATHS), so they
 // have no header to align against and keep their own centered-auth-screen
 // treatment (max-w-sm py-24).
+//
+// Session 56 white-space audit (see the published "White Space Audit"
+// comparison canvas and the session56_height_token_and_whitespace project
+// memory note): two follow-on fixes, both approved by Andrew after seeing
+// the before/after mockups.
+//
+// (1) Top/bottom padding tightened py-10 (40px) -> py-8 (32px). Paired with
+// the SECTION_GAP token (components/ZoneMap.tsx) that pages now use for
+// their own internal section spacing instead of ad hoc mt-6/mt-8's, this
+// closed the "128px of pure margin before you reach the KPI strip" gap the
+// audit measured on Goals down to 108px, with no page redesign — same
+// components, same content, just a shared vertical-rhythm scale instead of
+// each page/block picking its own margin.
+//
+// (2) New `8xl` tier (max-w-[1600px], an arbitrary value — Tailwind has no
+// built-in step between 7xl/80rem and full) for pages whose job is a wide
+// data grid (Dashboard, Goals, Projects, Team). The audit found max-w-7xl
+// (1280px) sitting in the middle of a much wider flex-1 column next to the
+// 190px sidebar on a wide monitor — 165px of dead space on each side, ~21%
+// of the available width doing nothing for a page whose whole point is
+// showing several columns of data side by side. Form-heavy pages (Settings
+// 4xl, Capacity/Org/1:1s 3xl) deliberately keep their narrower widths —
+// this tier is additive, not a replacement for the existing ones.
 
 import { ReactNode } from "react";
 
@@ -32,6 +52,7 @@ const MAX_WIDTHS = {
   "4xl": "max-w-4xl",
   "6xl": "max-w-6xl",
   "7xl": "max-w-7xl",
+  "8xl": "max-w-[1600px]",
 } as const;
 
 export type PageShellMaxWidth = keyof typeof MAX_WIDTHS;
@@ -46,7 +67,7 @@ export default function PageShell({
   children: ReactNode;
 }) {
   return (
-    <main className={`mx-auto ${MAX_WIDTHS[maxWidth]} px-6 py-10 sm:px-8 ${className}`.trim()}>
+    <main className={`mx-auto ${MAX_WIDTHS[maxWidth]} px-6 py-8 sm:px-8 ${className}`.trim()}>
       {children}
     </main>
   );

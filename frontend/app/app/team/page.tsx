@@ -68,6 +68,16 @@
 // filtering Session 45 used as a stand-in is gone. See the
 // team_project_goal_hierarchy project memory note for the scoping
 // conversation.
+//
+// Session 56 white-space audit — widened to PageShell's new `8xl` tier
+// (this is a wide multi-section page, one of the ones the audit flagged as
+// most starved for width on a wide monitor) and the entrance gap (subtitle
+// -> first section) now uses the shared SECTION_GAP token instead of a
+// bare mt-8. The page's own internal space-y-10 between its 5 major
+// sections (KPI strip / this week's focus / meetings / development /
+// roster) is left as-is — that's already one consistent value, not the
+// per-block drift the audit was about, and wasn't part of the approved
+// comparison canvas.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -110,6 +120,7 @@ import {
 } from "@/lib/api";
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
@@ -426,7 +437,7 @@ export default function TeamPage() {
       : (ledOrgUnits.find((u) => u.id === selectedTeamId)?.name ?? "Team");
 
   return (
-    <PageShell maxWidth="7xl">
+    <PageShell maxWidth="8xl">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{ledOrgUnits.length > 0 ? selectedTeamName : "Team"}</h1>
         {ledOrgUnits.length > 0 && (
@@ -453,9 +464,9 @@ export default function TeamPage() {
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
       ) : (
-        <div className="mt-8 space-y-10">
+        <div className={`${SECTION_GAP} space-y-10`}>
           <KpiStrip
             goals={visibleGoals}
             initiatives={visibleInitiatives}

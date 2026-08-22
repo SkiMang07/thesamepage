@@ -20,6 +20,11 @@
 // border-l-4 accented cards each carrying their own progress ring. Projects
 // has no level tabs (flat list, grouped by assignee same as before) — same
 // card treatment otherwise. Add/edit forms are untouched, just refit.
+//
+// Session 56 white-space audit — same fix as goals/page.tsx (its ported
+// twin): widened to max-w-[1600px] (PageShell's new `8xl` tier) and its
+// section gaps now use the shared SECTION_GAP token instead of ad hoc
+// mt-8's; the card grid's own gap tightened gap-4 -> gap-3 to match.
 
 import { useEffect, useMemo, useState } from "react";
 import CheckInPanel from "@/components/CheckInPanel";
@@ -42,6 +47,7 @@ import {
   updateProjectStatus,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
   { id: "active", label: "Active" },
@@ -224,7 +230,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <PageShell maxWidth="7xl">
+    <PageShell maxWidth="8xl">
       <h1 className="text-2xl font-semibold">Projects</h1>
       <p className="mt-1 text-sm text-gray-500">
         How your goals get done — standalone or linked to a goal, yours or a direct report&apos;s.
@@ -233,12 +239,12 @@ export default function ProjectsPage() {
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
       ) : (
-        <div className="mt-8">
+        <div className={SECTION_GAP}>
           <KpiStrip projects={projects} />
 
-          <div className="mt-8 flex items-center justify-end">
+          <div className={`${SECTION_GAP} flex items-center justify-end`}>
             <button
               onClick={() => {
                 setEditingProjectId(null);
@@ -263,9 +269,9 @@ export default function ProjectsPage() {
           )}
 
           {projects.length === 0 ? (
-            <p className="mt-8 text-gray-500">No projects yet. Add the first one above.</p>
+            <p className={`${SECTION_GAP} text-gray-500`}>No projects yet. Add the first one above.</p>
           ) : (
-            <div className="mt-8 space-y-8">
+            <div className={`${SECTION_GAP} space-y-8`}>
               {grouped.map((group) => (
                 <div key={group.name}>
                   <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
@@ -390,7 +396,7 @@ function ProjectGrid({
   orgUnits: OrgUnit[];
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {projects.map((p) =>
         p.id === editingProjectId ? (
           <div key={p.id} className="md:col-span-2 xl:col-span-3">

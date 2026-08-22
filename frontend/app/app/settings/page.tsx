@@ -10,6 +10,12 @@
 // the card-swap edit-in-place pattern from Goals (Session 10).
 // Deferred: evaluation weighting, scale definitions, capacity/recruitment,
 // project settings, permissions (all department-tier — see SESSION_HISTORY).
+//
+// Session 56 white-space audit — the entrance gap (subtitle -> the nav+
+// content two-column layout) now uses the shared SECTION_GAP token
+// (components/ZoneMap.tsx) instead of a bare mt-8. Spacing inside the
+// individual sections (Profile/Roles/People/Capacity) is untouched — out
+// of scope for this pass.
 
 import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -64,6 +70,7 @@ import {
   upsertWorkUnitConfig,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 import {
   DraftExpectationsReview,
   DraftMetricRow,
@@ -190,7 +197,7 @@ function SettingsFlow() {
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
-      <div className="mt-8 flex gap-10">
+      <div className={`${SECTION_GAP} flex gap-10`}>
         <nav className="w-48 shrink-0 space-y-1">
           {SECTIONS.map((s) => (
             <button

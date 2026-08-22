@@ -9,6 +9,81 @@ here.
 
 ---
 
+## Session 51 — 2026-08-22
+
+**Goal:** Andrew flagged that the persistent nav (Sessions 36-38's "hub & orbit") felt cluttered —
+the header's breadcrumb and the orbit strip's zone chip both restated the same "where am I" context
+in two different idioms stacked on top of each other. Worked through it as a design exploration first
+(a multi-artboard "Top Nav Options" canvas comparing four directions), landed on a combined approach,
+then built it.
+
+**What was done:**
+- Explored via a published Claude Design canvas ("Top Nav Options") comparing four directions against
+  the real AppNav.tsx tokens, then a rough combined-approach pass across Mission Control/Team/an
+  individual page plus a collapsible-sidebar mockup — Andrew approved the combined direction: a fully
+  static top bar everywhere, a persistent left rail on every page except Mission Control, and the
+  roster switcher kept only on person-kind pages.
+- `frontend/components/AppNav.tsx` reworked: removed the breadcrumb ("here" slot) entirely, removed
+  the zone-chip + item-switcher row and the all-areas map overlay (`mapOpen` state and its Escape
+  handler) since the sidebar now covers that job; added a global "+ Quick add" button (moved from the
+  dashboard) next to Scribe. The roster switcher row is unchanged in markup, but now renders only for
+  `ctx.kind === "person"` (previously also rendered, with a zone chip, for "item" kind).
+- `frontend/components/Sidebar.tsx` (new) — persistent left rail built from `ZoneMap.tsx`'s existing
+  `NAV_GROUPS`/`HOME_ITEM`/`HUE_STYLES` (no new nav config, no duplicated route list): a "Mission
+  Control" link, a divider, then every group's items flattened into one list, active item tinted by
+  its group's hue. Collapses to a 56px icon-only rail (native `title` tooltips) via a toggle button;
+  not rendered on `ctx.kind === "home"` or `"none"`.
+- `frontend/lib/sidebar-context.tsx` (new) — collapse state, persisted to `localStorage` (a durable
+  per-device preference, unlike `drawer-context.tsx`'s sessionStorage-backed open state).
+- `frontend/lib/quick-add-context.tsx` (new) — Quick Add's open/close state, lifted out of the
+  dashboard page (mirrors `drawer-context.tsx`'s shape). AppNav renders the actual `<QuickAddModal>`
+  (reusing `useZoneData()`'s already-fetched roster for the `directReports` prop, no new fetch); other
+  pages just call `useQuickAdd().open()`.
+- `frontend/app/app/layout.tsx` — added `SidebarProvider`/`QuickAddProvider`, renders `<Sidebar />` as
+  a flex sibling of the main-content column (same shape as the Scribe drawer on the other side), gated
+  by the same `showNav` check as AppNav.
+- `frontend/app/app/dashboard/page.tsx` — removed the local `quickAddOpen` state, the page's own
+  "+ Quick add" button, and the `<QuickAddModal>` render; the "add your first direct report" empty
+  state now calls the shared `useQuickAdd().open()`.
+
+**Decisions made / locked:**
+- Mission Control gets no sidebar — it already is the map (its own card grid + inline `ZoneMap` are
+  the between-section navigation), so a persistent rail there would restate what's already on screen.
+  Every other page gets one.
+- The all-areas map overlay (opened from the old zone chip) is retired, not preserved behind a new
+  trigger — the sidebar already puts every section one click away from anywhere, so a separate
+  "jump to any zone" sheet no longer earns its keep. Flagged to Andrew rather than silently dropped.
+- Quick Add's `onCreated` now calls `router.refresh()` instead of the dashboard's own `loadDashboard()`
+  reload — a known, accepted regression: pages with client-fetched data (dashboard, team, goals, ...)
+  won't auto-refresh after a global Quick Add the way the dashboard-local button used to. Worth a
+  follow-up if it's annoying in practice; not worth a global data-refresh bus for this pass.
+- Collapsed-sidebar labels use native `title` tooltips, not a custom tooltip component — a reasonable
+  v1, flagged to Andrew at mockup time (docs/DESIGN.md's entry has the rest).
+
+**Verification:** frontend-only change, no schema/backend touch, so no migration and no Postgres test
+this pass. Cloned the repo into the cloud sandbox (device_bash's ~45s cap is too short for `next
+build`) at the exact commit the device-side working copy was on, applied all six file changes there,
+then: fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean (19/19 routes — Mission
+Control, Team, Goals, Projects, Capacity, Org, Knowledge, Settings, and Assessments all statically
+generated without throwing, which exercises the new AppNav/Sidebar/provider tree on every one of
+them). Runtime smoke-testing via `next start` wasn't possible in the sandbox (no live Supabase
+credentials), so middleware-gated pages weren't hit with a real request — build-time render + tsc are
+the verification for this pass.
+
+**Known snag:** the device-side working copy has a stale, zero-byte `.git/index.lock` that this
+session's device-bash bridge can't delete (no delete permission on the mount) — git refuses `add`/
+`commit` until it's cleared. Not caused by this session's changes; the six file writes themselves
+landed fine via the file bridge (confirmed with `git status --short`/`diff --stat` showing exactly the
+expected diff, nothing else). Andrew needs to delete that lock file himself before running the commit
+block (a plain `rm .git/index.lock` in his own terminal, where he has full permissions).
+
+**Next step:** Andrew: delete the stale `.git/index.lock`, then run the commit block. After that,
+dogfood the new nav for real — try the sidebar collapse toggle, jump between a couple of sections,
+open a direct report's page and confirm the roster strip still switches people correctly, and open
+Quick Add from a page other than Mission Control to confirm it still works end-to-end.
+
+---
+
 ## Session 50 — 2026-08-21
 
 **Goal:** Rebuild `/app/reports/[id]` (the individual DR detail page) from a single-column wall of

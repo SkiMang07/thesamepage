@@ -5,6 +5,10 @@
 // every other domain page (Goals, Projects, Org): this is somewhere a
 // manager returns to regularly, not a one-time setup screen.
 //
+// Session 56 white-space audit — section gaps (The Brain, the upload form,
+// Needs review, Recently confirmed) had drifted to a mt-8/mt-10 mix; all
+// now use the shared SECTION_GAP token (components/ZoneMap.tsx).
+//
 // Flow: upload a file -> backend runs the whole extraction pipeline
 // synchronously (Session 28's POST /api/documents/upload, up to ~1-2
 // minutes for a large deck) -> the Librarian's proposed card appears
@@ -57,6 +61,7 @@ import {
   uploadDocument,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 const CATEGORY_LABELS: Record<DocumentCategory, string> = {
   where_we_are_going: "Where we're going",
@@ -181,7 +186,7 @@ export default function ContextEnginePage() {
           until coverage resolves (undefined), and fails silently on error —
           same posture as the dashboard's AI insight banner. */}
       {coverage && (
-        <div className="mt-8">
+        <div className={SECTION_GAP}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">The Brain</h2>
             <p className="text-xs text-gray-400">What the Librarian knows about your team</p>
@@ -219,7 +224,7 @@ export default function ContextEnginePage() {
         </div>
       )}
 
-      <form onSubmit={handleUpload} className="mt-8 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+      <form onSubmit={handleUpload} className={`${SECTION_GAP} space-y-3 rounded-lg border border-dashed border-gray-300 p-4`}>
         <div className="flex gap-3">
           <div className="flex-1">
             <label className={labelCls}>File (.pptx, .pdf, .txt, or .md)</label>
@@ -255,17 +260,17 @@ export default function ContextEnginePage() {
       </form>
 
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
       ) : (
         <>
           {stuck.length > 0 && (
-            <div className="mt-8 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            <div className={`${SECTION_GAP} rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700`}>
               {stuck.length} document{stuck.length > 1 ? "s are" : " is"} still processing. Refresh in a
               moment — if this persists, the upload likely failed partway through.
             </div>
           )}
 
-          <div className="mt-8">
+          <div className={SECTION_GAP}>
             <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
               Needs review {pending.length > 0 && `(${pending.length})`}
             </h2>
@@ -308,7 +313,7 @@ export default function ContextEnginePage() {
           </div>
 
           {confirmed.length > 0 && (
-            <div className="mt-10">
+            <div className={SECTION_GAP}>
               <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Recently confirmed</h2>
               <ul className="mt-3 space-y-2">
                 {confirmed.map((doc) => (

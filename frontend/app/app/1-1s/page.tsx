@@ -10,6 +10,11 @@
 // resolve_cadence_days()). This page does no staleness math of its own,
 // only ordering/filtering of fields the API already resolved.
 //
+// Session 56 white-space audit — entrance gap now uses the shared
+// SECTION_GAP token (components/ZoneMap.tsx); the space-y-10 between the
+// 3 sections (Due now / Prepped / Recently wrapped) is left as-is, same
+// reasoning as team/page.tsx.
+//
 // Page actions are triage + start/resume prep only (spec decision #4) — no
 // new write paths. Logging an off-platform 1:1, bulk actions, search across
 // history, and calendar integration are all explicitly out of scope.
@@ -18,6 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CadenceSource, OneOnOneOverviewItem, getOneOnOnesOverview } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -90,7 +96,7 @@ export default function OneOnOnesPage() {
       <p className="mt-1 text-sm text-gray-500">Who you owe a conversation, and what&apos;s already in flight.</p>
 
       {items.length === 0 ? (
-        <p className="mt-8 text-gray-500">
+        <p className={`${SECTION_GAP} text-gray-500`}>
           No direct reports yet.{" "}
           <Link href="/app/dashboard" className="underline hover:text-gray-700">
             Add your first one from your dashboard
@@ -98,7 +104,7 @@ export default function OneOnOnesPage() {
           .
         </p>
       ) : (
-        <div className="mt-8 space-y-10">
+        <div className={`${SECTION_GAP} space-y-10`}>
           {/* Due now */}
           <section>
             <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">

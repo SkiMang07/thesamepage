@@ -34,6 +34,7 @@ import {
   HUE_STYLES,
   Icon,
   NAV_GROUPS,
+  NAV_STRIP_HEIGHT,
   getNavContext,
 } from "@/components/ZoneMap";
 import { useSidebar } from "@/lib/sidebar-context";
@@ -55,7 +56,13 @@ export default function Sidebar() {
         collapsed ? "w-14" : "w-[190px]"
       }`}
     >
-      <div className={`flex items-center py-3 ${collapsed ? "justify-center" : "justify-end px-2"}`}>
+      {/* Top row — shares AppNav's header height via NAV_STRIP_HEIGHT
+          (Session 55 follow-up) so the rail and header read as one
+          coordinated strip instead of two independently-padded rows that
+          happened to look close. Previously py-3, whose height fell out of
+          padding + the collapse button's own h-7 rather than matching the
+          header on purpose. */}
+      <div className={`flex ${NAV_STRIP_HEIGHT} items-center ${collapsed ? "justify-center" : "justify-end px-2"}`}>
         <button
           onClick={toggle}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}

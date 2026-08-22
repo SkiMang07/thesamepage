@@ -9,11 +9,15 @@
 // This page is the team-wide list — current overall rating per report,
 // click through to /app/assessments/[reportId] for the full scorecard
 // (per-metric/skill/value scores + the AI-draft flow).
+//
+// Session 56 white-space audit — entrance gap now uses the shared
+// SECTION_GAP token (components/ZoneMap.tsx) instead of a bare mt-8.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getTeamAssessments, TeamAssessmentItem } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -51,9 +55,9 @@ export default function AssessmentsPage() {
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
       ) : team.length === 0 ? (
-        <p className="mt-8 text-gray-500">
+        <p className={`${SECTION_GAP} text-gray-500`}>
           No direct reports yet.{" "}
           <Link href="/app/dashboard" className="underline hover:text-gray-700">
             Add your first one
@@ -61,7 +65,7 @@ export default function AssessmentsPage() {
           .
         </p>
       ) : (
-        <ul className="mt-8 space-y-3">
+        <ul className={`${SECTION_GAP} space-y-3`}>
           {team.map((r) => (
             <li key={r.id}>
               <Link

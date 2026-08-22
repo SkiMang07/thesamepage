@@ -26,6 +26,15 @@
 // Still four client-side merges of existing endpoints, same as Session 18
 // — the only new backend route is the insight endpoint. No new dependency;
 // no schema changes.
+//
+// Session 56 white-space audit — this page's own section gaps had drifted
+// to a mix of mt-6/mt-8/mt-5 for what are structurally the same kind of
+// transition (ZoneMap, the insight banner, the 3-col grid, the Capacity
+// strip). All now use the shared SECTION_GAP token (components/ZoneMap.tsx)
+// instead, and the page is widened to PageShell's new `8xl` tier — see the
+// published "White Space Audit" comparison canvas (modeled this exact
+// 3-column grid on a wide monitor) and the
+// session56_height_token_and_whitespace project memory note.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -50,7 +59,7 @@ import {
   getTeamAssessments,
   getTeamOverview,
 } from "@/lib/api";
-import { useZoneData, ZoneMap } from "@/components/ZoneMap";
+import { SECTION_GAP, useZoneData, ZoneMap } from "@/components/ZoneMap";
 import PageShell from "@/components/PageShell";
 
 function daysSince(iso: string) {
@@ -355,7 +364,7 @@ export default function DashboardPage() {
   const maxCapacityHours = Math.max(1, ...capacity.map((c) => c.available_hours));
 
   return (
-    <PageShell maxWidth="7xl">
+    <PageShell maxWidth="8xl">
       {/* Header — cross-page nav (Team/Goals/etc links), Quick add, the
           Scribe toggle, and the account avatar all moved into the
           persistent global nav (components/AppNav.tsx + Sidebar.tsx)
@@ -373,7 +382,7 @@ export default function DashboardPage() {
           counts that need attention are colored; everything healthy stays
           grey — see components/ZoneMap.tsx. */}
       {!zone.loading && (
-        <div className="mt-6">
+        <div className={SECTION_GAP}>
           <ZoneMap doorStates={zone.doorStates} />
         </div>
       )}
@@ -384,12 +393,12 @@ export default function DashboardPage() {
           it must not look identical to "all clear," so it gets a small
           muted line instead of silence. */}
       {insightFailed && !insightDismissed && (
-        <p className="mt-6 text-xs text-gray-400">
+        <p className={`${SECTION_GAP} text-xs text-gray-400`}>
           Couldn&apos;t check for anything to flag right now.
         </p>
       )}
       {insight && insight.insight && !insightDismissed && (
-        <div className="mt-6 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+        <div className={`${SECTION_GAP} flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4`}>
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600">
             <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -414,14 +423,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {loading && <p className="mt-8 text-gray-500">Loading...</p>}
+      {loading && <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>}
 
       {/* THE GRID — 3 sections across the top. Capacity is deliberately NOT
           a fourth column: it's a snapshot stat per person, not a triage
           list, so it reads better as a wide strip below than a narrow
           column competing for the same vertical space. */}
       {!loading && (
-        <div className="mt-8 grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+        <div className={`${SECTION_GAP} grid grid-cols-1 items-start gap-5 lg:grid-cols-3`}>
           {/* Individual Performance — exception-first (spec section 7):
               only who's due for a 1:1 leads, everyone else collapses behind
               "Show N on track". Same treatment Goals/Key Initiatives got in
@@ -478,7 +487,7 @@ export default function DashboardPage() {
           only, per capacity.py). Full breakdown + department rollup live on
           /app/capacity. */}
       {!loading && (
-        <section className="mt-5 rounded-xl border border-gray-200 bg-white">
+        <section className={`${SECTION_GAP} rounded-xl border border-gray-200 bg-white`}>
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Capacity — this week</h2>
             <Link href="/app/capacity" className="text-xs text-gray-400 hover:text-gray-600">

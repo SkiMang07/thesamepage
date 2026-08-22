@@ -9,6 +9,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getDirectReport, wrapUpOneOnOne, WrapUpDraft } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 import WrapUpReview from "../wrap-up-review";
 
 export default function LogOneOnOnePage() {
@@ -68,7 +69,7 @@ export default function LogOneOnOnePage() {
         we&apos;ll draft the summary and pull out the commitments for you to review.
       </p>
 
-      <form onSubmit={handleWrapUp} className="mt-8">
+      <form onSubmit={handleWrapUp} className={SECTION_GAP}>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

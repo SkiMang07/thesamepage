@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import WrapUpReview from "../wrap-up-review";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -233,7 +234,7 @@ function PrepFlow() {
           </p>
         )}
 
-        <form onSubmit={handleGenerate} className="mt-8">
+        <form onSubmit={handleGenerate} className={SECTION_GAP}>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -264,7 +265,7 @@ function PrepFlow() {
           ← Edit prep notes
         </button>
 
-        <div className="mt-6 grid gap-10 lg:grid-cols-2">
+        <div className={`${SECTION_GAP} grid gap-10 lg:grid-cols-2`}>
           {/* Left — the prep sheet, what you planned to talk about */}
           <div>
             <h1 className="text-2xl font-semibold">Your prep sheet</h1>

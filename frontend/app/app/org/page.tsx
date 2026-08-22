@@ -7,6 +7,11 @@
 // built once and occasionally adjusted, but it's a distinct object worth
 // its own surface, same reasoning as Goals in Session 10.
 //
+// Session 56 white-space audit — this page's section gaps (tabs row, each
+// view's content, the chart/rollup views' own top margins) had drifted to
+// a mt-6/mt-8 mix; all now use the shared SECTION_GAP token
+// (components/ZoneMap.tsx).
+//
 // Hybrid interaction model, per Andrew's call: a nested tree to add/edit/
 // delete units and set parent relationships (no new frontend dependency —
 // styled-jsx ships with Next.js by default), plus a read-only visual chart
@@ -46,6 +51,7 @@ import {
   updateOrgUnit,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { SECTION_GAP } from "@/components/ZoneMap";
 
 const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 const labelCls = "mb-1 block text-xs font-medium text-gray-500";
@@ -177,7 +183,7 @@ export default function OrgPage() {
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
-      <div className="mt-8 flex items-center justify-between gap-4">
+      <div className={`${SECTION_GAP} flex items-center justify-between gap-4`}>
         <div className="flex rounded-md border border-gray-200 p-0.5">
           <button
             onClick={() => setView("build")}
@@ -212,13 +218,13 @@ export default function OrgPage() {
       </div>
 
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
       ) : view === "chart" ? (
         <OrgChart tree={tree} companyName={companyName} members={members} />
       ) : view === "rollup" ? (
         <RollupView units={units} />
       ) : (
-        <div className="mt-6">
+        <div className={SECTION_GAP}>
           {addParentId === "root" && (
             <UnitForm
               units={units}
@@ -507,7 +513,7 @@ function UnitForm({
 // styled-jsx ships with Next.js, so this adds nothing new to package.json.
 function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName: string; members: OrgMember[] }) {
   return (
-    <div className="org-chart mt-8 overflow-x-auto pb-6">
+    <div className={`org-chart ${SECTION_GAP} overflow-x-auto pb-6`}>
       <ul className="flex justify-center">
         <li>
           <div className="inline-block rounded-lg border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-medium text-white">
@@ -748,12 +754,12 @@ function RollupView({ units }: { units: OrgUnit[] }) {
 
   const nodeMap = useMemo(() => buildNodeMap(units), [units]);
 
-  if (loading) return <p className="mt-8 text-gray-500">Loading...</p>;
+  if (loading) return <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>;
   if (error) return <p className="mt-4 text-sm text-red-500">{error}</p>;
 
   if (!ledUnits || ledUnits.length === 0) {
     return (
-      <div className="mt-8 rounded-lg border border-dashed border-gray-300 p-6 text-center">
+      <div className={`${SECTION_GAP} rounded-lg border border-dashed border-gray-300 p-6 text-center`}>
         <p className="text-gray-500">
           You don&apos;t lead any departments or teams yet — rollups only show for units you&apos;re assigned to
           lead.
@@ -766,7 +772,7 @@ function RollupView({ units }: { units: OrgUnit[] }) {
   }
 
   return (
-    <div className="mt-8">
+    <div className={SECTION_GAP}>
       <p className="text-xs text-gray-400">
         Aggregate numbers only — for units outside your own direct team, you never see a named individual, only
         counts. Capacity hours live on the{" "}

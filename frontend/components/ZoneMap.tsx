@@ -172,6 +172,36 @@ export type NavGroup = {
   items: NavItem[];
 };
 
+// Shared height token for the two chrome strips that sit side by side at the
+// top of every page — AppNav's header row and Sidebar's own top row (Session
+// 55 follow-up, flagged in Session 54's UX review). Both used to derive their
+// height independently from vertical padding + whatever their tallest child
+// happened to be (header: py-2.5 + the "+ Quick add" button's ~36px; sidebar:
+// py-3 + the collapse button's h-7/28px) — close enough to look aligned but
+// off by a few px, and liable to drift further apart the moment either row's
+// content changes. Both rows now take this fixed height directly instead of
+// letting it fall out of padding math, so they read as one coordinated strip
+// by construction rather than by coincidence. h-14 (56px) was picked to match
+// the header's actual pre-existing rendered height (see AppNav.tsx's
+// top-[55px] roster-switcher offset, now top-14 to match exactly).
+export const NAV_STRIP_HEIGHT = "h-14";
+
+// Shared vertical-rhythm token — Session 56 white-space audit (see the
+// published "White Space Audit" comparison canvas and the
+// session56_height_token_and_whitespace project memory note). Every
+// PageShell page used to pick its own margin between major sections
+// (mt-4/mt-6/mt-8, chosen per block, per page) stacked on top of
+// PageShell's own top padding — on Goals that added up to 128px of pure
+// margin before the KPI strip even appeared, and Dashboard alone mixed
+// mt-6/mt-8/mt-5 for what are structurally the same kind of gap. One
+// token used everywhere a page separates "the next major block" (a KPI
+// strip, a filter/tab row, the main content grid, a secondary section)
+// fixes both problems at once: pages stop drifting apart from each other,
+// and a page stops being internally inconsistent with itself. Not for
+// tight, same-thought-group spacing (a subtitle under an h1, a label
+// under a value) — those intentionally stay smaller (mt-0.5/mt-1/mt-2).
+export const SECTION_GAP = "mt-5";
+
 export const HOME_ITEM: NavItem = { id: "home", label: "Mission Control", href: "/app/dashboard", icon: "home" };
 
 export const NAV_GROUPS: NavGroup[] = [
