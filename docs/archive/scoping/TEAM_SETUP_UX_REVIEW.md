@@ -1,3 +1,5 @@
+> **ARCHIVED — historical, not current intent.** The UX review behind the S1–S5 setup sessions, all complete. Current behavior: `docs/systems/expectations.md` and `docs/DESIGN.md`.
+
 # Team Setup UX Review — people, roles, teams, expectations
 
 **Date:** 2026-08-18 · **Method:** walked the live deploy (thesamepage-blush.vercel.app) as a first-time manager doing initial setup, then as a PM/UX reviewer; cross-checked against `database/schema.sql`, `settings/page.tsx`, `org/page.tsx`, and the Quick add flow.
@@ -193,4 +195,4 @@ Two plan items didn't fully land: **org-wide values** (no org-level values block
 
 **Polish Pass B — finish the values story (half to one session).** Org-wide values block (backend treats `value_configs.role_level_id NULL` as org-wide; `fetch_role_expectations` unions them in), AI draft for values at the org level (from company/context info rather than JDs), and the merge-suggestion nudge from P3 if it didn't fit in Pass A.
 
-*Approved scope and session prompts: see docs/TEAM_SETUP_BUILD_SESSIONS.md (Session 5, and 6 if split).*
+*Approved scope and session prompts: see docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md (Session 5, and 6 if split).*

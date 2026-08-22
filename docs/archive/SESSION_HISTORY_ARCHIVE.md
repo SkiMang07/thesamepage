@@ -9,6 +9,52 @@ here.
 
 ---
 
+## Session 52 — 2026-08-22
+
+**Goal:** Andrew saw the new persistent sidebar (Session 51) and initially read Mission Control's
+missing rail as an oversight, then clarified he knew it was a deliberate Session 51 call ("that page
+already is the map") but wanted it reversed anyway — every other page has the rail, and that read as
+inconsistent rather than as a deliberate simplification. Also asked to bring Goals and Projects into
+the same visual language Team (Session 24) and the Person page (Session 50) already share.
+
+**What was done:**
+- `frontend/components/Sidebar.tsx` — now renders on Mission Control too; only `ctx.kind === "none"`
+  (login/IC) still suppresses it. The Home link takes an "active" treatment (`bg-black/5 font-semibold
+  text-gray-900`) since none of `NAV_GROUPS`' items apply on the home page itself. Header comment
+  rewritten to record why Session 51's original call got reversed.
+- `frontend/components/AppNav.tsx` — one comment line updated to stop saying the sidebar skips Mission
+  Control.
+- Goals/Projects: no code touched this session. Scoped via one AskUserQuestion round (Andrew picked
+  "mockups first," same process as Team/Person) — mined real tokens from `frontend/app/app/team/page.tsx`
+  (KpiStrip's gradient tiles, STATUS_BORDER/STATUS_STYLES hex values, the inline-SVG donut ring) and
+  published a 3-option design canvas, "Goals and Projects Redesign Options"
+  (https://claude.ai/code/artifact/16006c11-c6ad-49a0-985f-717731b4001e): Option A (direct KPI-strip/
+  card port of the Team page pattern), Option B (hierarchy made visually explicit via nested/indented
+  company→department→team→individual groups, tabs retired), Option C (exception-first triage mirroring
+  Mission Control's own Goals card, plus a scope switcher folding in the org-unit rollup need) — plus
+  one Projects artboard applying Option A's treatment as a concrete example.
+
+**Decisions made / locked:**
+- Mission Control gets the sidebar after all — Session 51's "already the map" reasoning was sound on
+  paper but read as inconsistent in practice; every authenticated page now shows the same rail.
+- Goals/Projects redesign direction: **Option A** — KPI strip (4 gradient tiles) + card grid using the
+  border-l-4 status accent + inline-SVG progress ring, level tabs on Goals kept as a pill-style filter
+  rather than retired. Locked in; not yet built.
+
+**Verification:** Frontend-only change (Sidebar/AppNav), no schema/backend touch. Repo tarred from the
+device's working copy (git status was clean going in — Session 51's own changes were already committed,
+its stale `.git/index.lock` resolved before this session started) and rebuilt in the cloud sandbox since
+`next build` exceeds device_bash's ~45s per-call cap: fresh `npm install`, `npx tsc --noEmit` clean,
+`next build` clean (21/21 routes). The mockup canvas is exploration only — no build/type verification
+applies to it.
+
+**Next step:** Build Goals and Projects per Option A — KPI strip + border-l-4 card grid, matching the
+token values in the published canvas and in `frontend/app/app/team/page.tsx`. Widen both pages from
+`max-w-3xl` to `max-w-7xl`. Leave the add/edit forms alone this pass (out of scope per the canvas
+brief) — just fit the "+ Add" affordance into the new layout.
+
+---
+
 ## Session 51 — 2026-08-22
 
 **Goal:** Andrew flagged that the persistent nav (Sessions 36-38's "hub & orbit") felt cluttered —
@@ -470,7 +516,7 @@ at least one `org_units` row with himself as `leader_user_id` before the dropdow
 
 ## Session 44 — 2026-08-18
 
-**Goal:** Build the Role JD Import flow scoped in `docs/ROLE_JD_IMPORT_SCOPING.md` — paste or drop a
+**Goal:** Build the Role JD Import flow scoped in `docs/archive/scoping/ROLE_JD_IMPORT_SCOPING.md` — paste or drop a
 job description, one AI call extracts the role identity + proposes where it belongs among existing
 ladders + drafts its expectations, the manager reviews, one commit creates (or back-fills) the role
 and its expectations. Kills the "type everything by hand" burden that left 13 dogfood roles with 0
@@ -595,9 +641,9 @@ paste each role's JD in turn.
 
 ## Session 43 — 2026-08-18
 
-**Goal:** Build the polish pass from `docs/TEAM_SETUP_UX_REVIEW.md` §7.3 (Pass A + Pass B
+**Goal:** Build the polish pass from `docs/archive/scoping/TEAM_SETUP_UX_REVIEW.md` §7.3 (Pass A + Pass B
 combined, the fifth and last of the team-setup UX sessions — see
-`docs/TEAM_SETUP_BUILD_SESSIONS.md`, Session 5): person management on Settings → People (edit,
+`docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`, Session 5): person management on Settings → People (edit,
 open profile, archive), a People-row layout rethink, data-trust fixes on tiles/labels/links, the
 org-wide values story, and a ladder-merge nudge.
 
@@ -731,8 +777,8 @@ role-level draft.
 
 ## Session 42 — 2026-08-18
 
-**Goal:** Build Plan S4+S5 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (last of the four S1-S5
-setup-UX sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): make half-configured setup state
+**Goal:** Build Plan S4+S5 from `docs/archive/scoping/TEAM_SETUP_UX_REVIEW.md` §6 (last of the four S1-S5
+setup-UX sessions, see `docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`): make half-configured setup state
 visible everywhere a person appears, and rename/consolidate the setup surfaces.
 
 **What was done:**
@@ -819,7 +865,7 @@ visible everywhere a person appears, and rename/consolidate the setup surfaces.
   a 403 from a proxy). Andrew needs to run `git push` from his own machine to get this live.
 
 **Next step:**
-All four S1-S5 sessions from `docs/TEAM_SETUP_UX_REVIEW.md` §6 are now built. Recommended next:
+All four S1-S5 sessions from `docs/archive/scoping/TEAM_SETUP_UX_REVIEW.md` §6 are now built. Recommended next:
 (1) `git push` this session's commit, (2) a real click-through of Settings, /app/team, /app/org,
 and a role-less direct-report page against the live/dev deploy to close the "not done live" gap
 above, (3) decide whether to fold `QuickAddModal`'s duplicate role-grouping helpers into
@@ -829,8 +875,8 @@ above, (3) decide whether to fold `QuickAddModal`'s duplicate role-grouping help
 
 ## Session 41 — 2026-08-18
 
-**Goal:** Build Plan S1 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (third of the four S1-S5
-setup-UX sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): rebuild Settings → Team as a
+**Goal:** Build Plan S1 from `docs/archive/scoping/TEAM_SETUP_UX_REVIEW.md` §6 (third of the four S1-S5
+setup-UX sessions, see `docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`): rebuild Settings → Team as a
 roster-first "People" section that walks people → teams → roles → expectations in one place —
 progress header, inline creation of roles/teams from the pickers, and a fix for Quick add's
 dead-end free-text Role field.
@@ -984,7 +1030,7 @@ session's new `/api/setup-status` endpoint also depends on it (it reads `role_le
 Session 40 already required.
 
 **Next step:** Run the Session 40 migration if it hasn't been already, then Session 4 of the four
-(`docs/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 4 prompt) builds Plan S4+S5 — visibility (always-
+(`docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 4 prompt) builds Plan S4+S5 — visibility (always-
 render expectations block, roster/org-page badges) and the naming/placement pass. After all four
 land, Andrew brings the per-session reports back to the Cowork review session for a final pass
 per the team_setup_ux_review project memory note.
@@ -993,8 +1039,8 @@ per the team_setup_ux_review project memory note.
 
 ## Session 40 — 2026-08-18
 
-**Goal:** Build Plan S2 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (second of the four S1–S5 setup-UX
-sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): role families, so 13 flat role_levels cards
+**Goal:** Build Plan S2 from `docs/archive/scoping/TEAM_SETUP_UX_REVIEW.md` §6 (second of the four S1–S5 setup-UX
+sessions, see `docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`): role families, so 13 flat role_levels cards
 become ~5 ladders — one card per family, levels as rows inside, "Add L{n+1}" pre-filled from L{n},
 JDs collapsed, plus a merge tool for near-duplicate names.
 
@@ -1112,15 +1158,15 @@ schema testing, not called out in the plan, but a direct consequence of adding a
 foreign key without one).
 
 **Next step:** Run the migration in Supabase, then Session 3 of the four
-(`docs/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 3 prompt) builds Plan S1 — the guided "People" setup
+(`docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 3 prompt) builds Plan S1 — the guided "People" setup
 flow — which reads role_family-grouped pickers built here.
 
 ---
 
 ## Session 39 — 2026-08-18
 
-**Goal:** Build Plan S3 from `docs/TEAM_SETUP_UX_REVIEW.md` §6 (first of the four S1–S5 setup-UX
-sessions, see `docs/TEAM_SETUP_BUILD_SESSIONS.md`): an expectations coverage grid plus per-role
+**Goal:** Build Plan S3 from `docs/archive/scoping/TEAM_SETUP_UX_REVIEW.md` §6 (first of the four S1–S5 setup-UX
+sessions, see `docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`): an expectations coverage grid plus per-role
 "Draft with AI" that turns each role's stored job description into draft metrics/skills/values for
 review-then-commit, and org-wide values support.
 
@@ -1210,7 +1256,7 @@ commit fields are slightly richer than described (measurement_period/value_type 
 per-item) to avoid a second round-trip after commit. No new migration, as expected.
 
 **Next step:** Deploy (Vercel + Railway pick this up on push) and run the live golden-path check
-above. Then Session 2 of the four (`docs/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 2 prompt) builds
+above. Then Session 2 of the four (`docs/archive/scoping/TEAM_SETUP_BUILD_SESSIONS.md`'s Session 2 prompt) builds
 Plan S2 — role families — grouping this session's coverage grid rows by ladder once `role_family_id`
 exists.
 
@@ -1342,14 +1388,14 @@ count shown live despite its disabled destination; nav/Scribe skipped on `/app/l
 `/app/ic`.
 
 **Next step:** Nav rework pass 2 — build `/app/1-1s` and the cadence model it depends on. See
-`docs/ONE_ON_ONES_PAGE_SPEC.md` (written to scope pass 2) and Session 37 below.
+`docs/archive/scoping/ONE_ON_ONES_PAGE_SPEC.md` (written to scope pass 2) and Session 37 below.
 
 ---
 
 ## Session 37 — 2026-08-16
 
 **Goal:** Nav rework pass 2 (tracked in code comments as Session 38 — see
-`docs/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). Build `/app/1-1s` as the
+`docs/archive/scoping/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). Build `/app/1-1s` as the
 front door for the 1:1 loop, the org-default + per-person cadence model it depends on
 (replacing a hardcoded `21` that lived in three places), shrink Mission Control's Individual
 Performance card to exception-first, and fix four data-trust bugs surfaced in a 2026-08-12 live
@@ -1480,7 +1526,7 @@ then dogfood a real week through the drawer.
 
 ## Session 34 — 2026-08-13
 
-**Goal:** S3 of the Scribe build plan (`docs/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out.
+**Goal:** S3 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out.
 
 **What was done:**
 
@@ -1586,7 +1632,7 @@ first edit verbs.
 
 ## Session 33 — 2026-08-13
 
-**Goal:** S2 of the Scribe build plan (`docs/AGENT_SCRIBE_SCOPING.md`): Drawer UI + confirm flow.
+**Goal:** S2 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Drawer UI + confirm flow.
 
 **What was done:**
 
@@ -1678,7 +1724,7 @@ ambiguity UX, page-context, edit-in-card polish, thread persistence table
 
 ## Session 32 — 2026-08-13
 
-**Goal:** S1 of the Scribe build plan (`docs/AGENT_SCRIBE_SCOPING.md`): agent loop + eval harness, no UI.
+**Goal:** S1 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): agent loop + eval harness, no UI.
 
 **What was done:**
 - **`backend/ai_core.py`** gained `call_anthropic_with_tools()` — a low-level Anthropic call with
@@ -1766,7 +1812,7 @@ validation pass remains open and is Andrew's call on whether it precedes or foll
 
 ## Session 31 — 2026-08-12
 
-**Goal:** Build Session VI of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`):
+**Goal:** Build Session VI of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`):
 staleness + precedence surfacing — the final session of the documented 6-session build plan.
 
 **What was done:**
@@ -1835,7 +1881,7 @@ build is complete.
 
 ## Session 30 — 2026-08-12
 
-**Goal:** Build Session V of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`): the
+**Goal:** Build Session V of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): the
 Brain visualization.
 
 **What was done:**
@@ -1926,7 +1972,7 @@ state is unchanged from what Session 29 already confirmed.
 
 ## Session 29 — 2026-08-12
 
-**Goal:** Build Session IV of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`):
+**Goal:** Build Session IV of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`):
 retrieval + agent integration, backend only.
 
 **What was done:**
@@ -2007,7 +2053,7 @@ dashboard insights) would extend this session's work without needing new schema 
 ## Session 28 — 2026-08-12
 
 **Goal:** Build Session II (extraction + Librarian pipeline, backend) and, same session, Session III
-(confirm-card UX, frontend) of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`).
+(confirm-card UX, frontend) of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`).
 
 **What was done:**
 - **New `backend/routes/documents.py`** — one endpoint, `POST /api/documents/upload`, that runs the
@@ -2143,7 +2189,7 @@ by Andrew, same as Session I's migration.
 
 ## Session 27 — 2026-08-12
 
-**Goal:** Move the Context Engine (Session 25's framework, `docs/CONTEXT_ENGINE.md`) from settled
+**Goal:** Move the Context Engine (Session 25's framework, `docs/archive/scoping/CONTEXT_ENGINE.md`) from settled
 concept to buildable. Two parts: resolve the 5 open questions at the end of that doc into a concrete
 build plan, then build Session I of that plan (schema + storage) same session.
 
@@ -2155,7 +2201,7 @@ build plan, then build Session I of that plan (schema + storage) same session.
   scoring — per-document for v1, per-category-question explicitly deferred; (4) cost model —
   immediate processing, no cap, accepted as COGS; (5) sensitive docs — scope + RLS only, no new
   sensitivity flag, leans on the existing manager-only v1 boundary.
-- Wrote `docs/CONTEXT_ENGINE_BUILD_PLAN.md` — 6 sessions (I schema/storage, II extraction/Librarian
+- Wrote `docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md` — 6 sessions (I schema/storage, II extraction/Librarian
   pipeline, III confirm-card UX, IV retrieval/agent integration, V the Brain visualization, VI
   staleness/precedence surfacing), with dependency sequencing (I→II→III hard chain; IV/V both
   depend on III but not each other; VI depends on both).
@@ -2193,7 +2239,7 @@ live by Andrew.**
 **Next step:** Session II — extraction + Librarian pipeline (backend). Build the upload endpoint
 (PPTX/PDF/text), the PPTX→PDF conversion step, and the single structured `generate_text()` call that
 extracts full text and proposes category/scope/freshness/summary/novelty in one shot, writing to the
-new `documents` row with `status='pending_review'`. See `docs/CONTEXT_ENGINE_BUILD_PLAN.md`'s
+new `documents` row with `status='pending_review'`. See `docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`'s
 "Session II" section for the full spec.
 
 ---
@@ -2211,7 +2257,7 @@ new `documents` row with `status='pending_review'`. See `docs/CONTEXT_ENGINE_BUI
 - `frontend/lib/api.ts` — `CheckIn`/`CheckInIn`/`CheckInDerived` types + the four check-in client functions; `Goal`/`Project` extended with the derived fields.
 
 **Decisions made / locked:**
-- Check-ins cover both goals and projects in ONE shared table — same status enum, same shape, and the COO-agent temporal layer (data gap #2 in `docs/COO_AGENT_QUESTION_SET.md`) wants one place to diff history. This closes that gap.
+- Check-ins cover both goals and projects in ONE shared table — same status enum, same shape, and the COO-agent temporal layer (data gap #2 in `docs/archive/scoping/COO_AGENT_QUESTION_SET.md`) wants one place to diff history. This closes that gap.
 - Progress is a manually-asserted % per check-in — honest about the judgment involved. Structured key results (metric/current/target rows with computed attainment) considered and deferred; a note-only check-in never wipes the last asserted %.
 - Write-through status (not derived-only) so zero existing surfaces needed changes — the migration is additive.
 - STALE_CHECK_IN_DAYS = 14, deliberately shorter than the dashboard's 21-day 1:1 cadence — goals drift faster than relationships. DUE_SOON_DAYS = 14.
@@ -2227,7 +2273,7 @@ new `documents` row with `status='pending_review'`. See `docs/CONTEXT_ENGINE_BUI
 
 **Goal:** COO agent brainstorm round 2 (follow-up to the Session ~9 agent-hierarchy idea, whose "wait until the data models exist" objection is now resolved). No code.
 
-**What was done:** Drafted an 18-question eval suite for the agent layer, readiness-rated 🟢/🟡/🔴 against today's schema, saved to `docs/COO_AGENT_QUESTION_SET.md` (committed with Session 26's push). Identified and ranked 5 data gaps: (1) no demand-side capacity / person↔initiative assignment, (2) no temporal/history layer — closed by Session 26's check-ins, (3) no context-docs feature, (4) no structured career-aspiration field, (5) no team-health signal.
+**What was done:** Drafted an 18-question eval suite for the agent layer, readiness-rated 🟢/🟡/🔴 against today's schema, saved to `docs/archive/scoping/COO_AGENT_QUESTION_SET.md` (committed with Session 26's push). Identified and ranked 5 data gaps: (1) no demand-side capacity / person↔initiative assignment, (2) no temporal/history layer — closed by Session 26's check-ins, (3) no context-docs feature, (4) no structured career-aspiration field, (5) no team-health signal.
 
 **Decisions made / locked:** Agent roster (COO + culture/L&D/performance/strategy&ops) is brand, not architecture — one COO agent with per-domain context loaders, split only if quality degrades. Mode A (on-demand consultation) ships before Mode B (proactive background work). Context-docs agreed as a future first-class data model. Eval-suite-first: don't ship 🔴 questions until their gap closes.
 

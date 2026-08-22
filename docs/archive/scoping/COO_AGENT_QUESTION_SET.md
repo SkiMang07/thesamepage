@@ -1,3 +1,5 @@
+> **ARCHIVED — historical, not current intent.** Exploratory question set from the COO-agent brainstorm. Never a build plan; kept for the data-gap framing it names.
+
 # COO Agent — Question Set v0 (Eval Suite)
 
 Drafted 2026-08-09, brainstorming session. This is the founding artifact for

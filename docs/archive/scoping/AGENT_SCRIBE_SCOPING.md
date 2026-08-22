@@ -1,3 +1,5 @@
+> **ARCHIVED — historical, not current intent.** The Scribe, built and shipped. Current behavior: `docs/systems/scribe.md`.
+
 # The Scribe — Scoping Brief
 
 *Conversational data entry for The Same Page. Drafted Session 32 (2026-08-12), following the chat-surface mockup review. "The Scribe" is a working name, not a brand decision.*
@@ -8,7 +10,7 @@
 
 A conversational agent the manager talks to instead of filling out forms. "One project is to build out HubSpot to support our LatAm go-to-market launch — it's connected to Activate the Army" becomes a created project, linked to the right goal, after a short back-and-forth and an explicit confirm. Forms remain fully available; the chat is a parallel path, not a replacement.
 
-This is the **write side** of the agent layer scoped in Session 25 (`docs/COO_AGENT_QUESTION_SET.md`). It ships before the consult ("COO") mode because its correctness is verifiable — either the right rows and links were created or they weren't — and every conversation that enters data makes the future consult mode smarter. Both modes will eventually share this same surface.
+This is the **write side** of the agent layer scoped in Session 25 (`docs/archive/scoping/COO_AGENT_QUESTION_SET.md`). It ships before the consult ("COO") mode because its correctness is verifiable — either the right rows and links were created or they weren't — and every conversation that enters data makes the future consult mode smarter. Both modes will eventually share this same surface.
 
 ---
 

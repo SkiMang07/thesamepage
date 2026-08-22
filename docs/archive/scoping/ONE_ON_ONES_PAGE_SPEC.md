@@ -1,3 +1,5 @@
+> **ARCHIVED — historical, not current intent.** The nav-rework pass this specced is shipped. Current behavior: `docs/systems/one-on-ones.md` and `docs/DESIGN.md`.
+
 # `/app/1-1s` — build spec (nav rework, pass 2)
 
 Written 2026-08-16, after pass 1 (the hub-and-orbit nav) landed. Pass 1's spec was

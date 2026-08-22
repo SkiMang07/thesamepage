@@ -1,3 +1,5 @@
+> **ARCHIVED — historical, not current intent.** Role JD import, built and shipped. Current behavior: `docs/systems/expectations.md`.
+
 # Role JD Import — Scoping Brief
 
 **Scoped:** 2026-08-18 (Cowork session with Andrew)
@@ -103,7 +105,7 @@ Entry-point wiring (locked decision 4):
 ## Paste-ready build prompt (one fresh Claude Code session)
 
 ```
-Read docs/SESSION_HISTORY.md first, then docs/ROLE_JD_IMPORT_SCOPING.md in full — it contains locked decisions; do not relitigate them.
+Read docs/SESSION_HISTORY.md first, then docs/archive/scoping/ROLE_JD_IMPORT_SCOPING.md in full — it contains locked decisions; do not relitigate them.
 
 Build the Role JD Import flow exactly as scoped:
 

@@ -1,191 +1,198 @@
 # The Same Page — Design Reference
 
-Read this doc for any session involving UI, component decisions, visual design,
-or UX patterns. Starts minimal — add decisions here as they get locked.
+Read this for any session involving UI, component decisions, visual design, or UX
+patterns.
+
+This doc holds the conventions that are true across the app plus the decisions
+still load-bearing today. Feature-specific behavior lives in
+`docs/systems/<area>.md`. The complete historical decisions log — every row ever
+recorded, including superseded ones — is `docs/archive/DESIGN_ARCHIVE.md`.
 
 ---
 
 ## Framework & tooling
 
-- **CSS:** Tailwind CSS (configured in `frontend/tailwind.config.js`)
-- **Components:** No component library yet — plain Tailwind. `frontend/components/` was introduced
-  Session 19 for the first shared component (`QuickAddModal.tsx`); still no external library — add
-  shadcn/ui only if complexity warrants it, confirm before pulling it in.
-- **Icons:** Not yet decided.
-- **Fonts:** Not yet decided.
+- **CSS:** Tailwind, configured in `frontend/tailwind.config.js`. Plain Tailwind —
+  no component library. Add shadcn/ui only if complexity warrants it, and confirm
+  before pulling it in.
+- **Shared components:** `frontend/components/` — `AppNav`, `Sidebar`, `PageShell`,
+  `ZoneMap`, `QuickAddModal`, `ScribeDrawer`, `CheckInPanel`, `RolePicker`,
+  `RoleImportPanel`, `DraftExpectationRows`.
+- **Design tokens live in `ZoneMap.tsx`**, not a separate theme file: `NAV_GROUPS`,
+  `HUE_STYLES` / `TONE_TEXT` (pastel, nav chrome), `HUE_GRADIENT` /
+  `TONE_TEXT_ON_GRADIENT` (bold tiles), `NAV_STRIP_HEIGHT`, `SECTION_GAP`. Import
+  from there rather than redefining a value locally — that drift is what these
+  tokens exist to stop.
+- **Colors are exact hex via Tailwind arbitrary values** (`text-[#4f46e5]`,
+  `bg-[#eef1ff]`), not Tailwind's built-in shades. The design's hex tokens don't
+  line up 1:1 with the default palette (emerald especially: `#0e8f7e` vs
+  `#059669`), and arbitrary values keep it faithful without introducing a CSS
+  variable file.
+- **Icons and fonts:** not yet decided.
 
 ---
 
 ## Design principles
 
-1. **Manager-first clarity.** Every screen should answer a question the manager
-   actually has, not display data for data's sake. If there's no clear question
-   being answered, the screen is wrong.
-
-2. **Calm, not busy.** The manager is already overwhelmed. The product should
-   feel like it's reducing cognitive load, not adding to it. Prefer whitespace,
-   clear hierarchy, one primary action per view.
-
-3. **Mobile-aware but desktop-first.** Managers will use this at their desks
-   before 1:1s. Design for desktop first. Responsive, but desktop is the
-   primary viewport.
-
-4. **Confidence, not just information.** The product's job is to make the
-   manager feel prepared and confident. Copy, empty states, and AI output should
-   all reinforce that feeling — not sound clinical or corporate.
+1. **Manager-first clarity.** Every screen answers a question the manager actually
+   has. If there's no clear question being answered, the screen is wrong.
+2. **Calm, not busy.** The manager is already overwhelmed. Prefer whitespace, clear
+   hierarchy, one primary action per view.
+3. **Mobile-aware but desktop-first.** Managers use this at their desks before
+   1:1s. Responsive, but desktop is the primary viewport.
+4. **Confidence, not just information.** Copy, empty states, and AI output should
+   make the manager feel prepared — not clinical or corporate.
 
 ---
 
-## Page structure (current)
+## App shell
 
-```
-/ (marketing home)          frontend/app/(marketing)/page.tsx
-/pricing                    frontend/app/(marketing)/pricing/page.tsx
-/blog                       frontend/app/(marketing)/blog/page.tsx
-/app/login                  frontend/app/app/login/page.tsx
-/app/dashboard              frontend/app/app/dashboard/page.tsx
-/app/reports/[id]           frontend/app/app/reports/[id]/page.tsx
-/app/goals                  frontend/app/app/goals/page.tsx
-/app/projects               frontend/app/app/projects/page.tsx
-/app/org                    frontend/app/app/org/page.tsx
-/app/capacity                frontend/app/app/capacity/page.tsx
-/app/settings               frontend/app/app/settings/page.tsx
-/app/assessments             frontend/app/app/assessments/page.tsx
-/app/assessments/[reportId]  frontend/app/app/assessments/[reportId]/page.tsx
-/app/context                 frontend/app/app/context/page.tsx
-```
+Every authenticated page renders inside one shell, built once in
+`app/app/layout.tsx`:
 
-Marketing pages (`(marketing)/`) are public and need to be SSG-renderable for
-SEO. Do not add client-side-only patterns to these pages.
+- **`AppNav`** — a static top bar on every page. Contains the global "+ Quick add",
+  the Scribe toggle (a filled indigo→violet "✦ Scribe ⌘J" pill), and the avatar
+  dropdown (Settings + Sign out — the app's only sign-out control; no "switch org",
+  there's no multi-org concept).
+- **`Sidebar`** — a persistent left rail on **every** authenticated page, built from
+  `ZoneMap.tsx`'s `NAV_GROUPS`. Collapses to a 56px icon-only rail with native
+  `title` tooltips; the collapse state persists to `localStorage`.
+- **`PageShell`** — owns every page's container
+  (`mx-auto max-w-{size} px-6 py-8 sm:px-8`). A `maxWidth` prop keeps each page's
+  own width; `8xl` (`max-w-[1600px]`) is reserved for the four grid-heavy pages
+  (Dashboard, Goals, Projects, Team). **Never hand-roll a `<main>` wrapper** —
+  fourteen of them drifted out of alignment before this existed.
+- **`ScribeDrawer`** — a persistent right drawer, `w-[clamp(400px,30vw,640px)]`,
+  content reflows beside it, thread survives navigation. ⌘J summons focused, Esc
+  closes.
+
+`/app/login` and `/app/ic` render none of this — one is pre-auth, the other is an
+IC stub, and a manager-oriented nav would fetch data neither has.
+
+**Sticky gotcha:** `overflow-x-hidden` in `layout.tsx` wraps only `{children}`,
+never the div that also renders `<AppNav />`. Setting `overflow-x` to anything but
+`visible` makes the browser compute `overflow-y: auto` too, silently turning that
+div into a scroll container and breaking `position: sticky` for everything inside
+it. Any new sticky element must stay outside whatever wrapper carries horizontal
+overflow containment.
+
+Routes: `ls frontend/app/app/`. Marketing pages under `app/(marketing)/` are public
+and must stay SSG-renderable — **no client-side-only patterns there.**
+
+---
+
+## Conventions
+
+### Placement: its own page, or a section?
+
+A first-class object that gets **created and updated regularly** gets its own
+top-level page — Goals, Projects, Org, Capacity, Assessments, Team, Context.
+Settings is for things **configured once and not written to constantly**.
+
+Two refinements:
+
+- **Summary here, edit there.** Where an object also matters on the person page, it
+  appears there as a compact read view linking to the full page. Never two editors.
+- **No team-wide list, no page.** Development stayed a section on the person page
+  because it's always about one person; a page-plus-summary split would add
+  navigation without a second real use case.
+
+Per-person config (cadence, capacity overrides, time off) lives with the person,
+behind the person page's settings drawer — off the main flow, not in Settings.
+
+### Empty states and degradation
+
+- A section gated behind a **prerequisite** hides entirely until the prerequisite is
+  met, with at most a one-line nudge. Expectations is hidden until a role is
+  assigned. Capacity's "By department" is empty until a leader is assigned.
+- A **first-class object with no prerequisite** is always visible with a one-line
+  empty state and a link. Goals, Projects, Commitments.
+- **No "coming soon" placeholders anywhere.** Calm beats roadmap-signaling. A card
+  ships only when real data backs it.
+
+### Severity and attention
+
+- **Amber is the app's one "needs attention" color.** At-risk, aging, stale,
+  conflicting, unfinished setup all read as one visual language. Don't invent a
+  second warning color or a new severity system.
+- **Only counts that need attention get color.** Healthy stays grey.
+- **Never invent tiers the data doesn't support.** Individual Performance stays
+  binary (due for a 1:1, or not) plus a raw commitment count, not a synthesized
+  3-tier on-track/needs-check-in/at-risk.
+- **Exception-first everywhere.** Attention rows with reason chips lead; healthy
+  items collapse behind "Show N on track." Applies to Individual Performance,
+  Goals, and Key Initiatives alike — a manager scanning should see problems before
+  things that are fine.
+
+### Honesty conventions
+
+- **Label which rule produced a number.** "every 14 days (custom)" vs "every 21
+  days (org default)"; capacity's logged-vs-assumed off hours. A manager should be
+  able to tell whether a figure is theirs, the org's, or a fallback.
+- **Distinguish "nothing to report" from "it broke."** The AI insight renders
+  nothing when there's legitimately nothing to flag, and a small muted line when
+  the call failed. Identical silence for both erodes trust in every other all-clear
+  signal.
+- **Never fabricate a derived number.** Progress bars render only with a real
+  check-in, never inferred from status.
+
+### AI in the UI
+
+- **Draft-then-review, always.** AI output lands on an editable review surface
+  before anything saves. Per-item include checkboxes; the manager can adjust each
+  row. Never auto-apply.
+- **Manual entry is the primary path; AI is an optional assist.** "Draft with AI"
+  for a first pass, "Revise with AI" for existing text. Nothing is AI-gated — a
+  blocking draft panel produced a dead end the first time a report had no evidence.
+- **One shared review implementation.** `DraftExpectationRows.tsx` backs both AI
+  draft doors, so they can't drift apart.
+- **Scribe drafts** render as in-thread cards: amber "Draft — not saved" badge,
+  green resolved-link fields, muted "none yet" optionals, Confirm / Edit details /
+  Discard. Confirm calls the same endpoint the forms use, then collapses to a
+  receipt with a view link and a 30s Undo. Ambiguity candidates render as tappable
+  quick-reply chips.
+
+### Card and form patterns
+
+- **Edit in place.** An Edit action swaps the card for the same form used to create
+  it, pre-filled — not a modal, not a separate page. One component, not two.
+- **Status is an inline `<select>` styled as a pill** on the card, not a separate
+  edit form. It's the field that changes constantly.
+- **Scale scores render as a row of scale-point buttons**, labeled with each point's
+  configured output, rather than a number input or dropdown — the scale definitions
+  already carry the meaning.
+- **Fix select widths** (`w-48`/`w-44`) and truncate. An unconstrained select
+  balloons to fit its longest option and squeezes sibling columns into slivers.
+- **Show a mockup before writing code** for a visually subjective decision — via the
+  Design skill, using real fetched data rather than placeholder numbers. Locked in
+  after it worked for the Team page, the Person page, Goals/Projects, and the
+  gradient-tile question.
 
 ---
 
 ## Decisions log
 
+Decisions still load-bearing. Everything else — including every superseded row — is
+in `docs/archive/DESIGN_ARCHIVE.md`, complete and unedited.
+
 | Date | Decision | Rationale |
 |---|---|---|
-| 2026-07-14 | Tailwind for styling | Consistent with Prism Tree; fast for solo dev |
-| 2026-07-14 | No component library yet | Avoid abstraction before we know what components we actually need |
-| 2026-08-01 | Settings uses left-nav sections (Profile & Company / Roles & Levels / Expectations), not tabs or one long page | Three distinct setup jobs; nav keeps each screen answering one question |
-| 2026-08-01 | Deferred settings sections get no placeholder/"coming soon" nav entries | Calm > roadmap-signaling; empty locked sections add noise for a solo manager |
-| 2026-08-01 | DR detail "Expectations" section is hidden entirely when no role is assigned (no empty-state card); a role with zero configs gets a one-line Settings nudge | Calm degradation — an empty section answers no question; the nudge only appears once the manager has signaled intent by assigning a role |
-| 2026-08-01 | In-call screen is two-column on desktop: prep sheet left, live "Call notes" pane right (sticky) | The screen the manager has open DURING the 1:1 must answer both "what should we cover" and "what's actually happening" without navigation |
-| 2026-08-01 | AI wrap-up is always draft-then-review — extracted summary/commitments render on an editable review screen before anything saves | Commitments are accountability records; a hallucinated one costs trust in the entire product |
-| 2026-08-02 | DR detail "1:1 History" renamed "1:1 Sessions" — now lists planned (prepped, not yet happened) alongside completed, with a status badge; a planned row is clickable straight into the resumed prep sheet | A prep sheet the manager can't get back to isn't useful; the list is now honest about what's upcoming vs. done, not just a log of the past |
-| 2026-08-02 | Header CTA becomes "Resume prep sheet →" instead of "Start 1:1 prep →" whenever a planned session already exists for that report | The fix for "I lost my prep sheet" needs to be reachable from the primary action, not only from a list item further down the page |
-| 2026-08-02 | Goals gets its own top-level page (`/app/goals`), not a Settings section | Settings is "configured once, not written to constantly" (see Settings decisions above); goals get created per period and have their status updated regularly — a different interaction pattern |
-| 2026-08-02 | DR detail "Goals" section is always shown, with a one-line empty state + link when there are none — NOT hidden entirely like Expectations | Expectations is gated behind a Settings prerequisite (assign a role first), so hiding it until that's done is calm degradation. Goals has no such prerequisite — it's a first-class object like Commitments, so it follows Commitments' always-visible empty-state pattern instead. **Unconfirmed with Andrew** — the scoping question he answered actually said "hidden if empty"; this was a mid-build judgment call, flagged to him, may still get reverted |
-| 2026-08-02 | Goals page ships full company/department/team/individual level tabs now, even though role-scoped views (manager/dept-head/individual) don't exist yet | Andrew's explicit call in the Session 10 scoping conversation, over the more conservative "individual only" default — company/department goals are usable today, just without a distinct dept-head/VP audience until role-scoped views ship |
-| 2026-08-02 | Goal status is an inline `<select>` styled as a pill on each goal card, not a separate edit form | Status is the field that changes constantly (the reason Goals got its own page in the first place) — matches the existing inline-select pattern used for assigning a direct report's role in Settings |
-| 2026-08-02 | Added a "Success metric" free-text field to the goal create form and card display, right below Description | Andrew wanted a SMART-framework "Measurable" anchor without over-structuring goals into fields that stay blank for anything that doesn't fit a rigid model — kept it as unstructured text, same as description, not a new metric-picker UI |
-| 2026-08-02 | Goal cards get an "Edit" action next to Delete, which swaps the card in place for the same form used to create goals (pre-filled) rather than opening a modal or a separate page | Andrew caught this gap live in the deployed app — status and delete existed but there was no way to fix a typo or update a description. Reusing the create form in place keeps this to one component instead of building a second edit UI, and swapping in-place (not navigating away) matches how the rest of the page already behaves |
-| 2026-08-02 | Org (team/department entities) gets its own top-level page (`/app/org`), not a Settings section | Same reasoning as Goals' placement (Session 10) — a distinct object, not a "configure once and forget" setting, even though it's edited less frequently than Goals |
-| 2026-08-02 | Org-chart builder is a hybrid: a nested tree to add/edit/delete units and set parents, plus a separate read-only visual chart rendered from the same data | Andrew's explicit call over a true drag-and-drop canvas, which would require adding the app's first UI dependency (a diagramming library). The chart view uses styled-jsx (ships with Next.js) for a pure-CSS nested-list chart — no new dependency either way |
-| 2026-08-02 | "Company" is not a stored `org_units` row — the chart root is the existing `organizations.name` (Settings → Profile & Company), with top-level departments (`parent_unit_id` null) branching directly off it | Avoids a row that would just duplicate what `organizations` already represents; proposed by Claude during scoping, confirmed by Andrew before building |
-| 2026-08-02 | Settings' Roles & Levels form drops the free-text "Team (optional)" input, and `roleLabel()` stops appending `functional_team` to the role display | Session 11: team/department is now a structured `org_unit_id` on the direct report, not free text on the role template — keeping both would let them disagree. The "Who's in which role" list gets a second picker (org unit) next to the existing role picker |
-| 2026-08-02 | Projects gets its own top-level page (`/app/projects`), not a tab on Goals | Session 13, same reasoning as Goals' own placement — projects get created and status-updated regularly |
-| 2026-08-02 | Projects gets no `level`/`org_unit_id` of its own, unlike Goals | Per PRODUCT_VISION.md's "goals = what, projects = how" — a project's scope is derived from whatever it's linked to (its goal's level, or the report it's assigned to), not a duplicated parallel hierarchy. Revisit if a project ever needs independent scope (e.g. team-level with no goal attached) |
-| 2026-08-02 | Projects list groups by assignee ("Your initiatives" first, then one group per direct report), same visual pattern as Goals' individual-level grouping | Keeps the list from turning into one flat wall once a manager has projects both of their own and delegated to reports |
-| 2026-08-02 | DR detail "Projects" section is always shown, with a one-line empty state + link when there are none — same pattern as Goals | Session 13 also resolves Goals' Session 10 open question ("hidden if empty" vs. always-visible) the same direction, since both are first-class objects like Commitments with no Settings prerequisite |
-| 2026-08-02 | Commitments → project linking (`source_type='project'`, already in schema.sql's check constraint) stays deferred | Same scope discipline as Goals shipping Session 10 without rollup calculation — activate the core object first, dogfood it, then decide if the cross-link earns its complexity |
-| 2026-08-02 | Capacity gets its own top-level page (`/app/capacity`), not a Settings section | Session 14, same reasoning as Goals/Projects/Org — the resolved week-by-week numbers and time off log get checked/updated regularly; only the org-wide baseline defaults and work-unit setup are "configured once" and live in Settings |
-| 2026-08-02 | Capacity v1 shows available hours only — no bar/meter comparing available vs. allocated | Andrew's explicit scoping call: supply only this pass, no demand/allocation tracking. A progress-bar visual implies something to fill it against; showing one before there's real allocation data would overstate what the page currently answers |
-| 2026-08-02 | Capacity page's "By department" section shows aggregate numbers only (count + total hours per org unit), never a named individual outside the viewer's own direct reports | Andrew's explicit privacy call in Session 14 scoping — matches the existing privacy boundary (a manager's own reports stay private) while still answering the department-level bandwidth question |
-| 2026-08-02 | Per-person capacity override (contracted hours, target utilization) and time off logging live on the DR detail page, not the Capacity page itself | Same "config that changes per-person lives next to the person" reasoning as Expectations — the Capacity page is the read/rollup surface, the DR detail page is where the underlying numbers get set |
-| 2026-08-02 | Added a third capacity default, `off_days_per_year` (21 = 15 vacation + 6 sick), separate from target utilization — org default in Settings > Capacity, per-person override on the DR detail page, same pattern as the other two capacity fields | Andrew caught the gap live: target utilization only buffers within-a-day overhead, nothing accounted for whole days off unless a manager had already logged specific dates |
-| 2026-08-02 | Capacity page labels each report's off-hours figure as "logged" or "assumed" rather than showing one unlabeled number | Two different sources feed the same figure (real dates vs. a prorated annual default) — showing which one won avoids the number reading as more precise than it is when nothing's been logged yet |
-| 2026-08-03 | Role-scoped views ship as a third "Rollup" tab on the existing Org page, not a new top-level page | Session 15 — the rollup is inherently about org structure (a leader's subtree), so it belongs next to Build/Chart rather than adding a fifth top-level nav item; capacity hours stay on Capacity's own page rather than being duplicated |
-| 2026-08-03 | Scoping mechanism is an explicit per-unit "leader" (`org_units.leader_user_id`, any org member can be assigned), not `users.role` tiers and not the manager-reporting chain | Andrew's explicit call — mirrors Capacity's Session 14 choice to walk the `org_units` tree rather than the manager chain, so there's one consistent source of truth for "who sees what" across every rollup |
-| 2026-08-03 | Rollup views are aggregate-only everywhere, with no exception for any of the four surfaces (People/Goals/Projects/Capacity) | Andrew's explicit call, extending Capacity's Session 14 precedent uniformly rather than allowing named drill-down for some data types and not others |
-| 2026-08-03 | Capacity's "By department" section now shows an empty state ("you don't lead any units yet") instead of the whole org's rollup by default | Closes the permission gap flagged in Session 14 — previously any authenticated org member could see the whole org's aggregate rollup with no assignment step; this is an intentional behavior change, not a bug, and needs Andrew to assign a leader before the section shows anything |
-| 2026-08-04 | Assessments gets its own top-level page (`/app/assessments` + `/app/assessments/[reportId]`), not folded into DR detail | Session 16, same reasoning as Goals/Projects/Org/Capacity — scoring happens regularly, not once; DR detail gets a read-only summary + link, same "summary here, edit there" pattern as Goals/Projects/Capacity |
-| 2026-08-04 | Scorecard inputs start empty rather than pre-filled with the direct report's latest recorded score; the latest score shows alongside each item as read-only context instead | Pre-filling would make an untouched "Save" silently re-log every unchanged score as a new timestamped row. Empty-by-default means only what the manager (or an AI draft) actually set this pass gets written — consistent with the draft-then-review rule elsewhere in the app |
-| 2026-08-06 | Settings sub-section "currently selected X" state (e.g. Expectations' role/kind picker) lives on `SettingsPage`, not inside the section component | Settings unmounts the inactive section on every tab switch; state owned locally resets to defaults each time, which read as data loss once Andrew had stepped through many roles. Lifted to the parent, matching `roleLevels`/`reports`/`orgUnits` |
-| 2026-08-06 | Team section's role/team `<select>`s get fixed widths (`w-48`/`w-44`) + truncate; report name/role_title get truncate too | An unconstrained select balloons to fit its longest option (e.g. "Enterprise Producer CSM · L2"), squeezing the sibling name column into unreadable wrapped slivers |
-| 2026-08-04 | Skill/value scores render as a row of scale-point buttons (labeled with each point's configured qualitative/quantitative output when available) rather than a free-number input or dropdown | The scale definitions already carry meaning per point (Settings > Expectations, Session 6) — buttons surface that meaning directly instead of making the manager cross-reference a legend elsewhere |
-| 2026-08-04 | AI draft prompt is explicitly told to leave an item unscored rather than force coverage of every configured metric/skill/value, and to return a null overall if there isn't enough evidence | Same restraint already proven in the 1:1 prep prompt's expectations block (Session 7) — a fabricated complete draft would erode trust in the assessment record faster than an honest partial one |
-| 2026-08-06 | Mission Control (PRODUCT_VISION.md's dashboard concept) replaces `/app/dashboard` in place, rather than shipping as a separate new page | Session 18 — the vision's "top-level questions about my team" language is what the old dashboard already narrowly tried to answer (1:1 cadence only); one landing page beats two competing for the "home" slot |
-| 2026-08-06 | Mission Control ships only cards backed by real data today (Individual Performance, Organization/Department/Team Goals, Key Initiatives, a Capacity snapshot) — no placeholder cards for Team Health, Team/Dept Operations, or People Operations | Andrew's explicit call, extending Settings' existing "no coming-soon placeholders" precedent (2026-08-01) to this page |
-| 2026-08-06 | Mission Control is manager-view only this pass — no Department Head toggle, no Team/Individual (IC) views | Session 15's rollup infrastructure could support a Dept Head toggle later; IC views need IC login, deferred since Session 3. Andrew picked the smaller scope over building all four of the board's role-scoped dashboards now |
-| 2026-08-06 | Individual Performance lists each report's latest assessment rating as-is — no synthesized team-average or distribution | Andrew's explicit call — matches the app's existing pattern of surfacing real records rather than introducing a new derived calculation |
-| 2026-08-07 | Mission Control reworked from a single-column stack into a 3-column grid (Individual Performance / Goals / Key Initiatives) with Capacity as a full-width strip below, not a 4th column | Andrew's original design intent, confirmed via a static mockup reviewed before building; Capacity is a snapshot stat per person, not a scrollable triage list, so it doesn't fit the same column shape as the other three |
-| 2026-08-07 | AI insight banner is real AI-generated text (new `GET /api/dashboard/insight`), not a rule-based string computed client-side | Andrew's explicit call — the insight is meant to be the page's "magic," and a synthesized take can weigh multiple signals together in a way a fixed rule can't |
-| 2026-08-07 | Quick add is a single modal (type picker + minimal form), not a global ⌘K command palette | Andrew's explicit call — not enough surface area in the app yet to justify a global command palette or its likely new dependency (e.g. `cmdk`) |
-| 2026-08-07 | Individual Performance's status stays binary (due for a 1:1, or not) + a raw commitment count, not a synthesized 3-tier on-track/needs-check-in/at-risk status | The reviewed mockup used 3 tiers for visual variety, but the real data doesn't back a 3-tier status — same restraint as Assessments' "leave unscored rather than force coverage" (Session 16) |
-| 2026-08-07 | `frontend/components/` introduced as the app's first shared-component directory (`QuickAddModal.tsx`) | First UI piece reused across more than one create-flow (direct report / goal / project) in a single modal — still no external component library |
-| 2026-08-08 | Team View gets its own top-level page (`/app/team`), not folded into Mission Control | Session 21 — matches every other feature's placement (Goals/Projects/Org/Capacity/Assessments); Mission Control is already a 3-column grid + capacity strip, adding a 4th surface would crowd it |
-| 2026-08-08 | Team View v1 is scoped to the caller's own direct reports, not an org_unit rollup like role-scoped views | Andrew's explicit call — matches Mission Control's existing scope; an org_unit rollup version can follow the same pattern Session 15 used for People/Goals/Projects/Capacity if it's ever needed |
-| 2026-08-08 | Team View's roster shows only active/on_track/at_risk projects and priorities per person | Same "what's happening now" framing as Mission Control's Key Initiatives card (Session 18/19) — full history stays on the dedicated Goals/Projects pages, Team View isn't trying to replace either |
-| 2026-08-08 | Messaging ships as free-text, store-only groundwork this session, not deferred to a later pass | Andrew's explicit call, overriding the team_space_brainstorm note's original two-pass recommendation. No delivery mechanism (email, IC login) exists yet — the compose box's placeholder copy says so directly, so the lack of delivery reads as intentional rather than broken |
-| 2026-08-08 | A "Log update" toggle reveals the compose box + message history inline per person, rather than navigating to a separate detail page | Keeps roster, priorities, projects, and messaging all on one page — matches the brainstorm note's original framing of a single assembled "team home," not another click-through |
-| 2026-08-08 | `/app/team` reworked in place into a 3-column layout (roster / goal progress / meeting notes), same route and nav item, not a new page | Session 22 — Andrew's explicit call over standing up a separate "Mission Control" route; the roster built Session 21 becomes the left column rather than being duplicated |
-| 2026-08-08 | Team Mission Control's middle column shows only company- and team-level goal progress, never department or individual | Andrew's explicit scoping call — department stays a role-scoped-views rollup concept, and individual priorities are already the left column's per-report Priorities list; showing both would duplicate |
-| 2026-08-08 | Meeting notes is a standalone team-wide log (free text, no attendee tagging, not tied to any single 1:1) | Chosen over a unified feed that also pulled in `one_on_ones.summary` rows — keeps 1:1 history exactly where it already lives and avoids merging two different record types into one feed for v1 |
-| 2026-08-08 | "Key updates" (a manager-authored broadcast feed) was scoped and then explicitly deferred to a follow-up session | Andrew's call after Claude flagged that building a 4th new subsystem (on top of auth primitives, the goals column, and the notes log) in one pass risked rushed verification on all of them; keeping this session's scope to three new pieces instead of four |
-| 2026-08-08 | IC login ships as "auth primitives now, IC view later": an invite → magic-link → account-claim flow, landing on a minimal stub page (`/app/ic`), with no real IC-facing Mission Control view yet | Andrew explicitly rejected a lighter no-login workaround, so the account/claim mechanism had to be real — but scoping the IC's actual view in the same pass as the 3-column rework risked scoping two different UIs (manager + IC) in one session |
-| 2026-08-08 | Invite delivery is manual — the manager copies a generated link and sends it themselves, no email is sent from the backend | Same manual-delivery posture Session 21 chose for `team_messages`; avoids adding an email-sending dependency in this pass too |
-| 2026-08-09 | "Next meeting's agenda" vs. a logged past meeting is derived from a nullable `meeting_date` (today-or-later = upcoming), not a stored status field | Session 23 — mirrors `one_on_ones`' planned/completed split (Session 9); avoids a second status field to keep in sync as dates pass |
-| 2026-08-09 | Past meeting notes render as a card grid (date + snippet) that opens a detail modal on click, replacing the flat reverse-chron text list | Session 23 — the flat list stopped scaling once notes carried more content worth reading in full; a modal keeps this on one page rather than adding a new route |
-| 2026-08-09 | Team-level commitments extend the existing `commitments` table with an `is_team_commitment` flag, not a new `team_commitments` table | Session 23, Andrew's explicit call — a commitment already has exactly one `direct_report_id`; the flag just changes where it's *visible*, reusing status/committed_by/source_type instead of building parallel multi-assignee infrastructure that wasn't asked for |
-| 2026-08-09 | Team commitments get a new section appended below the roster column, not a 4th grid column or a separate `/app/commitments` page | Session 23, Andrew's explicit call — commitments are fundamentally about individual accountability, so they sit with the per-person roster rather than crowding the 3-column grid or splitting into a page not edited often enough to earn its own nav item |
-| 2026-08-09 | "Key updates" stayed deferred rather than folding into this session | Session 23, Andrew's call — kept scope to three new pieces (agenda surfacing, card/detail UI, team commitments) instead of four, same rushed-verification concern that deferred it in Session 22 |
-| 2026-08-09 | `/app/team` fully redesigned via a scoped mockup-review pass (AskUserQuestion round, 4 static HTML mockups, then a refined 5th after Andrew picked one) before any code was written | Session 24, Andrew's explicit ask for this to be its own design-exploration session, not built straight from the brief — see the team_page_redesign_brief and team_page_redesign_options project memory notes |
-| 2026-08-09 | New `/app/team` structure: KPI strip, then a row pairing Initiatives/Goals/Commitments, then Critical callouts + Meetings, then the roster as a row at the bottom (moved off the left column) | Session 24, Andrew's explicit layout call from the mockup review — leans more colorful/engaging than the rest of the app on purpose, over the safer close-to-today mockup option |
-| 2026-08-09 | "Initiatives" on `/app/team` reuses `getProjects()` filtered to active/on_track/at_risk — the same subset Mission Control's Key Initiatives card already uses — rather than a new team-scoped endpoint | Session 24 — Andrew confirmed this mapping when it was flagged as an assumption; no new data source needed since Team View's projects were already scoped to the manager's whole team |
-| 2026-08-09 | "Key updates" revived as "Critical callouts" — one manager-authored text block, overwritten in place on every edit, not a dated history log | Session 24 — deferred twice (Sessions 22/23) over rushed-verification concerns; Andrew explicitly asked for it back this session, scoped deliberately small (no per-line CRUD, no history) to keep the same discipline that deferred it before |
-| 2026-08-11 | Progress on goals/initiatives is logged via check-ins (status + manual % + one-line note) rendered by one shared `CheckInPanel` component on both goal and project cards, rather than separate per-page UIs or an editable % field on the record | Session 26 — the check-in is the primitive: it yields progress, trend, staleness, and history from one small interaction; goals and projects share the same status enum so one component covers both |
-| 2026-08-11 | Staleness turns the freshness label amber after 14 days without a check-in (vs. the dashboard's 21-day 1:1 cadence) | Session 26 — a stale green is more dangerous than an honest yellow, and goals drift faster than relationships; two missed weekly check-ins earns a nudge |
-| 2026-08-11 | Mission Control's Goals + Key Initiatives cards are exception-first: attention rows (at-risk / overdue / due soon / stale / no-initiative) with reason chips lead, healthy items collapse into a "Show N on track" toggle | Session 26 — same worst-first philosophy as the Individual Performance column's sort (Session 19), applied to the other two columns; a manager scanning the grid should see problems before things that are fine |
-| 2026-08-12 | The Context Engine gets its own top-level page (`/app/context`, "The Space"), not folded into Settings or Team | Session 28 (Context Engine Session III) — same reasoning as every other domain page: managers return to it repeatedly to teach the Librarian, it's not a configure-once setting |
-| 2026-08-12 | The confirm-card's scope picker defaults to nothing selected, not "Company-wide" | Session 28 — per `docs/CONTEXT_ENGINE.md`, scope is a user-confirmed decision the framework doc is explicit about, not something to default silently; Confirm stays disabled until the manager picks at least one |
-| 2026-08-12 | The Brain's coverage rings are a plain inline-SVG radial progress ring per category, not a new charting/diagramming dependency | Session 30 (Context Engine Session V) — the build plan suggested reusing "the dashboard's orbital/radial mission control motif," but Mission Control turned out to be a card grid with no radial component to actually reuse. Interpreted as "radial in spirit, visually consistent" rather than adding a dependency for one visualization; flagged as the placeholder the build plan itself invited ("treat as a placeholder, not a lock-in") |
-| 2026-08-12 | `/app/context` widened from `max-w-3xl` to `max-w-4xl` | Session 30 — the Brain's 5-category grid needed more horizontal room than the page's original narrow single-column width; the upload form and queues below still read fine wider |
-| 2026-08-12 | The Brain's coverage fill is quality-weighted via MAX (best single doc's decayed score), not an average across a category's docs | Session 30 — matches `docs/CONTEXT_ENGINE.md`'s own example almost verbatim ("ten junk uploads move nothing; one current strategy doc lights a region"); an average would let weak docs drag down a category that already has one excellent, current source |
-| 2026-08-12 | Staleness ("Aging" badge on a `BrainCategoryCard` + amber-toned Librarian line in `BrainDetailPanel`) and scope conflicts (`ConflictBanner` above the Brain grid) both reuse the app's existing amber warning convention, not a new color/severity system | Session 31 (Context Engine Session VI) — the app already uses `amber-*` for "needs attention" states elsewhere (dashboard's at-risk styling); staleness and conflicts are both "the Librarian isn't fully confident here" signals, so they read as one visual language rather than inventing a second warning color |
-| 2026-08-13 | The Scribe's chat surface is a persistent right-hand drawer (~400px, content reflows beside it, thread survives navigation), picked from a 3-mockup review (drawer / command-bar / docked composer); ⌘J summons it focused from any page, Esc closes | Sessions 32–34 — the drawer is the only shape that serves both multi-turn slot-filling now and the future consult mode's persistent thread; the command-bar's best trait (keyboard summon) was folded in instead of built as a second surface. Reference mockup: chat-surface-a-drawer.html |
-| 2026-08-13 | Scribe drafts render as in-thread draft cards: amber "Draft — not saved" badge, green resolved-link fields, muted "none yet" optionals, Confirm / Edit details (inline inputs) / Discard; Confirm calls the same endpoint the forms use, then collapses to a receipt with view link + 30s Undo (project/goal only) | Extends the app's draft-then-review posture to structured records — a wrong link is visible before commit, and Edit-details is the escape hatch when typing beats talking |
-| 2026-08-13 | Ambiguity candidates in Scribe replies render as tappable quick-reply chips (parsed from ·-delimited lists in the agent text) | Answering a disambiguation question should be one tap, not retyping the option |
-| 2026-08-13 | ✦ drawer toggle: nav-integrated on the dashboard, fixed top-right button on every other authenticated page via a single AppShell change | Discoverable everywhere without touching nine page headers; revisit placement when global nav ships |
-| 2026-08-16 | The Scribe drawer's width changed from a fixed 400px to a responsive `clamp(400px,30vw,640px)` | Session 35 — Andrew wanted more room for the conversation and draft cards; a second fixed px value would've meant re-picking a number per screen size, so a vw-based clamp scales toward ~25-33% of viewport on larger screens while keeping the original 400px floor (so nothing gets narrower than before) and a 640px cap (so it doesn't sprawl on ultrawide monitors) |
-| 2026-08-16 | Pass 1 of the nav rework ships: a persistent global nav (`components/AppNav.tsx` — sticky header + sticky orbit strip + zone-map overlay) rendered once from `app/app/layout.tsx`, replacing the per-page "← Back to your team" links (9 pages) and Mission Control's own `NAV_LINKS` row | Session 36/37 — Option C v2 "hub & orbit" locked in nav_redesign_options.md; ported from `mockups/nav/nav-option-c-v2.html` rather than reinvented. `/app/1-1s` is NOT built this pass — its nav item renders disabled |
-| 2026-08-16 | Mission Control's stat ribbon is replaced in place by the same zone map (`components/ZoneMap.tsx`'s `<ZoneMap>`) used inside the nav overlay — one shared component, not a duplicated grid | Session 36/37 — the ribbon and the map were saying the same things twice; door counts now carry what the ribbon used to show. Only counts needing attention are colored (goals at-risk = risk/rose, 1:1s due = warn/amber, settings unfinished = setup/muted-italic); healthy stays grey, matching the app's existing restraint about not inventing severity tiers the data doesn't support (same principle as the 2026-08-07 Individual Performance decision) |
-| 2026-08-16 | Zone/hue colors are ported as exact hex values via Tailwind arbitrary-value classes (e.g. `text-[#4f46e5]`, `bg-[#eef1ff]`) rather than Tailwind's built-in indigo/emerald/violet shades | The mockup's hex tokens don't line up 1:1 with Tailwind's default palette (emerald especially: `#0e8f7e` vs Tailwind's `#059669`); arbitrary values keep the port color-for-color faithful without introducing a new CSS variable/token file — still "plain Tailwind," per this doc's Framework & tooling section |
-| 2026-08-16 | The mockup's "Jump to ⌘K" command palette and global "+ Quick add" header button are deferred, not built this pass | Neither is in the nav rework's enumerated port list (strip markup, zone-chip overlay, breadcrumb rules, hues, hover/active states, zone map) — both are net-new standalone features, not nav plumbing. Quick add still works from Mission Control's own header, unchanged from before |
-| 2026-08-16 | The 1:1s zone-map door shows a real "N due" count (same cadence logic as Individual Performance) while staying visually disabled/unclickable, since `/app/1-1s` doesn't exist yet | Judgment call, unconfirmed with Andrew — the alternative (hide the count entirely until the route ships) avoids a dead-end nag but also hides real, possibly-important signal from a door that IS visible on the map. Revisit if it reads as more frustrating than informative once dogfooded |
-| 2026-08-16 | The persistent nav (and the Scribe toggle/drawer with it) is not rendered on `/app/login` or `/app/ic` | `/app/login` is pre-auth (no session to build a manager's nav from) and `/app/ic` is a stub landing page for IC accounts, not managers — a manager-oriented nav showing there would fetch data an IC user doesn't have and wouldn't make sense even if it succeeded |
+| 2026-08-09 | `/app/team`'s structure: KPI strip, then Initiatives/Goals/Commitments, then Critical callouts + Meetings, then the roster as a bottom row | Andrew's layout call from a mockup review; leans more colorful than the rest of the app on purpose |
+| 2026-08-11 | Check-in staleness turns the freshness label amber after 14 days, vs. the 21-day 1:1 cadence | A stale green is more dangerous than an honest yellow, and goals drift faster than relationships |
+| 2026-08-12 | The Context Engine gets its own top-level page (`/app/context`, "The Space") | Managers return to it repeatedly to teach the Librarian; it's not a configure-once setting |
+| 2026-08-12 | The Brain's coverage rings are plain inline SVG, not a charting dependency | Mission Control turned out to have no radial component to actually reuse; "radial in spirit" didn't justify a dependency for one visualization |
+| 2026-08-13 | The Scribe's chat surface is a persistent right drawer, picked from a 3-mockup review (drawer / command-bar / docked composer) | The only shape serving both multi-turn slot-filling now and a future persistent consult thread; the command-bar's best trait (⌘J summon) was folded in rather than built as a second surface |
+| 2026-08-16 | `/app/1-1s` (Due now / Prepped not yet run / Recently wrapped) is the one front door for the 1:1 loop — no off-platform logging, bulk actions, search, or calendar integration on it | Triage plus start/resume prep only |
+| 2026-08-18 | Settings → Expectations' entry point is a coverage grid (role × count pills, amber at zero), not a role dropdown | The dropdown gave no sense of what's covered vs. missing across 13 roles; the grid answers "what's left" in one glance |
+| 2026-08-18 | Org-wide values get their own block above the role-specific list on the Values tab, not a separate Settings section | Values are edited where the manager is already thinking about "what does good look like here"; a separate section would bury an entry most orgs touch a handful of times |
+| 2026-08-18 | Add-role is AI-first: "+ Add a new ladder" opens the JD import panel as the hero, "or start from scratch" is the quiet fallback | Typing expectations by hand is the fallback, not the norm |
+| 2026-08-19 | `/app/team`'s team `<select>` filters every section of the page, not just a label swap; "All teams" is the default | Most of it needed no backend work — direct_reports and goals already carried `org_unit_id` |
+| 2026-08-20 | `/app/team`'s Goals and Initiatives cascade from parent departments, labeled "inherited from parent"; commitments, roster, notes, and callouts stay exact-match | Andrew's explicit ask, scoped to the two cards where inheritance is meaningful |
+| 2026-08-21 | The person page (`/app/reports/[id]`) is a "Command Deck": identity band with primary CTAs, a 4-tile KPI strip, then Conversation / Work / Person columns, with admin inputs behind a gear-triggered settings drawer | The old page was a single-column wall of ~10 form-heavy sections; a manager opening a report mid-week needs "what's the state of this relationship" at a glance, not a form to fill |
+| 2026-08-22 | The persistent left rail renders on every authenticated page, Mission Control included | Excluding Mission Control as "already the map" was sound on paper and read as inconsistent in use |
+| 2026-08-22 | Goals and Projects use the KPI strip + `border-l-4` card grid with a per-card progress ring, tokens ported verbatim from `team/page.tsx`; level tabs stay as a pill filter on Goals, none on Projects | Third page on the same treatment — Team, Person, then these — so the app reads as one system |
+| 2026-08-22 | `ZoneMap`'s summary cards use the bold gradient-tile treatment (`HUE_GRADIENT`), matching the Team/Goals/Projects KPI strips; the pastel `HUE_STYLES` tokens stay canonical for nav chrome | Two different surfaces, not a half-finished restyle; picked from a real-data two-artboard comparison |
+| 2026-08-22 | `NAV_STRIP_HEIGHT` (`h-14`) and `SECTION_GAP` (`mt-5`) are named tokens rather than emergent properties of each component's own padding | Two independently-padded rows landed ~4px apart, and 13 pages each picked their own block margin. `mt-5` was chosen because it was already the tightest value in real use, not invented |
 
-| 2026-08-16 | Mission Control's Individual Performance card shrinks to exception-first — only reports due for a 1:1 lead, everyone else collapses behind "Show N on track" | Session 37/38 (nav rework pass 2) — same treatment Goals/Key Initiatives already got in Session 26; a manager scanning three columns should see problems before people who are fine, and the old card duplicated what the zone map's "N due" count already said |
-| 2026-08-16 | `/app/1-1s` (three sections: Due now / Prepped not yet run / Recently wrapped) is the one front door for the 1:1 loop — no new write paths on it (no off-platform logging, bulk actions, search, or calendar integration) | Session 37/38 — locked decision in `docs/ONE_ON_ONES_PAGE_SPEC.md` section 2; the page is triage + start/resume prep only, matching the spec's scope cut |
-| 2026-08-16 | Cadence resolution shows its source label wherever it's surfaced ("every 14 days (custom)" vs "every 21 days (org default)") | Session 37/38 — same honesty convention Capacity already uses for logged-vs-assumed hours; a manager should be able to tell whether a number is theirs, the org's, or a hardcoded fallback |
-| 2026-08-16 | The AI insight banner distinguishes "legitimately nothing to flag" (renders nothing) from "the call failed" (small muted line) instead of collapsing both into identical silence | Session 37/38 — 2026-08-12 data-trust bug #4; a real failure looking exactly like a healthy team erodes trust in every other "all clear" signal on the dashboard |
-| 2026-08-17 | AppNav's header/orbit-strip content sits inside an inner `mx-auto max-w-7xl` wrapper (bar background/border still spans full width) instead of just `px-6`/`sm:px-8` edge padding | Session 38 — Andrew flagged that the nav sat noticeably closer to the true viewport edges than every page's own centered `mx-auto max-w-*` `<main>` below it. `max-w-7xl` matches Dashboard's and Team's own width (the two widest/primary pages) rather than trying to reconcile every page's different max-width |
-| 2026-08-17 | `overflow-x-hidden` in `app/app/layout.tsx` wraps only `{children}`, never the div that also renders `<AppNav />` | Session 38 — CSS gotcha worth remembering: setting `overflow-x` to anything but `visible` makes the browser compute `overflow-y` as `auto` too when unset, silently turning that div into a scroll container and breaking `position: sticky` for anything inside it (the sticky element sticks to that div's own, never-scrolling box instead of the real viewport). Any future sticky element added inside AppShell's content column needs to stay outside whatever wrapper carries horizontal-overflow containment |
-| 2026-08-17 | Scribe toggle prominence solved with styling (filled indigo→violet gradient pill, "✦ Scribe ⌘J" label) rather than a second toggle location | Session 38 — keeps Session 36/37's "one toggle, inside AppNav" consolidation intact; "more discoverable" didn't have to mean "in more places" |
-| 2026-08-17 | AppNav's avatar badge is a real dropdown (name/email, Settings, Sign out) — the app's first sign-out control anywhere | Session 38 — Andrew clicked it expecting something to happen; it was a static `<span>`. Kept the menu to just Settings + Sign out (no "switch org" — the app has no multi-org concept) |
-| 2026-08-18 | Settings → Expectations' entry point is a coverage grid (role × metrics/skills/values count pills, amber at zero) instead of a role dropdown that defaults to the first role | Session 39, Plan S3 — F4 in `docs/TEAM_SETUP_UX_REVIEW.md`: the old dropdown gave no sense of what's covered vs. missing across 13 roles; the grid answers "what's left" in one glance, matching the review's #1 ask for this section |
-| 2026-08-18 | "Draft with AI" opens a modal review panel with per-item include-checkboxes and editable fields, not an auto-apply action | Session 39 — same draft-then-review rule as wrap-up extraction and assessment drafts; a manager should be able to see and adjust each drafted metric/skill/value before any of it becomes a real config row |
-| 2026-08-18 | Org-wide values get their own block above the role-specific list on the Values tab, rather than a separate Settings section | Session 39 — values are edited in the same place a manager is already thinking about "what does good look like for this role," and role-specific values sit directly below for contrast; a fully separate section would bury a company-values entry that most orgs only touch a handful of times |
-| 2026-08-18 | Add-role is AI-first: "+ Add a new ladder" opens the JD import panel (paste box + drop zone) as the hero, "or start from scratch" is the quiet fallback to the manual RoleForm; the import review screen reuses the same shared draft-review rows (`DraftExpectationRows.tsx`) as the coverage grid's "Draft with AI" | Session 44 — typing expectations by hand is the fallback, not the norm; one shared review implementation means the two AI-draft doors can't drift apart |
-| 2026-08-19 | `/app/team`'s header gains a team name + `<select>` dropdown (options = `org_units` the caller leads), defaulting to "All teams" | Session 45, Andrew's ask — a manager/director leading more than one team had no way to tell which team's data the page was showing; "All teams" as the default keeps today's combined view unchanged for anyone leading just one team (or none) |
-| 2026-08-19 | Selecting a team filters every section of the page (roster, initiatives, goals, meeting notes, commitments, callouts), not just a label swap | Session 45, Andrew's recommended pick over "label only" or "roster only" — most of this needed zero backend work since direct_reports/goals already carry org_unit_id; only meeting notes and callouts needed a real schema change |
-
-| 2026-08-20 | Projects gain an optional `org_unit_id` ("Team (optional)" picker on `/app/projects`, any team or department, not level-filtered like Goals') — supersedes the 2026-08-02 "Projects gets no level/org_unit_id of its own" decision | Session 46 — that earlier decision explicitly flagged "revisit if a project ever needs independent scope"; Andrew's ask this session ("we need a way to attach... projects (definitely) to a team") is that revisit. A project's scope no longer has to be derived from its goal or assignee |
-| 2026-08-20 | `/app/team`'s Goals and Initiatives cards go hierarchy-aware: a parent department's goal/project shows on every child team's page, labeled "inherited from parent" when it isn't an exact match to the selected team | Session 46, Andrew's explicit ask ("any parent team's goal/project also shows"); scoped to only these two cards — commitments, roster, meeting notes, and callouts stay exact-match-only, matching Session 45 |
-| 2026-08-20 | Development ships as individual plans + a lightweight team-level "training focus" note, not a full team-plan feature | Session 47 — Andrew picked the fuller of two scope options over individual-only; the team layer is deliberately kept to a single pinned note (mirrors Critical Callouts) rather than a new relational model, matching how small "key updates" started |
-| 2026-08-20 | Development is a section on the direct report detail page, with no dedicated `/app/development` page | Session 47, Andrew's recommended pick over a Goals/Assessments-style top-level page — unlike those, Development has no team-wide list view anyone needs (it's always about one person at a time), so a page-plus-summary split would just add navigation without a second real use case |
-| 2026-08-20 | Development's AI draft covers only opportunities + a synthesis note — aspirations and training are never AI-drafted | Session 47 — aspirations are a career conversation between manager and report, not evidence to infer; training is a logistics/budget decision. Narrower scope than Assessments' draft, which covers every scoreable item, because those two pieces have no comparable "evidence" to ground a draft in |
-| 2026-08-21 | Development's "Draft with AI" is non-blocking (dismissible suggestion chips + an optional note-suggestion callout), not a blocking review panel; new "Revise with AI" improves manager-authored text and is always answerable regardless of evidence | Session 48 — the blocking draft-then-review panel produced a dead end when a report had no evidence yet; manual entry must always be the primary path, with AI layered on as an optional assist, not a gate |
-| 2026-08-20 | Low-scoring skill/value assessments (at or below the midpoint of that item's own scale) surface as "suggested from assessment" quick-add prompts inside the Opportunities list | Session 47, Andrew's "connect to assessment scores" scoping decision — makes the assessment → development throughline visible without forcing every low score into an opportunity; the manager still clicks to add each one |
-| 2026-08-21 | DR detail page (`/app/reports/[id]`) rebuilt as a "Command Deck": indigo identity band with primary CTAs, a 4-tile KPI strip, then a 3-column layout (Conversation / Work / Person) — admin inputs (cadence, capacity, time off) moved behind a gear-triggered settings drawer, off the main flow | Session 50 — the old page was a single-column wall of ~10 form-heavy sections; a manager opening a report mid-week needs "what's the state of this relationship right now" answered at a glance, not a form to fill out. Mockup approved same day |
-| 2026-08-21 | `DevelopmentSection` stays one component with all its state/handlers, gated by a `section: "notes" \| "growth"` prop that renders only half its JSX per mount, rather than being split into two components | Session 50 — private Manager Notes (Col 1) and the growth plan (Col 3) now render in two different page locations, but both still share one bundle-fetch/mutate/refetch lifecycle; splitting would mean duplicating that logic, not simplifying it |
-| 2026-08-21 | Person Page KPI strip and "Worth raising" talking points are derived entirely client-side from data already fetched (overdue commitments, at-risk goals, dev plan text, last 1:1 summary) — no new backend endpoint | Session 50 — matches the scoping note's explicit constraint; keeps the hub fast to build and avoids a bespoke aggregation endpoint for what's really just a client-side view over existing fetches |
-| 2026-08-22 | AppNav's breadcrumb and the orbit strip's zone-chip/item-switcher are retired, replaced by a persistent left rail (`components/Sidebar.tsx`, built from `ZoneMap.tsx`'s existing `NAV_GROUPS` — no new nav config) on every page except Mission Control; a global "+ Quick add" moves into the top bar | Session 51 — the breadcrumb and zone chip restated the same "where am I" in two stacked idioms (Andrew: "a lot going on... I just don't like the feel"). Explored via a 4-option "Top Nav Options" design canvas before building, then a combined-approach pass Andrew approved: top bar fully static everywhere; sidebar everywhere except Mission Control, which is already the map via its own card grid + inline `ZoneMap`; the roster switcher stays only on person-kind pages since it's a different job (within-section, not between-section) from the sidebar's |
-| 2026-08-22 | The left rail collapses to a 56px icon-only rail (native `title` tooltips, collapse state persisted to `localStorage`) via a toggle button, rather than staying full-width always | Session 51, Andrew's explicit follow-up ask after seeing the sidebar mockup — lets a manager reclaim screen width without losing the rail. Native tooltips are a v1 tradeoff, not a custom component — flagged as a possible follow-up if it reads as unpolished |
-| 2026-08-22 | Mission Control gains the persistent left rail (`components/Sidebar.tsx`) too, reversing Session 51's "already the map" exclusion | Session 52 — sound reasoning on paper, but living with it read as inconsistent rather than as a deliberate simplification; every authenticated page now shows the same rail, with the Home link itself taking the active-state treatment |
-| 2026-08-22 | Goals/Projects redesign locked to Option A — KPI-strip + border-l-4 card grid, the same treatment as Team (2026-08-09) and the Person page (2026-08-21), level tabs kept as a pill filter rather than retired | Session 52, scoped via a 3-option design canvas (KPI-strip port / hierarchy-explicit nesting / exception-first triage) before any code was written, same process as Team/Person; not yet built |
-| 2026-08-22 | Goals/Projects Option A built — KPI strip (on-track fraction tile with Team's dynamic gray/amber/green tone, plus fixed-tone at-risk/due-this-week/no-linked-initiative-or-goal tiles) + `border-l-4` card grid with a per-card inline-SVG progress ring, all tokens ported verbatim from `team/page.tsx` | Session 53 — completes the Session 52 lock; level tabs stay on Goals, no tabs on Projects; verified via `tsc --noEmit` + `next build` (21/21 routes) |
-| 2026-08-22 | New shared `frontend/components/PageShell.tsx` owns every `/app/*` page's container (`mx-auto max-w-{size} px-6 py-10 sm:px-8`), replacing 14 independently hand-rolled `<main>` wrappers that had drifted out of alignment with `AppNav`'s header container (`px-6 sm:px-8`) — most pages were missing the `sm:` bump and used `py-16` instead of Dashboard's `py-10` | Session 54, Andrew flagged alignment/spacing as "not perfect" after Session 51/52's persistent header+sidebar made the drift visible; `maxWidth` prop keeps each page's own width, only the padding/breakpoint recipe was unified; `login`/`ic` excluded (no persistent chrome above them) |
-| 2026-08-22 | Mission Control's `ZoneMap` summary cards ("Your people"/"The work"/"Foundation") move to the same bold gradient-tile treatment as the Team/Goals/Projects KPI strips (new `HUE_GRADIENT` + `TONE_TEXT_ON_GRADIENT` tokens in `ZoneMap.tsx`), rather than staying on the original pastel `HUE_STYLES`/`TONE_TEXT` tokens | Session 55 — Session 54's UX review left this open; scoped via a real-data two-artboard comparison canvas (current pastel vs. gradient) before touching code, Andrew picked the gradient option. `HUE_STYLES`/`TONE_TEXT` are kept as-is and still used by `Sidebar.tsx`'s nav chips — only the card row's own visual language changed, not the shared hue tokens |
-| 2026-08-22 | New `NAV_STRIP_HEIGHT` (`h-14`) token in `ZoneMap.tsx`, shared by `AppNav.tsx`'s header and `Sidebar.tsx`'s top row, replacing two independently-padded rows that landed ~4px apart | Session 56 — closes the last open item from Session 54's UX review; a named height constant instead of an emergent property of each component's own padding choice, so the two rows can't drift apart again as either changes |
-| 2026-08-22 | New `SECTION_GAP` (`mt-5`) token in `ZoneMap.tsx`, replacing ad hoc `mt-4/6/8/10` page-level block-transition margins across 13 pages; a new `8xl` (`max-w-[1600px]`) `PageShell` tier for Dashboard/Goals/Projects/Team; `PageShell`'s own vertical padding tightened `py-10` → `py-8` | Session 56, approved from a published "White Space Audit" before-and-after comparison canvas — `mt-5` picked because it was already the tightest value in real use (`reports/[id]`), not invented; the token targets only the "each block picks its own margin" drift the audit measured, not already-consistent internal rhythm (Team/1-1s' `space-y-10`, the assessment scorecard's `mt-10`), which stay untouched by design; the 8xl tier is scoped to the four genuinely grid-heavy pages, not applied app-wide |
-_(Add new decisions here as they get made — date, what was decided, why.)_
+_(Add new decisions here. If one reverses an existing row, move the old row to
+`docs/archive/DESIGN_ARCHIVE.md` rather than leaving both.)_

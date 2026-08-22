@@ -8,57 +8,118 @@ trained to have. Solo founder, content/SEO distribution, $20/mo self-serve.
 
 ## Read this before starting any session
 
-| Task type | Read these |
-|---|---|
-| Backend, API, AI, database, auth | [ENGINEERING.md](docs/ENGINEERING.md) |
-| Product decisions, feature scope, roadmap | [PRODUCT_VISION.md](PRODUCT_VISION.md) |
-| Pricing, GTM, content strategy, ICP | [GTM.md](docs/GTM.md) |
-| UI, design decisions, component patterns | [DESIGN.md](docs/DESIGN.md) |
-| What was done last session / what's next | [SESSION_HISTORY.md](docs/SESSION_HISTORY.md) |
+**Always read `docs/SESSION_HISTORY.md` first.** It holds the 5 most recent
+sessions in full and tells you the current state and next task, so you don't
+relitigate decisions already made. Older sessions are compact index lines
+pointing to `docs/archive/SESSION_HISTORY_ARCHIVE.md` — open the archive only
+when you need the full detail behind one specific past decision.
 
-**Always read SESSION_HISTORY.md first.** It tells you the current state and
-next task so you don't relitigate decisions already made. It holds the 5 most
-recent sessions in full; older sessions are one-line summaries pointing to
-[SESSION_HISTORY_ARCHIVE.md](docs/SESSION_HISTORY_ARCHIVE.md) — only open the
-archive if you need the full detail behind a specific past decision.
+Then read by task type — read the *core* doc, and only the subsystem doc for
+the thing you're actually touching:
+
+| Task type | Read |
+|---|---|
+| Backend, API, DB, auth, AI, infra | `docs/ENGINEERING.md` |
+| UI, component patterns, design decisions | `docs/DESIGN.md` |
+| Product scope, feature priority, roadmap | `PRODUCT_VISION.md` |
+| Pricing, GTM, content, ICP | `docs/GTM.md` |
+| One specific feature area | `docs/systems/<area>.md` (see below) |
+
+`docs/systems/` holds one current-state doc per subsystem — read on demand,
+never all at once:
+
+```
+one-on-ones.md      prep, the call, wrap-up, cadence, capture notes
+team.md             /app/team — roster, goals, meeting notes, callouts, IC invites
+mission-control.md  /app/dashboard — zone map, AI insight, quick add
+context-engine.md   document ingest, extraction, retrieval, the Brain
+scribe.md           conversational data entry, the agent loop, eval harness
+expectations.md     role ladders, coverage grid, JD import, AI draft
+assessments.md      rolling ratings, AI draft-then-review
+development.md      individual plans, team training focus
+check-ins.md        the temporal layer under goals and projects
+capacity.md         supply model, off-days buffer, department rollup
+org-scoping.md      org_units, leader assignment, role-scoped rollups
+```
+
+Pending work that is scoped but not built has its own doc:
+`docs/NOTES_INGESTION_SCOPING.md`. Shipped scoping docs live in
+`docs/archive/scoping/` — historical, never current intent.
 
 ---
 
-## Project structure
+## How to find things
+
+Don't trust a file map in a doc — it goes stale. Ask the repo:
+
+```bash
+ls backend/routes/                          # every API module (20 today)
+grep -rn "@router\." backend/routes/        # every endpoint
+grep -n "CREATE TABLE" database/schema.sql  # every table (44 today)
+ls database/migrations/                     # every schema change, dated
+ls frontend/app/app/                        # every auth-gated page
+ls frontend/components/                     # shared components
+```
+
+Shape of the repo, which does *not* change often:
 
 ```
-backend/          FastAPI app (Python, deploys to Railway)
-  main.py         App entry point, CORS, router registration
-  config.py       Env vars — AI model names, Supabase keys
-  utils.py        get_authenticated_client(), shared helpers
-  ai_core.py      All Anthropic calls — use generate_text() only
-  routes/
-    direct_reports.py   CRUD for direct reports
-    one_on_ones.py      1:1 logging + AI-assisted prep
+backend/     FastAPI, deploys to Railway on push
+  main.py              app init, CORS, router registration, rate limiter
+  config.py            env vars, AI model names, Supabase keys
+  utils.py             get_authenticated_client(), ensure_org(), shared limiter
+  ai_core.py           the only place the Anthropic SDK is called
+  context_engine.py    Context Engine plumbing (not a route)
+  assistant_engine.py  the Scribe's agent loop (not a route)
+  routes/              one module per API area
 
 database/
-  schema.sql      4 tables: direct_reports, one_on_ones,
-                  commitments, subscriptions. All RLS-scoped.
+  schema.sql             source of truth for tables, indexes, RLS policies
+  migrations/            dated .sql files — every schema change lands here first
+  local_verify_stub.sql  lets schema.sql run against a throwaway local Postgres
 
-frontend/         Next.js App Router (deploys to Vercel)
-  app/
-    (marketing)/  Public pages — home, pricing, blog (SSG/SSR)
-    app/          Auth-gated dashboard
-  lib/
-    api.ts        All backend calls go here, nowhere else
-    supabase.ts   Supabase client (browser-side)
+frontend/    Next.js App Router, deploys to Vercel on push
+  app/(marketing)/   public pages (SSG/SSR)
+  app/app/           auth-gated app
+  app/auth, app/invite
+  components/        shared components
+  lib/api.ts         every backend call, nowhere else
+  lib/supabase.ts    browser-side Supabase client
 
-docs/             Canonical reference docs (see table above)
-PRODUCT_VISION.md Full product vision — the "Mission Control" concept,
-                  ICP, competitive landscape. Read before adding features.
+docs/        see the table above
 ```
 
 ---
 
 ## Hard rules (enforce in every session)
 
-1. **Auth:** use `get_authenticated_client()` from `utils.py`. Never service-role for user data.
-2. **AI calls:** always through `ai_core.py`'s `generate_text()`. Never inline SDK calls.
-3. **API calls:** all frontend→backend calls go through `lib/api.ts`. No ad-hoc `fetch()` in components.
-4. **Schema:** stay at 4 tables until real users demand more. See ENGINEERING.md → Scope Discipline.
-5. **Models:** `AI_DEFAULT_MODEL_HEAVY` / `AI_DEFAULT_MODEL_LIGHT` in `config.py` must be valid Anthropic model names.
+1. **Auth:** use `get_authenticated_client()` from `utils.py`. Never service-role
+   for user data on a request path.
+2. **AI calls:** always through `ai_core.py` (`generate_text()`, or
+   `call_anthropic_with_tools()` for the Scribe loop). Never inline SDK calls.
+3. **API calls:** all frontend→backend calls go through `lib/api.ts`. No ad-hoc
+   `fetch()` in components.
+4. **Schema changes:** a dated file in `database/migrations/` *and* the matching
+   edit to `schema.sql` — never one without the other. Verify locally against
+   `local_verify_stub.sql` before calling a migration done. Prefer activating a
+   dormant table over adding a new one; see ENGINEERING.md → Scope discipline.
+5. **Models:** `AI_DEFAULT_MODEL_HEAVY` / `AI_DEFAULT_MODEL_LIGHT` in `config.py`
+   must be valid Anthropic model names — a bad name errors hard, it does not
+   degrade.
+6. **AI writes are draft-then-review.** No AI-generated content enters the record
+   without the manager seeing and confirming it. This applies to every surface.
+
+---
+
+## Keeping these docs true
+
+`tsp-push` closes out every session: it writes the SESSION_HISTORY entry and
+updates whichever docs the session actually changed. Two rules it enforces that
+matter when you're editing docs by hand:
+
+- **Subsystem docs describe the present, not the history.** When a session
+  changes how something works, rewrite that subsystem's doc to current state.
+  The story of how it got there belongs in SESSION_HISTORY, and only there — no
+  "(Session N)" stamps in reference docs.
+- **Nothing is deleted, only moved.** Superseded content goes to the matching
+  file under `docs/archive/`.

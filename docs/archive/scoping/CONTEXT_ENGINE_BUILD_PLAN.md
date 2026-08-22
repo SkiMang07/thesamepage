@@ -1,3 +1,5 @@
+> **ARCHIVED — historical, not current intent.** All six build sessions completed. Current behavior: `docs/systems/context-engine.md`.
+
 # The Context Engine — Build Plan v1
 
 Drafted 2026-08-11, Session 27. Resolves the five open questions at the end

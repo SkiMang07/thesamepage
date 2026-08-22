@@ -1,3 +1,5 @@
+> **ARCHIVED — historical, not current intent.** The Context Engine framework. Built and shipped. Current behavior: `docs/systems/context-engine.md`.
+
 # The Context Engine — Framework Doc v0
 
 Drafted 2026-08-09, brainstorming session (same session as

@@ -1,20 +1,57 @@
 # The Same Page — Session History
 
-One entry per session. Read the most recent entry first — it tells you the
-current state and what to do next so you don't relitigate past decisions.
+One entry per session, newest first. **Read the top entry first** — it tells you
+the current state and what to do next so you don't relitigate settled decisions.
 
-Format per entry:
-- **Date + session goal**
-- **What was done**
-- **Decisions made / locked**
-- **Next step**
+Format per entry, and nothing else:
 
-This file keeps the **5 most recent sessions in full detail**. Older sessions
-are compacted below to their goal plus key locked decisions; older sessions
-are archived in full at `docs/SESSION_HISTORY_ARCHIVE.md`. The tsp-push skill
-maintains this split automatically — it appends new entries here and rolls
-the oldest full entry into the archive (with a fresh compact summary left
-behind) each time the count exceeds 5.
+- **Goal** — what Andrew asked for, or the problem that prompted the session
+- **What was done** — specific files, functions, routes, migrations
+- **Decisions made / locked** — and *why*, not just what
+- **Next step** — the actual next task, named
+
+Keep an entry to roughly 150 words. Do not narrate verification here — that it
+built clean is what git history and CI are for. Record a verification detail only
+when it *found* something worth remembering, and then put that finding in the
+doc it belongs to.
+
+This file holds the **5 most recent sessions in full**. Older ones appear as index
+lines at the bottom; the last 20 keep their locked decisions, everything before
+that keeps its goal alone. Full text of every archived entry lives unchanged in
+`docs/archive/SESSION_HISTORY_ARCHIVE.md`. `tsp-push` maintains all of this
+automatically.
+
+---
+
+## Session 57 — 2026-08-22
+
+**Goal:** Andrew flagged that the reference docs had gotten long enough to burn real tokens every
+session, and asked for a hard look at how the non-dev docs are organized.
+
+**What was done:** Measured it — a typical build session loaded ~51k tokens of docs before reading any
+code. Rewrote `CLAUDE.md` from the filesystem (it still claimed 4 tables and 2 route modules against
+44 and 20). Split `ENGINEERING.md` 111 KB → 14 KB plus 11 current-state docs under `docs/systems/`,
+merging the four Team Mission Control sections into one and the six Context Engine sub-sessions into
+one. Restructured `DESIGN.md` around conventions plus 16 live decisions; all 122 original rows moved
+unedited to `docs/archive/DESIGN_ARCHIVE.md`. Created `docs/archive/` for the session archive and the
+seven shipped scoping docs, each bannered. Capped the compact index at 20 decision-carrying lines.
+Rewrote the `tsp-push` skill (delivered as a `.skill` file for Andrew to save).
+
+**Decisions made / locked:**
+- **Reference docs describe the present; SESSION_HISTORY describes the past.** No session-stamped
+  headings or inline "(Session N)" in any reference doc — that convention is what grew ENGINEERING.md
+  to 111 KB, since `tsp-push` Step 6 explicitly said to append rather than rewrite.
+- **A new feature area gets a new `docs/systems/<area>.md`**, never a new section in ENGINEERING.md.
+- **Nothing is deleted, only moved** to the matching file under `docs/archive/`.
+- `tsp-push` now runs a documentation GC pass every 10th session, and checks CLAUDE.md's counts
+  against reality whenever `routes/` or `schema.sql` changes.
+
+**Found along the way:** `assistant_messages` is live (migration applied 13 Aug) but was never folded
+into `schema.sql`, so a local verification run from `schema.sql` alone is missing a table production
+has. Recorded under "Known drift" in ENGINEERING.md; the new hard rule #4 is what prevents the next one.
+
+**Next step:** Fold `assistant_messages` into `schema.sql`. Then Session 56's open thread — the
+remaining items from Session 54's UX review.
 
 ---
 
@@ -212,61 +249,17 @@ still just plain text, unchanged from before this pass).
 
 ---
 
-## Session 52 — 2026-08-22
-
-**Goal:** Andrew saw the new persistent sidebar (Session 51) and initially read Mission Control's
-missing rail as an oversight, then clarified he knew it was a deliberate Session 51 call ("that page
-already is the map") but wanted it reversed anyway — every other page has the rail, and that read as
-inconsistent rather than as a deliberate simplification. Also asked to bring Goals and Projects into
-the same visual language Team (Session 24) and the Person page (Session 50) already share.
-
-**What was done:**
-- `frontend/components/Sidebar.tsx` — now renders on Mission Control too; only `ctx.kind === "none"`
-  (login/IC) still suppresses it. The Home link takes an "active" treatment (`bg-black/5 font-semibold
-  text-gray-900`) since none of `NAV_GROUPS`' items apply on the home page itself. Header comment
-  rewritten to record why Session 51's original call got reversed.
-- `frontend/components/AppNav.tsx` — one comment line updated to stop saying the sidebar skips Mission
-  Control.
-- Goals/Projects: no code touched this session. Scoped via one AskUserQuestion round (Andrew picked
-  "mockups first," same process as Team/Person) — mined real tokens from `frontend/app/app/team/page.tsx`
-  (KpiStrip's gradient tiles, STATUS_BORDER/STATUS_STYLES hex values, the inline-SVG donut ring) and
-  published a 3-option design canvas, "Goals and Projects Redesign Options"
-  (https://claude.ai/code/artifact/16006c11-c6ad-49a0-985f-717731b4001e): Option A (direct KPI-strip/
-  card port of the Team page pattern), Option B (hierarchy made visually explicit via nested/indented
-  company→department→team→individual groups, tabs retired), Option C (exception-first triage mirroring
-  Mission Control's own Goals card, plus a scope switcher folding in the org-unit rollup need) — plus
-  one Projects artboard applying Option A's treatment as a concrete example.
-
-**Decisions made / locked:**
-- Mission Control gets the sidebar after all — Session 51's "already the map" reasoning was sound on
-  paper but read as inconsistent in practice; every authenticated page now shows the same rail.
-- Goals/Projects redesign direction: **Option A** — KPI strip (4 gradient tiles) + card grid using the
-  border-l-4 status accent + inline-SVG progress ring, level tabs on Goals kept as a pill-style filter
-  rather than retired. Locked in; not yet built.
-
-**Verification:** Frontend-only change (Sidebar/AppNav), no schema/backend touch. Repo tarred from the
-device's working copy (git status was clean going in — Session 51's own changes were already committed,
-its stale `.git/index.lock` resolved before this session started) and rebuilt in the cloud sandbox since
-`next build` exceeds device_bash's ~45s per-call cap: fresh `npm install`, `npx tsc --noEmit` clean,
-`next build` clean (21/21 routes). The mockup canvas is exploration only — no build/type verification
-applies to it.
-
-**Next step:** Build Goals and Projects per Option A — KPI strip + border-l-4 card grid, matching the
-token values in the published canvas and in `frontend/app/app/team/page.tsx`. Widen both pages from
-`max-w-3xl` to `max-w-7xl`. Leave the add/edit forms alone this pass (out of scope per the canvas
-brief) — just fit the "+ Add" affordance into the new layout.
-
----
-
 ## Archived sessions (compact index)
 
-Each line below is the goal plus the key decisions locked in that session —
-enough to know if it matters to what you're doing now. Full entries
+The 20 most recent archived sessions keep their goal plus the decisions locked
+that session — enough to know if one matters to what you're doing now. Older
+lines keep the goal alone. Full entries
 (what was done, verification, deviations) are in
-`docs/SESSION_HISTORY_ARCHIVE.md`, newest-first, unchanged from their
+`docs/archive/SESSION_HISTORY_ARCHIVE.md`, newest-first, unchanged from their
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 52 — 2026-08-22:** Give Mission Control the persistent sidebar after all, and scope Goals/Projects into Team's visual language via a 3-option design canvas. **Decided:** every authenticated page shows the same rail — Session 51's "already the map" exclusion read as inconsistent in use, not as deliberate simplification; Goals/Projects locked to Option A (KPI strip + border-l-4 card grid + progress ring), level tabs kept as a pill filter.
 - **Session 51 — 2026-08-22:** Simplify the persistent nav (Sessions 36-38) by retiring the duplicated breadcrumb + zone-chip idiom in favor of a fully static top bar and a persistent left rail (`Sidebar.tsx`) on every page except Mission Control. **Decided:** Mission Control gets no sidebar since its own card grid + inline ZoneMap already is the map; the all-areas map overlay is retired outright, not rehomed, since the sidebar already puts every section one click away.
 - **Session 50 — 2026-08-21:** Rebuild `/app/reports/[id]` from a single-column form wall into the "Command Deck" hub (identity band, KPI strip, 3-column layout, settings drawer). **Decided:** new `dr_capture_notes` is its own inbox table (not a column on `one_on_ones`); goal progress bars only render with a real check-in, never fabricated from status alone.
 - **Session 49 — 2026-08-21:** Give the development plan its own dedicated, always-editable text box (Manager Notes had been accidentally absorbing the AI-assist meant for the plan itself). **Decided:** Manager notes and the development plan are genuinely separate concepts and stay on separate fields/surfaces, not merged; `/notes/revise` is reused for both rather than duplicated.
@@ -274,51 +267,51 @@ specific decision.
 - **Session 47 — 2026-08-20:** Scope and build Development (individual plans + a lightweight team "training focus" note), activating dormant `development_plans`/`dev_plan_*` schema from the original scaffold. **Decided:** Aspirations and training are never AI-drafted — only opportunities + a synthesis note, where evidence-grounding actually applies; team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than a new pattern.
 - **Session 46 — 2026-08-20:** Give projects an optional team attachment and make `/app/team`'s Goals/Initiatives cascade down from parent departments instead of exact-matching only. **Decided:** Hierarchy inheritance applies only to goals/projects on `/app/team` (commitments, roster, meeting notes, callouts stay exact-match); the leadership-rollup endpoint was deliberately left unchanged (different hierarchy concept), flagged as a follow-up.
 - **Session 45 — 2026-08-19:** Add a team name + dropdown to `/app/team` so a manager leading multiple `org_units` can tell which team's data they're viewing, and filter the page by picking one. **Decided:** `team_callouts.org_unit_id` is `ON DELETE CASCADE` (not `SET NULL` like `team_meeting_notes`) — found via a real Postgres test, needed because of the two-partial-unique-index uniqueness rule; `GET /callout` changed from one object to a list, a breaking response-shape change.
-- **Session 44 — 2026-08-18:** Build Role JD Import (`docs/ROLE_JD_IMPORT_SCOPING.md`): paste/drop a JD, one AI call proposes role identity + ladder match + drafts expectations, manager reviews, one commit lands it. **Decided:** No migration needed — every column this flow writes already existed; collision resolution is server-side first (draft already flags `exists`), frontend only handles manager-created collisions; the JD file is never stored (role config, not a Context Engine document).
+- **Session 44 — 2026-08-18:** Build Role JD Import (`docs/archive/scoping/ROLE_JD_IMPORT_SCOPING.md`): paste/drop a JD, one AI call proposes role identity + ladder match + drafts expectations, manager reviews, one commit lands it. **Decided:** No migration needed — every column this flow writes already existed; collision resolution is server-side first (draft already flags `exists`), frontend only handles manager-created collisions; the JD file is never stored (role config, not a Context Engine document).
 - **Session 43 — 2026-08-18:** Polish pass (Plan §7.3, last of 5 team-setup UX sessions): People archive/edit, People-row rework, data-trust fixes, org-wide values. **Decided:** Two mutually-exclusive lists (active/archived), not one client-filtered list — archived fetch only pays when a manager expands "Show archived"; `teams_count` keeps its pre-existing meaning (total org units), tile-display split lives in two new fields instead.
-- **Session 42 — 2026-08-18:** Build Plan S4+S5 (last of the four S1-S5 setup-UX sessions, `docs/TEAM_SETUP_UX_REVIEW.md` §6) — make half-configured setup state visible everywhere a person appears, and rename/consolidate the setup surfaces (Roles & Levels + Expectations merged into one "Roles & expectations" tab).
+- **Session 42 — 2026-08-18:** Build Plan S4+S5 (last of the four S1-S5 setup-UX sessions, `docs/archive/scoping/TEAM_SETUP_UX_REVIEW.md` §6) — make half-configured setup state visible everywhere a person appears, and rename/consolidate the setup surfaces (Roles & Levels + Expectations merged into one "Roles & expectations" tab).
 - **Session 41 — 2026-08-18:** Build Plan S1 — rebuild Settings → Team as a roster-first "People" section (progress header, inline role/team creation, fix for Quick add's free-text Role dead-end). **Decided:** `role_has_expectations` is null (not false) when no role is assigned, distinguishing "nothing to check" from "checked, found nothing"; inline role/team creation always creates new (no fuzzy-match merge — Roles & Levels' existing merge tool stays the one place for that); email on create is fire-and-forget, no auto-invite.
 - **Session 40 — 2026-08-18:** Build Plan S2 — role families, so 13 flat role_levels cards become ~5 ladders (one card per family, levels as rows, "Add L{n+1}" pre-filled, merge tool for near-duplicates). **Decided:** Family name takes over as primary display once a level has one, `job_role` stays as an optional per-level override title; new role creation splits into "+ Add a new ladder" (family+L1 together) vs. "+ Add L{n+1}" (pre-filled, existing ladder); family deletion allowed regardless of level count, UI just steers toward emptying it first.
 - **Session 39 — 2026-08-18:** Build Plan S3 — expectations coverage grid + per-role "Draft with AI" (role's stored JD → draft metrics/skills/values, review-then-commit) + org-wide values. **Decided:** Org-wide values = `value_configs.role_level_id IS NULL` — no migration (column already nullable, RLS org-scoped, not role_level-scoped); AI draft leans conservative on role-specific values — prefer empty, company values live in the org-wide block, not duplicated 13x; all new logic in new `expectations_ai.py` on top of settings.py's unchanged CRUD (same shape as assessments.py on direct_reports.py).
 - **Session 38 — 2026-08-17:** Polish pass on the persistent nav shipped in Sessions 36/37: top-bar alignment fix, a sticky-nav scroll bug found during verification, Scribe toggle prominence, and a first-ever avatar menu (Settings + Sign out). **Decided:** Nav content aligns to `max-w-7xl` (matching Dashboard/Team); Scribe toggle prominence solved with styling only, no second toggle location; avatar menu is Settings + Sign out only, no multi-org items.
 - **Session 36 — 2026-08-16:** Nav rework pass 1 (tracked in code comments and DESIGN.md as Session 36/37; documented here retroactively — Andrew asked to hold… **Decided:** all six recorded directly in `docs/DESIGN.md`'s 2026-08-16 rows — hub & orbit locked in from nav_redesign_options.md; ZoneMap.tsx….
-- **Session 37 — 2026-08-16:** Nav rework pass 2 (tracked in code comments as Session 38 — see `docs/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). **Decided:** `resolve_cadence_days()` returns `(days, source)` rather than a bare int — a deliberate deviation from the spec's literal…; `one_on_ones` still has no status column — status stays derived (`planned` = prep_guide set + summary null; `completed` = summary….
+- **Session 37 — 2026-08-16:** Nav rework pass 2 (tracked in code comments as Session 38 — see `docs/archive/scoping/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). **Decided:** `resolve_cadence_days()` returns `(days, source)` rather than a bare int — a deliberate deviation from the spec's literal…; `one_on_ones` still has no status column — status stays derived (`planned` = prep_guide set + summary null; `completed` = summary….
 - **Session 35 — 2026-08-16:** Widen the Scribe drawer from its fixed 400px to roughly 25–33% of the viewport width, so the conversation and draft cards get more room without…
-- **Session 34 — 2026-08-13:** S3 of the Scribe build plan (`docs/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out. **Decided:** **Thread is now fully server-managed.** The client no longer passes a thread to the backend; it only sends the new message + optional page context.; **Page context is ephemeral, not stored.** It's injected into the system prompt per request, not into the `assistant_messages` table..
-- **Session 33 — 2026-08-13:** S2 of the Scribe build plan (`docs/AGENT_SCRIBE_SCOPING.md`): Drawer UI + confirm flow. **Decided:** **Commitment confirm path:** `POST /api/commitments` (new endpoint) rather than reusing `POST /api/team/commitments` (which always sets `is_team_commitment = true`).; **`link_project_goal` confirm:** two API calls (GET project, then PUT with goal_id)..
-- **Session 32 — 2026-08-13:** S1 of the Scribe build plan (`docs/AGENT_SCRIBE_SCOPING.md`): agent loop + eval harness, no UI. **Decided:** **MVR schema verification:** all six verb schemas were verified against `schema.sql` before locking the system prompt.; **`emit_draft` as the write primitive:** the model calls `emit_draft` (a tool returning `{"ok": true}`) to stage drafts rather than emitting JSON in its text output..
-- **Session 31 — 2026-08-12:** Build Session VI of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`): staleness + precedence surfacing — the final session of the… **Decided:** Staleness threshold set at decay multiplier < 0.7 — a judgment call, not discussed with Andrew; picked because it sits…; Both staleness prompts and scope conflicts reuse the app's existing amber "needs attention" convention rather than inventing a….
-- **Session 30 — 2026-08-12:** Build Session V of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`): the Brain visualization. **Decided:** No new charting/visualization dependency — build-plan Session V suggested reusing "the existing dashboard's orbital/radial…; Decay curve is per-session-simple by design (see above) — real canonical decay weighting stays Session VI's job, not pulled….
-- **Session 29 — 2026-08-12:** Build Session IV of the Context Engine build plan (`docs/CONTEXT_ENGINE_BUILD_PLAN.md`): retrieval + agent integration, backend only. **Decided:** `max_docs=4` for tier-two `extracted_text` fetches — a judgment call, not discussed with Andrew: decks can run long and this is a…; Ranking is a documented placeholder (specificity → novelty → recency), not the final design — decay weighting is explicitly….
-- **Session 28 — 2026-08-12:** Build Session II (extraction + Librarian pipeline, backend) and, same session, Session III (confirm-card UX, frontend) of the Context Engine build… **Decided:** Extraction call has no OpenAI fallback (see above) — an Anthropic 5xx just fails the upload (`status='failed'`); the user re-uploads.; `document_scopes` stays empty until confirm — a document with no scope row is invisible to Session IV's retrieval cascade until a human sets one..
-- **Session 27 — 2026-08-12:** Move the Context Engine (Session 25's framework, `docs/CONTEXT_ENGINE.md`) from settled concept to buildable. **Decided:** All 5 build-plan resolutions above..
-- **Session 26 — 2026-08-11:** Started as an open brainstorm from Andrew — goals and initiatives feel inert on Mission Control (cards can't be interacted with, no visible progress,… **Decided:** Check-ins cover both goals and projects in ONE shared table — same status enum, same shape, and the COO-agent temporal layer…; Progress is a manually-asserted % per check-in — honest about the judgment involved..
-- **Session 25 — 2026-08-09:** COO agent brainstorm round 2 (follow-up to the Session ~9 agent-hierarchy idea, whose "wait until the data models exist" objection is now resolved). **Decided:** Agent roster (COO + culture/L&D/performance/strategy&ops) is brand, not architecture — one COO agent with per-domain context loaders, split only if quality degrades..
-- **Session 24 — 2026-08-09:** Visual/layout redesign of `/app/team` (Team Mission Control), Andrew's explicit ask after dogfooding Session 22/23's 3-column grid — captured at the… **Decided:** Write access stays manager-authored with the team viewing only — the brief's "team member adds their own agenda items" framing is…; Initiatives reuses `getProjects()` filtered client-side to active/on_track/at_risk (Mission Control's existing Key Initiatives….
-- **Session 23 — 2026-08-09:** Follow-up on Session 22's Team Mission Control — extend the meeting-notes column with a surfaced "next meeting's agenda" distinct from logged past… **Decided:** Agenda vs. past meeting is derived from `meeting_date`, never a stored status field — same discipline as `one_on_ones`, and…; Team commitments reuse the existing `commitments` table via a flag rather than a new table or true multi-assignee model — a….
-- **Session 22 — 2026-08-08:** Expand the `/app/team` page built Session 21 into "Team Mission Control" — a 3-column team-wide surface (roster/priorities left, company+team goal… **Decided:** IC login ships in two passes: the account/claim mechanism now, the IC-facing view as a follow-up.; "Key updates" is scoped conceptually (a manager-authored broadcast feed, distinct from `team_messages`) but has no code yet —….
-- **Session 21 — 2026-08-08:** Andrew asked what's next; Claude's read of the project memory (the `team_space_brainstorm` note from 2026-08-03) suggested Team View was the most… **Decided:** Team View v1 is scoped to the caller's own direct reports, matching Mission Control rather than role-scoped views' org_unit…; Messaging ships as store-only groundwork this session rather than deferred to a separate pass — Andrew's explicit call,….
-- **Session 20 — 2026-08-08:** Andrew asked to work through `foundation_weaknesses.md` (the 6 structural weaknesses flagged in Session 19) and confirm they're all still active… **Decided:** Rate limiting is per-IP, not per-user, going forward — see the Rate limiting convention in ENGINEERING.md.; The insight cache uses a flat TTL, not write-path invalidation — accepted tradeoff rather than threading cache invalidation into….
-- **Session 19 — 2026-08-07:** Andrew reviewed Session 18's Mission Control page and wanted it reworked into a grid — three sections across the top, per his original design intent… **Decided:** AI insight is real AI-generated, not rule-based — Andrew's explicit call, since the insight is meant to be the page's "magic."…; Quick add is a single modal, not a global command palette — Andrew's explicit call, matching the app's current size (not enough….
-- **Session 18 — 2026-08-06:** Andrew asked for a few options for next steps given everything built so far. **Decided:** see the 4 scoping answers above — all now reflected in the page's header comment block in `dashboard/page.tsx` and in….
-- **Session 17 — 2026-08-06:** Andrew reported the Team settings page had visually overlapping text (screenshot), and separately — a much bigger concern — that he'd gone through… **Decided:** Any Settings sub-section with its own "currently selected X" state should default to lifting that state to `SettingsPage`, not….
+- **Session 34 — 2026-08-13:** S3 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out. **Decided:** **Thread is now fully server-managed.** The client no longer passes a thread to the backend; it only sends the new message + optional page context.; **Page context is ephemeral, not stored.** It's injected into the system prompt per request, not into the `assistant_messages` table..
+- **Session 33 — 2026-08-13:** S2 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Drawer UI + confirm flow. **Decided:** **Commitment confirm path:** `POST /api/commitments` (new endpoint) rather than reusing `POST /api/team/commitments` (which always sets `is_team_commitment = true`).; **`link_project_goal` confirm:** two API calls (GET project, then PUT with goal_id)..
+- **Session 32 — 2026-08-13:** S1 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): agent loop + eval harness, no UI. **Decided:** **MVR schema verification:** all six verb schemas were verified against `schema.sql` before locking the system prompt.; **`emit_draft` as the write primitive:** the model calls `emit_draft` (a tool returning `{"ok": true}`) to stage drafts rather than emitting JSON in its text output..
+- **Session 31 — 2026-08-12:** Build Session VI of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): staleness + precedence surfacing — the final session of the….
+- **Session 30 — 2026-08-12:** Build Session V of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): the Brain visualization.
+- **Session 29 — 2026-08-12:** Build Session IV of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): retrieval + agent integration, backend only.
+- **Session 28 — 2026-08-12:** Build Session II (extraction + Librarian pipeline, backend) and, same session, Session III (confirm-card UX, frontend) of the Context Engine build….
+- **Session 27 — 2026-08-12:** Move the Context Engine (Session 25's framework, `docs/archive/scoping/CONTEXT_ENGINE.md`) from settled concept to buildable.
+- **Session 26 — 2026-08-11:** Started as an open brainstorm from Andrew — goals and initiatives feel inert on Mission Control (cards can't be interacted with, no visible progress,….
+- **Session 25 — 2026-08-09:** COO agent brainstorm round 2 (follow-up to the Session ~9 agent-hierarchy idea, whose "wait until the data models exist" objection is now resolved).
+- **Session 24 — 2026-08-09:** Visual/layout redesign of `/app/team` (Team Mission Control), Andrew's explicit ask after dogfooding Session 22/23's 3-column grid — captured at the….
+- **Session 23 — 2026-08-09:** Follow-up on Session 22's Team Mission Control — extend the meeting-notes column with a surfaced "next meeting's agenda" distinct from logged past….
+- **Session 22 — 2026-08-08:** Expand the `/app/team` page built Session 21 into "Team Mission Control" — a 3-column team-wide surface (roster/priorities left, company+team goal….
+- **Session 21 — 2026-08-08:** Andrew asked what's next; Claude's read of the project memory (the `team_space_brainstorm` note from 2026-08-03) suggested Team View was the most….
+- **Session 20 — 2026-08-08:** Andrew asked to work through `foundation_weaknesses.md` (the 6 structural weaknesses flagged in Session 19) and confirm they're all still active….
+- **Session 19 — 2026-08-07:** Andrew reviewed Session 18's Mission Control page and wanted it reworked into a grid — three sections across the top, per his original design intent….
+- **Session 18 — 2026-08-06:** Andrew asked for a few options for next steps given everything built so far.
+- **Session 17 — 2026-08-06:** Andrew reported the Team settings page had visually overlapping text (screenshot), and separately — a much bigger concern — that he'd gone through….
 - **Session 16 — 2026-08-04:** Asked what the best next step for the app was, given PRODUCT_VISION.md and everything built so far.
-- **Session 15 — 2026-08-03:** Role-scoped views — Andrew picked this off the running list of "what's next" options (surfaced at the top of this session by reviewing… **Decided:** See the four AskUserQuestion answers above — all confirmed with Andrew, not defaulted.; **My call, flagged not re-asked** (same pattern as prior sessions' scope notes): any org member can assign any org member as a….
+- **Session 15 — 2026-08-03:** Role-scoped views — Andrew picked this off the running list of "what's next" options (surfaced at the top of this session by reviewing….
 - **Session 14 — 2026-08-02:** Capacity model and planning — Andrew's own framing: help managers/ dept heads understand team bandwidth, and codify how much "work" a team, individual, or department can actually handle.
-- **Session 13 — 2026-08-02:** Activate `projects` — the dormant table flagged as "the next candidate in this family" after Goals (Session 10) and Org (Session 11). **Decided:** see above — all confirmed with Andrew via AskUserQuestion before building, same discipline as Sessions 10-12..
-- **Session 12 — 2026-08-02:** Split "Team" out of Settings' Roles & Levels into its own section, and add Edit (update-in-place) for role_levels — same "scope first" pattern as… **Decided:** Team is a Settings sub-page, not a top-level nav item and not folded into Org — it's about "who does what," which Andrew judged…; Role assignment + team assignment travel together as one section (Team), not split further..
-- **Session 11 — 2026-08-02:** Design (then build) an org hierarchy data model — team/department/ company as real entities, not free text — plus a visual org-chart builder. **Decided:** See "What was done" above — schema shape, the `functional_team` deprecation, builder interaction model, page placement, and the…; `org_units` is org-scoped (`current_org_id()`), unlike `direct_reports`/ `goals` which are manager-scoped….
-- **Session 10 — 2026-08-02:** Scope how Goals fits into the product with Andrew (design/scoping conversation, not a build session at first) — then, once placement and shape were… **Decided:** See "What was done" above — placement, DR surfacing, hierarchy scope, and the projects/rollup deferrals were all explicit calls…; `goals`/`projects` RLS is owner_id-scoped, not org-scoped, despite the policy names — documented in `goals.py`'s module docstring….
-- **Session 9 — 2026-08-02:** Give managers access to past 1:1 activity from the DR detail page — both completed sessions and in-progress prep sheets. **Decided:** Status is always derived from `prep_guide`/`summary`, never a stored column — one less thing that can drift out of sync.; "Deferred" (from the original ask's planned/completed/deferred sketch) is NOT a tracked status — there's no trigger in the app….
-- **Session 8 — 2026-08-01:** Capture what actually happens on the call. **Decided:** Wrap-up is draft-then-review: AI output never enters the record without the manager seeing it.; Commitments are two-sided (`committed_by`); `owner_id` stays the manager (record-keeper) so RLS is untouched..
-- **Session 7 — 2026-08-01:** Make the Settings backbone pay off — surface each DR's role expectations on the detail page and ground the AI 1:1 prep in them. **Decided:** Expectations ride on `GET /api/direct-reports/{id}` rather than a separate endpoint — the detail page already fetches it, and…; Prompt behavior: expectations are grounding context, not an agenda — the prompt explicitly forbids auditing every expectation in….
-- **Session 6 — 2026-08-01:** Settings page — the configuration backbone connecting people, roles, and performance expectations (pulled forward ahead of the dashboard roadmap). **Decided:** v1 Settings = Profile & Company, Roles & Levels, Expectations.; Depth: UI-first, minimal table activation..
-- **Session 5 — 2026-08-01:** Commitment tracker UI — surface and resolve commitments (they could be created and fed into prep, but never viewed or closed anywhere). **Decided:** Commitment resolution is checkbox-style on the DR detail page (no separate tracker page yet — dashboard rollup is the natural…; `dropped` is a first-class status (already in schema) — dropping is distinct from done so accountability data stays honest..
-- **Session 5b — 2026-08-01:** Dashboard → mini mission control. **Decided:** 1:1 cadence threshold is 21 days everywhere — dashboard badge matches the prep prompt's recency logic in `one_on_ones.py`.; Dashboard stays single-column cards (calm > dense grid) until team sizes demand otherwise..
-- **Session 4 — 2026-07-17:** Implement real AI-assisted 1:1 prep — the core product IP. **Decided:** Prep output shape: `situation_summary` + `agenda_items[]` (not flat Q&A lists).; Closing question is mandatory — always the last agenda item..
-- **Session 4b — 2026-07-21:** Wire the 1:1 prep backend to the frontend. **Decided:** Agenda items render as collapsible cards with rationale as italic subtext and suggested questions as indented list.; New commitments on log step are split by newline — simplest UX, avoids a dynamic "add another" form that adds complexity..
-- **Session 4c — 2026-07-21:** Wire Supabase Auth so the full flow is end-to-end testable. **Decided:** Magic link only (no password). Revisit if conversion data says otherwise.; `/auth/callback` is the canonical redirect URL — must be added to the Supabase project's "Redirect URLs" allow-list (Auth → URL Configuration)..
-- **Session 4d — 2026-07-21:** Get Supabase running and backend deployed to Railway. **Decided:** Use Supabase legacy API keys (`eyJ...` format) — new `sb_publishable_` format not confirmed compatible with SDK versions in…; Python 3.11 pinned via `.python-version` for Railway builds..
-- **Session 3 — 2026-07-17:** High-fidelity mockup of all 5 core screens + full schema architecture aligned with the Miro board. **Decided:** Schema expanded from 4 → 28 tables. See ENGINEERING.md for full table list.; Hierarchy: `users.manager_id` self-ref..
-- **Session 2 — 2026-07-17:** Reset from scaffold confusion, confirm tech stack, establish documentation strategy. **Decided:** Tech stack confirmed: FastAPI + Supabase backend (Railway), Next.js frontend (Vercel), Tailwind CSS, Anthropic Claude via…; Documentation structure above is the canonical system going forward..
-- **Session 1 — 2026-07-14:** Build project scaffold. **Decided:** Stack: FastAPI + Supabase + Next.js (see ENGINEERING.md for rationale); 4-table schema: direct_reports, one_on_ones, commitments, subscriptions.
+- **Session 13 — 2026-08-02:** Activate `projects` — the dormant table flagged as "the next candidate in this family" after Goals (Session 10) and Org (Session 11).
+- **Session 12 — 2026-08-02:** Split "Team" out of Settings' Roles & Levels into its own section, and add Edit (update-in-place) for role_levels — same "scope first" pattern as….
+- **Session 11 — 2026-08-02:** Design (then build) an org hierarchy data model — team/department/ company as real entities, not free text — plus a visual org-chart builder.
+- **Session 10 — 2026-08-02:** Scope how Goals fits into the product with Andrew (design/scoping conversation, not a build session at first) — then, once placement and shape were….
+- **Session 9 — 2026-08-02:** Give managers access to past 1:1 activity from the DR detail page — both completed sessions and in-progress prep sheets.
+- **Session 8 — 2026-08-01:** Capture what actually happens on the call.
+- **Session 7 — 2026-08-01:** Make the Settings backbone pay off — surface each DR's role expectations on the detail page and ground the AI 1:1 prep in them.
+- **Session 6 — 2026-08-01:** Settings page — the configuration backbone connecting people, roles, and performance expectations (pulled forward ahead of the dashboard roadmap).
+- **Session 5 — 2026-08-01:** Commitment tracker UI — surface and resolve commitments (they could be created and fed into prep, but never viewed or closed anywhere).
+- **Session 5b — 2026-08-01:** Dashboard → mini mission control.
+- **Session 4 — 2026-07-17:** Implement real AI-assisted 1:1 prep — the core product IP.
+- **Session 4b — 2026-07-21:** Wire the 1:1 prep backend to the frontend.
+- **Session 4c — 2026-07-21:** Wire Supabase Auth so the full flow is end-to-end testable.
+- **Session 4d — 2026-07-21:** Get Supabase running and backend deployed to Railway.
+- **Session 3 — 2026-07-17:** High-fidelity mockup of all 5 core screens + full schema architecture aligned with the Miro board.
+- **Session 2 — 2026-07-17:** Reset from scaffold confusion, confirm tech stack, establish documentation strategy.
+- **Session 1 — 2026-07-14:** Build project scaffold.
