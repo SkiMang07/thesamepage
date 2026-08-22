@@ -9,6 +9,63 @@ here.
 
 ---
 
+## Session 48 — 2026-08-21
+
+**Goal:** Andrew dogfooded Session 47's Development feature immediately and hit a real dead
+end: "Draft with AI" is evidence-gated by design, so a direct report with no assessment/1:1
+history yet got nothing back — and the manager-note flow had no other way in. He asked for
+manual entry to be the default everywhere, with AI as an optional assist: both "Draft with AI"
+(already existed) and a new "Revise with AI."
+
+**What was done:**
+- `backend/routes/development.py` — factored `draft_development`'s inline evidence-fetching and
+  role-label-building into two shared helpers, `_fetch_evidence()` (recent 1:1 summaries + open
+  commitments) and `_role_label()`, so the new revise endpoint grounds itself in identical
+  context to `/draft` without duplicating ~25 lines.
+- New `_build_revise_prompt()` — treats the manager's own already-written text as the primary
+  source ("your starting point... preserve their intent, meaning, and voice"), tightens
+  language and adds a concrete grounding detail only where evidence genuinely supports it, but
+  is explicitly forbidden from inventing evidence or changing the manager's overall assessment.
+- New `POST /{direct_report_id}/notes/revise` route (rate-limited 10/minute, same as `/draft`)
+  — takes `{text}`, 422s with a clear message if empty, otherwise calls `generate_text()` and
+  strips code-fence/quote wrapping the model sometimes adds despite the prompt telling it not
+  to.
+- `frontend/lib/api.ts` — `reviseDevManagerNote(directReportId, text)`.
+- `frontend/app/app/reports/[id]/page.tsx`'s `DevelopmentSection` — replaced the old blocking
+  "AI draft review" panel (checkboxes per item, editable draft note, Discard/Save selected)
+  with a non-blocking model. "Draft with AI" now populates `aiOpportunities` (dismissible blue
+  suggestion chips with their own "Add" button, styled distinctly from the amber
+  assessment-suggested chips) and `aiNoteSuggestion` (a callout with "Use this"/"Dismiss" that
+  fills the always-present note textarea rather than overwriting it silently). When a draft
+  comes back with nothing to suggest, a plain hint replaces what used to be a dead end ("Not
+  enough evidence yet for a draft — write your own below..."). A new "Revise with AI" button
+  sits next to the note form's existing "Add" button, disabled until there's manually-typed
+  text, calling the new endpoint and replacing the textarea's contents with the revision (still
+  editable, still requires a separate Add to save).
+
+**Decisions made / locked:**
+- Draft and revise are two intentionally different-shaped operations, not the same prompt
+  behind a flag: draft is evidence-gated and honestly returns nothing on thin evidence; revise
+  takes the manager's text as the primary source and is always answerable, using evidence only
+  to add grounding detail, never to gate the response.
+- Manual entry was never actually missing for opportunities/training/aspiration — those already
+  had independent forms. Only the manager-note flow was accidentally AI-gated by the old
+  blocking-panel design; fixed by demoting AI from "the only path in" to an optional assist on
+  both the note and the opportunities list.
+
+**Verification:** `python3 -m py_compile` clean on `development.py`; sandboxed `main.py` import
+confirms the new `/api/development/{direct_report_id}/notes/revise` route registers with no
+path-ordering collisions against the existing 120-route total. Frontend: `npx tsc --noEmit`
+clean, `next build` clean (19/19 routes).
+
+**Next step:** Andrew to dogfood the revised flow live — write a note by hand on a
+thin-evidence report and confirm "Revise with AI" actually improves it instead of erroring; try
+"Draft with AI" on a report with real assessment/1:1 history and confirm the suggestion chips
+render and "Add" still creates real opportunity rows now that they're a separate list from the
+assessment-suggested ones.
+
+---
+
 ## Session 47 — 2026-08-20
 
 **Goal:** Andrew wanted to discuss "Development" (Personal Development / Career Plan / Development

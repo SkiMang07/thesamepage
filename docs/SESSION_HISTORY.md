@@ -18,6 +18,53 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 53 — 2026-08-22
+
+**Goal:** Build Goals and Projects per the Option A direction Session 52 locked (KPI strip + border-l-4
+card grid + inline-SVG progress ring), matching the visual language Team (Session 24) and the Person
+page (Session 50) already shipped. A build session, not a design session — direction was pre-approved
+via the published "Goals and Projects Redesign Options" canvas.
+
+**What was done:**
+- `frontend/app/app/goals/page.tsx` — widened `max-w-3xl` → `max-w-7xl`; added a `KpiStrip` (4
+  gradient tiles: goals on track, at risk, due this week, no initiative attached — scoped to
+  whichever level tab is currently selected, so the strip moves with the tab the same way Team's
+  strip moves with its team-selector filter); kept the level-tab pill row, unretired; replaced the
+  plain bordered `<ul>` list with a responsive `GoalGrid` of `border-l-4` accented cards
+  (`STATUS_BORDER`/`STATUS_STYLES` ported verbatim from `team/page.tsx`, same hex values), each
+  carrying its own inline-SVG `ProgressRing` (same donut path/stroke as Team's `GoalsCard` ring, but
+  driven by the single goal's own `progress` instead of an aggregate — renders an honest em-dash when
+  no check-in exists rather than a fabricated 0%). `CheckInPanel` reused as-is inside each card;
+  add/edit forms untouched, just refit (the edit form now spans the full grid row).
+- `frontend/app/app/projects/page.tsx` — same treatment, no level tabs (flat list grouped by
+  assignee, unchanged from before). `KpiStrip`'s 4th tile is "no goal attached" — the inverse of
+  Goals' "no initiative attached," completing the goals=what/projects=how cross-check from the other
+  direction. `ProjectGrid` mirrors `GoalGrid`'s card shape exactly.
+
+**Decisions made / locked:**
+- Only the on-track fraction tile gets the dynamic gray/amber/green tone (Team's exact data-trust
+  rule: a fraction tile must never render a fixed "success" color — "0/N on track" is not success);
+  the other 3 tiles (at risk, due this week, no-initiative/no-goal) use a fixed tone regardless of
+  count, matching how Team's own `KpiStrip` treats its non-fraction tiles.
+- The progress ring stays a fixed green stroke regardless of goal/project status — an exact port of
+  Team's ring, which is status-agnostic — rather than inventing a per-status recoloring convention
+  the source doesn't have.
+- Card left-accent uses `border-l-4` plus the ported `STATUS_BORDER` class with no competing
+  all-sides border class on the card (same technique Team's list items use), so the ported hex
+  values apply unmodified instead of needing a new directional-border map.
+
+**Verification:** Frontend-only change (no schema/backend touch). Repo tarred from the device's
+working copy (git status clean going in) and rebuilt in the cloud sandbox since `next build` exceeds
+device_bash's ~45s per-call cap: fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean
+(21/21 routes, `/app/goals` and `/app/projects` both compiled with no errors). Both files written back
+to Andrew's disk via the device bridge (mtime-guarded).
+
+**Next step:** Andrew to dogfood both pages live — confirm the KPI counts read right against real
+data, and decide whether a level tab with zero goals needs a Person-page-style empty state (currently
+still just plain text, unchanged from before this pass).
+
+---
+
 ## Session 52 — 2026-08-22
 
 **Goal:** Andrew saw the new persistent sidebar (Session 51) and initially read Mission Control's
@@ -257,63 +304,6 @@ not Manager Notes), try "Revise with AI" on hand-typed text.
 
 ---
 
-## Session 48 — 2026-08-21
-
-**Goal:** Andrew dogfooded Session 47's Development feature immediately and hit a real dead
-end: "Draft with AI" is evidence-gated by design, so a direct report with no assessment/1:1
-history yet got nothing back — and the manager-note flow had no other way in. He asked for
-manual entry to be the default everywhere, with AI as an optional assist: both "Draft with AI"
-(already existed) and a new "Revise with AI."
-
-**What was done:**
-- `backend/routes/development.py` — factored `draft_development`'s inline evidence-fetching and
-  role-label-building into two shared helpers, `_fetch_evidence()` (recent 1:1 summaries + open
-  commitments) and `_role_label()`, so the new revise endpoint grounds itself in identical
-  context to `/draft` without duplicating ~25 lines.
-- New `_build_revise_prompt()` — treats the manager's own already-written text as the primary
-  source ("your starting point... preserve their intent, meaning, and voice"), tightens
-  language and adds a concrete grounding detail only where evidence genuinely supports it, but
-  is explicitly forbidden from inventing evidence or changing the manager's overall assessment.
-- New `POST /{direct_report_id}/notes/revise` route (rate-limited 10/minute, same as `/draft`)
-  — takes `{text}`, 422s with a clear message if empty, otherwise calls `generate_text()` and
-  strips code-fence/quote wrapping the model sometimes adds despite the prompt telling it not
-  to.
-- `frontend/lib/api.ts` — `reviseDevManagerNote(directReportId, text)`.
-- `frontend/app/app/reports/[id]/page.tsx`'s `DevelopmentSection` — replaced the old blocking
-  "AI draft review" panel (checkboxes per item, editable draft note, Discard/Save selected)
-  with a non-blocking model. "Draft with AI" now populates `aiOpportunities` (dismissible blue
-  suggestion chips with their own "Add" button, styled distinctly from the amber
-  assessment-suggested chips) and `aiNoteSuggestion` (a callout with "Use this"/"Dismiss" that
-  fills the always-present note textarea rather than overwriting it silently). When a draft
-  comes back with nothing to suggest, a plain hint replaces what used to be a dead end ("Not
-  enough evidence yet for a draft — write your own below..."). A new "Revise with AI" button
-  sits next to the note form's existing "Add" button, disabled until there's manually-typed
-  text, calling the new endpoint and replacing the textarea's contents with the revision (still
-  editable, still requires a separate Add to save).
-
-**Decisions made / locked:**
-- Draft and revise are two intentionally different-shaped operations, not the same prompt
-  behind a flag: draft is evidence-gated and honestly returns nothing on thin evidence; revise
-  takes the manager's text as the primary source and is always answerable, using evidence only
-  to add grounding detail, never to gate the response.
-- Manual entry was never actually missing for opportunities/training/aspiration — those already
-  had independent forms. Only the manager-note flow was accidentally AI-gated by the old
-  blocking-panel design; fixed by demoting AI from "the only path in" to an optional assist on
-  both the note and the opportunities list.
-
-**Verification:** `python3 -m py_compile` clean on `development.py`; sandboxed `main.py` import
-confirms the new `/api/development/{direct_report_id}/notes/revise` route registers with no
-path-ordering collisions against the existing 120-route total. Frontend: `npx tsc --noEmit`
-clean, `next build` clean (19/19 routes).
-
-**Next step:** Andrew to dogfood the revised flow live — write a note by hand on a
-thin-evidence report and confirm "Revise with AI" actually improves it instead of erroring; try
-"Draft with AI" on a report with real assessment/1:1 history and confirm the suggestion chips
-render and "Add" still creates real opportunity rows now that they're a separate list from the
-assessment-suggested ones.
-
----
-
 ## Archived sessions (compact index)
 
 Each line below is the goal plus the key decisions locked in that session —
@@ -323,6 +313,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 48 — 2026-08-21:** Fix the manager-note flow being accidentally AI-gated by adding manual entry as the default everywhere, with AI as an optional assist (new "Revise with AI" alongside the existing "Draft with AI"). **Decided:** Draft (evidence-gated, can honestly return nothing) and revise (always answerable, evidence only for grounding) are intentionally different-shaped operations, not one prompt behind a flag.
 - **Session 47 — 2026-08-20:** Scope and build Development (individual plans + a lightweight team "training focus" note), activating dormant `development_plans`/`dev_plan_*` schema from the original scaffold. **Decided:** Aspirations and training are never AI-drafted — only opportunities + a synthesis note, where evidence-grounding actually applies; team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than a new pattern.
 - **Session 46 — 2026-08-20:** Give projects an optional team attachment and make `/app/team`'s Goals/Initiatives cascade down from parent departments instead of exact-matching only. **Decided:** Hierarchy inheritance applies only to goals/projects on `/app/team` (commitments, roster, meeting notes, callouts stay exact-match); the leadership-rollup endpoint was deliberately left unchanged (different hierarchy concept), flagged as a follow-up.
 - **Session 45 — 2026-08-19:** Add a team name + dropdown to `/app/team` so a manager leading multiple `org_units` can tell which team's data they're viewing, and filter the page by picking one. **Decided:** `team_callouts.org_unit_id` is `ON DELETE CASCADE` (not `SET NULL` like `team_meeting_notes`) — found via a real Postgres test, needed because of the two-partial-unique-index uniqueness rule; `GET /callout` changed from one object to a list, a breaking response-shape change.

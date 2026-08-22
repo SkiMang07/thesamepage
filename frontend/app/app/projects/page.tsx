@@ -10,6 +10,16 @@
 // gain org_unit_id — a direct team/department attachment, the same picker
 // pattern Goals already had (Session 11). Unlike Goals, there's no level
 // enum here, so the picker offers every org_unit regardless of unit_type.
+//
+// Session 52 (2026-08-22) — visual rebuild to match Team (Session 24) and
+// the Person page (Session 50): Option A from the published "Goals and
+// Projects Redesign Options" design canvas. Widened to max-w-7xl, added a
+// KpiStrip (same ported tokens as goals/page.tsx — gradient tiles, the
+// STATUS_BORDER/STATUS_STYLES hex values, the inline-SVG donut ring shape),
+// and replaced the plain bordered-list cards with a responsive grid of
+// border-l-4 accented cards each carrying their own progress ring. Projects
+// has no level tabs (flat list, grouped by assignee same as before) — same
+// card treatment otherwise. Add/edit forms are untouched, just refit.
 
 import { useEffect, useMemo, useState } from "react";
 import CheckInPanel from "@/components/CheckInPanel";
@@ -40,12 +50,25 @@ const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
   { id: "cancelled", label: "Cancelled" },
 ];
 
+// Ported verbatim from frontend/app/app/team/page.tsx — same hex values as
+// Goals/Team. Do not reinvent.
 const STATUS_STYLES: Record<ProjectStatus, string> = {
   active: "bg-gray-100 text-gray-600",
   on_track: "bg-green-50 text-green-600",
   at_risk: "bg-amber-50 text-amber-600",
   completed: "bg-blue-50 text-blue-600",
   cancelled: "bg-gray-100 text-gray-400",
+};
+
+// Left-border accent per status — same map/technique as Team and Goals: a
+// border-l-4 with no competing all-sides border class, so only the left
+// edge picks up a visible color.
+const STATUS_BORDER: Record<ProjectStatus, string> = {
+  active: "border-gray-300",
+  on_track: "border-green-500",
+  at_risk: "border-amber-500",
+  completed: "border-blue-300",
+  cancelled: "border-gray-200",
 };
 
 const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
@@ -68,6 +91,22 @@ function formatDate(iso: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+// Local (not UTC) YYYY-MM-DD date helpers — same as goals/page.tsx and
+// team/page.tsx, needed for the "due this week" KPI tile.
+function localDateStr(d: Date = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysStr(dateStr: string, days: number) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return localDateStr(dt);
 }
 
 function toProjectPayload(input: ProjectFormValues) {
@@ -128,7 +167,7 @@ export default function ProjectsPage() {
   }
 
   // Session 26: mirror a logged check-in's server-side write-through in list
-  // state (status + derived progress/trend/freshness) — same as Goals.
+  // state (status + derived progress/trend/freshness), same as Goals.
   function applyCheckIn(projectId: string, ci: CheckIn) {
     setProjects((ps) =>
       ps.map((p) => {
@@ -184,7 +223,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <main className="mx-auto max-w-7xl px-6 py-16">
       <h1 className="text-2xl font-semibold">Projects</h1>
       <p className="mt-1 text-sm text-gray-500">
         How your goals get done — standalone or linked to a goal, yours or a direct report&apos;s.
@@ -192,49 +231,139 @@ export default function ProjectsPage() {
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
-      <div className="mt-8 flex items-center justify-end">
-        <button
-          onClick={() => {
-            setEditingProjectId(null);
-            setShowForm((s) => !s);
-          }}
-          className={primaryBtnCls}
-        >
-          {showForm ? "Cancel" : "+ New project"}
-        </button>
-      </div>
-
-      {showForm && (
-        <ProjectForm
-          reports={reports}
-          goals={goals}
-          orgUnits={orgUnits}
-          onCancel={() => setShowForm(false)}
-          onSubmit={addProject}
-          submitLabel="Add project"
-          savingLabel="Adding..."
-        />
-      )}
-
       {loading ? (
         <p className="mt-8 text-gray-500">Loading...</p>
-      ) : projects.length === 0 ? (
-        <p className="mt-8 text-gray-500">No projects yet. Add the first one above.</p>
       ) : (
-        <div className="mt-8 space-y-8">
-          {grouped.map((group) => (
-            <div key={group.name}>
-              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">{group.name}</h2>
-              <ProjectList projects={group.projects} {...listProps} />
+        <div className="mt-8">
+          <KpiStrip projects={projects} />
+
+          <div className="mt-8 flex items-center justify-end">
+            <button
+              onClick={() => {
+                setEditingProjectId(null);
+                setShowForm((s) => !s);
+              }}
+              className={primaryBtnCls}
+            >
+              {showForm ? "Cancel" : "+ New project"}
+            </button>
+          </div>
+
+          {showForm && (
+            <ProjectForm
+              reports={reports}
+              goals={goals}
+              orgUnits={orgUnits}
+              onCancel={() => setShowForm(false)}
+              onSubmit={addProject}
+              submitLabel="Add project"
+              savingLabel="Adding..."
+            />
+          )}
+
+          {projects.length === 0 ? (
+            <p className="mt-8 text-gray-500">No projects yet. Add the first one above.</p>
+          ) : (
+            <div className="mt-8 space-y-8">
+              {grouped.map((group) => (
+                <div key={group.name}>
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                    {group.name}
+                  </h2>
+                  <ProjectGrid projects={group.projects} {...listProps} />
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
     </main>
   );
 }
 
-function ProjectList({
+// ---------------------------------------------------------------------------
+// KPI strip — same gradient-tile markup/structure as Team's/Goals' KpiStrip.
+// The 4th tile mirrors Goals' "no initiative attached" from the other
+// direction: how many of your own projects support no goal at all.
+// ---------------------------------------------------------------------------
+
+function KpiStrip({ projects }: { projects: Project[] }) {
+  const scored = projects.filter((p) => p.status !== "cancelled");
+  const onTrack = scored.filter((p) => p.status === "on_track").length;
+  const onTrackLabel = scored.length > 0 ? `${onTrack}/${scored.length}` : "—";
+  // Same data-trust rule as Goals' KpiStrip: never a fixed "success" color
+  // for a fraction tile — "0/N on track" is not success.
+  const onTrackTone =
+    scored.length === 0
+      ? { from: "from-gray-400", to: "to-gray-500" }
+      : onTrack === 0
+        ? { from: "from-amber-500", to: "to-amber-600" }
+        : { from: "from-green-500", to: "to-green-600" };
+
+  const atRisk = scored.filter((p) => p.status === "at_risk").length;
+
+  const today = localDateStr();
+  const weekOut = addDaysStr(today, 7);
+  const dueThisWeek = scored.filter(
+    (p) => p.due_date && p.due_date >= today && p.due_date <= weekOut
+  ).length;
+
+  const noGoal = scored.filter((p) => p.goal_id == null).length;
+
+  const tiles = [
+    { value: onTrackLabel, label: "Projects on track", from: onTrackTone.from, to: onTrackTone.to },
+    { value: String(atRisk), label: "At risk", from: "from-amber-500", to: "to-amber-600" },
+    { value: String(dueThisWeek), label: "Due this week", from: "from-indigo-500", to: "to-indigo-600" },
+    { value: String(noGoal), label: "No goal attached", from: "from-rose-500", to: "to-rose-600" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {tiles.map((t) => (
+        <div key={t.label} className={`rounded-xl bg-gradient-to-br ${t.from} ${t.to} px-4 py-3 text-white`}>
+          <p className="text-2xl font-semibold">{t.value}</p>
+          <p className="text-xs text-white/80">{t.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Progress ring — same inline-SVG donut shape as Goals'/Team's ring. Only
+// draws the colored arc when a real check-in exists; otherwise an honest
+// em-dash — no fabricated progress.
+// ---------------------------------------------------------------------------
+
+function ProgressRing({ progress }: { progress: number | null | undefined }) {
+  const pct = progress ?? 0;
+  const dash = `${pct}, 100`;
+  return (
+    <svg width="48" height="48" viewBox="0 0 36 36" className="shrink-0">
+      <path
+        d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
+        fill="none"
+        stroke="#e5e7eb"
+        strokeWidth="3"
+      />
+      {progress != null && (
+        <path
+          d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
+          fill="none"
+          stroke="#22c55e"
+          strokeWidth="3"
+          strokeDasharray={dash}
+          strokeLinecap="round"
+        />
+      )}
+      <text x="18" y="21" textAnchor="middle" fontSize="9" fill="#111827" fontWeight="600">
+        {progress != null ? `${pct}%` : "–"}
+      </text>
+    </svg>
+  );
+}
+
+function ProjectGrid({
   projects,
   onSetStatus,
   onDelete,
@@ -260,10 +389,10 @@ function ProjectList({
   orgUnits: OrgUnit[];
 }) {
   return (
-    <ul className="mt-3 space-y-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {projects.map((p) =>
         p.id === editingProjectId ? (
-          <li key={p.id}>
+          <div key={p.id} className="md:col-span-2 xl:col-span-3">
             <ProjectForm
               initialProject={p}
               reports={reports}
@@ -274,20 +403,25 @@ function ProjectList({
               submitLabel="Save changes"
               savingLabel="Saving..."
             />
-          </li>
+          </div>
         ) : (
-          <li key={p.id} className="rounded-lg border border-gray-200 px-4 py-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">{p.title}</p>
-                {p.org_unit_name && (
-                  <p className="mt-0.5 text-xs text-gray-400">Team: {p.org_unit_name}</p>
-                )}
-                {p.goal_title && (
-                  <p className="mt-0.5 text-xs text-gray-400">Supports goal: {p.goal_title}</p>
-                )}
-                {p.description && <p className="mt-1 text-sm text-gray-500">{p.description}</p>}
-                {p.due_date && <p className="mt-1 text-xs text-gray-400">Due {formatDate(p.due_date)}</p>}
+          <div
+            key={p.id}
+            className={`rounded-lg border-l-4 bg-white px-4 py-4 shadow-sm ${STATUS_BORDER[p.status]}`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <ProgressRing progress={p.progress} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-900">{p.title}</p>
+                  {p.org_unit_name && (
+                    <p className="mt-0.5 text-xs text-gray-400">Team: {p.org_unit_name}</p>
+                  )}
+                  {p.goal_title && (
+                    <p className="mt-0.5 text-xs text-gray-400">Supports goal: {p.goal_title}</p>
+                  )}
+                  {p.due_date && <p className="mt-0.5 text-xs text-gray-400">Due {formatDate(p.due_date)}</p>}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <select
@@ -317,6 +451,9 @@ function ProjectList({
                 </button>
               </div>
             </div>
+
+            {p.description && <p className="mt-2 text-sm text-gray-500">{p.description}</p>}
+
             <CheckInPanel
               status={p.status}
               progress={p.progress}
@@ -326,10 +463,10 @@ function ProjectList({
               submitCheckIn={(body) => createProjectCheckIn(p.id, body)}
               onCheckedIn={(ci) => onCheckedIn(p.id, ci)}
             />
-          </li>
+          </div>
         )
       )}
-    </ul>
+    </div>
   );
 }
 

@@ -8,6 +8,17 @@
 // yet — company/department goals are usable today, they just don't have a
 // distinct audience beyond you until that UI ships. See docs/SESSION_HISTORY.md
 // Session 10 and the goals_scoping project memory note.
+//
+// Session 52 (2026-08-22) — visual rebuild to match Team (Session 24) and
+// the Person page (Session 50): Option A from the published "Goals and
+// Projects Redesign Options" design canvas. Widened to max-w-7xl, added a
+// KpiStrip (tokens ported verbatim from frontend/app/app/team/page.tsx —
+// same gradient-tile markup, same STATUS_BORDER/STATUS_STYLES hex values,
+// same inline-SVG donut ring shape), and replaced the plain bordered-list
+// cards with a responsive grid of border-l-4 accented cards each carrying
+// their own progress ring. Level tabs are kept as a pill-style filter, not
+// retired — that was the one explicit "don't change this" in the brief.
+// Add/edit forms are untouched, just refit into the new shell.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -47,12 +58,26 @@ const STATUS_OPTIONS: { id: GoalStatus; label: string }[] = [
   { id: "cancelled", label: "Cancelled" },
 ];
 
+// Ported verbatim from frontend/app/app/team/page.tsx — same status
+// vocabulary as Team/Projects, same hex values. Do not reinvent.
 const STATUS_STYLES: Record<GoalStatus, string> = {
   active: "bg-gray-100 text-gray-600",
   on_track: "bg-green-50 text-green-600",
   at_risk: "bg-amber-50 text-amber-600",
   completed: "bg-blue-50 text-blue-600",
   cancelled: "bg-gray-100 text-gray-400",
+};
+
+// Left-border accent per status — same map Team's InitiativesCard/
+// CommitmentsCard use for their border-l-4 accent. Applied here with no
+// competing all-sides border class, so only the left edge (border-l-4)
+// ever picks up a visible color — same technique as the source file.
+const STATUS_BORDER: Record<GoalStatus, string> = {
+  active: "border-gray-300",
+  on_track: "border-green-500",
+  at_risk: "border-amber-500",
+  completed: "border-blue-300",
+  cancelled: "border-gray-200",
 };
 
 const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
@@ -82,6 +107,24 @@ function formatDate(iso: string) {
   });
 }
 
+// Local (not UTC) YYYY-MM-DD date helpers — due_date is a date-only column;
+// parsing via new Date(dateStr) treats it as UTC midnight, which reads as
+// "yesterday" west of UTC. Ported from team/page.tsx's identical helpers
+// (used there for the same "due this week" KPI math).
+function localDateStr(d: Date = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysStr(dateStr: string, days: number) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return localDateStr(dt);
+}
+
 function toGoalPayload(input: GoalFormValues) {
   return {
     title: input.title.trim(),
@@ -102,7 +145,8 @@ export default function GoalsPage() {
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   // Session 26: fetched so each goal card can show the initiatives serving
-  // it ("goals = what, projects = how" made visible).
+  // it ("goals = what, projects = how" made visible); Session 52 also uses
+  // this to compute the "no initiative attached" KPI tile.
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +259,7 @@ export default function GoalsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <main className="mx-auto max-w-7xl px-6 py-16">
       <h1 className="text-2xl font-semibold">Goals</h1>
       <p className="mt-1 text-sm text-gray-500">
         Company, department, team, and individual goals in one place.
@@ -223,68 +267,76 @@ export default function GoalsPage() {
 
       {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
-      <div className="mt-8 flex items-center justify-between gap-4">
-        <div className="flex flex-wrap rounded-md border border-gray-200 p-0.5">
-          {LEVEL_TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setLevel(t.id)}
-              className={`rounded px-3 py-1.5 text-sm ${
-                level === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => {
-            setEditingGoalId(null);
-            setShowForm((s) => !s);
-          }}
-          className={primaryBtnCls}
-        >
-          {showForm ? "Cancel" : "+ New goal"}
-        </button>
-      </div>
-      <p className="mt-2 text-xs text-gray-400">
-        {LEVEL_TABS.find((t) => t.id === level)?.blurb}
-      </p>
-
-      {showForm && (
-        <GoalForm
-          defaultLevel={level}
-          reports={reports}
-          orgUnits={orgUnits}
-          allGoals={goals}
-          onCancel={() => setShowForm(false)}
-          onSubmit={addGoal}
-          submitLabel="Add goal"
-          savingLabel="Adding..."
-        />
-      )}
-
       {loading ? (
         <p className="mt-8 text-gray-500">Loading...</p>
-      ) : level === "individual" ? (
-        <div className="mt-8 space-y-8">
-          {(groupedIndividual ?? []).map((group) => (
-            <div key={group.name}>
-              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">{group.name}</h2>
-              <GoalList goals={group.goals} {...goalListProps} />
-            </div>
-          ))}
-          {levelGoals.length === 0 && (
-            <p className="text-gray-500">
-              No individual goals yet. Add one above and link it to a direct report.
-            </p>
-          )}
-        </div>
       ) : (
         <div className="mt-8">
-          <GoalList goals={levelGoals} {...goalListProps} />
-          {levelGoals.length === 0 && (
-            <p className="text-gray-500">No {level} goals yet. Add the first one above.</p>
+          <KpiStrip goals={levelGoals} projects={projects} />
+
+          <div className="mt-8 flex items-center justify-between gap-4">
+            <div className="flex flex-wrap rounded-md border border-gray-200 p-0.5">
+              {LEVEL_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setLevel(t.id)}
+                  className={`rounded px-3 py-1.5 text-sm ${
+                    level === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                setEditingGoalId(null);
+                setShowForm((s) => !s);
+              }}
+              className={primaryBtnCls}
+            >
+              {showForm ? "Cancel" : "+ New goal"}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-gray-400">
+            {LEVEL_TABS.find((t) => t.id === level)?.blurb}
+          </p>
+
+          {showForm && (
+            <GoalForm
+              defaultLevel={level}
+              reports={reports}
+              orgUnits={orgUnits}
+              allGoals={goals}
+              onCancel={() => setShowForm(false)}
+              onSubmit={addGoal}
+              submitLabel="Add goal"
+              savingLabel="Adding..."
+            />
+          )}
+
+          {level === "individual" ? (
+            <div className="mt-8 space-y-8">
+              {(groupedIndividual ?? []).map((group) => (
+                <div key={group.name}>
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                    {group.name}
+                  </h2>
+                  <GoalGrid goals={group.goals} {...goalListProps} />
+                </div>
+              ))}
+              {levelGoals.length === 0 && (
+                <p className="text-gray-500">
+                  No individual goals yet. Add one above and link it to a direct report.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="mt-8">
+              <GoalGrid goals={levelGoals} {...goalListProps} />
+              {levelGoals.length === 0 && (
+                <p className="text-gray-500">No {level} goals yet. Add the first one above.</p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -292,7 +344,94 @@ export default function GoalsPage() {
   );
 }
 
-function GoalList({
+// ---------------------------------------------------------------------------
+// KPI strip — 4 gradient tiles, same markup/structure as Team's KpiStrip.
+// Scoped to the currently selected level tab so it moves with the tab, the
+// same way Team's strip moves with the selected-team filter.
+// ---------------------------------------------------------------------------
+
+function KpiStrip({ goals, projects }: { goals: Goal[]; projects: Project[] }) {
+  const scored = goals.filter((g) => g.status !== "cancelled");
+  const onTrack = scored.filter((g) => g.status === "on_track").length;
+  const onTrackLabel = scored.length > 0 ? `${onTrack}/${scored.length}` : "—";
+  // Data-trust rule (same fix Team's KpiStrip carries): a fraction tile must
+  // never render a fixed "success" color — "0/N on track" is not success.
+  // Amber once there's real signal and nothing is on track yet; gray when
+  // there's nothing to score at all.
+  const onTrackTone =
+    scored.length === 0
+      ? { from: "from-gray-400", to: "to-gray-500" }
+      : onTrack === 0
+        ? { from: "from-amber-500", to: "to-amber-600" }
+        : { from: "from-green-500", to: "to-green-600" };
+
+  const atRisk = scored.filter((g) => g.status === "at_risk").length;
+
+  const today = localDateStr();
+  const weekOut = addDaysStr(today, 7);
+  const dueThisWeek = scored.filter(
+    (g) => g.due_date && g.due_date >= today && g.due_date <= weekOut
+  ).length;
+
+  const goalIdsWithProjects = new Set(projects.map((p) => p.goal_id).filter((id): id is string => id != null));
+  const noInitiative = scored.filter((g) => !goalIdsWithProjects.has(g.id)).length;
+
+  const tiles = [
+    { value: onTrackLabel, label: "Goals on track", from: onTrackTone.from, to: onTrackTone.to },
+    { value: String(atRisk), label: "At risk", from: "from-amber-500", to: "to-amber-600" },
+    { value: String(dueThisWeek), label: "Due this week", from: "from-indigo-500", to: "to-indigo-600" },
+    { value: String(noInitiative), label: "No initiative attached", from: "from-rose-500", to: "to-rose-600" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {tiles.map((t) => (
+        <div key={t.label} className={`rounded-xl bg-gradient-to-br ${t.from} ${t.to} px-4 py-3 text-white`}>
+          <p className="text-2xl font-semibold">{t.value}</p>
+          <p className="text-xs text-white/80">{t.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Progress ring — same inline-SVG donut shape as Team's GoalsCard ring
+// (same path data, same stroke colors), scaled to a single goal's own
+// `progress` rather than an aggregate. Only draws the colored arc when a
+// real check-in exists; otherwise shows an honest em-dash — no fabricated
+// progress.
+// ---------------------------------------------------------------------------
+
+function ProgressRing({ progress }: { progress: number | null | undefined }) {
+  const pct = progress ?? 0;
+  const dash = `${pct}, 100`;
+  return (
+    <svg width="48" height="48" viewBox="0 0 36 36" className="shrink-0">
+      <path
+        d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
+        fill="none"
+        stroke="#e5e7eb"
+        strokeWidth="3"
+      />
+      {progress != null && (
+        <path
+          d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
+          fill="none"
+          stroke="#22c55e"
+          strokeWidth="3"
+          strokeDasharray={dash}
+          strokeLinecap="round"
+        />
+      )}
+      <text x="18" y="21" textAnchor="middle" fontSize="9" fill="#111827" fontWeight="600">
+        {progress != null ? `${pct}%` : "–"}
+      </text>
+    </svg>
+  );
+}
+
+function GoalGrid({
   goals,
   onSetStatus,
   onDelete,
@@ -320,10 +459,10 @@ function GoalList({
   projects: Project[];
 }) {
   return (
-    <ul className="mt-3 space-y-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {goals.map((g) =>
         g.id === editingGoalId ? (
-          <li key={g.id}>
+          <div key={g.id} className="md:col-span-2 xl:col-span-3">
             <GoalForm
               defaultLevel={g.level}
               initialGoal={g}
@@ -335,43 +474,27 @@ function GoalList({
               submitLabel="Save changes"
               savingLabel="Saving..."
             />
-          </li>
+          </div>
         ) : (
-          <li key={g.id} className="rounded-lg border border-gray-200 px-4 py-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">{g.title}</p>
-                {g.org_unit_name && (
-                  <p className="mt-0.5 text-xs text-gray-400">
-                    {g.level === "department" ? "Department" : "Team"}: {g.org_unit_name}
-                  </p>
-                )}
-                {g.parent_goal_title && (
-                  <p className="mt-0.5 text-xs text-gray-400">Part of: {g.parent_goal_title}</p>
-                )}
-                {g.description && <p className="mt-1 text-sm text-gray-500">{g.description}</p>}
-                {g.success_metrics && (
-                  <p className="mt-1 text-sm text-gray-500">
-                    <span className="text-gray-400">Success metric: </span>
-                    {g.success_metrics}
-                  </p>
-                )}
-                {g.due_date && <p className="mt-1 text-xs text-gray-400">Due {formatDate(g.due_date)}</p>}
-                {/* Session 26: initiatives serving this goal — "goals = what,
-                    projects = how" made visible on the goal itself. */}
-                {(() => {
-                  const serving = projects.filter((p) => p.goal_id === g.id);
-                  if (serving.length === 0) return null;
-                  return (
-                    <p className="mt-1 text-xs text-gray-400">
-                      <Link href="/app/projects" className="hover:text-gray-600">
-                        {serving.length} initiative{serving.length === 1 ? "" : "s"}
-                      </Link>
-                      {": "}
-                      {serving.map((p) => p.title).join(", ")}
+          <div
+            key={g.id}
+            className={`rounded-lg border-l-4 bg-white px-4 py-4 shadow-sm ${STATUS_BORDER[g.status]}`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <ProgressRing progress={g.progress} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-900">{g.title}</p>
+                  {g.org_unit_name && (
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      {g.level === "department" ? "Department" : "Team"}: {g.org_unit_name}
                     </p>
-                  );
-                })()}
+                  )}
+                  {g.parent_goal_title && (
+                    <p className="mt-0.5 text-xs text-gray-400">Part of: {g.parent_goal_title}</p>
+                  )}
+                  {g.due_date && <p className="mt-0.5 text-xs text-gray-400">Due {formatDate(g.due_date)}</p>}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <select
@@ -401,6 +524,30 @@ function GoalList({
                 </button>
               </div>
             </div>
+
+            {g.description && <p className="mt-2 text-sm text-gray-500">{g.description}</p>}
+            {g.success_metrics && (
+              <p className="mt-1 text-sm text-gray-500">
+                <span className="text-gray-400">Success metric: </span>
+                {g.success_metrics}
+              </p>
+            )}
+            {/* Session 26: initiatives serving this goal — "goals = what,
+                projects = how" made visible on the goal itself. */}
+            {(() => {
+              const serving = projects.filter((p) => p.goal_id === g.id);
+              if (serving.length === 0) return null;
+              return (
+                <p className="mt-1 text-xs text-gray-400">
+                  <Link href="/app/projects" className="hover:text-gray-600">
+                    {serving.length} initiative{serving.length === 1 ? "" : "s"}
+                  </Link>
+                  {": "}
+                  {serving.map((p) => p.title).join(", ")}
+                </p>
+              );
+            })()}
+
             <CheckInPanel
               status={g.status}
               progress={g.progress}
@@ -410,10 +557,10 @@ function GoalList({
               submitCheckIn={(body) => createGoalCheckIn(g.id, body)}
               onCheckedIn={(ci) => onCheckedIn(g.id, ci)}
             />
-          </li>
+          </div>
         )
       )}
-    </ul>
+    </div>
   );
 }
 
