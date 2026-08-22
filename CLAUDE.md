@@ -111,6 +111,25 @@ docs/        see the table above
 
 ---
 
+## Handing Andrew a terminal command
+
+Any paste-ready block that runs `git add` / `commit` / `push` **must** start with the
+lock removal:
+
+```bash
+cd "/Users/andrewgodlewski/Desktop/Obsidian/main/01 Projects/The Same Page"
+rm -f .git/index.lock
+git add ...
+```
+
+This repo reliably ends up with a stale `.git/index.lock` left behind by session
+tooling, and the sandbox can't delete it itself (`Operation not permitted`).
+Without that line the paste fails on `git add` with "Unable to create
+'.../.git/index.lock': File exists", which reads like a git problem and isn't
+one. Include it every time, unprompted. It's a no-op when no lock is present.
+
+---
+
 ## Keeping these docs true
 
 `tsp-push` closes out every session: it writes the SESSION_HISTORY entry and

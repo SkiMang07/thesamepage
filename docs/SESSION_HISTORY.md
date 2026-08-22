@@ -45,6 +45,10 @@ Rewrote the `tsp-push` skill (delivered as a `.skill` file for Andrew to save).
 - **Nothing is deleted, only moved** to the matching file under `docs/archive/`.
 - `tsp-push` now runs a documentation GC pass every 10th session, and checks CLAUDE.md's counts
   against reality whenever `routes/` or `schema.sql` changes.
+- **Every paste-ready git block starts with `rm -f .git/index.lock`** — Andrew's standing ask.
+  The stale lock this repo accumulates can't be cleared from the sandbox, and without the line the
+  paste fails on `git add` in a way that reads like a git problem. Recorded in CLAUDE.md and in
+  `tsp-push` Step 8.
 
 **Found along the way:** `assistant_messages` is live (migration applied 13 Aug) but was never folded
 into `schema.sql`, so a local verification run from `schema.sql` alone is missing a table production
