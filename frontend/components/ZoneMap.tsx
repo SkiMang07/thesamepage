@@ -258,12 +258,35 @@ export const HUE_STYLES: Record<ZoneHue, { text: string; bg: string; border: str
   violet: { text: "text-[#7c4ddb]", bg: "bg-[#f5f0ff]", border: "border-[#e4d8fb]", chipOn: "bg-[#f5f0ff] border-[#e4d8fb] text-[#7c4ddb]" },
 };
 
+// Gradient tiles for Mission Control's zone map only (Session 55) — everything
+// else that reads HUE_STYLES (Sidebar's active-state chips, AppNav) keeps the
+// original pastel tokens above untouched. This mirrors the bold
+// bg-gradient-to-br {from}/{to} + white-text KPI-tile convention already used
+// on Team/Goals/Projects (see docs/DESIGN.md's Session 53/54 entries) so
+// Mission Control reads as the same app instead of a second visual language.
+// Reviewed against a two-option comparison canvas before building (Session
+// 55) — Andrew picked the gradient option over the original pastel cards.
+const HUE_GRADIENT: Record<ZoneHue, { from: string; to: string; shadow: string }> = {
+  indigo: { from: "from-[#6366f1]", to: "to-[#4f46e5]", shadow: "shadow-[0_4px_14px_rgba(79,70,229,0.25)]" },
+  emerald: { from: "from-[#10b981]", to: "to-[#059669]", shadow: "shadow-[0_4px_14px_rgba(5,150,105,0.25)]" },
+  violet: { from: "from-[#a78bfa]", to: "to-[#7c3aed]", shadow: "shadow-[0_4px_14px_rgba(124,58,237,0.25)]" },
+};
+
 export type Tone = "warn" | "risk" | "setup";
 
 const TONE_TEXT: Record<Tone, string> = {
   warn: "text-[#b0640c] font-semibold",
   risk: "text-[#c02a4c] font-semibold",
   setup: "text-[#a3a9b4] italic",
+};
+
+// Tone colors for text sitting directly on a gradient tile (ZoneMap's cards)
+// rather than on the pastel backgrounds above — needs to stay readable across
+// all three gradients, not just one hue's pastel.
+const TONE_TEXT_ON_GRADIENT: Record<Tone, string> = {
+  warn: "text-[#fde68a] font-semibold",
+  risk: "text-[#fecaca] font-semibold",
+  setup: "text-white/65 italic",
 };
 
 const AVATAR_COLORS = ["#4f46e5", "#0e8f7e", "#7c4ddb", "#b0640c", "#c02a4c"];
@@ -467,20 +490,25 @@ export function ZoneMap({ doorStates }: { doorStates: Partial<Record<string, Doo
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
       {NAV_GROUPS.map((g) => {
-        const hue = HUE_STYLES[g.hue];
+        const gradient = HUE_GRADIENT[g.hue];
         return (
-          <div key={g.group} className={`rounded-2xl border p-4 ${hue.bg} ${hue.border}`}>
-            <div className="text-[13px] font-bold tracking-tight text-gray-900">{g.group}</div>
-            <div className="mt-0.5 text-xs text-gray-500">{g.blurb}</div>
+          <div
+            key={g.group}
+            className={`rounded-2xl bg-gradient-to-br p-4 ${gradient.from} ${gradient.to} ${gradient.shadow}`}
+          >
+            <div className="text-[13px] font-bold tracking-tight text-white">{g.group}</div>
+            <div className="mt-0.5 text-xs text-white/75">{g.blurb}</div>
             <div className="mt-2 space-y-1">
               {g.items.map((item) => {
                 const state = doorStates[item.id];
                 const inner = (
                   <>
-                    <Icon name={item.icon} className="h-[15px] w-[15px] shrink-0 text-gray-400" />
-                    <span className="flex-1 truncate text-[13px] font-medium text-gray-800">{item.label}</span>
+                    <Icon name={item.icon} className="h-[15px] w-[15px] shrink-0 text-white/80" />
+                    <span className="flex-1 truncate text-[13px] font-medium text-white">{item.label}</span>
                     {state && (
-                      <span className={`shrink-0 text-[11.5px] ${state.tone ? TONE_TEXT[state.tone] : "text-gray-500"}`}>
+                      <span
+                        className={`shrink-0 text-[11.5px] ${state.tone ? TONE_TEXT_ON_GRADIENT[state.tone] : "text-white/85"}`}
+                      >
                         {state.label}
                       </span>
                     )}
@@ -489,7 +517,7 @@ export function ZoneMap({ doorStates }: { doorStates: Partial<Record<string, Doo
                 return item.disabled ? (
                   <div
                     key={item.id}
-                    className="flex cursor-default items-center gap-2 rounded-lg bg-white/60 px-2.5 py-2 opacity-70"
+                    className="flex cursor-default items-center gap-2 rounded-lg bg-white/[0.14] px-2.5 py-2 opacity-70"
                     title="Coming in a later pass"
                   >
                     {inner}
@@ -498,7 +526,7 @@ export function ZoneMap({ doorStates }: { doorStates: Partial<Record<string, Doo
                   <Link
                     key={item.id}
                     href={item.href}
-                    className="flex items-center gap-2 rounded-lg bg-white/60 px-2.5 py-2 transition hover:translate-x-0.5 hover:bg-white"
+                    className="flex items-center gap-2 rounded-lg bg-white/[0.14] px-2.5 py-2 transition hover:translate-x-0.5 hover:bg-white/25"
                   >
                     {inner}
                   </Link>

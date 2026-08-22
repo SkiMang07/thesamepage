@@ -18,6 +18,52 @@ behind) each time the count exceeds 5.
 
 ---
 
+## Session 55 — 2026-08-22
+
+**Goal:** Finish the one open item from Session 54's UX review: whether Mission Control's pastel
+"Your people/The work/Foundation" summary cards should move onto the same bold gradient-tile
+convention as the Team/Goals/Projects KPI strips. Andrew wasn't sure, so asked to see both first.
+
+**What was done:**
+- Built a two-artboard comparison canvas via the Claude Design skill — `CurrentBaseline.dc.html`
+  (today's pastel cards, recreated pixel-for-pixel from `ZoneMap.tsx`'s real `HUE_STYLES`/
+  `TONE_TEXT`/icon paths) and `Main.dc.html` (the same real content restyled as gradient tiles:
+  indigo/emerald/violet gradients, white text). Both used the actual live door-state content (9
+  people, 8 due, 5 goals, 241h free, etc.) rather than placeholder numbers. Published as an Artifact
+  (`mission-control-card-styles.html`) for Andrew to review side by side; he picked the gradient
+  option ("the right one").
+- Implemented the chosen direction in `frontend/components/ZoneMap.tsx`: added `HUE_GRADIENT` (a
+  from/to/shadow token set per hue, separate from `HUE_STYLES`) and `TONE_TEXT_ON_GRADIENT` (warn/
+  risk/setup colors picked to stay readable across all three gradients, not just one hue's pastel).
+  Rewrote the `ZoneMap()` render to use `bg-gradient-to-br` tiles with white group titles/blurbs,
+  translucent-white icon/item-row backgrounds, and the new gradient-aware tone colors. `HUE_STYLES`
+  and `TONE_TEXT` (the original pastel tokens) are untouched — `Sidebar.tsx` still reads `HUE_STYLES`
+  for its active-state chips, so that pastel token set stays canonical for nav chrome; only the
+  Mission Control card row itself changed visual language.
+- No changes to `doorStates` computation, icons, group copy, or any data-fetching logic — this was a
+  pure restyle of an already-correct real-data component.
+
+**Decisions made / locked:**
+- Mission Control's summary cards now match Team/Goals/Projects' gradient-tile convention rather
+  than staying a deliberately calmer "home" treatment — resolves the question Session 54 left open.
+- The pastel `HUE_STYLES`/`TONE_TEXT` tokens remain the source of truth for nav chrome (sidebar chips,
+  breadcrumbs) even though ZoneMap's cards no longer use them directly — two different UI surfaces,
+  not a conflicting restyle.
+- Show-a-mockup-before-touching-code (via the Design skill, using real fetched data rather than
+  placeholder numbers) is confirmed as the right call for a visually subjective decision like this one.
+
+**Verification:** Frontend-only change (1 file). Cloud sandbox already had the repo from Session
+54's build; re-verified there: `npx tsc --noEmit` clean, `npx next build` clean (full route table
+built with no type/lint errors). Delivered via the device bridge and committed straight to
+`frontend/components/ZoneMap.tsx` on Andrew's disk before this push.
+
+**Next step:** The other item flagged in Session 54's original UX review is still open: give the
+sidebar's top row and AppNav's header an explicit shared height token so the rail and header read as
+one coordinated unit. Otherwise, Andrew to eyeball the live gradient Mission Control cards in the
+running app and confirm the final look holds up outside the mockup.
+
+---
+
 ## Session 54 — 2026-08-22
 
 **Goal:** Andrew reviewed Session 53's Goals/Projects rebuild live and flagged that alignment/spacing
@@ -234,70 +280,6 @@ Quick Add from a page other than Mission Control to confirm it still works end-t
 
 ---
 
-## Session 50 — 2026-08-21
-
-**Goal:** Rebuild `/app/reports/[id]` (the individual DR detail page) from a single-column wall of
-~10 form-heavy sections into an engaging hub, per the "Command Deck" mockup Andrew approved the same
-day (see the person_page_redesign project memory note and the "Person Page" mockup artifact).
-
-**What was done:**
-- `frontend/app/app/reports/[id]/page.tsx` rebuilt in place: an indigo identity band (avatar
-  initials, name, rating pill from `scorecard.overall`, role · team subtitle, About note, Log 1:1 /
-  Resume-or-Start prep CTAs, a gear button); a 4-tile KPI strip (last 1:1 + days to next resolved-
-  cadence-aware, open commitments + overdue count, goals on track with the same data-trust-aware tone
-  logic as `/app/team`'s KpiStrip, capacity available this week via `getCapacityOverview` over a
-  rolling 7-day window); three columns — Conversation (Next-1:1 cockpit with derived "Worth raising"
-  talking points + one-click "+ Agenda", a between-sessions capture box, private Manager Notes), Work
-  (Goals/Initiatives with status-border accents + progress bars only where check-in data exists,
-  Recent 1:1 sessions capped at 6), Person (Open commitments, an inline-SVG Assessment ring, the rest
-  of Development, Expectations as chips instead of paragraph lists — role-assignment flow preserved
-  unchanged). Admin inputs (1:1 cadence, capacity, time off) moved behind the gear into a settings
-  drawer, off the main flow.
-- New `dr_capture_notes` table (`database/migrations/2026-08-21_dr_capture_notes.sql`, folded into
-  `database/schema.sql`) — the capture box's storage, scoped via one AskUserQuestion round before
-  writing the migration (new small table vs. attaching to the planned one_on_ones row; the table won
-  because a capture can happen before any planned session exists, and a planned row today is only
-  ever created BY `/prep`). Flat `manager_id = auth.uid()` RLS policy, same pattern as `commitments`.
-- `backend/routes/one_on_ones.py` — 3 new endpoints: `GET`/`POST /{direct_report_id}/captures`,
-  `DELETE /captures/{capture_id}`. Kept in this router rather than a new file since captures are
-  tightly coupled to `/prep`, which already owns it.
-- `frontend/lib/api.ts` — `CaptureNote` type + `getCaptureNotes`/`createCaptureNote`/`deleteCaptureNote`.
-- `frontend/app/app/reports/[id]/prep/page.tsx` — step 1's raw-notes textarea now prefills from
-  unconsumed captures for that report (oldest first) and deletes them once a sheet generates
-  (best-effort, non-blocking on failure) — this is how a capture "lands on the next prep sheet."
-
-**Decisions made / locked:**
-- `dr_capture_notes` is its own small inbox table, not a column on `one_on_ones` — see above; avoids
-  a new "draft planned session with no prep_guide yet" state the rest of the app doesn't model.
-- `DevelopmentSection` (Session 47-49) keeps ALL its original state/handlers in one component but now
-  takes a `section: "notes" | "growth"` prop and renders only half its JSX per mount — private
-  manager notes in Col 1, plan/aspiration/opportunities/training in Col 3 — rather than being split
-  into two components that would each need their own copy of the bundle-mutate-refetch logic.
-- "Worth raising" talking points and the KPI strip are entirely derived client-side from data the
-  page already fetches (overdue commitments, at-risk goals, dev plan text, last 1:1 summary) — no new
-  backend computation, matching the scoping note's explicit constraint.
-- Goal progress bars only render where `progress` is non-null (a real check-in exists) — same Session
-  19 restraint precedent, not fabricated from status alone.
-
-**Verification:** unusually thorough given the size of the change and device_bash's ~45s per-call
-cap (too short for a full `next build` or fresh `npm ci`/`pip install`) — reconstructed both the
-frontend and backend in the cloud sandbox from the connected folder instead. `npx tsc --noEmit`
-clean; fresh `npm ci` + `next build` clean (19/19 routes, no type/lint errors); `python3 -m py_compile`
-clean on every touched + dependent backend file; a sandboxed `main.py` import (fresh venv, dummy
-`.env`) confirmed 121 → 124 routes with the 3 new capture endpoints and zero path collisions; a real
-local Postgres 16 test via `database/local_verify_stub.sql`'s documented flow, run TWO ways — fresh
-`schema.sql` with the table baked in, and the ORIGINAL pre-session `schema.sql` + the standalone
-migration file (what actually happens against live Supabase) — both clean; an RLS functional test
-(two managers, `set role authenticated` + `set_config`) confirmed manager-scoped isolation and that a
-spoofed insert (wrong `manager_id`) is blocked by the policy's `WITH CHECK`.
-
-**Next step:** Run `database/migrations/2026-08-21_dr_capture_notes.sql` against live Supabase — the
-capture box and "+ Agenda" buttons error until the table exists. Then Andrew dogfoods: try the capture
-box, a few "+ Agenda" clicks, the settings drawer, and sanity-check the assessment ring and goal
-progress bars against a real report.
-
----
-
 ## Archived sessions (compact index)
 
 Each line below is the goal plus the key decisions locked in that session —
@@ -307,6 +289,7 @@ enough to know if it matters to what you're doing now. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 50 — 2026-08-21:** Rebuild `/app/reports/[id]` from a single-column form wall into the "Command Deck" hub (identity band, KPI strip, 3-column layout, settings drawer). **Decided:** new `dr_capture_notes` is its own inbox table (not a column on `one_on_ones`); goal progress bars only render with a real check-in, never fabricated from status alone.
 - **Session 49 — 2026-08-21:** Give the development plan its own dedicated, always-editable text box (Manager Notes had been accidentally absorbing the AI-assist meant for the plan itself). **Decided:** Manager notes and the development plan are genuinely separate concepts and stay on separate fields/surfaces, not merged; `/notes/revise` is reused for both rather than duplicated.
 - **Session 48 — 2026-08-21:** Fix the manager-note flow being accidentally AI-gated by adding manual entry as the default everywhere, with AI as an optional assist (new "Revise with AI" alongside the existing "Draft with AI"). **Decided:** Draft (evidence-gated, can honestly return nothing) and revise (always answerable, evidence only for grounding) are intentionally different-shaped operations, not one prompt behind a flag.
 - **Session 47 — 2026-08-20:** Scope and build Development (individual plans + a lightweight team "training focus" note), activating dormant `development_plans`/`dev_plan_*` schema from the original scaffold. **Decided:** Aspirations and training are never AI-drafted — only opportunities + a synthesis note, where evidence-grounding actually applies; team dev focus reuses team_callouts' exact upsert/uniqueness mechanics rather than a new pattern.
