@@ -114,11 +114,11 @@ const ACTIVE_PROJECT_STATUSES = new Set<GoalStatus>(["active", "on_track", "at_r
 const DUE_SOON_DAYS = 14;
 
 const DOT_STYLES: Record<GoalStatus, string> = {
-  active: "bg-gray-400",
-  on_track: "bg-green-500",
+  active: "bg-ink-muted",
+  on_track: "bg-brand",
   at_risk: "bg-amber-500",
   completed: "bg-blue-500",
-  cancelled: "bg-gray-300",
+  cancelled: "bg-carbon-300",
 };
 
 type AttentionReason = { label: string; severe: boolean };
@@ -370,11 +370,11 @@ export default function DashboardPage() {
           persistent global nav (components/AppNav.tsx + Sidebar.tsx)
           rendered from app/app/layout.tsx (Session 51 nav rework). */}
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Mission Control</h1>
-        <p className="mt-1 text-sm text-gray-500">Your team, at a glance.</p>
+        <h1 className="text-2xl font-semibold text-ink">Mission Control</h1>
+        <p className="mt-1 text-sm text-ink-secondary">Your team, at a glance.</p>
       </div>
 
-      {loadError && <p className="mt-4 text-sm text-red-500">{loadError}</p>}
+      {loadError && <p className="mt-4 text-sm text-red-700">{loadError}</p>}
 
       {/* Zone map — replaces the old stat ribbon in place (Session 36/37
           decision: the map's door counts already carry the numbers a ribbon
@@ -393,28 +393,28 @@ export default function DashboardPage() {
           it must not look identical to "all clear," so it gets a small
           muted line instead of silence. */}
       {insightFailed && !insightDismissed && (
-        <p className={`${SECTION_GAP} text-xs text-gray-400`}>
+        <p className={`${SECTION_GAP} text-xs text-ink-muted`}>
           Couldn&apos;t check for anything to flag right now.
         </p>
       )}
       {insight && insight.insight && !insightDismissed && (
-        <div className={`${SECTION_GAP} flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4`}>
-          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600">
+        <div className={`${SECTION_GAP} flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4`}>
+          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600">
             <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <p className="text-sm text-indigo-900">{insight.insight}</p>
+          <p className="text-sm text-blue-900">{insight.insight}</p>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {insight.cta_label && insight.cta_direct_report_id && (
               <Link
                 href={`/app/reports/${insight.cta_direct_report_id}`}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
               >
                 {insight.cta_label} →
               </Link>
             )}
-            <button onClick={() => setInsightDismissed(true)} className="text-indigo-400 hover:text-indigo-600" aria-label="Dismiss">
+            <button onClick={() => setInsightDismissed(true)} className="text-blue-400 hover:text-brand" aria-label="Dismiss">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -423,7 +423,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {loading && <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>}
+      {loading && <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>}
 
       {/* THE GRID — 3 sections across the top. Capacity is deliberately NOT
           a fourth column: it's a snapshot stat per person, not a triage
@@ -452,9 +452,9 @@ export default function DashboardPage() {
             attention={triagedGoals.attention}
             healthy={triagedGoals.healthy}
             emptyState={
-              <p className="px-5 py-6 text-sm text-gray-500">
+              <p className="px-5 py-6 text-sm text-ink-secondary">
                 No organization, department, or team goals yet.{" "}
-                <Link href="/app/goals" className="underline hover:text-gray-700">
+                <Link href="/app/goals" className="underline hover:text-ink-body">
                   Add one from the Goals page
                 </Link>
                 .
@@ -471,9 +471,9 @@ export default function DashboardPage() {
             attention={triagedProjects.attention}
             healthy={triagedProjects.healthy}
             emptyState={
-              <p className="px-5 py-6 text-sm text-gray-500">
+              <p className="px-5 py-6 text-sm text-ink-secondary">
                 No active projects.{" "}
-                <Link href="/app/projects" className="underline hover:text-gray-700">
+                <Link href="/app/projects" className="underline hover:text-ink-body">
                   Add one from the Projects page
                 </Link>
                 .
@@ -487,42 +487,42 @@ export default function DashboardPage() {
           only, per capacity.py). Full breakdown + department rollup live on
           /app/capacity. */}
       {!loading && (
-        <section className={`${SECTION_GAP} rounded-xl border border-gray-200 bg-white`}>
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Capacity — this week</h2>
-            <Link href="/app/capacity" className="text-xs text-gray-400 hover:text-gray-600">
+        <section className={`${SECTION_GAP} rounded-xl border border-hairline bg-white`}>
+          <div className="flex items-center justify-between border-b border-divider px-5 py-4">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Capacity — this week</h2>
+            <Link href="/app/capacity" className="text-xs text-ink-muted hover:text-ink-secondary">
               View full breakdown →
             </Link>
           </div>
           {capacity.length === 0 ? (
-            <p className="px-5 py-6 text-sm text-gray-500">
+            <p className="px-5 py-6 text-sm text-ink-secondary">
               No one to show capacity for yet.{" "}
-              <Link href="/app/capacity" className="underline hover:text-gray-700">
+              <Link href="/app/capacity" className="underline hover:text-ink-body">
                 Set up capacity defaults
               </Link>
               .
             </p>
           ) : (
             <div className="px-5 py-4">
-              <p className="mb-4 text-sm text-gray-700">
+              <p className="mb-4 text-sm text-ink-body">
                 <span className="font-medium">{Math.round(totalAvailableHours)} hours</span> available across your team this
                 week.
               </p>
               <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
                 {capacity.map((c) => (
                   <div key={c.direct_report_id} className="flex items-center gap-3">
-                    <span className="w-28 shrink-0 truncate text-sm text-gray-700">{c.name}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                    <span className="w-28 shrink-0 truncate text-sm text-ink-body">{c.name}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
                       <div
-                        className="h-full rounded-full bg-gray-400"
+                        className="h-full rounded-full bg-ink-muted"
                         style={{ width: `${Math.min(100, (c.available_hours / maxCapacityHours) * 100)}%` }}
                       />
                     </div>
                     {/* Labeled logged vs assumed (Session 14 decision) — two
                         different sources feed this number, and showing which
                         one won avoids it reading as more precise than it is. */}
-                    <span className="w-24 shrink-0 text-right text-xs text-gray-500">
-                      {Math.round(c.available_hours)}h <span className="text-gray-300">·{c.off_hours_source}</span>
+                    <span className="w-24 shrink-0 text-right text-xs text-ink-secondary">
+                      {Math.round(c.available_hours)}h <span className="text-ink-faint">·{c.off_hours_source}</span>
                     </span>
                   </div>
                 ))}
@@ -568,22 +568,22 @@ function IndividualPerformanceCard({
   // section 6).
   function severityStyles(r: PerformanceRow) {
     const badlyOverdue = r.days_since_last === null || r.days_since_last > r.cadence_days * 2;
-    if (badlyOverdue) return { avatar: "bg-rose-100 text-rose-700", text: "text-rose-600" };
-    return { avatar: "bg-amber-100 text-amber-700", text: "text-amber-600" };
+    if (badlyOverdue) return { avatar: "bg-red-100 text-red-800", text: "text-red-700" };
+    return { avatar: "bg-amber-100 text-amber-700", text: "text-amber-700" };
   }
 
   function Row({ r }: { r: PerformanceRow }) {
     const sev = severityStyles(r);
     return (
       <li>
-        <Link href={`/app/reports/${r.id}`} className="block px-5 py-3.5 hover:bg-gray-50">
+        <Link href={`/app/reports/${r.id}`} className="block px-5 py-3.5 hover:bg-canvas">
           <div className="flex items-center gap-3">
             <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${sev.avatar}`}>
               {initialsOf(r.name)}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
+                <p className="truncate text-sm font-medium text-ink">{r.name}</p>
                 {r.latest_level_label && (
                   <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">
                     {r.latest_level_label}
@@ -603,24 +603,24 @@ function IndividualPerformanceCard({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white">
-      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+    <section className="rounded-xl border border-hairline bg-white">
+      <div className="flex items-center justify-between border-b border-divider px-5 py-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
           Individual Performance{team.length > 0 && ` (${team.length})`}
         </h2>
         <div className="flex shrink-0 items-center gap-3">
-          <Link href="/app/1-1s" className="text-xs text-gray-400 hover:text-gray-600">
+          <Link href="/app/1-1s" className="text-xs text-ink-muted hover:text-ink-secondary">
             1:1s →
           </Link>
-          <Link href="/app/assessments" className="text-xs text-gray-400 hover:text-gray-600">
+          <Link href="/app/assessments" className="text-xs text-ink-muted hover:text-ink-secondary">
             Assessments →
           </Link>
         </div>
       </div>
       {team.length === 0 ? (
-        <p className="px-5 py-6 text-sm text-gray-500">
+        <p className="px-5 py-6 text-sm text-ink-secondary">
           No one added yet.{" "}
-          <button onClick={onAddFirst} className="underline hover:text-gray-700">
+          <button onClick={onAddFirst} className="underline hover:text-ink-body">
             Add your first direct report
           </button>
           .
@@ -628,17 +628,17 @@ function IndividualPerformanceCard({
       ) : (
         <div>
           {dueTeam.length === 0 ? (
-            <p className="px-5 pb-1 pt-4 text-sm text-gray-500">Everyone&apos;s on cadence. 🎯</p>
+            <p className="px-5 pb-1 pt-4 text-sm text-ink-secondary">Everyone&apos;s on cadence. 🎯</p>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-divider">
               {dueTeam.map((r) => (
                 <Row key={r.id} r={r} />
               ))}
             </ul>
           )}
           {healthyTeam.length > 0 && (
-            <div className="border-t border-gray-100 px-5 py-3">
-              <button onClick={() => setShowHealthy((s) => !s)} className="text-xs text-gray-400 hover:text-gray-600">
+            <div className="border-t border-divider px-5 py-3">
+              <button onClick={() => setShowHealthy((s) => !s)} className="text-xs text-ink-muted hover:text-ink-secondary">
                 {showHealthy ? "Hide" : "Show"} {healthyTeam.length} on track {showHealthy ? "▴" : "▾"}
               </button>
               {showHealthy && (
@@ -647,10 +647,10 @@ function IndividualPerformanceCard({
                     <li key={r.id}>
                       <Link
                         href={`/app/reports/${r.id}`}
-                        className="flex items-center justify-between gap-2 rounded px-1 py-0.5 hover:bg-gray-50"
+                        className="flex items-center justify-between gap-2 rounded px-1 py-0.5 hover:bg-canvas"
                       >
-                        <span className="min-w-0 flex-1 truncate text-xs text-gray-600">{r.name}</span>
-                        <span className="shrink-0 text-[11px] text-gray-400">{lastOneOnOneLabel(r.days_since_last)}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-ink-secondary">{r.name}</span>
+                        <span className="shrink-0 text-[11px] text-ink-muted">{lastOneOnOneLabel(r.days_since_last)}</span>
                       </Link>
                     </li>
                   ))}
@@ -688,13 +688,13 @@ function TriageCard({
 }) {
   const [showHealthy, setShowHealthy] = useState(false);
   return (
-    <section className="rounded-xl border border-gray-200 bg-white">
-      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+    <section className="rounded-xl border border-hairline bg-white">
+      <div className="flex items-center justify-between border-b border-divider px-5 py-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
           {title}
           {total > 0 && ` (${total})`}
         </h2>
-        <Link href={href} className="text-xs text-gray-400 hover:text-gray-600">
+        <Link href={href} className="text-xs text-ink-muted hover:text-ink-secondary">
           {linkLabel} →
         </Link>
       </div>
@@ -703,35 +703,35 @@ function TriageCard({
       ) : (
         <div>
           {attention.length === 0 ? (
-            <p className="px-5 pb-1 pt-4 text-sm text-gray-500">Nothing needs your attention. 🎯</p>
+            <p className="px-5 pb-1 pt-4 text-sm text-ink-secondary">Nothing needs your attention. 🎯</p>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-divider">
               {attention.map((item) => (
                 <li key={item.id}>
-                  <Link href={href} className="block px-5 py-3 hover:bg-gray-50">
+                  <Link href={href} className="block px-5 py-3 hover:bg-canvas">
                     <div className="flex items-center gap-2">
                       <span className={`h-2 w-2 shrink-0 rounded-full ${DOT_STYLES[item.status]}`} />
-                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{item.title}</p>
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{item.title}</p>
                       {item.progress != null && (
-                        <span className="shrink-0 text-xs font-medium text-gray-600">{item.progress}%</span>
+                        <span className="shrink-0 text-xs font-medium text-ink-secondary">{item.progress}%</span>
                       )}
                       <TrendArrow trend={item.trend} />
                     </div>
                     {item.progress != null && (
-                      <div className="ml-4 mt-1.5 h-1 overflow-hidden rounded-full bg-gray-100">
+                      <div className="ml-4 mt-1.5 h-1 overflow-hidden rounded-full bg-sunken">
                         <div
-                          className={`h-full rounded-full ${item.status === "at_risk" ? "bg-amber-500" : "bg-green-500"}`}
+                          className={`h-full rounded-full ${item.status === "at_risk" ? "bg-amber-500" : "bg-brand"}`}
                           style={{ width: `${item.progress}%` }}
                         />
                       </div>
                     )}
                     <div className="ml-4 mt-1.5 flex flex-wrap items-center gap-1.5">
-                      {item.subtitle && <span className="text-[11px] text-gray-400">{item.subtitle}</span>}
+                      {item.subtitle && <span className="text-[11px] text-ink-muted">{item.subtitle}</span>}
                       {item.reasons.map((r) => (
                         <span
                           key={r.label}
                           className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                            r.severe ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"
+                            r.severe ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
                           }`}
                         >
                           {r.label}
@@ -744,10 +744,10 @@ function TriageCard({
             </ul>
           )}
           {healthy.length > 0 && (
-            <div className="border-t border-gray-100 px-5 py-3">
+            <div className="border-t border-divider px-5 py-3">
               <button
                 onClick={() => setShowHealthy((s) => !s)}
-                className="text-xs text-gray-400 hover:text-gray-600"
+                className="text-xs text-ink-muted hover:text-ink-secondary"
               >
                 {showHealthy ? "Hide" : "Show"} {healthy.length} on track {showHealthy ? "▴" : "▾"}
               </button>
@@ -755,11 +755,11 @@ function TriageCard({
                 <ul className="mt-2 space-y-1.5">
                   {healthy.map((item) => (
                     <li key={item.id}>
-                      <Link href={href} className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-gray-50">
+                      <Link href={href} className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-canvas">
                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT_STYLES[item.status]}`} />
-                        <span className="min-w-0 flex-1 truncate text-xs text-gray-600">{item.title}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-ink-secondary">{item.title}</span>
                         {item.progress != null && (
-                          <span className="shrink-0 text-[11px] text-gray-400">{item.progress}%</span>
+                          <span className="shrink-0 text-[11px] text-ink-muted">{item.progress}%</span>
                         )}
                         <TrendArrow trend={item.trend} />
                       </Link>

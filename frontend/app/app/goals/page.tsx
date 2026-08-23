@@ -53,6 +53,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { INPUT, LABEL, BTN_PRIMARY, HEX } from "@/lib/tokens";
 
 const LEVEL_TABS: { id: GoalLevel; label: string; blurb: string }[] = [
   { id: "individual", label: "Individual", blurb: "Goals for one direct report" },
@@ -72,11 +73,11 @@ const STATUS_OPTIONS: { id: GoalStatus; label: string }[] = [
 // Ported verbatim from frontend/app/app/team/page.tsx — same status
 // vocabulary as Team/Projects, same hex values. Do not reinvent.
 const STATUS_STYLES: Record<GoalStatus, string> = {
-  active: "bg-gray-100 text-gray-600",
-  on_track: "bg-green-50 text-green-600",
-  at_risk: "bg-amber-50 text-amber-600",
+  active: "bg-sunken text-ink-secondary",
+  on_track: "bg-teal-50 text-teal-700",
+  at_risk: "bg-amber-50 text-amber-700",
   completed: "bg-blue-50 text-blue-600",
-  cancelled: "bg-gray-100 text-gray-400",
+  cancelled: "bg-sunken text-ink-muted",
 };
 
 // Left-border accent per status — same map Team's InitiativesCard/
@@ -84,16 +85,18 @@ const STATUS_STYLES: Record<GoalStatus, string> = {
 // competing all-sides border class, so only the left edge (border-l-4)
 // ever picks up a visible color — same technique as the source file.
 const STATUS_BORDER: Record<GoalStatus, string> = {
-  active: "border-gray-300",
-  on_track: "border-green-500",
+  active: "border-control",
+  on_track: "border-brand",
   at_risk: "border-amber-500",
   completed: "border-blue-300",
-  cancelled: "border-gray-200",
+  cancelled: "border-hairline",
 };
 
-const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
-const labelCls = "mb-1 block text-xs font-medium text-gray-500";
-const primaryBtnCls = "rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50";
+// Local aliases so this file's existing call sites keep working; the value
+// itself is the shared token, so restyling happens in one place.
+const inputCls = INPUT;
+const labelCls = LABEL;
+const primaryBtnCls = BTN_PRIMARY;
 
 type GoalFormValues = {
   title: string;
@@ -272,26 +275,26 @@ export default function GoalsPage() {
   return (
     <PageShell maxWidth="8xl">
       <h1 className="text-2xl font-semibold">Goals</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         Company, department, team, and individual goals in one place.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <div className={SECTION_GAP}>
           <KpiStrip goals={levelGoals} projects={projects} />
 
           <div className={`${SECTION_GAP} flex items-center justify-between gap-4`}>
-            <div className="flex flex-wrap rounded-md border border-gray-200 p-0.5">
+            <div className="flex flex-wrap rounded-md border border-hairline p-0.5">
               {LEVEL_TABS.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setLevel(t.id)}
                   className={`rounded px-3 py-1.5 text-sm ${
-                    level === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"
+                    level === t.id ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"
                   }`}
                 >
                   {t.label}
@@ -308,7 +311,7 @@ export default function GoalsPage() {
               {showForm ? "Cancel" : "+ New goal"}
             </button>
           </div>
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-ink-muted">
             {LEVEL_TABS.find((t) => t.id === level)?.blurb}
           </p>
 
@@ -329,14 +332,14 @@ export default function GoalsPage() {
             <div className={`${SECTION_GAP} space-y-8`}>
               {(groupedIndividual ?? []).map((group) => (
                 <div key={group.name}>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
                     {group.name}
                   </h2>
                   <GoalGrid goals={group.goals} {...goalListProps} />
                 </div>
               ))}
               {levelGoals.length === 0 && (
-                <p className="text-gray-500">
+                <p className="text-ink-secondary">
                   No individual goals yet. Add one above and link it to a direct report.
                 </p>
               )}
@@ -345,7 +348,7 @@ export default function GoalsPage() {
             <div className={SECTION_GAP}>
               <GoalGrid goals={levelGoals} {...goalListProps} />
               {levelGoals.length === 0 && (
-                <p className="text-gray-500">No {level} goals yet. Add the first one above.</p>
+                <p className="text-ink-secondary">No {level} goals yet. Add the first one above.</p>
               )}
             </div>
           )}
@@ -371,10 +374,10 @@ function KpiStrip({ goals, projects }: { goals: Goal[]; projects: Project[] }) {
   // there's nothing to score at all.
   const onTrackTone =
     scored.length === 0
-      ? { from: "from-gray-400", to: "to-gray-500" }
+      ? { from: "from-carbon-500", to: "to-carbon-600" }
       : onTrack === 0
         ? { from: "from-amber-500", to: "to-amber-600" }
-        : { from: "from-green-500", to: "to-green-600" };
+        : { from: "from-teal-600", to: "to-teal-700" };
 
   const atRisk = scored.filter((g) => g.status === "at_risk").length;
 
@@ -390,8 +393,8 @@ function KpiStrip({ goals, projects }: { goals: Goal[]; projects: Project[] }) {
   const tiles = [
     { value: onTrackLabel, label: "Goals on track", from: onTrackTone.from, to: onTrackTone.to },
     { value: String(atRisk), label: "At risk", from: "from-amber-500", to: "to-amber-600" },
-    { value: String(dueThisWeek), label: "Due this week", from: "from-indigo-500", to: "to-indigo-600" },
-    { value: String(noInitiative), label: "No initiative attached", from: "from-rose-500", to: "to-rose-600" },
+    { value: String(dueThisWeek), label: "Due this week", from: "from-blue-600", to: "to-blue-700" },
+    { value: String(noInitiative), label: "No initiative attached", from: "from-red-600", to: "to-red-700" },
   ];
 
   return (
@@ -422,20 +425,20 @@ function ProgressRing({ progress }: { progress: number | null | undefined }) {
       <path
         d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
         fill="none"
-        stroke="#e5e7eb"
+        stroke={HEX.track}
         strokeWidth="3"
       />
       {progress != null && (
         <path
           d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
           fill="none"
-          stroke="#22c55e"
+          stroke={HEX.brand}
           strokeWidth="3"
           strokeDasharray={dash}
           strokeLinecap="round"
         />
       )}
-      <text x="18" y="21" textAnchor="middle" fontSize="9" fill="#111827" fontWeight="600">
+      <text x="18" y="21" textAnchor="middle" fontSize="9" fill={HEX.ink} fontWeight="600">
         {progress != null ? `${pct}%` : "–"}
       </text>
     </svg>
@@ -495,16 +498,16 @@ function GoalGrid({
               <div className="flex min-w-0 items-start gap-3">
                 <ProgressRing progress={g.progress} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-900">{g.title}</p>
+                  <p className="truncate text-sm font-medium text-ink">{g.title}</p>
                   {g.org_unit_name && (
-                    <p className="mt-0.5 text-xs text-gray-400">
+                    <p className="mt-0.5 text-xs text-ink-muted">
                       {g.level === "department" ? "Department" : "Team"}: {g.org_unit_name}
                     </p>
                   )}
                   {g.parent_goal_title && (
-                    <p className="mt-0.5 text-xs text-gray-400">Part of: {g.parent_goal_title}</p>
+                    <p className="mt-0.5 text-xs text-ink-muted">Part of: {g.parent_goal_title}</p>
                   )}
-                  {g.due_date && <p className="mt-0.5 text-xs text-gray-400">Due {formatDate(g.due_date)}</p>}
+                  {g.due_date && <p className="mt-0.5 text-xs text-ink-muted">Due {formatDate(g.due_date)}</p>}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -521,14 +524,14 @@ function GoalGrid({
                 </select>
                 <button
                   onClick={() => onStartEdit(g.id)}
-                  className="text-xs text-gray-400 hover:text-gray-700"
+                  className="text-xs text-ink-muted hover:text-ink-body"
                   title="Edit goal"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => onDelete(g.id)}
-                  className="text-xs text-gray-400 hover:text-red-500"
+                  className="text-xs text-ink-muted hover:text-red-700"
                   title="Delete goal"
                 >
                   Delete
@@ -536,10 +539,10 @@ function GoalGrid({
               </div>
             </div>
 
-            {g.description && <p className="mt-2 text-sm text-gray-500">{g.description}</p>}
+            {g.description && <p className="mt-2 text-sm text-ink-secondary">{g.description}</p>}
             {g.success_metrics && (
-              <p className="mt-1 text-sm text-gray-500">
-                <span className="text-gray-400">Success metric: </span>
+              <p className="mt-1 text-sm text-ink-secondary">
+                <span className="text-ink-muted">Success metric: </span>
                 {g.success_metrics}
               </p>
             )}
@@ -549,8 +552,8 @@ function GoalGrid({
               const serving = projects.filter((p) => p.goal_id === g.id);
               if (serving.length === 0) return null;
               return (
-                <p className="mt-1 text-xs text-gray-400">
-                  <Link href="/app/projects" className="hover:text-gray-600">
+                <p className="mt-1 text-xs text-ink-muted">
+                  <Link href="/app/projects" className="hover:text-ink-secondary">
                     {serving.length} initiative{serving.length === 1 ? "" : "s"}
                   </Link>
                   {": "}
@@ -645,7 +648,7 @@ function GoalForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-lg border border-dashed border-control p-4">
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>Title</label>
@@ -743,7 +746,7 @@ function GoalForm({
         <button type="submit" disabled={saving} className={primaryBtnCls}>
           {saving ? savingLabel : submitLabel}
         </button>
-        <button type="button" onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-900">
+        <button type="button" onClick={onCancel} className="text-sm text-ink-secondary hover:text-ink">
           Cancel
         </button>
       </div>

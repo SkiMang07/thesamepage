@@ -30,3 +30,6 @@ _to_delete/
 # from here.
 docs/branding/
 docs/marketing/
+
+# Session tooling scratch (Claude skills cache) — not project state
+.agents/

@@ -192,32 +192,32 @@ export default function CapacityPage() {
   return (
     <PageShell maxWidth="3xl">
       <h1 className="text-2xl font-semibold">Capacity</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         How much bandwidth your team has right now — not what&apos;s using it up yet.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {/* Period selector */}
       <div className={`${SECTION_GAP} flex items-center justify-between gap-4`}>
-        <div className="flex rounded-md border border-gray-200 p-0.5">
+        <div className="flex rounded-md border border-hairline p-0.5">
           {(Object.keys(PERIOD_LABEL) as PeriodKind[]).map((k) => (
             <button
               key={k}
               onClick={() => setPeriodKind(k)}
-              className={`rounded px-3 py-1.5 text-sm ${periodKind === k ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+              className={`rounded px-3 py-1.5 text-sm ${periodKind === k ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
             >
               {PERIOD_LABEL[k]}
             </button>
           ))}
         </div>
         {range && (
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-            <button onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, -1) : a))} className="hover:text-gray-900">
+          <div className="flex items-center gap-3 text-sm text-ink-secondary">
+            <button onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, -1) : a))} className="hover:text-ink">
               &larr;
             </button>
             <span>{formatRange(range.start, range.end)}</span>
-            <button onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, 1) : a))} className="hover:text-gray-900">
+            <button onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, 1) : a))} className="hover:text-ink">
               &rarr;
             </button>
           </div>
@@ -225,20 +225,20 @@ export default function CapacityPage() {
       </div>
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <>
           {/* Your team */}
           <div className={SECTION_GAP}>
             <div className="flex items-baseline justify-between">
-              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Your team</h2>
-              {overview.length > 0 && <span className="text-xs text-gray-400">{formatHours(teamTotalHours)} total</span>}
+              <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Your team</h2>
+              {overview.length > 0 && <span className="text-xs text-ink-muted">{formatHours(teamTotalHours)} total</span>}
             </div>
 
             {overview.length === 0 ? (
-              <p className="mt-4 text-gray-500">
+              <p className="mt-4 text-ink-secondary">
                 No direct reports yet.{" "}
-                <Link href="/app/dashboard" className="underline hover:text-gray-700">
+                <Link href="/app/dashboard" className="underline hover:text-ink-body">
                   Add your first one
                 </Link>
                 .
@@ -248,23 +248,23 @@ export default function CapacityPage() {
                 {overview.map((o) => {
                   const workUnit = o.role_level_id ? workUnitByRole.get(o.role_level_id) : undefined;
                   return (
-                    <li key={o.direct_report_id} className="rounded-lg border border-gray-200 px-4 py-3">
+                    <li key={o.direct_report_id} className="rounded-lg border border-hairline px-4 py-3">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{o.name}</p>
-                          {o.role_title && <p className="text-xs text-gray-500">{o.role_title}</p>}
+                          <p className="text-sm font-medium text-ink">{o.name}</p>
+                          {o.role_title && <p className="text-xs text-ink-secondary">{o.role_title}</p>}
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-sm font-medium text-gray-900">{formatHours(o.available_hours)}</p>
+                          <p className="text-sm font-medium text-ink">{formatHours(o.available_hours)}</p>
                           {workUnit && (
-                            <p className="text-xs text-gray-400">
+                            <p className="text-xs text-ink-muted">
                               &asymp; {Math.round(o.available_hours / workUnit.hours_per_unit)} {workUnit.unit_name}
                               {Math.round(o.available_hours / workUnit.hours_per_unit) === 1 ? "" : "s"}
                             </p>
                           )}
                         </div>
                       </div>
-                      <p className="mt-1.5 text-xs text-gray-400">
+                      <p className="mt-1.5 text-xs text-ink-muted">
                         {o.contracted_hours_per_week}h/wk contracted &middot; {o.target_utilization_pct}% target
                         {o.off_hours > 0 &&
                           ` · ${formatHours(o.off_hours)} ${
@@ -272,7 +272,7 @@ export default function CapacityPage() {
                           } this period`}
                       </p>
                       {o.off_hours_source === "assumed" && o.off_hours > 0 && (
-                        <p className="text-xs text-gray-300">
+                        <p className="text-xs text-ink-faint">
                           No time off logged for this period — assuming a share of {o.off_days_per_year} default days/year.
                         </p>
                       )}
@@ -281,13 +281,13 @@ export default function CapacityPage() {
                 })}
               </ul>
             )}
-            <p className="mt-3 text-xs text-gray-400">
+            <p className="mt-3 text-xs text-ink-muted">
               Adjust someone&apos;s hours, target, or unit conversion in{" "}
-              <Link href="/app/settings" className="underline hover:text-gray-600">
+              <Link href="/app/settings" className="underline hover:text-ink-secondary">
                 Settings
               </Link>{" "}
               or on their{" "}
-              <Link href="/app/dashboard" className="underline hover:text-gray-600">
+              <Link href="/app/dashboard" className="underline hover:text-ink-secondary">
                 report page
               </Link>
               .
@@ -296,23 +296,23 @@ export default function CapacityPage() {
 
           {/* By department */}
           <div className={SECTION_GAP}>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">By department</h2>
-            <p className="mt-1 text-xs text-gray-400">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">By department</h2>
+            <p className="mt-1 text-xs text-ink-muted">
               Rolled up across every unit you lead in {companyName}&apos;s org chart, regardless of who manages
               them — aggregate numbers only, never a named individual outside your own team.
             </p>
             {orgUnits.length === 0 ? (
-              <p className="mt-4 text-gray-500">
+              <p className="mt-4 text-ink-secondary">
                 No departments or teams yet.{" "}
-                <Link href="/app/org" className="underline hover:text-gray-700">
+                <Link href="/app/org" className="underline hover:text-ink-body">
                   Build your org chart
                 </Link>{" "}
                 to see rollups here.
               </p>
             ) : ledUnits.length === 0 ? (
-              <p className="mt-4 text-gray-500">
+              <p className="mt-4 text-ink-secondary">
                 You don&apos;t lead any departments or teams yet.{" "}
-                <Link href="/app/org" className="underline hover:text-gray-700">
+                <Link href="/app/org" className="underline hover:text-ink-body">
                   Assign a leader
                 </Link>{" "}
                 on the Build tab to see a rollup here.
@@ -345,16 +345,16 @@ function RollupNode({
   const totals = subtreeTotals(node, rollupByUnit);
   return (
     <li style={{ marginLeft: depth * 24 }}>
-      <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-2.5">
-        <p className="min-w-0 text-sm font-medium text-gray-900">
+      <div className="flex items-center justify-between gap-4 rounded-lg border border-hairline px-4 py-2.5">
+        <p className="min-w-0 text-sm font-medium text-ink">
           {node.name}
-          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
+          <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-normal text-ink-secondary">
             {TYPE_LABEL[node.unit_type]}
           </span>
         </p>
         <div className="shrink-0 text-right">
-          <p className="text-sm font-medium text-gray-900">{formatHours(totals.hours)}</p>
-          <p className="text-xs text-gray-400">
+          <p className="text-sm font-medium text-ink">{formatHours(totals.hours)}</p>
+          <p className="text-xs text-ink-muted">
             {totals.count} {totals.count === 1 ? "person" : "people"}
           </p>
         </div>

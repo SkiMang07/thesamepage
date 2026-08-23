@@ -56,16 +56,16 @@ function SkillValueRow({
     : Array.from({ length: (item.scale_max || 4) - (item.scale_min || 1) + 1 }, (_, i) => (item.scale_min || 1) + i);
 
   return (
-    <li className="rounded-lg border border-gray-200 px-4 py-3">
+    <li className="rounded-lg border border-hairline px-4 py-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">{item.name}</p>
+          <p className="text-sm font-medium text-ink">{item.name}</p>
           {(item.expectation || item.description) && (
-            <p className="mt-0.5 text-sm text-gray-500">{item.expectation || item.description}</p>
+            <p className="mt-0.5 text-sm text-ink-secondary">{item.expectation || item.description}</p>
           )}
         </div>
         {latest && (
-          <span className="shrink-0 text-xs text-gray-400">
+          <span className="shrink-0 text-xs text-ink-muted">
             Last: {latest.evaluation_point} ({formatDate(latest.assessed_at)})
           </span>
         )}
@@ -82,7 +82,7 @@ function SkillValueRow({
               title={label || undefined}
               onClick={() => onChange({ ...pending, evaluation_point: selected ? null : p })}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                selected ? "bg-gray-900 text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"
+                selected ? "bg-brand text-white" : "border border-control text-ink-secondary hover:bg-canvas"
               }`}
             >
               {p}
@@ -95,7 +95,7 @@ function SkillValueRow({
           value={pending.notes}
           onChange={(e) => onChange({ ...pending, notes: e.target.value })}
           placeholder="Notes (optional) — why this score"
-          className="mt-2 w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm"
+          className="mt-2 w-full rounded-md border border-hairline px-3 py-1.5 text-sm"
         />
       )}
     </li>
@@ -113,19 +113,19 @@ function MetricRow({
 }) {
   const latest = isMetricLatest(item.latest) ? item.latest : null;
   return (
-    <li className="rounded-lg border border-gray-200 px-4 py-3">
+    <li className="rounded-lg border border-hairline px-4 py-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">{item.name}</p>
+          <p className="text-sm font-medium text-ink">{item.name}</p>
           {(item.expectation || item.description) && (
-            <p className="mt-0.5 text-sm text-gray-500">{item.expectation || item.description}</p>
+            <p className="mt-0.5 text-sm text-ink-secondary">{item.expectation || item.description}</p>
           )}
           {item.measurement_period && item.measurement_period !== "none" && (
-            <p className="mt-0.5 text-xs text-gray-400">Measured per {item.measurement_period}</p>
+            <p className="mt-0.5 text-xs text-ink-muted">Measured per {item.measurement_period}</p>
           )}
         </div>
         {latest && (
-          <span className="shrink-0 text-xs text-gray-400">
+          <span className="shrink-0 text-xs text-ink-muted">
             Last: {latest.value}
             {latest.period ? ` (${latest.period})` : ""}
           </span>
@@ -137,13 +137,13 @@ function MetricRow({
           value={pending.value}
           onChange={(e) => onChange({ ...pending, value: e.target.value })}
           placeholder="Value"
-          className="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="w-28 rounded-md border border-control px-3 py-1.5 text-sm"
         />
         <input
           value={pending.period}
           onChange={(e) => onChange({ ...pending, period: e.target.value })}
           placeholder="Period (e.g. Q3 2026)"
-          className="w-40 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className="w-40 rounded-md border border-control px-3 py-1.5 text-sm"
         />
       </div>
       {pending.value.trim() && (
@@ -151,7 +151,7 @@ function MetricRow({
           value={pending.notes}
           onChange={(e) => onChange({ ...pending, notes: e.target.value })}
           placeholder="Notes (optional) — source of this number"
-          className="mt-2 w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm"
+          className="mt-2 w-full rounded-md border border-hairline px-3 py-1.5 text-sm"
         />
       )}
     </li>
@@ -277,8 +277,8 @@ export default function AssessmentScorecardPage() {
     [scorecard]
   );
 
-  if (loading) return <p className="p-8 text-gray-500">Loading...</p>;
-  if (error && !scorecard) return <p className="p-8 text-red-500">{error}</p>;
+  if (loading) return <p className="p-8 text-ink-secondary">Loading...</p>;
+  if (error && !scorecard) return <p className="p-8 text-red-700">{error}</p>;
   if (!scorecard) return null;
 
   const { direct_report: report, role, levels } = scorecard;
@@ -287,19 +287,19 @@ export default function AssessmentScorecardPage() {
     <PageShell maxWidth="2xl">
       <div className="flex items-start justify-between">
         <div>
-          <Link href="/app/assessments" className="text-sm text-gray-500 hover:underline">
+          <Link href="/app/assessments" className="text-sm text-ink-secondary hover:underline">
             ← Assessments
           </Link>
           <h1 className="mt-2 text-2xl font-semibold">{report.name}</h1>
           {role ? (
-            <p className="mt-1 text-gray-500">
+            <p className="mt-1 text-ink-secondary">
               {role.job_role} · Level {role.job_level}
               {role.functional_team && ` · ${role.functional_team}`}
             </p>
           ) : (
-            <p className="mt-1 text-gray-500">
+            <p className="mt-1 text-ink-secondary">
               No role assigned —{" "}
-              <Link href="/app/settings" className="underline hover:text-gray-700">
+              <Link href="/app/settings" className="underline hover:text-ink-body">
                 set one in Settings
               </Link>{" "}
               to unlock metric/skill/value scoring.
@@ -309,22 +309,22 @@ export default function AssessmentScorecardPage() {
         <button
           onClick={runDraft}
           disabled={drafting || totalConfigured === 0}
-          className="shrink-0 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+          className="shrink-0 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover disabled:opacity-50"
           title={totalConfigured === 0 ? "No metrics/skills/values configured for this role yet" : undefined}
         >
           {drafting ? "Drafting…" : "Draft with AI →"}
         </button>
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
-      {saveMessage && <p className="mt-4 text-sm text-gray-600">{saveMessage}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+      {saveMessage && <p className="mt-4 text-sm text-ink-secondary">{saveMessage}</p>}
 
       {/* Overall rating */}
       <div className="mt-10">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Overall rating</h2>
+        <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Overall rating</h2>
         {scorecard.overall && (
-          <p className="mt-2 text-sm text-gray-500">
-            Currently: <span className="font-medium text-gray-700">{levels.find((l) => l.ordinal === scorecard.overall!.level_ordinal)?.label}</span>{" "}
+          <p className="mt-2 text-sm text-ink-secondary">
+            Currently: <span className="font-medium text-ink-body">{levels.find((l) => l.ordinal === scorecard.overall!.level_ordinal)?.label}</span>{" "}
             (set {formatDate(scorecard.overall.created_at)})
           </p>
         )}
@@ -335,7 +335,7 @@ export default function AssessmentScorecardPage() {
               type="button"
               onClick={() => setOverallOrdinal(overallOrdinal === lv.ordinal ? null : lv.ordinal)}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                overallOrdinal === lv.ordinal ? "bg-gray-900 text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"
+                overallOrdinal === lv.ordinal ? "bg-brand text-white" : "border border-control text-ink-secondary hover:bg-canvas"
               }`}
             >
               {lv.ordinal} — {lv.label}
@@ -348,7 +348,7 @@ export default function AssessmentScorecardPage() {
             onChange={(e) => setOverallNotes(e.target.value)}
             placeholder="Notes justifying this rating (optional)"
             rows={2}
-            className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+            className="mt-2 w-full rounded-md border border-hairline px-3 py-2 text-sm"
           />
         )}
       </div>
@@ -356,7 +356,7 @@ export default function AssessmentScorecardPage() {
       {/* Skills */}
       {scorecard.skills.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Skills</h2>
+          <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Skills</h2>
           <ul className="mt-3 space-y-2">
             {scorecard.skills.map((s) => (
               <SkillValueRow
@@ -373,7 +373,7 @@ export default function AssessmentScorecardPage() {
       {/* Values */}
       {scorecard.values.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Values</h2>
+          <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Values</h2>
           <ul className="mt-3 space-y-2">
             {scorecard.values.map((v) => (
               <SkillValueRow
@@ -390,7 +390,7 @@ export default function AssessmentScorecardPage() {
       {/* Metrics */}
       {scorecard.metrics.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Metrics</h2>
+          <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Metrics</h2>
           <ul className="mt-3 space-y-2">
             {scorecard.metrics.map((m) => (
               <MetricRow
@@ -405,24 +405,24 @@ export default function AssessmentScorecardPage() {
       )}
 
       {totalConfigured === 0 && role && (
-        <p className="mt-10 text-gray-500">
+        <p className="mt-10 text-ink-secondary">
           No metrics, skills, or values configured for this role yet.{" "}
-          <Link href="/app/settings" className="underline hover:text-gray-700">
+          <Link href="/app/settings" className="underline hover:text-ink-body">
             Add them in Settings
           </Link>
           . You can still set an overall rating above.
         </p>
       )}
 
-      <div className="mt-10 flex items-center gap-3 border-t border-gray-200 pt-6">
+      <div className="mt-10 flex items-center gap-3 border-t border-hairline pt-6">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save assessment"}
         </button>
-        <p className="text-xs text-gray-400">Only items you&apos;ve scored above will be saved.</p>
+        <p className="text-xs text-ink-muted">Only items you&apos;ve scored above will be saved.</p>
       </div>
     </PageShell>
   );

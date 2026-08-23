@@ -23,6 +23,7 @@
 // is_due field rather than each re-deriving it.
 
 import { useEffect, useState } from "react";
+import { IDENTITY_HEX } from "@/lib/tokens";
 import Link from "next/link";
 import {
   getCapacityOverview,
@@ -152,7 +153,6 @@ export function Icon({ name, className }: { name: IconName; className?: string }
 // (home) + three zones (Your people / The work / Foundation).
 // ---------------------------------------------------------------------------
 
-export type ZoneHue = "indigo" | "emerald" | "violet";
 
 export type NavItem = {
   id: string;
@@ -167,7 +167,6 @@ export type NavItem = {
 
 export type NavGroup = {
   group: string;
-  hue: ZoneHue;
   blurb: string;
   items: NavItem[];
 };
@@ -207,7 +206,6 @@ export const HOME_ITEM: NavItem = { id: "home", label: "Mission Control", href: 
 export const NAV_GROUPS: NavGroup[] = [
   {
     group: "Your people",
-    hue: "indigo",
     blurb: "The rhythm you keep with humans",
     items: [
       { id: "team", label: "Team", href: "/app/team", icon: "team" },
@@ -217,7 +215,6 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     group: "The work",
-    hue: "emerald",
     blurb: "What we said we'd deliver",
     items: [
       { id: "goals", label: "Goals", href: "/app/goals", icon: "goals" },
@@ -227,7 +224,6 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     group: "Foundation",
-    hue: "violet",
     blurb: "Set once, tuned rarely",
     items: [
       { id: "org", label: "Org", href: "/app/org", icon: "org" },
@@ -278,48 +274,54 @@ export function getNavContext(pathname: string, params: Record<string, string | 
 }
 
 // ---------------------------------------------------------------------------
-// Hue / tone styling — exact hex tokens from the mockup's :root vars, as
-// Tailwind arbitrary values (no new global CSS file, no new dependency).
+// Zone styling — Current & Carbon.
+//
+// Session 58 collapsed the three per-zone hues (indigo "Your people",
+// emerald "The work", violet "Foundation") into ONE brand treatment. The
+// locked palette gives us teal, blue and carbon and reserves blue for Scribe
+// and focus, so there was no third zone colour to spend without diluting the
+// brand — the documented failure mode in docs/branding/colors/README.md.
+// Zones are now told apart by icon, label and position, which is what a
+// manager actually navigates by; colour is spent on the brand instead of on
+// wayfinding that the labels already do.
+//
+// The gradient TILE SHAPE from Session 55 is deliberately kept — that was
+// picked from a real comparison canvas and only its per-hue colouring is
+// superseded, not the decision to use bold tiles over pastel cards.
 // ---------------------------------------------------------------------------
 
-export const HUE_STYLES: Record<ZoneHue, { text: string; bg: string; border: string; chipOn: string }> = {
-  indigo: { text: "text-[#4f46e5]", bg: "bg-[#eef1ff]", border: "border-[#d9dcff]", chipOn: "bg-[#eef1ff] border-[#d9dcff] text-[#4f46e5]" },
-  emerald: { text: "text-[#0e8f7e]", bg: "bg-[#ecfaf6]", border: "border-[#c7ece4]", chipOn: "bg-[#ecfaf6] border-[#c7ece4] text-[#0e8f7e]" },
-  violet: { text: "text-[#7c4ddb]", bg: "bg-[#f5f0ff]", border: "border-[#e4d8fb]", chipOn: "bg-[#f5f0ff] border-[#e4d8fb] text-[#7c4ddb]" },
+export const ZONE_STYLE = {
+  text: "text-brand",
+  bg: "bg-brand-tint",
+  border: "border-teal-200",
+  chipOn: "bg-brand-tint border-teal-200 text-brand",
 };
 
-// Gradient tiles for Mission Control's zone map only (Session 55) — everything
-// else that reads HUE_STYLES (Sidebar's active-state chips, AppNav) keeps the
-// original pastel tokens above untouched. This mirrors the bold
-// bg-gradient-to-br {from}/{to} + white-text KPI-tile convention already used
-// on Team/Goals/Projects (see docs/DESIGN.md's Session 53/54 entries) so
-// Mission Control reads as the same app instead of a second visual language.
-// Reviewed against a two-option comparison canvas before building (Session
-// 55) — Andrew picked the gradient option over the original pastel cards.
-const HUE_GRADIENT: Record<ZoneHue, { from: string; to: string; shadow: string }> = {
-  indigo: { from: "from-[#6366f1]", to: "to-[#4f46e5]", shadow: "shadow-[0_4px_14px_rgba(79,70,229,0.25)]" },
-  emerald: { from: "from-[#10b981]", to: "to-[#059669]", shadow: "shadow-[0_4px_14px_rgba(5,150,105,0.25)]" },
-  violet: { from: "from-[#a78bfa]", to: "to-[#7c3aed]", shadow: "shadow-[0_4px_14px_rgba(124,58,237,0.25)]" },
+const ZONE_GRADIENT = {
+  from: "from-teal-600",
+  to: "to-teal-700",
+  shadow: "shadow-[0_4px_14px_rgba(8,126,120,0.25)]",
 };
 
 export type Tone = "warn" | "risk" | "setup";
 
 const TONE_TEXT: Record<Tone, string> = {
-  warn: "text-[#b0640c] font-semibold",
-  risk: "text-[#c02a4c] font-semibold",
-  setup: "text-[#a3a9b4] italic",
+  warn: "text-amber-700 font-semibold",
+  risk: "text-red-700 font-semibold",
+  setup: "text-ink-faint italic",
 };
 
-// Tone colors for text sitting directly on a gradient tile (ZoneMap's cards)
-// rather than on the pastel backgrounds above — needs to stay readable across
-// all three gradients, not just one hue's pastel.
+// Tone colours for text sitting directly on a gradient tile rather than on a
+// light ground — must stay readable on teal.
 const TONE_TEXT_ON_GRADIENT: Record<Tone, string> = {
-  warn: "text-[#fde68a] font-semibold",
-  risk: "text-[#fecaca] font-semibold",
+  warn: "text-amber-100 font-semibold",
+  risk: "text-red-100 font-semibold",
   setup: "text-white/65 italic",
 };
 
-const AVATAR_COLORS = ["#4f46e5", "#0e8f7e", "#7c4ddb", "#b0640c", "#c02a4c"];
+// Person-identity colours. Drawn only from the brand families so a roster
+// of avatars reads as one system; every entry clears 4.5:1 with white text.
+const AVATAR_COLORS = IDENTITY_HEX;
 
 function initialsOf(name: string) {
   return name
@@ -520,7 +522,7 @@ export function ZoneMap({ doorStates }: { doorStates: Partial<Record<string, Doo
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
       {NAV_GROUPS.map((g) => {
-        const gradient = HUE_GRADIENT[g.hue];
+        const gradient = ZONE_GRADIENT;
         return (
           <div
             key={g.group}

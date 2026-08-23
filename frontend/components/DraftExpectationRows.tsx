@@ -14,6 +14,7 @@
 // checked.
 
 import { useState } from "react";
+import { INPUT } from "@/lib/tokens";
 import {
   DraftMetricItem,
   DraftSkillItem,
@@ -27,7 +28,9 @@ export type DraftMetricRow = DraftMetricItem & { included: boolean };
 export type DraftSkillRow = DraftSkillItem & { included: boolean };
 export type DraftValueRow = DraftValueItem & { included: boolean };
 
-const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
+// Local aliases so this file's existing call sites keep working; the value
+// itself is the shared token, so restyling happens in one place.
+const inputCls = INPUT;
 
 const KIND_TABS: { id: ExpectationKind; label: string }[] = [
   { id: "metrics", label: "Metrics" },
@@ -119,14 +122,14 @@ export function DraftExpectationsReview({
 
   return (
     <>
-      <div className="mt-4 flex rounded-md border border-gray-200 p-0.5">
+      <div className="mt-4 flex rounded-md border border-hairline p-0.5">
         {KIND_TABS.map((t) => {
           const count = t.id === "metrics" ? metrics.length : t.id === "skills" ? skills.length : values.length;
           return (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`rounded px-3 py-1 text-sm ${tab === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+              className={`rounded px-3 py-1 text-sm ${tab === t.id ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
             >
               {t.label} ({count})
             </button>
@@ -135,15 +138,15 @@ export function DraftExpectationsReview({
       </div>
 
       {loading ? (
-        <p className="mt-4 text-sm text-gray-500">{loadingLabel}</p>
+        <p className="mt-4 text-sm text-ink-secondary">{loadingLabel}</p>
       ) : (
         <div className="mt-4 space-y-2">
           {tab === "metrics" &&
             (metrics.length === 0 ? (
-              <p className="text-sm text-gray-500">{hints.metrics}</p>
+              <p className="text-sm text-ink-secondary">{hints.metrics}</p>
             ) : (
               metrics.map((m, i) => (
-                <div key={i} className="rounded-lg border border-gray-200 p-3">
+                <div key={i} className="rounded-lg border border-hairline p-3">
                   <div className="flex items-start gap-2">
                     <input type="checkbox" checked={m.included} onChange={(e) => updateMetric(i, { included: e.target.checked })} className="mt-1.5" />
                     <div className="min-w-0 flex-1 space-y-2">
@@ -185,10 +188,10 @@ export function DraftExpectationsReview({
 
           {tab === "skills" &&
             (skills.length === 0 ? (
-              <p className="text-sm text-gray-500">{hints.skills}</p>
+              <p className="text-sm text-ink-secondary">{hints.skills}</p>
             ) : (
               skills.map((s, i) => (
-                <div key={i} className="rounded-lg border border-gray-200 p-3">
+                <div key={i} className="rounded-lg border border-hairline p-3">
                   <div className="flex items-start gap-2">
                     <input type="checkbox" checked={s.included} onChange={(e) => updateSkill(i, { included: e.target.checked })} className="mt-1.5" />
                     <div className="min-w-0 flex-1 space-y-2">
@@ -217,10 +220,10 @@ export function DraftExpectationsReview({
 
           {tab === "values" &&
             (values.length === 0 ? (
-              <p className="text-sm text-gray-500">{hints.values}</p>
+              <p className="text-sm text-ink-secondary">{hints.values}</p>
             ) : (
               values.map((v, i) => (
-                <div key={i} className="rounded-lg border border-gray-200 p-3">
+                <div key={i} className="rounded-lg border border-hairline p-3">
                   <div className="flex items-start gap-2">
                     <input type="checkbox" checked={v.included} onChange={(e) => updateValue(i, { included: e.target.checked })} className="mt-1.5" />
                     <div className="min-w-0 flex-1 space-y-2">

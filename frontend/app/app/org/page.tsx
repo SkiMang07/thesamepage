@@ -52,10 +52,13 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { INPUT, LABEL, BTN_PRIMARY } from "@/lib/tokens";
 
-const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
-const labelCls = "mb-1 block text-xs font-medium text-gray-500";
-const primaryBtnCls = "rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50";
+// Local aliases so this file's existing call sites keep working; the value
+// itself is the shared token, so restyling happens in one place.
+const inputCls = INPUT;
+const labelCls = LABEL;
+const primaryBtnCls = BTN_PRIMARY;
 
 const TYPE_LABEL: Record<OrgUnitType, string> = { department: "Department", team: "Team" };
 
@@ -177,29 +180,29 @@ export default function OrgPage() {
   return (
     <PageShell maxWidth="3xl">
       <h1 className="text-2xl font-semibold">Org</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         Your teams and departments — the structure everything rolls up through.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       <div className={`${SECTION_GAP} flex items-center justify-between gap-4`}>
-        <div className="flex rounded-md border border-gray-200 p-0.5">
+        <div className="flex rounded-md border border-hairline p-0.5">
           <button
             onClick={() => setView("build")}
-            className={`rounded px-3 py-1.5 text-sm ${view === "build" ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+            className={`rounded px-3 py-1.5 text-sm ${view === "build" ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
           >
             Build
           </button>
           <button
             onClick={() => setView("chart")}
-            className={`rounded px-3 py-1.5 text-sm ${view === "chart" ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+            className={`rounded px-3 py-1.5 text-sm ${view === "chart" ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
           >
             Chart
           </button>
           <button
             onClick={() => setView("rollup")}
-            className={`rounded px-3 py-1.5 text-sm ${view === "rollup" ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+            className={`rounded px-3 py-1.5 text-sm ${view === "rollup" ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
           >
             Rollup
           </button>
@@ -218,7 +221,7 @@ export default function OrgPage() {
       </div>
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : view === "chart" ? (
         <OrgChart tree={tree} companyName={companyName} members={members} />
       ) : view === "rollup" ? (
@@ -236,7 +239,7 @@ export default function OrgPage() {
             />
           )}
           {tree.length === 0 && addParentId !== "root" ? (
-            <p className="mt-2 text-gray-500">
+            <p className="mt-2 text-ink-secondary">
               No departments or teams yet. Add the first one above — {companyName} is the root everything else hangs off.
             </p>
           ) : (
@@ -328,17 +331,17 @@ function TreeNode({
           submitLabel="Save changes"
         />
       ) : (
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-2.5">
-          <p className="min-w-0 text-sm font-medium text-gray-900">
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-hairline px-4 py-2.5">
+          <p className="min-w-0 text-sm font-medium text-ink">
             {node.name}
-            <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
+            <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-normal text-ink-secondary">
               {TYPE_LABEL[node.unit_type]}
             </span>
-            {leader && <span className="ml-2 text-xs font-normal text-gray-400">Led by {leader}</span>}
+            {leader && <span className="ml-2 text-xs font-normal text-ink-muted">Led by {leader}</span>}
             {memberCount > 0 ? (
               <Link
                 href={`/app/settings?section=people&unit=${node.id}`}
-                className="ml-2 text-xs font-normal text-gray-400 hover:text-gray-700 hover:underline"
+                className="ml-2 text-xs font-normal text-ink-muted hover:text-ink-body hover:underline"
               >
                 {memberCount} {memberCount === 1 ? "person" : "people"}
               </Link>
@@ -347,17 +350,17 @@ function TreeNode({
               // used to show no count at all, indistinguishable from a
               // loading state. Plain text (not a link — nothing to filter
               // to yet).
-              <span className="ml-2 text-xs font-normal text-gray-400">0 people</span>
+              <span className="ml-2 text-xs font-normal text-ink-muted">0 people</span>
             )}
           </p>
           <div className="flex shrink-0 items-center gap-3">
-            <button onClick={() => onStartAddChild(node.id)} className="text-xs text-gray-400 hover:text-gray-700">
+            <button onClick={() => onStartAddChild(node.id)} className="text-xs text-ink-muted hover:text-ink-body">
               + Add child
             </button>
-            <button onClick={() => onStartEdit(node.id)} className="text-xs text-gray-400 hover:text-gray-700">
+            <button onClick={() => onStartEdit(node.id)} className="text-xs text-ink-muted hover:text-ink-body">
               Edit
             </button>
-            <button onClick={() => onDelete(node.id)} className="text-xs text-gray-400 hover:text-red-500">
+            <button onClick={() => onDelete(node.id)} className="text-xs text-ink-muted hover:text-red-700">
               Delete
             </button>
           </div>
@@ -454,7 +457,7 @@ function UnitForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-dashed border-control p-4">
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>Name</label>
@@ -492,7 +495,7 @@ function UnitForm({
           </select>
         </div>
       </div>
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-ink-muted">
         The leader sees an aggregate rollup (people, goals, projects, capacity) across this unit and everything
         under it — never a named individual outside their own team. See the Rollup tab.
       </p>
@@ -500,7 +503,7 @@ function UnitForm({
         <button type="submit" disabled={saving} className={primaryBtnCls}>
           {saving ? "Saving..." : submitLabel}
         </button>
-        <button type="button" onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-900">
+        <button type="button" onClick={onCancel} className="text-sm text-ink-secondary hover:text-ink">
           Cancel
         </button>
       </div>
@@ -516,7 +519,7 @@ function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName
     <div className={`org-chart ${SECTION_GAP} overflow-x-auto pb-6`}>
       <ul className="flex justify-center">
         <li>
-          <div className="inline-block rounded-lg border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-medium text-white">
+          <div className="inline-block rounded-lg border border-brand bg-brand px-4 py-2 text-sm font-medium text-white">
             {companyName}
           </div>
           {tree.length > 0 && (
@@ -529,7 +532,7 @@ function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName
         </li>
       </ul>
       {tree.length === 0 && (
-        <p className="mt-4 text-center text-sm text-gray-400">No departments or teams yet — add some in Build.</p>
+        <p className="mt-4 text-center text-sm text-ink-muted">No departments or teams yet — add some in Build.</p>
       )}
       <style jsx>{`
         .org-chart ul {
@@ -549,17 +552,17 @@ function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName
           content: "";
           position: absolute;
           top: 0;
-          border-top: 1px solid #d1d5db;
+          border-top: 1px solid #C9CDD0;
           width: 50%;
           height: 20px;
         }
         .org-chart li::before {
           left: 0;
-          border-right: 1px solid #d1d5db;
+          border-right: 1px solid #C9CDD0;
         }
         .org-chart li::after {
           right: 0;
-          border-left: 1px solid #d1d5db;
+          border-left: 1px solid #C9CDD0;
         }
         .org-chart li:only-child {
           padding-top: 0;
@@ -573,7 +576,7 @@ function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName
           border: 0 none;
         }
         .org-chart li:last-child::before {
-          border-right: 1px solid #d1d5db;
+          border-right: 1px solid #C9CDD0;
           border-radius: 0 5px 0 0;
         }
         .org-chart li:first-child::after {
@@ -584,7 +587,7 @@ function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName
           position: absolute;
           top: 0;
           left: 50%;
-          border-left: 1px solid #d1d5db;
+          border-left: 1px solid #C9CDD0;
           width: 0;
           height: 20px;
         }
@@ -597,12 +600,12 @@ function ChartNode({ node, members }: { node: OrgNode; members: OrgMember[] }) {
   const leader = memberName(node.leader_user_id, members);
   return (
     <li>
-      <div className="inline-block rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 shadow-sm">
+      <div className="inline-block rounded-lg border border-hairline bg-white px-4 py-2 text-sm text-ink shadow-sm">
         {node.name}
-        <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
+        <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-normal text-ink-secondary">
           {TYPE_LABEL[node.unit_type]}
         </span>
-        {leader && <div className="mt-1 text-xs text-gray-400">Led by {leader}</div>}
+        {leader && <div className="mt-1 text-xs text-ink-muted">Led by {leader}</div>}
       </div>
       {node.children.length > 0 && (
         <ul>
@@ -688,14 +691,14 @@ function RollupNode({
   const roles = Array.from(totals.roleBreakdown.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   return (
     <li style={{ marginLeft: depth * 24 }}>
-      <div className="rounded-lg border border-gray-200 px-4 py-3">
-        <p className="text-sm font-medium text-gray-900">
+      <div className="rounded-lg border border-hairline px-4 py-3">
+        <p className="text-sm font-medium text-ink">
           {node.name}
-          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
+          <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-normal text-ink-secondary">
             {TYPE_LABEL[node.unit_type]}
           </span>
         </p>
-        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
+        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-secondary">
           <span>
             {totals.people} {totals.people === 1 ? "person" : "people"}
             {roles.length > 0 && ` (${roles.map(([role, count]) => `${role} ${count}`).join(", ")})`}
@@ -754,17 +757,17 @@ function RollupView({ units }: { units: OrgUnit[] }) {
 
   const nodeMap = useMemo(() => buildNodeMap(units), [units]);
 
-  if (loading) return <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>;
-  if (error) return <p className="mt-4 text-sm text-red-500">{error}</p>;
+  if (loading) return <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>;
+  if (error) return <p className="mt-4 text-sm text-red-700">{error}</p>;
 
   if (!ledUnits || ledUnits.length === 0) {
     return (
-      <div className={`${SECTION_GAP} rounded-lg border border-dashed border-gray-300 p-6 text-center`}>
-        <p className="text-gray-500">
+      <div className={`${SECTION_GAP} rounded-lg border border-dashed border-control p-6 text-center`}>
+        <p className="text-ink-secondary">
           You don&apos;t lead any departments or teams yet — rollups only show for units you&apos;re assigned to
           lead.
         </p>
-        <p className="mt-2 text-sm text-gray-400">
+        <p className="mt-2 text-sm text-ink-muted">
           Assign yourself (or anyone) as a leader on any unit in the Build tab to see its rollup here.
         </p>
       </div>
@@ -773,10 +776,10 @@ function RollupView({ units }: { units: OrgUnit[] }) {
 
   return (
     <div className={SECTION_GAP}>
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-ink-muted">
         Aggregate numbers only — for units outside your own direct team, you never see a named individual, only
         counts. Capacity hours live on the{" "}
-        <Link href="/app/capacity" className="underline hover:text-gray-600">
+        <Link href="/app/capacity" className="underline hover:text-ink-secondary">
           Capacity page
         </Link>
         , gated the same way.

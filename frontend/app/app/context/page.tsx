@@ -62,6 +62,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { INPUT, LABEL, BTN_PRIMARY, HEX } from "@/lib/tokens";
 
 const CATEGORY_LABELS: Record<DocumentCategory, string> = {
   where_we_are_going: "Where we're going",
@@ -80,9 +81,11 @@ const FRESHNESS_LABELS: Record<DocumentFreshnessClass, string> = {
 const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABELS) as [DocumentCategory, string][];
 const FRESHNESS_OPTIONS = Object.entries(FRESHNESS_LABELS) as [DocumentFreshnessClass, string][];
 
-const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
-const labelCls = "mb-1 block text-xs font-medium text-gray-500";
-const primaryBtnCls = "rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50";
+// Local aliases so this file's existing call sites keep working; the value
+// itself is the shared token, so restyling happens in one place.
+const inputCls = INPUT;
+const labelCls = LABEL;
+const primaryBtnCls = BTN_PRIMARY;
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -173,12 +176,12 @@ export default function ContextEnginePage() {
   return (
     <PageShell maxWidth="4xl">
       <h1 className="text-2xl font-semibold">The Space</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         Teach the Librarian about your team — strategy, values, customers, offerings, career paths.
         The more it knows, the better your answers get.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {/* The Brain (Session V) — coverage map first, ahead of the upload
           form, per the framework doc's promise that the brain "will show
@@ -188,8 +191,8 @@ export default function ContextEnginePage() {
       {coverage && (
         <div className={SECTION_GAP}>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">The Brain</h2>
-            <p className="text-xs text-gray-400">What the Librarian knows about your team</p>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">The Brain</h2>
+            <p className="text-xs text-ink-muted">What the Librarian knows about your team</p>
           </div>
 
           {/* Conflicts (Session VI) — flagged, never auto-resolved, per the
@@ -224,7 +227,7 @@ export default function ContextEnginePage() {
         </div>
       )}
 
-      <form onSubmit={handleUpload} className={`${SECTION_GAP} space-y-3 rounded-lg border border-dashed border-gray-300 p-4`}>
+      <form onSubmit={handleUpload} className={`${SECTION_GAP} space-y-3 rounded-lg border border-dashed border-control p-4`}>
         <div className="flex gap-3">
           <div className="flex-1">
             <label className={labelCls}>File (.pptx, .pdf, .txt, or .md)</label>
@@ -232,7 +235,7 @@ export default function ContextEnginePage() {
               ref={fileInputRef}
               type="file"
               accept=".pptx,.pdf,.txt,.md"
-              className={`${inputCls} file:mr-3 file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs`}
+              className={`${inputCls} file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-xs`}
               disabled={uploading}
             />
           </div>
@@ -252,7 +255,7 @@ export default function ContextEnginePage() {
             {uploading ? "Reading your document…" : "Upload"}
           </button>
           {uploading && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-ink-muted">
               The Librarian is reading it now — this can take up to a minute for a large deck.
             </p>
           )}
@@ -260,7 +263,7 @@ export default function ContextEnginePage() {
       </form>
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <>
           {stuck.length > 0 && (
@@ -271,11 +274,11 @@ export default function ContextEnginePage() {
           )}
 
           <div className={SECTION_GAP}>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
               Needs review {pending.length > 0 && `(${pending.length})`}
             </h2>
             {pending.length === 0 && failed.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-500">
+              <p className="mt-3 text-sm text-ink-secondary">
                 Nothing waiting on you. Upload a document above to teach the Librarian something new.
               </p>
             ) : (
@@ -293,15 +296,15 @@ export default function ContextEnginePage() {
                   <div key={doc.id} className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{doc.title}</p>
-                        <p className="mt-0.5 text-xs text-red-500">
+                        <p className="text-sm font-medium text-ink">{doc.title}</p>
+                        <p className="mt-0.5 text-xs text-red-700">
                           This upload failed to process — the file may be unreadable, or the Librarian
                           hit an error. Discard and try again.
                         </p>
                       </div>
                       <button
                         onClick={() => handleDiscard(doc.id)}
-                        className="shrink-0 text-xs text-gray-400 hover:text-red-600"
+                        className="shrink-0 text-xs text-ink-muted hover:text-red-700"
                       >
                         Discard
                       </button>
@@ -314,23 +317,23 @@ export default function ContextEnginePage() {
 
           {confirmed.length > 0 && (
             <div className={SECTION_GAP}>
-              <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">Recently confirmed</h2>
+              <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Recently confirmed</h2>
               <ul className="mt-3 space-y-2">
                 {confirmed.map((doc) => (
                   <li
                     key={doc.id}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3"
+                    className="flex items-center justify-between gap-4 rounded-lg border border-hairline px-4 py-3"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{doc.title}</p>
-                      <p className="mt-0.5 text-xs text-gray-400">
+                      <p className="text-sm font-medium text-ink">{doc.title}</p>
+                      <p className="mt-0.5 text-xs text-ink-muted">
                         {doc.category && CATEGORY_LABELS[doc.category]}
                         {doc.confirmed_at && ` · confirmed ${formatDateTime(doc.confirmed_at)}`}
                       </p>
                     </div>
                     <button
                       onClick={() => handleDiscard(doc.id)}
-                      className="shrink-0 text-xs text-gray-400 hover:text-red-500"
+                      className="shrink-0 text-xs text-ink-muted hover:text-red-700"
                       title="Remove from the Context Engine"
                     >
                       Remove
@@ -394,23 +397,23 @@ function ConfirmCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
+    <div className="rounded-lg border border-hairline p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">{doc.title}</p>
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="text-sm font-medium text-ink">{doc.title}</p>
+          <p className="mt-0.5 text-xs text-ink-muted">
             Uploaded {formatDateTime(doc.created_at)}
             {doc.novelty_score != null && ` · Novelty ${doc.novelty_score}/100`}
           </p>
         </div>
-        <button onClick={onDiscard} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+        <button onClick={onDiscard} className="shrink-0 text-xs text-ink-muted hover:text-red-700">
           Discard
         </button>
       </div>
 
       {doc.summary_card && (
-        <p className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm italic text-gray-600">
-          <span className="not-italic font-medium text-gray-500">The Librarian: </span>
+        <p className="mt-3 rounded-md bg-canvas px-3 py-2 text-sm italic text-ink-secondary">
+          <span className="not-italic font-medium text-ink-secondary">The Librarian: </span>
           {doc.summary_card}
         </p>
       )}
@@ -460,7 +463,7 @@ function ConfirmCard({
         <div className="flex flex-wrap gap-2">
           <label
             className={`cursor-pointer rounded-full border px-3 py-1 text-xs ${
-              scopeIds.has(null) ? "border-gray-900 bg-gray-900 text-white" : "border-gray-300 text-gray-600"
+              scopeIds.has(null) ? "border-brand bg-brand text-white" : "border-control text-ink-secondary"
             }`}
           >
             <input type="checkbox" checked={scopeIds.has(null)} onChange={() => toggleScope(null)} className="hidden" />
@@ -471,8 +474,8 @@ function ConfirmCard({
               key={unit.id}
               className={`cursor-pointer rounded-full border px-3 py-1 text-xs ${
                 scopeIds.has(unit.id)
-                  ? "border-gray-900 bg-gray-900 text-white"
-                  : "border-gray-300 text-gray-600"
+                  ? "border-brand bg-brand text-white"
+                  : "border-control text-ink-secondary"
               }`}
             >
               <input
@@ -486,20 +489,20 @@ function ConfirmCard({
           ))}
         </div>
         {orgUnits.length === 0 && (
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-ink-muted">
             No teams or departments set up yet — Company-wide is your only option until you build one on
             the Org page.
           </p>
         )}
       </div>
 
-      {cardError && <p className="mt-3 text-sm text-red-500">{cardError}</p>}
+      {cardError && <p className="mt-3 text-sm text-red-700">{cardError}</p>}
 
       <div className="mt-4 flex items-center gap-3">
         <button onClick={handleConfirmClick} disabled={saving || scopeIds.size === 0} className={primaryBtnCls}>
           {saving ? "Confirming..." : "Confirm"}
         </button>
-        {scopeIds.size === 0 && <p className="text-xs text-gray-400">Pick a scope to enable Confirm.</p>}
+        {scopeIds.size === 0 && <p className="text-xs text-ink-muted">Pick a scope to enable Confirm.</p>}
       </div>
     </div>
   );
@@ -516,7 +519,7 @@ function ConfirmCard({
 // OPACITY scales with fill, not its hue — an empty region reads as barely
 // visible, a full one as vivid, per the framework doc's "regions
 // fill/brighten as real coverage grows."
-const BRAIN_ACCENT = "#4f46e5";
+const BRAIN_ACCENT = HEX.brand;
 
 function CoverageRing({ percent, size = 64 }: { percent: number; size?: number }) {
   const strokeWidth = 7;
@@ -529,7 +532,7 @@ function CoverageRing({ percent, size = 64 }: { percent: number; size?: number }
   const opacity = 0.2 + 0.8 * (clamped / 100);
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e5e7eb" strokeWidth={strokeWidth} />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={HEX.track} strokeWidth={strokeWidth} />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -559,22 +562,22 @@ function BrainCategoryCard({
     <button
       onClick={onClick}
       className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition ${
-        selected ? "border-indigo-300 bg-indigo-50/60" : "border-gray-200 bg-white hover:border-gray-300"
+        selected ? "border-blue-300 bg-blue-50/60" : "border-hairline bg-white hover:border-control"
       }`}
     >
       <div className="relative inline-flex items-center justify-center">
         <CoverageRing percent={coverage.fill_score} />
-        <span className="absolute text-sm font-semibold text-gray-900">{coverage.fill_score}</span>
+        <span className="absolute text-sm font-semibold text-ink">{coverage.fill_score}</span>
       </div>
-      <p className="text-xs font-medium leading-tight text-gray-700">{coverage.label}</p>
-      <p className="text-[11px] text-gray-400">
+      <p className="text-xs font-medium leading-tight text-ink-body">{coverage.label}</p>
+      <p className="text-[11px] text-ink-muted">
         {coverage.doc_count === 0
           ? "No documents yet"
           : `${coverage.doc_count} document${coverage.doc_count === 1 ? "" : "s"}`}
       </p>
       <div className="flex flex-wrap items-center justify-center gap-1">
         {coverage.citations_this_week > 0 && (
-          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
+          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-brand-hover">
             Used {coverage.citations_this_week}x this week
           </span>
         )}
@@ -590,11 +593,11 @@ function BrainCategoryCard({
 
 function BrainDetailPanel({ coverage }: { coverage: CategoryCoverage }) {
   return (
-    <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
+    <div className="mt-4 rounded-xl border border-hairline bg-white p-5">
       <div className="flex items-center justify-between gap-4">
-        <h3 className="text-sm font-semibold text-gray-900">{coverage.label}</h3>
+        <h3 className="text-sm font-semibold text-ink">{coverage.label}</h3>
         {coverage.citations_this_week > 0 && (
-          <span className="shrink-0 rounded-full bg-indigo-100 px-2.5 py-1 text-[11px] font-medium text-indigo-700">
+          <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-medium text-brand-hover">
             Used in {coverage.citations_this_week} answer{coverage.citations_this_week === 1 ? "" : "s"} this
             week
           </span>
@@ -604,17 +607,17 @@ function BrainDetailPanel({ coverage }: { coverage: CategoryCoverage }) {
       {coverage.documents.length > 0 ? (
         <ul className="mt-3 space-y-3">
           {coverage.documents.map((doc) => (
-            <li key={doc.id} className="rounded-lg bg-gray-50 px-3 py-2.5">
+            <li key={doc.id} className="rounded-lg bg-canvas px-3 py-2.5">
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <p className="text-sm font-medium text-gray-900">{doc.title}</p>
-                <span className="shrink-0 text-[11px] text-gray-400">
+                <p className="text-sm font-medium text-ink">{doc.title}</p>
+                <span className="shrink-0 text-[11px] text-ink-muted">
                   {doc.freshness_class && FRESHNESS_LABELS[doc.freshness_class]}
                   {doc.effective_date && ` · as of ${doc.effective_date}`}
                 </span>
               </div>
-              {doc.summary_card && <p className="mt-1 text-xs italic text-gray-600">{doc.summary_card}</p>}
+              {doc.summary_card && <p className="mt-1 text-xs italic text-ink-secondary">{doc.summary_card}</p>}
               {doc.citations_this_week > 0 && (
-                <p className="mt-1 text-[11px] font-medium text-indigo-600">
+                <p className="mt-1 text-[11px] font-medium text-brand">
                   Used in {doc.citations_this_week} answer{doc.citations_this_week === 1 ? "" : "s"} this week
                 </p>
               )}
@@ -622,18 +625,18 @@ function BrainDetailPanel({ coverage }: { coverage: CategoryCoverage }) {
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-sm text-gray-500">Nothing here yet.</p>
+        <p className="mt-2 text-sm text-ink-secondary">Nothing here yet.</p>
       )}
 
       {coverage.staleness_prompt && (
         <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm italic text-amber-800">
-          <span className="not-italic font-medium text-amber-600">The Librarian: </span>
+          <span className="not-italic font-medium text-amber-700">The Librarian: </span>
           {coverage.staleness_prompt}
         </p>
       )}
 
-      <p className="mt-4 rounded-md bg-gray-50 px-3 py-2 text-sm italic text-gray-600">
-        <span className="not-italic font-medium text-gray-500">The Librarian: </span>
+      <p className="mt-4 rounded-md bg-canvas px-3 py-2 text-sm italic text-ink-secondary">
+        <span className="not-italic font-medium text-ink-secondary">The Librarian: </span>
         {coverage.gap_question}
       </p>
     </div>

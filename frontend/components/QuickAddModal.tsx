@@ -193,23 +193,23 @@ export default function QuickAddModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={handleClose}>
       <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <h2 className="text-sm font-semibold text-gray-900">Quick add</h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+        <div className="flex items-center justify-between border-b border-divider px-5 py-4">
+          <h2 className="text-sm font-semibold text-ink">Quick add</h2>
+          <button onClick={handleClose} className="text-ink-muted hover:text-ink-secondary" aria-label="Close">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="flex gap-1 border-b border-gray-100 px-5 pt-3">
+        <div className="flex gap-1 border-b border-divider px-5 pt-3">
           {(Object.keys(TYPE_LABELS) as QuickAddType[]).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setType(t)}
               className={`rounded-t-md px-3 py-2 text-sm font-medium ${
-                type === t ? "border-b-2 border-gray-900 text-gray-900" : "text-gray-400 hover:text-gray-600"
+                type === t ? "border-b-2 border-brand text-ink" : "text-ink-muted hover:text-ink-secondary"
               }`}
             >
               {TYPE_LABELS[t]}
@@ -219,7 +219,7 @@ export default function QuickAddModal({
 
         <form onSubmit={handleSubmit} className="space-y-3 px-5 py-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">
+            <label className="mb-1 block text-xs font-medium text-ink-secondary">
               {type === "report" ? "Name" : "Title"}
             </label>
             <input
@@ -229,20 +229,20 @@ export default function QuickAddModal({
               placeholder={
                 type === "report" ? "e.g. Priya Patel" : type === "goal" ? "e.g. Reduce churn to <5%" : "e.g. Renewal automation"
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-control px-3 py-2 text-sm"
             />
           </div>
 
           {type === "report" && !creatingRole && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Role (optional)</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Role (optional)</label>
               <select
                 value={roleLevelId}
                 onChange={(e) => {
                   if (e.target.value === CREATE_NEW_ROLE) setCreatingRole(true);
                   else setRoleLevelId(e.target.value);
                 }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               >
                 <option value="">No role assigned</option>
                 <option value={CREATE_NEW_ROLE}>+ Create new role…</option>
@@ -256,21 +256,21 @@ export default function QuickAddModal({
                   </optgroup>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-ink-muted">
                 Full setup (teams, expectations) lives in Settings → People — this just gets them started.
               </p>
             </div>
           )}
 
           {type === "report" && creatingRole && (
-            <div className="rounded-md border border-gray-200 p-3">
-              <label className="mb-1 block text-xs font-medium text-gray-500">New role name</label>
+            <div className="rounded-md border border-hairline p-3">
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">New role name</label>
               <input
                 autoFocus
                 value={newRoleName}
                 onChange={(e) => setNewRoleName(e.target.value)}
                 placeholder="e.g. Account Executive"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               />
               <div className="mt-2 flex justify-end gap-2">
                 <button
@@ -279,7 +279,7 @@ export default function QuickAddModal({
                     setCreatingRole(false);
                     setNewRoleName("");
                   }}
-                  className="rounded-md px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                  className="rounded-md px-3 py-1.5 text-xs text-ink-secondary hover:text-ink-body"
                 >
                   Cancel
                 </button>
@@ -287,7 +287,7 @@ export default function QuickAddModal({
                   type="button"
                   onClick={handleCreateRole}
                   disabled={creatingRoleSaving || !newRoleName.trim()}
-                  className="rounded-md bg-gray-900 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                  className="rounded-md bg-brand px-3 py-1.5 text-xs text-white disabled:opacity-50"
                 >
                   {creatingRoleSaving ? "Creating..." : "Create role"}
                 </button>
@@ -297,11 +297,11 @@ export default function QuickAddModal({
 
           {type === "goal" && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Level</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Level</label>
               <select
                 value={level}
                 onChange={(e) => setLevel(e.target.value as GoalLevel)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               >
                 {GOAL_LEVELS.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -314,11 +314,11 @@ export default function QuickAddModal({
 
           {type === "project" && directReports.length > 0 && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Assign to (optional)</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Assign to (optional)</label>
               <select
                 value={directReportId}
                 onChange={(e) => setDirectReportId(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               >
                 <option value="">Your own initiative</option>
                 {directReports.map((r) => (
@@ -332,26 +332,26 @@ export default function QuickAddModal({
 
           {type !== "report" && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Due date (optional)</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Due date (optional)</label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               />
             </div>
           )}
 
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          {error && <p className="text-xs text-red-700">{error}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={handleClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+            <button type="button" onClick={handleClose} className="rounded-md px-3 py-2 text-sm text-ink-secondary hover:text-ink-body">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving || !title.trim()}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-md bg-brand px-4 py-2 text-sm text-white hover:bg-brand-hover disabled:opacity-50"
             >
               {saving ? "Adding..." : `Add ${TYPE_LABELS[type].toLowerCase()}`}
             </button>

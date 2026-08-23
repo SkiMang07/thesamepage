@@ -94,7 +94,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
       {showNav && isOpen && (
         <aside
-          className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-gray-200 bg-white shadow-sm"
+          className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-hairline bg-white shadow-sm"
           style={{ zIndex: 40 }}
         >
           <ScribeDrawer />

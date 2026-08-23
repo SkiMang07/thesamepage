@@ -106,6 +106,7 @@ import {
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
+import { HEX } from "@/lib/tokens";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
@@ -125,21 +126,21 @@ const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
 };
 
 const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
-  active: "bg-gray-100 text-gray-600",
-  on_track: "bg-green-50 text-green-600",
-  at_risk: "bg-amber-50 text-amber-600",
+  active: "bg-sunken text-ink-secondary",
+  on_track: "bg-teal-50 text-teal-700",
+  at_risk: "bg-amber-50 text-amber-700",
   completed: "bg-blue-50 text-blue-600",
-  cancelled: "bg-gray-100 text-gray-400",
+  cancelled: "bg-sunken text-ink-muted",
 };
 
 // Left-border accent per status — same vocabulary as /app/team's Session 24
 // treatment (STATUS_BORDER there).
 const STATUS_BORDER: Record<GoalStatus, string> = {
-  active: "border-gray-300",
-  on_track: "border-green-500",
+  active: "border-control",
+  on_track: "border-brand",
   at_risk: "border-amber-500",
   completed: "border-blue-300",
-  cancelled: "border-gray-200",
+  cancelled: "border-hairline",
 };
 
 function formatDate(iso: string) {
@@ -201,13 +202,13 @@ function ExpectationChips({ label, items }: { label: string; items: Expectation[
   if (items.length === 0) return null;
   return (
     <div>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">{label}</p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {items.map((e) => (
           <span
             key={e.id}
             title={e.expectation || e.description || undefined}
-            className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700"
+            className="rounded-full border border-hairline bg-canvas px-2.5 py-1 text-xs text-ink-body"
           >
             {expectationName(e)}
           </span>
@@ -540,8 +541,8 @@ export default function ReportDetailPage() {
     }
   }
 
-  if (loading) return <p className="p-8 text-gray-500">Loading...</p>;
-  if (error && !report) return <p className="p-8 text-red-500">{error}</p>;
+  if (loading) return <p className="p-8 text-ink-secondary">Loading...</p>;
+  if (error && !report) return <p className="p-8 text-red-700">{error}</p>;
   if (!report) return null;
 
   const open = commitments.filter((c) => c.status === "open");
@@ -573,10 +574,10 @@ export default function ReportDetailPage() {
   const goalsTileValue = scoredGoals.length > 0 ? `${onTrackGoals}/${scoredGoals.length}` : "—";
   const goalsTileTone =
     scoredGoals.length === 0
-      ? { from: "from-gray-400", to: "to-gray-500" }
+      ? { from: "from-carbon-500", to: "to-carbon-600" }
       : onTrackGoals === 0
         ? { from: "from-amber-500", to: "to-amber-600" }
-        : { from: "from-green-500", to: "to-green-600" };
+        : { from: "from-teal-600", to: "to-teal-700" };
 
   // KPI tile 4 — this week's resolved available hours (supply only, same as
   // /app/capacity).
@@ -594,7 +595,7 @@ export default function ReportDetailPage() {
   return (
     <PageShell maxWidth="7xl">
       {/* Identity band */}
-      <div className="rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-950 px-6 py-6 text-white">
+      <div className="rounded-2xl bg-gradient-to-br from-blue-700 via-blue-800 to-carbon-900 px-6 py-6 text-white">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-lg font-semibold">
@@ -608,12 +609,12 @@ export default function ReportDetailPage() {
                 )}
               </div>
               {(roleLevel || orgUnit || report.role_title) && (
-                <p className="mt-1 text-sm text-indigo-100">
+                <p className="mt-1 text-sm text-blue-100">
                   {roleLevel ? roleLabel(roleLevel) : report.role_title ?? "No role assigned"}
                   {orgUnit && ` · ${orgUnitLabel(orgUnit)}`}
                 </p>
               )}
-              {report.notes && <p className="mt-1 text-sm text-indigo-100/80">{report.notes}</p>}
+              {report.notes && <p className="mt-1 text-sm text-blue-100/80">{report.notes}</p>}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -629,7 +630,7 @@ export default function ReportDetailPage() {
                   ? `/app/reports/${id}/prep?resume=${plannedSession.id}`
                   : `/app/reports/${id}/prep`
               }
-              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-brand-hover hover:bg-blue-50"
             >
               {plannedSession ? "Resume prep sheet →" : "Start 1:1 prep →"}
             </Link>
@@ -645,11 +646,11 @@ export default function ReportDetailPage() {
         </div>
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {/* KPI strip */}
       <div className={`${SECTION_GAP} grid grid-cols-2 gap-3 sm:grid-cols-4`}>
-        <div className="rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 px-4 py-3 text-white">
+        <div className="rounded-xl bg-gradient-to-br from-carbon-500 to-carbon-600 px-4 py-3 text-white">
           <p className="text-2xl font-semibold">{daysSinceLast != null ? `${daysSinceLast}d` : "—"}</p>
           <p className="text-xs text-white/80">
             {daysSinceLast == null
@@ -666,8 +667,8 @@ export default function ReportDetailPage() {
             overdueCommitments.length > 0
               ? "from-amber-500 to-amber-600"
               : open.length > 0
-                ? "from-sky-500 to-sky-600"
-                : "from-gray-400 to-gray-500"
+                ? "from-blue-600 to-blue-700"
+                : "from-carbon-500 to-carbon-600"
           }`}
         >
           <p className="text-2xl font-semibold">{open.length}</p>
@@ -680,7 +681,7 @@ export default function ReportDetailPage() {
           <p className="text-2xl font-semibold">{goalsTileValue}</p>
           <p className="text-xs text-white/80">Goals on track</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 px-4 py-3 text-white">
+        <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 px-4 py-3 text-white">
           <p className="text-2xl font-semibold">
             {capacityItem ? `${Math.round(capacityItem.available_hours)}h` : "—"}
           </p>
@@ -692,24 +693,24 @@ export default function ReportDetailPage() {
       <div className={`${SECTION_GAP} grid grid-cols-1 gap-5 lg:grid-cols-3`}>
         {/* Col 1 — Conversation */}
         <div className="space-y-5">
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Next 1:1</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Next 1:1</p>
               <Link
                 href={
                   plannedSession
                     ? `/app/reports/${id}/prep?resume=${plannedSession.id}`
                     : `/app/reports/${id}/prep`
                 }
-                className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                className="text-xs font-medium text-brand hover:text-brand-hover"
               >
                 {plannedSession ? "Resume prep →" : "Start prep →"}
               </Link>
             </div>
-            <p className="mt-1 text-xs text-gray-400">Worth raising, pulled from what&apos;s on record.</p>
+            <p className="mt-1 text-xs text-ink-muted">Worth raising, pulled from what&apos;s on record.</p>
 
             {worthRaising.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">Nothing flagged — you&apos;re in good shape.</p>
+              <p className="mt-3 text-sm text-ink-muted">Nothing flagged — you&apos;re in good shape.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {worthRaising.map((item) => {
@@ -717,13 +718,13 @@ export default function ReportDetailPage() {
                   return (
                     <li
                       key={item.key}
-                      className="flex items-start justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2"
+                      className="flex items-start justify-between gap-3 rounded-lg border border-divider bg-canvas/60 px-3 py-2"
                     >
-                      <span className="min-w-0 text-sm text-gray-700">{item.text}</span>
+                      <span className="min-w-0 text-sm text-ink-body">{item.text}</span>
                       <button
                         onClick={() => addToAgenda(item)}
                         disabled={added || addingAgendaKey === item.key}
-                        className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:text-gray-300"
+                        className="shrink-0 text-xs font-medium text-brand hover:text-brand-hover disabled:text-ink-faint"
                       >
                         {added ? "Added ✓" : addingAgendaKey === item.key ? "Adding…" : "+ Agenda"}
                       </button>
@@ -734,20 +735,20 @@ export default function ReportDetailPage() {
             )}
 
             {/* Between-sessions capture box */}
-            <div className="mt-4 border-t border-gray-100 pt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Capture something</p>
+            <div className="mt-4 border-t border-divider pt-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Capture something</p>
               <textarea
                 value={newCapture}
                 onChange={(e) => setNewCapture(e.target.value)}
                 rows={2}
                 placeholder="Anything worth remembering before the next 1:1..."
-                className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="mt-2 w-full rounded-md border border-control px-3 py-2 text-sm"
               />
               <div className="mt-2 flex justify-end">
                 <button
                   onClick={saveCapture}
                   disabled={savingCapture || !newCapture.trim()}
-                  className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                 >
                   {savingCapture ? "Saving..." : "Save"}
                 </button>
@@ -755,15 +756,15 @@ export default function ReportDetailPage() {
               {captures.length > 0 && (
                 <ul className="mt-2 space-y-1.5">
                   {captures.map((c) => (
-                    <li key={c.id} className="flex items-start justify-between gap-2 text-xs text-gray-500">
+                    <li key={c.id} className="flex items-start justify-between gap-2 text-xs text-ink-secondary">
                       <span className="min-w-0">
-                        <span className="text-gray-400">{timeAgo(c.created_at)} — </span>
+                        <span className="text-ink-muted">{timeAgo(c.created_at)} — </span>
                         {c.content}
                       </span>
                       <button
                         onClick={() => removeCapture(c.id)}
                         disabled={deletingCaptureId === c.id}
-                        className="shrink-0 text-gray-300 hover:text-red-500"
+                        className="shrink-0 text-ink-faint hover:text-red-700"
                         aria-label="Remove capture"
                       >
                         ×
@@ -772,7 +773,7 @@ export default function ReportDetailPage() {
                   ))}
                 </ul>
               )}
-              <p className="mt-2 text-[11px] text-gray-400">
+              <p className="mt-2 text-[11px] text-ink-muted">
                 Saved here lands in the raw notes the next time you prep for {report.name.split(" ")[0]}.
               </p>
             </div>
@@ -791,19 +792,19 @@ export default function ReportDetailPage() {
 
         {/* Col 2 — Work */}
         <div className="space-y-5">
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Goals{goals.length > 0 && ` (${goals.length})`}
               </p>
-              <Link href="/app/goals" className="text-xs text-gray-400 hover:text-gray-600">
+              <Link href="/app/goals" className="text-xs text-ink-muted hover:text-ink-secondary">
                 Manage →
               </Link>
             </div>
             {goals.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">
+              <p className="mt-3 text-sm text-ink-muted">
                 No goals set yet.{" "}
-                <Link href="/app/goals" className="underline hover:text-gray-600">
+                <Link href="/app/goals" className="underline hover:text-ink-secondary">
                   Add one
                 </Link>
                 .
@@ -813,21 +814,21 @@ export default function ReportDetailPage() {
                 {goals.map((g) => (
                   <li key={g.id} className={`border-l-4 py-1 pl-3 ${STATUS_BORDER[g.status]}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm text-gray-700">{g.title}</span>
+                      <span className="truncate text-sm text-ink-body">{g.title}</span>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${GOAL_STATUS_STYLES[g.status]}`}>
                         {GOAL_STATUS_LABELS[g.status]}
                       </span>
                     </div>
-                    {g.due_date && <p className="text-xs text-gray-400">Due {formatDate(g.due_date + "T00:00:00")}</p>}
+                    {g.due_date && <p className="text-xs text-ink-muted">Due {formatDate(g.due_date + "T00:00:00")}</p>}
                     {g.progress != null && (
                       <div className="mt-1 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
                           <div
-                            className={`h-full rounded-full ${g.status === "at_risk" ? "bg-amber-500" : g.status === "completed" ? "bg-blue-500" : "bg-green-500"}`}
+                            className={`h-full rounded-full ${g.status === "at_risk" ? "bg-amber-500" : g.status === "completed" ? "bg-blue-500" : "bg-brand"}`}
                             style={{ width: `${g.progress}%` }}
                           />
                         </div>
-                        <span className="shrink-0 text-xs text-gray-500">{g.progress}%</span>
+                        <span className="shrink-0 text-xs text-ink-secondary">{g.progress}%</span>
                       </div>
                     )}
                   </li>
@@ -836,19 +837,19 @@ export default function ReportDetailPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Initiatives{projects.length > 0 && ` (${projects.length})`}
               </p>
-              <Link href="/app/projects" className="text-xs text-gray-400 hover:text-gray-600">
+              <Link href="/app/projects" className="text-xs text-ink-muted hover:text-ink-secondary">
                 Manage →
               </Link>
             </div>
             {projects.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">
+              <p className="mt-3 text-sm text-ink-muted">
                 No projects assigned yet.{" "}
-                <Link href="/app/projects" className="underline hover:text-gray-600">
+                <Link href="/app/projects" className="underline hover:text-ink-secondary">
                   Add one
                 </Link>
                 .
@@ -860,12 +861,12 @@ export default function ReportDetailPage() {
                   .map((p) => (
                     <li key={p.id} className={`border-l-4 py-1 pl-3 ${STATUS_BORDER[p.status]}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm text-gray-700">{p.title}</span>
+                        <span className="truncate text-sm text-ink-body">{p.title}</span>
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${GOAL_STATUS_STYLES[p.status]}`}>
                           {GOAL_STATUS_LABELS[p.status]}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-ink-muted">
                         {p.goal_title && `Supports: ${p.goal_title}`}
                         {p.goal_title && p.due_date && " · "}
                         {p.due_date && `Due ${formatDate(p.due_date + "T00:00:00")}`}
@@ -876,31 +877,31 @@ export default function ReportDetailPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Recent 1:1 sessions</p>
+          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Recent 1:1 sessions</p>
             {history.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">
+              <p className="mt-3 text-sm text-ink-muted">
                 No 1:1s yet. Prepping or logging one with {report.name.split(" ")[0]} will show up here.
               </p>
             ) : (
-              <ul className="mt-3 divide-y divide-gray-100">
+              <ul className="mt-3 divide-y divide-divider">
                 {history.slice(0, 6).map((h) => {
                   const isPlanned = h.status === "planned";
                   const body = (
                     <>
                       <div className="flex items-center gap-2">
-                        <p className="text-xs text-gray-400">{formatDate(h.created_at)}</p>
+                        <p className="text-xs text-ink-muted">{formatDate(h.created_at)}</p>
                         <span
                           className={
                             isPlanned
                               ? "rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-500"
-                              : "rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500"
+                              : "rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-secondary"
                           }
                         >
                           {isPlanned ? "Planned" : "Completed"}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-gray-700">
+                      <p className="mt-1 text-sm text-ink-body">
                         {h.display_summary || (isPlanned ? "Prep sheet generated — no summary yet." : "")}
                       </p>
                     </>
@@ -918,7 +919,7 @@ export default function ReportDetailPage() {
                           <button
                             onClick={() => dismissSession(h.id)}
                             disabled={dismissingId === h.id}
-                            className="shrink-0 text-xs text-gray-400 hover:text-gray-600"
+                            className="shrink-0 text-xs text-ink-muted hover:text-ink-secondary"
                             title="This 1:1 isn't happening — remove the planned session"
                           >
                             {dismissingId === h.id ? "Removing…" : "Not happening"}
@@ -933,19 +934,19 @@ export default function ReportDetailPage() {
               </ul>
             )}
             {history.length > 6 && (
-              <p className="mt-2 text-xs text-gray-400">+{history.length - 6} more in the full history.</p>
+              <p className="mt-2 text-xs text-ink-muted">+{history.length - 6} more in the full history.</p>
             )}
           </div>
         </div>
 
         {/* Col 3 — Person */}
         <div className="space-y-5">
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
               Open commitments{open.length > 0 && ` (${open.length})`}
             </p>
             {open.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">Nothing outstanding. Commitments you make in 1:1s show up here.</p>
+              <p className="mt-3 text-sm text-ink-muted">Nothing outstanding. Commitments you make in 1:1s show up here.</p>
             ) : (
               <ul className="mt-3 space-y-2.5">
                 {open.map((c) => (
@@ -956,20 +957,20 @@ export default function ReportDetailPage() {
                       disabled={updatingId === c.id}
                       onChange={() => setStatus(c.id, "done")}
                       aria-label={`Mark done: ${c.description}`}
-                      className="mt-1 h-4 w-4 cursor-pointer rounded border-gray-300"
+                      className="mt-1 h-4 w-4 cursor-pointer rounded border-control"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-800">
+                      <p className="text-sm text-ink-body">
                         {c.description}
                         {c.committed_by === "direct_report" && (
-                          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                          <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
                             {report.name.split(" ")[0]}
                           </span>
                         )}
                       </p>
-                      <p className="mt-0.5 text-xs text-gray-400">
+                      <p className="mt-0.5 text-xs text-ink-muted">
                         {c.due_date ? (
-                          <span className={isOverdue(c.due_date) ? "font-medium text-red-500" : ""}>
+                          <span className={isOverdue(c.due_date) ? "font-medium text-red-700" : ""}>
                             Due {formatDate(c.due_date + "T00:00:00")}
                             {isOverdue(c.due_date) && " — overdue"}
                           </span>
@@ -981,7 +982,7 @@ export default function ReportDetailPage() {
                     <button
                       onClick={() => setStatus(c.id, "dropped")}
                       disabled={updatingId === c.id}
-                      className="shrink-0 text-xs text-gray-400 hover:text-gray-600"
+                      className="shrink-0 text-xs text-ink-muted hover:text-ink-secondary"
                       title="No longer relevant"
                     >
                       Drop
@@ -992,21 +993,21 @@ export default function ReportDetailPage() {
             )}
             {resolved.length > 0 && (
               <div className="mt-3">
-                <button onClick={() => setShowResolved((s) => !s)} className="text-xs text-gray-400 hover:underline">
+                <button onClick={() => setShowResolved((s) => !s)} className="text-xs text-ink-muted hover:underline">
                   {showResolved ? "Hide" : "Show"} resolved ({resolved.length})
                 </button>
                 {showResolved && (
                   <ul className="mt-2 space-y-1.5">
                     {resolved.map((c) => (
                       <li key={c.id} className="flex items-start gap-2 text-xs">
-                        <span className="mt-0.5 text-gray-400">{c.status === "done" ? "✓" : "—"}</span>
+                        <span className="mt-0.5 text-ink-muted">{c.status === "done" ? "✓" : "—"}</span>
                         <div className="min-w-0 flex-1">
-                          <p className="text-gray-500 line-through decoration-gray-300">{c.description}</p>
+                          <p className="text-ink-secondary line-through decoration-ink-faint">{c.description}</p>
                         </div>
                         <button
                           onClick={() => setStatus(c.id, "open")}
                           disabled={updatingId === c.id}
-                          className="shrink-0 text-gray-400 hover:text-gray-600"
+                          className="shrink-0 text-ink-muted hover:text-ink-secondary"
                         >
                           Reopen
                         </button>
@@ -1030,17 +1031,17 @@ export default function ReportDetailPage() {
             />
           )}
 
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Expectations</p>
+          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Expectations</p>
             {report.expectations ? (
               <>
-                <p className="mt-1.5 text-xs text-gray-500">
+                <p className="mt-1.5 text-xs text-ink-secondary">
                   {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
                 </p>
                 {report.expectations.metrics.length + report.expectations.skills.length + report.expectations.values.length === 0 ? (
-                  <p className="mt-3 text-sm text-gray-400">
+                  <p className="mt-3 text-sm text-ink-muted">
                     No expectations configured for this role yet.{" "}
-                    <Link href="/app/settings?section=roles" className="underline hover:text-gray-600">
+                    <Link href="/app/settings?section=roles" className="underline hover:text-ink-secondary">
                       Add them in Settings
                     </Link>
                     .
@@ -1062,11 +1063,11 @@ export default function ReportDetailPage() {
                     roleFamilies={roleFamilies}
                     value=""
                     onChange={assignRole}
-                    className="w-56 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs disabled:opacity-50"
+                    className="w-56 rounded-md border border-control px-2.5 py-1.5 text-xs disabled:opacity-50"
                     placeholder={assigningRole ? "Assigning..." : "Assign a role…"}
                   />
                   {report.role_title && (
-                    <span className="text-xs text-gray-400">was: &quot;{report.role_title}&quot;</span>
+                    <span className="text-xs text-ink-muted">was: &quot;{report.role_title}&quot;</span>
                   )}
                 </div>
               </div>
@@ -1134,10 +1135,10 @@ function AssessmentCard({
     : null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Assessment</p>
-        <Link href={`/app/assessments/${reportId}`} className="text-xs text-gray-400 hover:text-gray-600">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Assessment</p>
+        <Link href={`/app/assessments/${reportId}`} className="text-xs text-ink-muted hover:text-ink-secondary">
           {scorecard?.overall ? "Assess again →" : "Assess now →"}
         </Link>
       </div>
@@ -1147,30 +1148,30 @@ function AssessmentCard({
             <path
               d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
               fill="none"
-              stroke="#e5e7eb"
+              stroke={HEX.track}
               strokeWidth="3"
             />
             <path
               d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
               fill="none"
-              stroke="#6366f1"
+              stroke={HEX.brand}
               strokeWidth="3"
               strokeDasharray={dash}
               strokeLinecap="round"
             />
-            <text x="18" y="21" textAnchor="middle" fontSize="8" fill="#111827" fontWeight="600">
+            <text x="18" y="21" textAnchor="middle" fontSize="8" fill={HEX.ink} fontWeight="600">
               {pct != null ? `${pct}%` : "–"}
             </text>
           </svg>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900">{label}</p>
-            <p className="text-xs text-gray-400">Set {formatDate(scorecard.overall.created_at)}</p>
+            <p className="text-sm font-medium text-ink">{label}</p>
+            <p className="text-xs text-ink-muted">Set {formatDate(scorecard.overall.created_at)}</p>
           </div>
         </div>
       ) : (
-        <p className="mt-3 text-sm text-gray-400">
+        <p className="mt-3 text-sm text-ink-muted">
           Not yet assessed.{" "}
-          <Link href={`/app/assessments/${reportId}`} className="underline hover:text-gray-600">
+          <Link href={`/app/assessments/${reportId}`} className="underline hover:text-ink-secondary">
             {hasExpectations ? "Score against role expectations" : "Assess them"}
           </Link>
           .
@@ -1252,18 +1253,18 @@ function SettingsDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
-          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-700">
+          <h2 className="text-lg font-semibold text-ink">Settings</h2>
+          <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink-body">
             &times;
           </button>
         </div>
 
         {/* 1:1 cadence */}
         <div className="mt-6">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">1:1 cadence</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-ink-muted">1:1 cadence</h3>
           <form onSubmit={saveCadence} className="mt-3 flex flex-wrap items-end gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Every N days</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Every N days</label>
               <input
                 type="number"
                 min={1}
@@ -1272,19 +1273,19 @@ function SettingsDrawer({
                 value={cadenceDays}
                 onChange={(e) => setCadenceDays(e.target.value)}
                 placeholder={`${orgCadenceDays} (org default)`}
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-40 rounded-md border border-control px-3 py-2 text-sm"
               />
             </div>
             <button
               type="submit"
               disabled={savingCadence}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-4 py-2 text-sm text-white disabled:opacity-50"
             >
               {savingCadence ? "Saving..." : "Save"}
             </button>
-            {cadenceSaved && <span className="text-sm text-green-600">Saved</span>}
+            {cadenceSaved && <span className="text-sm text-teal-700">Saved</span>}
           </form>
-          <p className="mt-1.5 text-xs text-gray-400">
+          <p className="mt-1.5 text-xs text-ink-muted">
             {cadenceDays.trim()
               ? `Currently every ${cadenceDays.trim()} days (custom).`
               : `Currently every ${orgCadenceDays} days (org default). Leave blank to keep inheriting it.`}
@@ -1294,14 +1295,14 @@ function SettingsDrawer({
         {/* Capacity */}
         <div className="mt-8">
           <div className="flex items-baseline justify-between">
-            <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">Capacity</h3>
-            <Link href="/app/capacity" className="text-xs text-gray-400 hover:text-gray-600">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-ink-muted">Capacity</h3>
+            <Link href="/app/capacity" className="text-xs text-ink-muted hover:text-ink-secondary">
               View capacity →
             </Link>
           </div>
           <form onSubmit={saveCapacityProfile} className="mt-3 space-y-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Contracted hours / week</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Contracted hours / week</label>
               <input
                 type="number"
                 min={1}
@@ -1310,11 +1311,11 @@ function SettingsDrawer({
                 value={contractedHours}
                 onChange={(e) => setContractedHours(e.target.value)}
                 placeholder={capacitySettings ? `${capacitySettings.default_hours_per_week} (default)` : ""}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Target utilization %</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Target utilization %</label>
               <input
                 type="number"
                 min={1}
@@ -1323,11 +1324,11 @@ function SettingsDrawer({
                 value={utilizationPct}
                 onChange={(e) => setUtilizationPct(e.target.value)}
                 placeholder={capacitySettings ? `${capacitySettings.default_target_utilization_pct} (default)` : ""}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Days off / year</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Days off / year</label>
               <input
                 type="number"
                 min={0}
@@ -1336,40 +1337,40 @@ function SettingsDrawer({
                 value={offDaysPerYear}
                 onChange={(e) => setOffDaysPerYear(e.target.value)}
                 placeholder={capacitySettings ? `${capacitySettings.default_off_days_per_year} (default)` : ""}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-control px-3 py-2 text-sm"
               />
             </div>
             <div className="flex items-center gap-3">
               <button
                 type="submit"
                 disabled={savingCapacity}
-                className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+                className="rounded-md bg-brand px-4 py-2 text-sm text-white disabled:opacity-50"
               >
                 {savingCapacity ? "Saving..." : "Save"}
               </button>
-              {capacitySaved && <span className="text-sm text-green-600">Saved</span>}
+              {capacitySaved && <span className="text-sm text-teal-700">Saved</span>}
             </div>
           </form>
-          <p className="mt-1.5 text-xs text-gray-400">Leave blank to use your Settings &gt; Capacity defaults.</p>
+          <p className="mt-1.5 text-xs text-ink-muted">Leave blank to use your Settings &gt; Capacity defaults.</p>
 
           <div className="mt-5">
-            <h4 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
               Time off{timeOff.length > 0 && ` (${timeOff.length})`}
             </h4>
             {timeOff.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No time off logged.</p>
+              <p className="mt-2 text-sm text-ink-secondary">No time off logged.</p>
             ) : (
               <ul className="mt-2 space-y-1.5">
                 {timeOff.map((t) => (
-                  <li key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 text-sm">
-                    <span className="text-gray-700">
+                  <li key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-hairline px-3 py-2 text-sm">
+                    <span className="text-ink-body">
                       {formatDate(t.start_date + "T00:00:00")}
                       {t.end_date !== t.start_date && ` – ${formatDate(t.end_date + "T00:00:00")}`}
-                      <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                      <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-ink-secondary">
                         {TIME_OFF_LABELS[t.type]}
                       </span>
                     </span>
-                    <button onClick={() => removeTimeOff(t.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+                    <button onClick={() => removeTimeOff(t.id)} className="shrink-0 text-xs text-ink-muted hover:text-red-700">
                       Remove
                     </button>
                   </li>
@@ -1378,29 +1379,29 @@ function SettingsDrawer({
             )}
             <form onSubmit={addTimeOff} className="mt-3 flex flex-wrap items-end gap-2">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-500">Start</label>
+                <label className="mb-1 block text-xs font-medium text-ink-secondary">Start</label>
                 <input
                   type="date"
                   value={toStart}
                   onChange={(e) => setToStart(e.target.value)}
-                  className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  className="rounded-md border border-control px-2 py-1.5 text-sm"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-500">End</label>
+                <label className="mb-1 block text-xs font-medium text-ink-secondary">End</label>
                 <input
                   type="date"
                   value={toEnd}
                   onChange={(e) => setToEnd(e.target.value)}
-                  className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  className="rounded-md border border-control px-2 py-1.5 text-sm"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-500">Type</label>
+                <label className="mb-1 block text-xs font-medium text-ink-secondary">Type</label>
                 <select
                   value={toType}
                   onChange={(e) => setToType(e.target.value as TimeOffType)}
-                  className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  className="rounded-md border border-control px-2 py-1.5 text-sm"
                 >
                   {(Object.keys(TIME_OFF_LABELS) as TimeOffType[]).map((t) => (
                     <option key={t} value={t}>
@@ -1412,7 +1413,7 @@ function SettingsDrawer({
               <button
                 type="submit"
                 disabled={addingTimeOff}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-control px-3 py-1.5 text-sm font-medium text-ink-body hover:bg-canvas"
               >
                 {addingTimeOff ? "Adding..." : "Add"}
               </button>
@@ -1728,8 +1729,8 @@ function DevelopmentSection({
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
           Manager notes{bundle.manager_notes.length > 0 && ` (${bundle.manager_notes.length})`}
         </p>
-        <p className="mt-0.5 text-xs text-amber-600/80">Private — not shared with {reportName.split(" ")[0]}.</p>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        <p className="mt-0.5 text-xs text-amber-700/80">Private — not shared with {reportName.split(" ")[0]}.</p>
+        {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
 
         {bundle.manager_notes.length === 0 ? (
           <p className="mt-3 text-sm text-amber-700/70">No notes yet.</p>
@@ -1737,8 +1738,8 @@ function DevelopmentSection({
           <ul className="mt-3 space-y-2 max-h-56 overflow-y-auto pr-1">
             {bundle.manager_notes.map((n) => (
               <li key={n.id} className="rounded-lg border border-amber-200/70 bg-white/60 px-3 py-2">
-                <p className="text-sm text-gray-700">{n.content}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{formatDate(n.created_at)}</p>
+                <p className="text-sm text-ink-body">{n.content}</p>
+                <p className="mt-0.5 text-xs text-ink-muted">{formatDate(n.created_at)}</p>
               </li>
             ))}
           </ul>
@@ -1778,19 +1779,19 @@ function DevelopmentSection({
   // "growth" section — plan text, aspiration, opportunities, training, Col 3
   // -------------------------------------------------------------------------
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
       <div className="flex items-baseline justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Development</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Development</p>
         <button
           onClick={runDraft}
           disabled={drafting}
-          className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+          className="text-xs text-ink-muted hover:text-ink-secondary disabled:opacity-50"
         >
           {drafting ? "Drafting..." : "Draft with AI →"}
         </button>
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
 
       {/* Development plan */}
       <div className="mt-3">
@@ -1813,14 +1814,14 @@ function DevelopmentSection({
           onChange={(e) => setPlanText(e.target.value)}
           rows={3}
           placeholder={`Write ${reportName.split(" ")[0]}'s development plan — growth focus, what's next, whatever's useful...`}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-control px-3 py-2 text-sm"
         />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={savePlanText}
             disabled={savingPlan || !planDirty}
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
             {savingPlan ? "Saving..." : "Save"}
           </button>
@@ -1832,16 +1833,16 @@ function DevelopmentSection({
           >
             {revisingPlan ? "Revising..." : "Revise with AI"}
           </button>
-          {draftHint && <span className="text-xs text-gray-400">{draftHint}</span>}
+          {draftHint && <span className="text-xs text-ink-muted">{draftHint}</span>}
         </div>
       </div>
 
       {/* Aspiration */}
-      <div className="mt-4 border-t border-gray-100 pt-3">
+      <div className="mt-4 border-t border-divider pt-3">
         <div className="flex items-center justify-between">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Career aspiration</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Career aspiration</p>
           {!editingAspiration && (
-            <button onClick={startEditingAspiration} className="text-xs text-gray-400 hover:text-gray-600">
+            <button onClick={startEditingAspiration} className="text-xs text-ink-muted hover:text-ink-secondary">
               {bundle.aspiration ? "Edit" : "Add"}
             </button>
           )}
@@ -1853,53 +1854,53 @@ function DevelopmentSection({
               value={desiredRole}
               onChange={(e) => setDesiredRole(e.target.value)}
               placeholder="Desired role"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-control px-3 py-2 text-sm"
             />
             <input
               type="text"
               value={timeline}
               onChange={(e) => setTimeline(e.target.value)}
               placeholder="Timeline (e.g. 12-18 months)"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-control px-3 py-2 text-sm"
             />
             <textarea
               value={aspirationNotes}
               onChange={(e) => setAspirationNotes(e.target.value)}
               rows={2}
               placeholder="Notes"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-control px-3 py-2 text-sm"
             />
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setEditingAspiration(false)}
-                className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                className="rounded-md border border-hairline px-3 py-1.5 text-xs text-ink-secondary hover:bg-canvas"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={savingAspiration}
-                className="rounded-md bg-gray-900 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                className="rounded-md bg-brand px-3 py-1.5 text-xs text-white disabled:opacity-50"
               >
                 {savingAspiration ? "Saving..." : "Save"}
               </button>
             </div>
           </form>
         ) : bundle.aspiration && (bundle.aspiration.desired_role || bundle.aspiration.timeline || bundle.aspiration.notes) ? (
-          <div className="mt-2 rounded-lg border border-gray-200 px-3 py-2">
-            {bundle.aspiration.desired_role && <p className="text-sm font-medium text-gray-900">{bundle.aspiration.desired_role}</p>}
-            {bundle.aspiration.timeline && <p className="mt-0.5 text-xs text-gray-400">{bundle.aspiration.timeline}</p>}
-            {bundle.aspiration.notes && <p className="mt-1.5 text-sm text-gray-700">{bundle.aspiration.notes}</p>}
+          <div className="mt-2 rounded-lg border border-hairline px-3 py-2">
+            {bundle.aspiration.desired_role && <p className="text-sm font-medium text-ink">{bundle.aspiration.desired_role}</p>}
+            {bundle.aspiration.timeline && <p className="mt-0.5 text-xs text-ink-muted">{bundle.aspiration.timeline}</p>}
+            {bundle.aspiration.notes && <p className="mt-1.5 text-sm text-ink-body">{bundle.aspiration.notes}</p>}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-gray-400">No aspiration on record yet.</p>
+          <p className="mt-2 text-sm text-ink-muted">No aspiration on record yet.</p>
         )}
       </div>
 
       {/* Opportunities */}
-      <div className="mt-4 border-t border-gray-100 pt-3">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+      <div className="mt-4 border-t border-divider pt-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
           Opportunities{bundle.opportunities.length > 0 && ` (${bundle.opportunities.length})`}
         </p>
 
@@ -1960,17 +1961,17 @@ function DevelopmentSection({
         )}
 
         {bundle.opportunities.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-400">No opportunities logged yet.</p>
+          <p className="mt-2 text-sm text-ink-muted">No opportunities logged yet.</p>
         ) : (
           <ul className="mt-2 flex flex-wrap gap-1.5">
             {bundle.opportunities.map((o) => (
-              <li key={o.id} className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
-                <span className="text-gray-400">{OPPORTUNITY_TYPE_LABELS[o.type]}</span>
+              <li key={o.id} className="flex items-center gap-1.5 rounded-full border border-hairline bg-canvas px-2.5 py-1 text-xs text-ink-body">
+                <span className="text-ink-muted">{OPPORTUNITY_TYPE_LABELS[o.type]}</span>
                 {o.description}
                 <button
                   onClick={() => removeOpportunity(o.id)}
                   disabled={removingOppId === o.id}
-                  className="text-gray-300 hover:text-red-500"
+                  className="text-ink-faint hover:text-red-700"
                   aria-label="Remove opportunity"
                 >
                   ×
@@ -1990,7 +1991,7 @@ function DevelopmentSection({
           <select
             value={newOppType}
             onChange={(e) => setNewOppType(e.target.value as OpportunityType)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+            className="rounded-md border border-control px-2 py-1.5 text-xs"
           >
             <option value="skill">Skill</option>
             <option value="knowledge">Knowledge</option>
@@ -2000,12 +2001,12 @@ function DevelopmentSection({
             value={newOppDescription}
             onChange={(e) => setNewOppDescription(e.target.value)}
             placeholder="Describe the opportunity"
-            className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs"
+            className="min-w-[12rem] flex-1 rounded-md border border-control px-3 py-1.5 text-xs"
           />
           <button
             type="submit"
             disabled={addingOpp}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-control px-3 py-1.5 text-xs font-medium text-ink-body hover:bg-canvas disabled:opacity-50"
           >
             {addingOpp ? "Adding..." : "Add"}
           </button>
@@ -2013,33 +2014,33 @@ function DevelopmentSection({
       </div>
 
       {/* Training */}
-      <div className="mt-4 border-t border-gray-100 pt-3">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+      <div className="mt-4 border-t border-divider pt-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
           Training{bundle.training.length > 0 && ` (${bundle.training.length})`}
         </p>
         {bundle.training.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-400">No training logged yet.</p>
+          <p className="mt-2 text-sm text-ink-muted">No training logged yet.</p>
         ) : (
           <ul className="mt-2 space-y-1.5">
             {bundle.training.map((t) => (
-              <li key={t.id} className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2">
+              <li key={t.id} className="flex items-start justify-between gap-3 rounded-lg border border-hairline px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm text-gray-700">{t.description}</p>
-                  <p className="mt-0.5 text-xs text-gray-400">
+                  <p className="text-sm text-ink-body">{t.description}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">
                     {t.completion_date ? `Completed ${formatDate(t.completion_date + "T00:00:00")}` : "Not yet completed"}
                     {t.projected_cost != null && ` · $${t.projected_cost.toLocaleString()}`}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   {!t.completion_date && (
-                    <button onClick={() => markTrainingComplete(t.id)} className="text-xs text-gray-400 hover:text-gray-600">
+                    <button onClick={() => markTrainingComplete(t.id)} className="text-xs text-ink-muted hover:text-ink-secondary">
                       Mark complete
                     </button>
                   )}
                   <button
                     onClick={() => removeTraining(t.id)}
                     disabled={removingTrainingId === t.id}
-                    className="text-xs text-gray-400 hover:text-red-500"
+                    className="text-xs text-ink-muted hover:text-red-700"
                   >
                     Remove
                   </button>
@@ -2054,32 +2055,32 @@ function DevelopmentSection({
             value={newTrainingDesc}
             onChange={(e) => setNewTrainingDesc(e.target.value)}
             placeholder="Training / course"
-            className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs"
+            className="min-w-[12rem] flex-1 rounded-md border border-control px-3 py-1.5 text-xs"
           />
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Target date</label>
+            <label className="mb-1 block text-xs font-medium text-ink-secondary">Target date</label>
             <input
               type="date"
               value={newTrainingDate}
               onChange={(e) => setNewTrainingDate(e.target.value)}
-              className="rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+              className="rounded-md border border-control px-2 py-1.5 text-xs"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Est. cost</label>
+            <label className="mb-1 block text-xs font-medium text-ink-secondary">Est. cost</label>
             <input
               type="number"
               min={0}
               step={1}
               value={newTrainingCost}
               onChange={(e) => setNewTrainingCost(e.target.value)}
-              className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-xs"
+              className="w-24 rounded-md border border-control px-2 py-1.5 text-xs"
             />
           </div>
           <button
             type="submit"
             disabled={addingTraining}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-control px-3 py-1.5 text-xs font-medium text-ink-body hover:bg-canvas disabled:opacity-50"
           >
             {addingTraining ? "Adding..." : "Add"}
           </button>

@@ -18,17 +18,18 @@ recorded, including superseded ones — is `docs/archive/DESIGN_ARCHIVE.md`.
 - **Shared components:** `frontend/components/` — `AppNav`, `Sidebar`, `PageShell`,
   `ZoneMap`, `QuickAddModal`, `ScribeDrawer`, `CheckInPanel`, `RolePicker`,
   `RoleImportPanel`, `DraftExpectationRows`.
-- **Design tokens live in `ZoneMap.tsx`**, not a separate theme file: `NAV_GROUPS`,
-  `HUE_STYLES` / `TONE_TEXT` (pastel, nav chrome), `HUE_GRADIENT` /
-  `TONE_TEXT_ON_GRADIENT` (bold tiles), `NAV_STRIP_HEIGHT`, `SECTION_GAP`. Import
-  from there rather than redefining a value locally — that drift is what these
-  tokens exist to stop.
-- **Colors are exact hex via Tailwind arbitrary values** (`text-[#4f46e5]`,
-  `bg-[#eef1ff]`), not Tailwind's built-in shades. The design's hex tokens don't
-  line up 1:1 with the default palette (emerald especially: `#0e8f7e` vs
-  `#059669`), and arbitrary values keep it faithful without introducing a CSS
-  variable file.
-- **Icons and fonts:** not yet decided.
+- **Colour lives in `tailwind.config.js`; recurring class strings live in
+  `lib/tokens.ts`.** The full system — the five colour roles, the ink scale and
+  its contrast floors, surfaces, the status vocabulary — is
+  `docs/systems/brand.md`. Read that before touching colour anywhere.
+  Arbitrary hex values (`text-[#4f46e5]`) are no longer used; there are none
+  left in the app.
+- **Layout tokens live in `ZoneMap.tsx`**: `NAV_GROUPS`, `ZONE_STYLE`,
+  `ZONE_GRADIENT`, `TONE_TEXT` / `TONE_TEXT_ON_GRADIENT`, `NAV_STRIP_HEIGHT`,
+  `SECTION_GAP`. Import from there rather than redefining a value locally —
+  that drift is what these tokens exist to stop.
+- **Icons and fonts:** not yet decided. The wordmark currently sets in the
+  default sans; a pairing for the editorial T10-C mark is still open.
 
 ---
 
@@ -191,7 +192,13 @@ in `docs/archive/DESIGN_ARCHIVE.md`, complete and unedited.
 | 2026-08-21 | The person page (`/app/reports/[id]`) is a "Command Deck": identity band with primary CTAs, a 4-tile KPI strip, then Conversation / Work / Person columns, with admin inputs behind a gear-triggered settings drawer | The old page was a single-column wall of ~10 form-heavy sections; a manager opening a report mid-week needs "what's the state of this relationship" at a glance, not a form to fill |
 | 2026-08-22 | The persistent left rail renders on every authenticated page, Mission Control included | Excluding Mission Control as "already the map" was sound on paper and read as inconsistent in use |
 | 2026-08-22 | Goals and Projects use the KPI strip + `border-l-4` card grid with a per-card progress ring, tokens ported verbatim from `team/page.tsx`; level tabs stay as a pill filter on Goals, none on Projects | Third page on the same treatment — Team, Person, then these — so the app reads as one system |
-| 2026-08-22 | `ZoneMap`'s summary cards use the bold gradient-tile treatment (`HUE_GRADIENT`), matching the Team/Goals/Projects KPI strips; the pastel `HUE_STYLES` tokens stay canonical for nav chrome | Two different surfaces, not a half-finished restyle; picked from a real-data two-artboard comparison |
+| 2026-08-23 | Current & Carbon is the app's colour system: five roles (brand teal / attention amber / critical red / info blue / inert carbon) and nothing else. Full spec in `docs/systems/brand.md` | Twelve hue families were live across the app — Team alone used ten — so adjacent pages read as different products. Five roles is the fewest that still distinguishes "going well" from "needs you" from "broken" |
+| 2026-08-23 | Blue is reserved for Scribe, AI surfaces and focus rings. It is never a status, a zone, or a decorative accent | `docs/branding/colors/README.md` names blue creep as the specific way this palette goes generic. Narrowness is the whole value of the token |
+| 2026-08-23 | The locked success green `#24745B` is not used; teal absorbs "good" | It measures dE2000 = 8.8 from brand teal — the same colour to the eye. Keeping both meant one was decoration pretending to be meaning |
+| 2026-08-23 | Zone hues are dropped; nav zones are told apart by icon, label and position. Session 55's bold-gradient tile *shape* stands, only its per-hue colouring is superseded | The palette offers teal, blue and carbon, and blue is reserved — there was no third zone colour to spend that wouldn't dilute the brand |
+| 2026-08-23 | `tailwind.config.js` remaps the stock gray/green/indigo/rose/sky/cyan/… families onto brand ramps | Makes the palette closed by construction. A stray `text-rose-500` renders as on-brand critical red instead of an off-palette pink, rather than relying on everyone remembering the rule |
+| 2026-08-23 | The ink scale's floor for real text is `ink-muted` (5.2:1); `ink-faint` (3.4:1) is disabled-and-decoration only | Tailwind `gray-400` was the app's most-used text colour at 232 usages and sits at 2.54:1 on white. This was an accessibility defect, not a taste question |
+| 2026-08-23 | The T10-C mark ships as traced vector (`components/Logo.tsx` + `public/`), with a separate widened-channel cut for 16–24px | Below ~32px the full mark's negative channels close up into a blob — the limitation `docs/branding/tsp/README.md` predicted for T10 |
 | 2026-08-22 | `NAV_STRIP_HEIGHT` (`h-14`) and `SECTION_GAP` (`mt-5`) are named tokens rather than emergent properties of each component's own padding | Two independently-padded rows landed ~4px apart, and 13 pages each picked their own block margin. `mt-5` was chosen because it was already the tightest value in real use, not invented |
 
 _(Add new decisions here. If one reverses an existing row, move the old row to

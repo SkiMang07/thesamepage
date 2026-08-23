@@ -42,16 +42,16 @@ function LoginForm() {
   return (
     <main className="mx-auto max-w-sm px-6 py-24">
       <h1 className="text-2xl font-semibold">Sign in</h1>
-      <p className="mt-2 text-gray-500">We'll send you a magic link — no password needed.</p>
+      <p className="mt-2 text-ink-secondary">We'll send you a magic link — no password needed.</p>
 
       {sent ? (
         <div className="mt-8">
-          <p className="text-gray-700">
+          <p className="text-ink-body">
             Check <strong>{email}</strong> for a login link. It expires in 1 hour.
           </p>
           <button
             onClick={() => { setSent(false); setEmail(""); }}
-            className="mt-4 text-sm text-gray-500 underline"
+            className="mt-4 text-sm text-ink-secondary underline"
           >
             Use a different email
           </button>
@@ -64,13 +64,13 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@company.com"
-            className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-gray-900 focus:outline-none"
+            className="w-full rounded-md border border-control px-4 py-2 focus:border-brand focus:outline-none"
           />
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-red-700">{error}</p>}
           <button
             type="submit"
             disabled={loading || !email.trim()}
-            className="w-full rounded-md bg-gray-900 px-4 py-2 text-white disabled:opacity-40"
+            className="w-full rounded-md bg-brand px-4 py-2 text-white disabled:opacity-40"
           >
             {loading ? "Sending…" : "Send login link"}
           </button>

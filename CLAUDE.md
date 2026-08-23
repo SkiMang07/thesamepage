@@ -40,6 +40,7 @@ development.md      individual plans, team training focus
 check-ins.md        the temporal layer under goals and projects
 capacity.md         supply model, off-days buffer, department rollup
 org-scoping.md      org_units, leader assignment, role-scoped rollups
+brand.md            Current & Carbon — colour roles, ink scale, status vocabulary, logo
 ```
 
 Pending work that is scoped but not built has its own doc:
@@ -85,6 +86,9 @@ frontend/    Next.js App Router, deploys to Vercel on push
   components/        shared components
   lib/api.ts         every backend call, nowhere else
   lib/supabase.ts    browser-side Supabase client
+  lib/tokens.ts      brand class strings — status maps, buttons, cards, KPI tones
+  public/            logo masters, favicon, app icons
+  tailwind.config.js every colour value + the font token (see docs/systems/brand.md)
 
 docs/        see the table above
 ```

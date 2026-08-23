@@ -121,14 +121,15 @@ import {
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { IDENTITY_BG, IDENTITY_BORDER, HEX } from "@/lib/tokens";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
-  active: "bg-gray-100 text-gray-600",
-  on_track: "bg-green-50 text-green-600",
-  at_risk: "bg-amber-50 text-amber-600",
+  active: "bg-sunken text-ink-secondary",
+  on_track: "bg-teal-50 text-teal-700",
+  at_risk: "bg-amber-50 text-amber-700",
   completed: "bg-blue-50 text-blue-600",
-  cancelled: "bg-gray-100 text-gray-400",
+  cancelled: "bg-sunken text-ink-muted",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -143,11 +144,11 @@ const STATUS_LABELS: Record<string, string> = {
 // more colorful Session 24 treatment; STATUS_STYLES pills stay too since
 // they still carry the text label.
 const STATUS_BORDER: Record<string, string> = {
-  active: "border-gray-300",
-  on_track: "border-green-500",
+  active: "border-control",
+  on_track: "border-brand",
   at_risk: "border-amber-500",
   completed: "border-blue-300",
-  cancelled: "border-gray-200",
+  cancelled: "border-hairline",
 };
 
 // Same subset Mission Control's Key Initiatives card uses (dashboard.py) —
@@ -157,22 +158,13 @@ const ACTIVE_STATUSES = new Set(["active", "on_track", "at_risk"]);
 // A small fixed palette cycled by roster order, so a person's avatar color
 // on the roster row matches their commitment/initiative accent color
 // elsewhere on the page. Purely a display convenience — not stored anywhere.
-const AVATAR_PALETTE = [
-  "bg-indigo-500",
-  "bg-rose-500",
-  "bg-teal-500",
-  "bg-amber-500",
-  "bg-violet-500",
-  "bg-cyan-600",
-];
-const AVATAR_BORDER_PALETTE = [
-  "border-indigo-500",
-  "border-rose-500",
-  "border-teal-500",
-  "border-amber-500",
-  "border-violet-500",
-  "border-cyan-600",
-];
+// Session 58: these were an off-system rainbow (indigo/rose/teal/amber/
+// violet/cyan) and, worse, CARD_ACCENTS below was a five-item copy of this
+// six-item list, so a person's avatar and their card accent desynchronised
+// past index 4. Both now read the one brand-derived identity palette in
+// lib/tokens.ts.
+const AVATAR_PALETTE = IDENTITY_BG;
+const AVATAR_BORDER_PALETTE = IDENTITY_BORDER;
 
 function memberIndex(memberId: string | null | undefined, members: TeamMember[]) {
   if (!memberId) return -1;
@@ -444,7 +436,7 @@ export default function TeamPage() {
           <select
             value={selectedTeamId ?? ""}
             onChange={(e) => setSelectedTeamId(e.target.value || null)}
-            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700"
+            className="rounded-md border border-control bg-white px-2 py-1 text-sm text-ink-body"
             aria-label="Select team"
           >
             <option value="">All teams</option>
@@ -456,15 +448,15 @@ export default function TeamPage() {
           </select>
         )}
       </div>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         Everything your team is working on, how goals and commitments are tracking, and a shared space
         for meetings — this week&apos;s must-knows included.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <div className={`${SECTION_GAP} space-y-10`}>
           <KpiStrip
@@ -475,7 +467,7 @@ export default function TeamPage() {
           />
 
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
               This week&apos;s focus
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -490,7 +482,7 @@ export default function TeamPage() {
           </div>
 
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
               Meetings
             </h2>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.3fr)]">
@@ -504,7 +496,7 @@ export default function TeamPage() {
           </div>
 
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
               Development
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -555,10 +547,10 @@ function KpiStrip({
   // and nothing is on track yet; gray when there's nothing to score at all.
   const goalsTileTone =
     scoredGoals.length === 0
-      ? { from: "from-gray-400", to: "to-gray-500" }
+      ? { from: "from-carbon-500", to: "to-carbon-600" }
       : onTrackGoals === 0
         ? { from: "from-amber-500", to: "to-amber-600" }
-        : { from: "from-green-500", to: "to-green-600" };
+        : { from: "from-teal-600", to: "to-teal-700" };
 
   const today = localDateStr();
   const weekOut = addDaysStr(today, 7);
@@ -572,9 +564,9 @@ function KpiStrip({
 
   const tiles = [
     { value: goalsLabel, label: "Goals on track", from: goalsTileTone.from, to: goalsTileTone.to },
-    { value: String(initiatives.length), label: "Active initiatives", from: "from-sky-500", to: "to-sky-600" },
+    { value: String(initiatives.length), label: "Active initiatives", from: "from-blue-600", to: "to-blue-700" },
     { value: String(dueThisWeek), label: "Commitments due this week", from: "from-amber-500", to: "to-amber-600" },
-    { value: meetingLabel, label: meetingSubLabel, from: "from-indigo-500", to: "to-indigo-600" },
+    { value: meetingLabel, label: meetingSubLabel, from: "from-blue-600", to: "to-blue-700" },
   ];
 
   return (
@@ -609,17 +601,17 @@ function InitiativesCard({
   });
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Initiatives</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Initiatives</p>
         {initiatives.length > 0 && (
-          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-600">
+          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
             {initiatives.length} active
           </span>
         )}
       </div>
       {sorted.length === 0 ? (
-        <p className="text-sm text-gray-400">No active initiatives.</p>
+        <p className="text-sm text-ink-muted">No active initiatives.</p>
       ) : (
         <ul className="space-y-2.5">
           {sorted.map((p) => {
@@ -631,12 +623,12 @@ function InitiativesCard({
             return (
               <li key={p.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[p.status]}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm text-gray-700">{p.title}</span>
+                  <span className="truncate text-sm text-ink-body">{p.title}</span>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
                     {STATUS_LABELS[p.status]}
                   </span>
                 </div>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-ink-muted">
                   {p.direct_report_name ?? "You"}
                   {p.due_date ? ` · Due ${formatDate(p.due_date)}` : ""}
                   {inherited ? ` · From ${p.org_unit_name}` : ""}
@@ -646,7 +638,7 @@ function InitiativesCard({
           })}
         </ul>
       )}
-      <Link href="/app/projects" className="mt-3 inline-block text-xs text-gray-500 underline hover:text-gray-700">
+      <Link href="/app/projects" className="mt-3 inline-block text-xs text-ink-secondary underline hover:text-ink-body">
         Manage projects
       </Link>
     </div>
@@ -668,30 +660,30 @@ function GoalsCard({ goals, selectedTeamId }: { goals: TeamGoal[]; selectedTeamI
   const sorted = [...goals].sort((a, b) => (a.level === b.level ? 0 : a.level === "company" ? -1 : 1));
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
-      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">Goal progress</p>
+    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">Goal progress</p>
       {goals.length === 0 ? (
-        <p className="text-sm text-gray-400">No company or team goals yet.</p>
+        <p className="text-sm text-ink-muted">No company or team goals yet.</p>
       ) : (
         <div className="flex items-start gap-4">
           <svg width="52" height="52" viewBox="0 0 36 36" className="shrink-0">
             <path
               d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
               fill="none"
-              stroke="#e5e7eb"
+              stroke={HEX.track}
               strokeWidth="3"
             />
             {avgProgress != null && (
               <path
                 d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
                 fill="none"
-                stroke="#22c55e"
+                stroke={HEX.brand}
                 strokeWidth="3"
                 strokeDasharray={dash}
                 strokeLinecap="round"
               />
             )}
-            <text x="18" y="21" textAnchor="middle" fontSize="9" fill="#111827" fontWeight="600">
+            <text x="18" y="21" textAnchor="middle" fontSize="9" fill={HEX.ink} fontWeight="600">
               {avgProgress != null ? `${pct}%` : "–"}
             </text>
           </svg>
@@ -708,13 +700,13 @@ function GoalsCard({ goals, selectedTeamId }: { goals: TeamGoal[]; selectedTeamI
                     : g.org_unit_name;
               return (
                 <li key={g.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="min-w-0 truncate text-gray-700" title={g.title}>
+                  <span className="min-w-0 truncate text-ink-body" title={g.title}>
                     {g.title}
-                    {sourceLabel && <span className="text-gray-400"> · {sourceLabel}</span>}
+                    {sourceLabel && <span className="text-ink-muted"> · {sourceLabel}</span>}
                   </span>
                   <span
                     className={`shrink-0 h-2 w-2 rounded-full ${
-                      g.status === "on_track" ? "bg-green-500" : g.status === "at_risk" ? "bg-amber-500" : "bg-gray-300"
+                      g.status === "on_track" ? "bg-brand" : g.status === "at_risk" ? "bg-amber-500" : "bg-carbon-300"
                     }`}
                     title={STATUS_LABELS[g.status]}
                   />
@@ -724,7 +716,7 @@ function GoalsCard({ goals, selectedTeamId }: { goals: TeamGoal[]; selectedTeamI
           </ul>
         </div>
       )}
-      <Link href="/app/goals" className="mt-3 inline-block text-xs text-gray-500 underline hover:text-gray-700">
+      <Link href="/app/goals" className="mt-3 inline-block text-xs text-ink-secondary underline hover:text-ink-body">
         Manage goals
       </Link>
     </div>
@@ -783,26 +775,26 @@ function CommitmentsCard({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
           Team commitments{open.length > 0 && ` (${open.length})`}
         </p>
         <button
           onClick={() => setAdding((a) => !a)}
-          className="text-xs font-medium text-gray-500 underline hover:text-gray-700"
+          className="text-xs font-medium text-ink-secondary underline hover:text-ink-body"
         >
           {adding ? "Cancel" : "Add"}
         </button>
       </div>
 
       {adding && (
-        <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-3">
-          <label className="mb-1 block text-xs font-medium text-gray-500">Assigned to</label>
+        <div className="mt-2 rounded-lg border border-hairline bg-canvas/60 px-3 py-3">
+          <label className="mb-1 block text-xs font-medium text-ink-secondary">Assigned to</label>
           <select
             value={reportId}
             onChange={(e) => setReportId(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            className="w-full rounded-md border border-control px-2 py-1.5 text-sm"
           >
             <option value="">Choose a person...</option>
             {members.map((m) => (
@@ -811,26 +803,26 @@ function CommitmentsCard({
               </option>
             ))}
           </select>
-          <label className="mb-1 mt-2 block text-xs font-medium text-gray-500">Commitment</label>
+          <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Commitment</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-control px-3 py-2 text-sm"
           />
-          <label className="mb-1 mt-2 block text-xs font-medium text-gray-500">Due date (optional)</label>
+          <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Due date (optional)</label>
           <input
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            className="w-full rounded-md border border-control px-3 py-1.5 text-sm"
           />
-          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+          {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end">
             <button
               onClick={submit}
               disabled={saving || !reportId || !description.trim()}
-              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -839,7 +831,7 @@ function CommitmentsCard({
       )}
 
       {open.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-400">No open team commitments.</p>
+        <p className="mt-3 text-sm text-ink-muted">No open team commitments.</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {open.map((c) => (
@@ -851,8 +843,8 @@ function CommitmentsCard({
               )}`}
             >
               <div className="min-w-0">
-                <p className="truncate text-sm text-gray-700">{c.description}</p>
-                <p className="text-xs text-gray-400">
+                <p className="truncate text-sm text-ink-body">{c.description}</p>
+                <p className="text-xs text-ink-muted">
                   {c.direct_report_name}
                   {c.due_date ? ` · Due ${formatDate(c.due_date)}` : ""}
                 </p>
@@ -860,7 +852,7 @@ function CommitmentsCard({
               <button
                 onClick={() => markDone(c.id)}
                 disabled={completingId === c.id}
-                className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:opacity-50"
               >
                 {completingId === c.id ? "Saving..." : "Done"}
               </button>
@@ -928,16 +920,16 @@ function CalloutsPanel({
   }
 
   return (
-    <div className="flex flex-col rounded-xl border border-gray-200 bg-white px-4 py-4">
+    <div className="flex flex-col rounded-xl border border-hairline bg-white px-4 py-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Critical callouts</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Critical callouts</p>
         {!editing && (
-          <button onClick={startEditing} className="text-xs text-gray-400 hover:text-gray-600">
+          <button onClick={startEditing} className="text-xs text-ink-muted hover:text-ink-secondary">
             Edit
           </button>
         )}
       </div>
-      <p className="mt-1 text-xs text-gray-400">
+      <p className="mt-1 text-xs text-ink-muted">
         This week&apos;s must-knows for {scopeLabel} — written by you, visible to the whole team.
       </p>
 
@@ -948,39 +940,39 @@ function CalloutsPanel({
             onChange={(e) => setDraft(e.target.value)}
             rows={6}
             placeholder={"One callout per line, e.g.\nEnterprise tier scope is cut this quarter.\nQ3 roadmap draft due Friday."}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-control px-3 py-2 text-sm"
           />
-          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+          {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
             <button
               onClick={() => setEditing(false)}
               disabled={saving}
-              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
             >
               Cancel
             </button>
             <button
               onClick={save}
               disabled={saving}
-              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </div>
       ) : lines.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-400">
+        <p className="mt-3 text-sm text-ink-muted">
           No callouts yet —{" "}
-          <button onClick={startEditing} className="underline hover:text-gray-600">
+          <button onClick={startEditing} className="underline hover:text-ink-secondary">
             add what your team should know this week
           </button>
           .
         </p>
       ) : (
-        <ul className="mt-3 space-y-2.5 text-sm text-gray-700">
+        <ul className="mt-3 space-y-2.5 text-sm text-ink-body">
           {lines.map((line, i) => (
             <li key={i} className="flex gap-2">
-              <span className="text-gray-300">•</span>
+              <span className="text-ink-faint">•</span>
               <span>{line}</span>
             </li>
           ))}
@@ -1041,16 +1033,16 @@ function DevFocusPanel({
   }
 
   return (
-    <div className="flex flex-col rounded-xl border border-gray-200 bg-white px-4 py-4">
+    <div className="flex flex-col rounded-xl border border-hairline bg-white px-4 py-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Training focus</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Training focus</p>
         {!editing && (
-          <button onClick={startEditing} className="text-xs text-gray-400 hover:text-gray-600">
+          <button onClick={startEditing} className="text-xs text-ink-muted hover:text-ink-secondary">
             Edit
           </button>
         )}
       </div>
-      <p className="mt-1 text-xs text-gray-400">
+      <p className="mt-1 text-xs text-ink-muted">
         What {scopeLabel} is focused on developing right now — written by you.
       </p>
 
@@ -1061,36 +1053,36 @@ function DevFocusPanel({
             onChange={(e) => setDraft(e.target.value)}
             rows={4}
             placeholder={"e.g. Q3 focus: leveling up async communication and stakeholder updates."}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-control px-3 py-2 text-sm"
           />
-          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+          {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
             <button
               onClick={() => setEditing(false)}
               disabled={saving}
-              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
             >
               Cancel
             </button>
             <button
               onClick={save}
               disabled={saving}
-              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </div>
       ) : devFocus.message.trim() === "" ? (
-        <p className="mt-3 text-sm text-gray-400">
+        <p className="mt-3 text-sm text-ink-muted">
           No focus set yet —{" "}
-          <button onClick={startEditing} className="underline hover:text-gray-600">
+          <button onClick={startEditing} className="underline hover:text-ink-secondary">
             set this month&apos;s training focus
           </button>
           .
         </p>
       ) : (
-        <p className="mt-3 whitespace-pre-line text-sm text-gray-700">{devFocus.message}</p>
+        <p className="mt-3 whitespace-pre-line text-sm text-ink-body">{devFocus.message}</p>
       )}
     </div>
   );
@@ -1128,7 +1120,7 @@ function MeetingsPanel({
 
   // Decorative only — cycles a color per card position so the carousel
   // doesn't read as one flat gray strip. Not tied to any data.
-  const CARD_ACCENTS = ["bg-indigo-500", "bg-rose-500", "bg-teal-500", "bg-amber-500", "bg-violet-500"];
+  const CARD_ACCENTS = IDENTITY_BG;
 
   async function submitLog() {
     if (!draft.trim() || saving) return;
@@ -1164,9 +1156,9 @@ function MeetingsPanel({
   return (
     <div>
       {nextAgenda ? (
-        <div className="rounded-xl bg-gradient-to-br from-gray-900 via-indigo-950 to-gray-900 px-5 py-4 text-white">
+        <div className="rounded-xl bg-gradient-to-br from-carbon-900 via-carbon-800 to-carbon-900 px-5 py-4 text-white">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-200">Next meeting</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-teal-200">Next meeting</p>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium">
               {formatMeetingDate(nextAgenda.meeting_date!)}
             </span>
@@ -1174,38 +1166,38 @@ function MeetingsPanel({
           <p className="mt-1 whitespace-pre-wrap text-sm">{nextAgenda.note}</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-gray-200 px-4 py-3">
-          <p className="text-xs text-gray-400">No upcoming meeting planned.</p>
+        <div className="rounded-xl border border-dashed border-hairline px-4 py-3">
+          <p className="text-xs text-ink-muted">No upcoming meeting planned.</p>
         </div>
       )}
 
       <details className="mt-2">
-        <summary className="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700">
+        <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
           Plan next meeting
         </summary>
-        <div className="mt-2 rounded-xl border border-gray-200 bg-white px-4 py-3">
-          <label className="mb-1 block text-xs font-medium text-gray-500">Meeting date</label>
+        <div className="mt-2 rounded-xl border border-hairline bg-white px-4 py-3">
+          <label className="mb-1 block text-xs font-medium text-ink-secondary">Meeting date</label>
           <input
             type="date"
             value={agendaDate}
             onChange={(e) => setAgendaDate(e.target.value)}
             min={today}
-            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            className="w-full rounded-md border border-control px-3 py-1.5 text-sm"
           />
-          <label className="mb-1 mt-2 block text-xs font-medium text-gray-500">Agenda</label>
+          <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Agenda</label>
           <textarea
             value={agendaDraft}
             onChange={(e) => setAgendaDraft(e.target.value)}
             rows={2}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-control px-3 py-2 text-sm"
             placeholder="What you want to cover..."
           />
-          {agendaError && <p className="mt-1 text-xs text-red-500">{agendaError}</p>}
+          {agendaError && <p className="mt-1 text-xs text-red-700">{agendaError}</p>}
           <div className="mt-2 flex justify-end">
             <button
               onClick={submitAgenda}
               disabled={agendaSaving || !agendaDraft.trim() || !agendaDate}
-              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
               {agendaSaving ? "Saving..." : "Save agenda"}
             </button>
@@ -1213,21 +1205,21 @@ function MeetingsPanel({
         </div>
       </details>
 
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
-        <label className="mb-1 block text-xs font-medium text-gray-500">Log a past meeting</label>
+      <div className="mt-4 rounded-xl border border-hairline bg-white px-4 py-3">
+        <label className="mb-1 block text-xs font-medium text-ink-secondary">Log a past meeting</label>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={3}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-control px-3 py-2 text-sm"
           placeholder="What happened, what to remember..."
         />
-        {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
         <div className="mt-2 flex justify-end">
           <button
             onClick={submitLog}
             disabled={saving || !draft.trim()}
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
           >
             {saving ? "Saving..." : "Log note"}
           </button>
@@ -1235,21 +1227,21 @@ function MeetingsPanel({
       </div>
 
       {past.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-400">No past meetings logged yet.</p>
+        <p className="mt-4 text-sm text-ink-muted">No past meetings logged yet.</p>
       ) : (
         <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
           {past.map((n, i) => (
             <button
               key={n.id}
               onClick={() => setSelected(n)}
-              className="w-56 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white text-left hover:border-gray-300 hover:shadow-sm"
+              className="w-56 shrink-0 overflow-hidden rounded-xl border border-hairline bg-white text-left hover:border-control hover:shadow-sm"
             >
               <div className={`h-1.5 ${CARD_ACCENTS[i % CARD_ACCENTS.length]}`} />
               <div className="px-3 py-2.5">
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-ink-muted">
                   {n.meeting_date ? formatMeetingDate(n.meeting_date) : timeAgo(n.created_at)}
                 </p>
-                <p className="mt-1 text-sm text-gray-700">{snippet(n.note, 90)}</p>
+                <p className="mt-1 text-sm text-ink-body">{snippet(n.note, 90)}</p>
               </div>
             </button>
           ))}
@@ -1263,18 +1255,18 @@ function MeetingsPanel({
         >
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                 {selected.meeting_date ? formatMeetingDate(selected.meeting_date) : timeAgo(selected.created_at)}
               </p>
               <button
                 onClick={() => setSelected(null)}
                 aria-label="Close"
-                className="text-gray-400 hover:text-gray-700"
+                className="text-ink-muted hover:text-ink-body"
               >
                 &times;
               </button>
             </div>
-            <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{selected.note}</p>
+            <p className="mt-3 whitespace-pre-wrap text-sm text-ink-body">{selected.note}</p>
           </div>
         </div>
       )}
@@ -1320,12 +1312,12 @@ function RosterRow({
 
   return (
     <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Your team</h2>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">Your team</h2>
 
       {members.length === 0 ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-ink-secondary">
           No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="underline hover:text-gray-700">
+          <Link href="/app/dashboard" className="underline hover:text-ink-body">
             Add your first one
           </Link>
           .
@@ -1349,8 +1341,8 @@ function RosterRow({
               <button
                 key={m.id}
                 onClick={() => toggleExpand(m.id)}
-                className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left hover:border-gray-300 ${
-                  expandedId === m.id ? "border-gray-900" : "border-gray-200"
+                className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left hover:border-control ${
+                  expandedId === m.id ? "border-brand" : "border-hairline"
                 }`}
               >
                 <div
@@ -1362,9 +1354,9 @@ function RosterRow({
                   {initials(m.name)}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-900">{m.name}</p>
+                  <p className="truncate text-sm font-medium text-ink">{m.name}</p>
                   {hasRole ? (
-                    chipText && <p className="truncate text-xs text-gray-500">{chipText}</p>
+                    chipText && <p className="truncate text-xs text-ink-secondary">{chipText}</p>
                   ) : (
                     <span className="mt-0.5 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                       No role
@@ -1447,19 +1439,19 @@ function MemberDetailPanel({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-canvas/60 px-4 py-4">
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
             Priorities{member.priorities.length > 0 && ` (${member.priorities.length})`}
           </p>
           {member.priorities.length === 0 ? (
-            <p className="mt-1 text-sm text-gray-400">None set.</p>
+            <p className="mt-1 text-sm text-ink-muted">None set.</p>
           ) : (
             <ul className="mt-1 space-y-1">
               {member.priorities.map((g) => (
                 <li key={g.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate text-gray-700">{g.title}</span>
+                  <span className="truncate text-ink-body">{g.title}</span>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
                     {STATUS_LABELS[g.status]}
                   </span>
@@ -1468,16 +1460,16 @@ function MemberDetailPanel({
             </ul>
           )}
 
-          <p className="mt-4 text-xs font-medium uppercase tracking-wide text-gray-400">
+          <p className="mt-4 text-xs font-medium uppercase tracking-wide text-ink-muted">
             Projects{member.projects.length > 0 && ` (${member.projects.length})`}
           </p>
           {member.projects.length === 0 ? (
-            <p className="mt-1 text-sm text-gray-400">None active.</p>
+            <p className="mt-1 text-sm text-ink-muted">None active.</p>
           ) : (
             <ul className="mt-1 space-y-1">
               {member.projects.map((p) => (
                 <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate text-gray-700">{p.title}</span>
+                  <span className="truncate text-ink-body">{p.title}</span>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
                     {STATUS_LABELS[p.status]}
                   </span>
@@ -1487,28 +1479,28 @@ function MemberDetailPanel({
           )}
           <Link
             href={`/app/reports/${member.id}`}
-            className="mt-3 inline-block text-xs text-gray-500 underline hover:text-gray-700"
+            className="mt-3 inline-block text-xs text-ink-secondary underline hover:text-ink-body"
           >
             Open full profile
           </Link>
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-muted">
             Log update for {member.name}
           </label>
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-control px-3 py-2 text-sm"
             placeholder="Not sent anywhere yet — just kept on record here until reports can log in."
           />
           <div className="mt-2">
             <button
               onClick={submitMessage}
               disabled={sending || !draft.trim()}
-              className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
               {sending ? "Saving..." : "Save update"}
             </button>
@@ -1516,11 +1508,11 @@ function MemberDetailPanel({
 
           {history && history.length > 0 && (
             <div className="mt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">History</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">History</p>
               <ul className="mt-1.5 space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {history.map((msg) => (
-                  <li key={msg.id} className="text-sm text-gray-600">
-                    <span className="text-xs text-gray-400">{timeAgo(msg.created_at)}</span> — {msg.message}
+                  <li key={msg.id} className="text-sm text-ink-secondary">
+                    <span className="text-xs text-ink-muted">{timeAgo(msg.created_at)}</span> — {msg.message}
                   </li>
                 ))}
               </ul>
@@ -1529,24 +1521,24 @@ function MemberDetailPanel({
         </div>
 
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Account</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Account</p>
           {member.user_id ? (
-            <p className="mt-1 text-xs text-gray-500">Account linked — they can log in.</p>
+            <p className="mt-1 text-xs text-ink-secondary">Account linked — they can log in.</p>
           ) : inviting ? (
             <div className="mt-1">
               {inviteUrl ? (
                 <div>
-                  <p className="text-xs text-gray-500">Share this link with them — it expires in 7 days:</p>
+                  <p className="text-xs text-ink-secondary">Share this link with them — it expires in 7 days:</p>
                   <div className="mt-1 flex items-center gap-2">
                     <input
                       readOnly
                       value={inviteUrl}
                       onFocus={(e) => e.target.select()}
-                      className="w-full truncate rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600"
+                      className="w-full truncate rounded-md border border-hairline bg-white px-2 py-1 text-xs text-ink-secondary"
                     />
                     <button
                       onClick={() => navigator.clipboard?.writeText(inviteUrl)}
-                      className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-white"
+                      className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-white"
                     >
                       Copy
                     </button>
@@ -1559,30 +1551,30 @@ function MemberDetailPanel({
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     placeholder="their@email.com"
-                    className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs"
+                    className="w-full rounded-md border border-control px-2 py-1 text-xs"
                   />
                   <button
                     onClick={submitInvite}
                     disabled={inviteSending || !inviteEmail.trim()}
-                    className="shrink-0 rounded-md bg-gray-900 px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                    className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-xs text-white disabled:opacity-50"
                   >
                     {inviteSending ? "Sending…" : "Send"}
                   </button>
                 </div>
               )}
-              {inviteError && <p className="mt-1 text-xs text-red-500">{inviteError}</p>}
+              {inviteError && <p className="mt-1 text-xs text-red-700">{inviteError}</p>}
             </div>
           ) : (
             <button
               onClick={() => setInviting(true)}
-              className="mt-1 text-xs font-medium text-gray-500 underline hover:text-gray-700"
+              className="mt-1 text-xs font-medium text-ink-secondary underline hover:text-ink-body"
             >
               Invite to log in
             </button>
           )}
 
           {member.latest_message && (
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-ink-muted">
               Last update {timeAgo(member.latest_message.created_at)}: &ldquo;{member.latest_message.message}&rdquo;
             </p>
           )}

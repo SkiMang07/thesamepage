@@ -58,26 +58,26 @@ export default function InvitePage() {
       <h1 className="text-2xl font-semibold">You&apos;ve been invited</h1>
 
       {loading ? (
-        <p className="mt-8 text-gray-500">Loading...</p>
+        <p className="mt-8 text-ink-secondary">Loading...</p>
       ) : error ? (
-        <p className="mt-8 text-sm text-red-500">{error}</p>
+        <p className="mt-8 text-sm text-red-700">{error}</p>
       ) : sent ? (
         <div className="mt-8">
-          <p className="text-gray-700">
+          <p className="text-ink-body">
             Check <strong>{preview?.invited_email}</strong> for a login link. It expires in 1 hour.
           </p>
         </div>
       ) : (
         preview && (
           <div className="mt-8">
-            <p className="text-gray-600">
+            <p className="text-ink-secondary">
               {preview.manager_name ? `${preview.manager_name} has` : "Your manager has"} invited{" "}
               <strong>{preview.report_name}</strong> to The Same Page.
             </p>
             <button
               onClick={handleSignIn}
               disabled={sending}
-              className="mt-6 w-full rounded-md bg-gray-900 px-4 py-2 text-white disabled:opacity-40"
+              className="mt-6 w-full rounded-md bg-brand px-4 py-2 text-white disabled:opacity-40"
             >
               {sending ? "Sending…" : `Send login link to ${preview.invited_email}`}
             </button>

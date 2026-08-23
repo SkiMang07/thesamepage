@@ -9,6 +9,53 @@ here.
 
 ---
 
+## Session 53 — 2026-08-22
+
+**Goal:** Build Goals and Projects per the Option A direction Session 52 locked (KPI strip + border-l-4
+card grid + inline-SVG progress ring), matching the visual language Team (Session 24) and the Person
+page (Session 50) already shipped. A build session, not a design session — direction was pre-approved
+via the published "Goals and Projects Redesign Options" canvas.
+
+**What was done:**
+- `frontend/app/app/goals/page.tsx` — widened `max-w-3xl` → `max-w-7xl`; added a `KpiStrip` (4
+  gradient tiles: goals on track, at risk, due this week, no initiative attached — scoped to
+  whichever level tab is currently selected, so the strip moves with the tab the same way Team's
+  strip moves with its team-selector filter); kept the level-tab pill row, unretired; replaced the
+  plain bordered `<ul>` list with a responsive `GoalGrid` of `border-l-4` accented cards
+  (`STATUS_BORDER`/`STATUS_STYLES` ported verbatim from `team/page.tsx`, same hex values), each
+  carrying its own inline-SVG `ProgressRing` (same donut path/stroke as Team's `GoalsCard` ring, but
+  driven by the single goal's own `progress` instead of an aggregate — renders an honest em-dash when
+  no check-in exists rather than a fabricated 0%). `CheckInPanel` reused as-is inside each card;
+  add/edit forms untouched, just refit (the edit form now spans the full grid row).
+- `frontend/app/app/projects/page.tsx` — same treatment, no level tabs (flat list grouped by
+  assignee, unchanged from before). `KpiStrip`'s 4th tile is "no goal attached" — the inverse of
+  Goals' "no initiative attached," completing the goals=what/projects=how cross-check from the other
+  direction. `ProjectGrid` mirrors `GoalGrid`'s card shape exactly.
+
+**Decisions made / locked:**
+- Only the on-track fraction tile gets the dynamic gray/amber/green tone (Team's exact data-trust
+  rule: a fraction tile must never render a fixed "success" color — "0/N on track" is not success);
+  the other 3 tiles (at risk, due this week, no-initiative/no-goal) use a fixed tone regardless of
+  count, matching how Team's own `KpiStrip` treats its non-fraction tiles.
+- The progress ring stays a fixed green stroke regardless of goal/project status — an exact port of
+  Team's ring, which is status-agnostic — rather than inventing a per-status recoloring convention
+  the source doesn't have.
+- Card left-accent uses `border-l-4` plus the ported `STATUS_BORDER` class with no competing
+  all-sides border class on the card (same technique Team's list items use), so the ported hex
+  values apply unmodified instead of needing a new directional-border map.
+
+**Verification:** Frontend-only change (no schema/backend touch). Repo tarred from the device's
+working copy (git status clean going in) and rebuilt in the cloud sandbox since `next build` exceeds
+device_bash's ~45s per-call cap: fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean
+(21/21 routes, `/app/goals` and `/app/projects` both compiled with no errors). Both files written back
+to Andrew's disk via the device bridge (mtime-guarded).
+
+**Next step:** Andrew to dogfood both pages live — confirm the KPI counts read right against real
+data, and decide whether a level tab with zero goals needs a Person-page-style empty state (currently
+still just plain text, unchanged from before this pass).
+
+---
+
 ## Session 52 — 2026-08-22
 
 **Goal:** Andrew saw the new persistent sidebar (Session 51) and initially read Mission Control's

@@ -27,28 +27,28 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
   const [open, setOpen] = useState(index === 0); // first card open by default
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white">
+    <div className="rounded-lg border border-hairline bg-white">
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-start justify-between px-5 py-4 text-left"
       >
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
             {index + 1}
           </span>
-          <p className="mt-0.5 font-medium text-gray-900">{item.title}</p>
+          <p className="mt-0.5 font-medium text-ink">{item.title}</p>
         </div>
-        <span className="ml-4 mt-1 shrink-0 text-gray-400">{open ? "▲" : "▼"}</span>
+        <span className="ml-4 mt-1 shrink-0 text-ink-muted">{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
-        <div className="border-t border-gray-100 px-5 pb-5 pt-4">
-          <p className="text-sm text-gray-500 italic">{item.rationale}</p>
+        <div className="border-t border-divider px-5 pb-5 pt-4">
+          <p className="text-sm text-ink-secondary italic">{item.rationale}</p>
           <ul className="mt-4 space-y-3">
             {item.suggested_questions.map((q, i) => (
               <li key={i} className="flex gap-3">
-                <span className="mt-0.5 shrink-0 text-gray-300">→</span>
-                <p className="text-gray-800">{q}</p>
+                <span className="mt-0.5 shrink-0 text-ink-faint">→</span>
+                <p className="text-ink-body">{q}</p>
               </li>
             ))}
           </ul>
@@ -200,15 +200,15 @@ function PrepFlow() {
   // Resuming a planned session — loading / not-found states
   // ---------------------------------------------------------------------------
   if (resumeLoading) {
-    return <p className="p-8 text-gray-500">Loading your prep sheet…</p>;
+    return <p className="p-8 text-ink-secondary">Loading your prep sheet…</p>;
   }
   if (resumeError) {
     return (
       <PageShell maxWidth="2xl">
-        <Link href={`/app/reports/${id}`} className="text-sm text-gray-500 hover:underline">
+        <Link href={`/app/reports/${id}`} className="text-sm text-ink-secondary hover:underline">
           ← Back
         </Link>
-        <p className="mt-4 text-gray-700">{resumeError}</p>
+        <p className="mt-4 text-ink-body">{resumeError}</p>
       </PageShell>
     );
   }
@@ -219,17 +219,17 @@ function PrepFlow() {
   if (step === 1) {
     return (
       <PageShell maxWidth="2xl">
-        <Link href={`/app/reports/${id}`} className="text-sm text-gray-500 hover:underline">
+        <Link href={`/app/reports/${id}`} className="text-sm text-ink-secondary hover:underline">
           ← Back
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Prep for 1:1</h1>
-        <p className="mt-2 text-gray-500">
+        <p className="mt-2 text-ink-secondary">
           Jot down what&apos;s on your mind before the meeting — what&apos;s going on with
           this person, anything you&apos;re worried about, anything you want to celebrate.
           The more specific, the better the prep sheet.
         </p>
         {captures.length > 0 && (
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-ink-muted">
             Prefilled with {captures.length} thing{captures.length > 1 ? "s" : ""} you captured since the last 1:1 — edit freely below.
           </p>
         )}
@@ -240,13 +240,13 @@ function PrepFlow() {
             onChange={(e) => setNotes(e.target.value)}
             placeholder="e.g. She's been quiet in standups lately. She closed the Acme deal last week — worth calling out. There's a commitment from two weeks ago about the onboarding doc I need to follow up on."
             rows={8}
-            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 placeholder-gray-400 focus:border-gray-900 focus:outline-none"
+            className="w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
           />
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
           <button
             type="submit"
             disabled={loading || !notes.trim()}
-            className="mt-4 w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+            className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
           >
             {loading ? "Generating prep sheet…" : "Generate prep sheet →"}
           </button>
@@ -261,7 +261,7 @@ function PrepFlow() {
   if (step === 2 && prep) {
     return (
       <PageShell maxWidth="6xl">
-        <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:underline">
+        <button onClick={() => setStep(1)} className="text-sm text-ink-secondary hover:underline">
           ← Edit prep notes
         </button>
 
@@ -275,7 +275,7 @@ function PrepFlow() {
               <p className="text-xs font-semibold uppercase tracking-wide text-blue-400">
                 Where things stand
               </p>
-              <p className="mt-2 text-gray-800">{prep.situation_summary}</p>
+              <p className="mt-2 text-ink-body">{prep.situation_summary}</p>
             </div>
 
             {/* Open commitments reminder */}
@@ -286,11 +286,11 @@ function PrepFlow() {
                 </p>
                 <ul className="mt-2 space-y-1">
                   {prep.open_commitments_to_check.map((c, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-gray-700">
+                    <li key={i} className="flex gap-2 text-sm text-ink-body">
                       <span className="text-amber-400">•</span>
                       <span>
                         {c.description}
-                        <span className="ml-1 text-gray-400">
+                        <span className="ml-1 text-ink-muted">
                           {c.committed_by === "direct_report"
                             ? `(${reportName.split(" ")[0] || "theirs"})`
                             : "(yours)"}
@@ -305,7 +305,7 @@ function PrepFlow() {
 
             {/* Agenda items */}
             <div className="mt-8 space-y-3">
-              <p className="text-sm font-medium uppercase tracking-wide text-gray-400">
+              <p className="text-sm font-medium uppercase tracking-wide text-ink-muted">
                 Agenda — {prep.agenda_items.length} items
               </p>
               {prep.agenda_items.map((item, i) => (
@@ -317,7 +317,7 @@ function PrepFlow() {
           {/* Right — what's actually happening on the call */}
           <div className="lg:sticky lg:top-8 lg:self-start">
             <h2 className="text-2xl font-semibold">Call notes</h2>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-ink-secondary">
               Type as you talk, or paste your notes afterward — from Granola or
               whatever you record with. When you&apos;re done, we&apos;ll draft the
               summary and pull out the commitments for you to review.
@@ -327,13 +327,13 @@ function PrepFlow() {
               onChange={(e) => setCallNotes(e.target.value)}
               placeholder={"– Pipeline looking thin for Q4, she's worried about the Acme renewal\n– I'll intro her to Sam on the design team\n– She'll draft the QBR deck by Friday"}
               rows={18}
-              className="mt-4 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 placeholder-gray-400 focus:border-gray-900 focus:outline-none"
+              className="mt-4 w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
             />
-            {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+            {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
             <button
               onClick={handleWrapUp}
               disabled={wrappingUp || !callNotes.trim()}
-              className="mt-4 w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+              className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
             >
               {wrappingUp ? "Drafting your log…" : "Wrap up & log →"}
             </button>

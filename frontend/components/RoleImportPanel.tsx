@@ -19,6 +19,7 @@
 // than opening a review screen over an invented role.
 
 import { useState } from "react";
+import { INPUT, LABEL, BTN_PRIMARY } from "@/lib/tokens";
 import {
   RoleFamily,
   RoleImportMatch,
@@ -37,9 +38,11 @@ import {
   draftIncludedCount,
 } from "./DraftExpectationRows";
 
-const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
-const labelCls = "mb-1 block text-xs font-medium text-gray-500";
-const primaryBtnCls = "rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50";
+// Local aliases so this file's existing call sites keep working; the value
+// itself is the shared token, so restyling happens in one place.
+const inputCls = INPUT;
+const labelCls = LABEL;
+const primaryBtnCls = BTN_PRIMARY;
 
 const CREATE_NEW_FAMILY = "__new_ladder__";
 const ACCEPTED_EXTENSIONS = ".pdf,.docx,.txt,.md";
@@ -217,10 +220,10 @@ export default function RoleImportPanel({
       <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="font-medium text-gray-900">
+            <h3 className="font-medium text-ink">
               {stage === "review" ? "Review this role" : "Start from a job description"}
             </h3>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-ink-secondary">
               {stage === "review"
                 ? "Nothing is saved yet. Edit anything that's off, uncheck what doesn't fit."
                 : pinnedFamily
@@ -228,12 +231,12 @@ export default function RoleImportPanel({
                   : "One paste sets up the role and drafts what good looks like for it."}
             </p>
           </div>
-          <button onClick={onClose} className="shrink-0 text-sm text-gray-400 hover:text-gray-900">
+          <button onClick={onClose} className="shrink-0 text-sm text-ink-muted hover:text-ink">
             Close
           </button>
         </div>
 
-        {panelError && <p className="mt-3 text-sm text-red-500">{panelError}</p>}
+        {panelError && <p className="mt-3 text-sm text-red-700">{panelError}</p>}
 
         {/* ---------------------------------------------------------------
             INPUT — paste box + drop zone, one control each. Both survive a
@@ -254,7 +257,7 @@ export default function RoleImportPanel({
                 onChange={(e) => setPastedText(e.target.value)}
                 rows={8}
                 disabled={!!file || stage === "drafting"}
-                className={`${inputCls} disabled:bg-gray-50 disabled:text-gray-400`}
+                className={`${inputCls} disabled:bg-canvas disabled:text-ink-muted`}
                 placeholder="Paste the full job description here — title, responsibilities, requirements."
               />
             </div>
@@ -275,20 +278,20 @@ export default function RoleImportPanel({
                 }
               }}
               className={`rounded-lg border border-dashed px-4 py-5 text-center ${
-                dragging ? "border-gray-900 bg-gray-50" : "border-gray-300"
+                dragging ? "border-brand bg-canvas" : "border-control"
               }`}
             >
               {file ? (
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-ink-body">
                   {file.name}
-                  <button onClick={() => setFile(null)} className="ml-3 text-xs text-gray-400 hover:text-gray-900">
+                  <button onClick={() => setFile(null)} className="ml-3 text-xs text-ink-muted hover:text-ink">
                     Remove
                   </button>
                 </p>
               ) : (
                 <>
-                  <p className="text-sm text-gray-500">or drop the PDF / Word file here</p>
-                  <label className="mt-1 inline-block cursor-pointer text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                  <p className="text-sm text-ink-secondary">or drop the PDF / Word file here</p>
+                  <label className="mt-1 inline-block cursor-pointer text-xs font-medium text-brand hover:text-brand-hover">
                     choose a file
                     <input
                       type="file"
@@ -303,7 +306,7 @@ export default function RoleImportPanel({
                       }}
                     />
                   </label>
-                  <p className="mt-1 text-xs text-gray-400">.pdf, .docx, .txt or .md — 25MB max</p>
+                  <p className="mt-1 text-xs text-ink-muted">.pdf, .docx, .txt or .md — 25MB max</p>
                 </>
               )}
             </div>
@@ -317,7 +320,7 @@ export default function RoleImportPanel({
                 {stage === "drafting" ? "Reading the job description…" : "Read the job description"}
               </button>
               {onManualFallback && stage !== "drafting" && (
-                <button onClick={onManualFallback} className="text-sm text-gray-500 hover:text-gray-900">
+                <button onClick={onManualFallback} className="text-sm text-ink-secondary hover:text-ink">
                   or start from scratch
                 </button>
               )}
@@ -331,8 +334,8 @@ export default function RoleImportPanel({
             --------------------------------------------------------------- */}
         {stage === "review" && (
           <>
-            <div className="mt-4 rounded-lg border border-gray-200 p-4">
-              {match?.rationale && <p className="mb-3 text-xs text-gray-500">{match.rationale}</p>}
+            <div className="mt-4 rounded-lg border border-hairline p-4">
+              {match?.rationale && <p className="mb-3 text-xs text-ink-secondary">{match.rationale}</p>}
               {otherRolesNote && (
                 <p className="mb-3 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
                   {otherRolesNote} Only the first one is set up here — import the others one at a time.
@@ -373,12 +376,12 @@ export default function RoleImportPanel({
                     ))}
                   </select>
                   {pinnedFamily && (
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-ink-muted">
                       Pinned to {pinnedFamily.name} — you opened this from that ladder.
                     </p>
                   )}
                   {!pinnedFamily && match?.confidence === "medium" && match.suggested_action !== "create_new" && (
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-ink-muted">
                       Not a confident match — creating a new ladder is just as likely to be right.
                     </p>
                   )}
@@ -421,10 +424,10 @@ export default function RoleImportPanel({
               )}
 
               {backfillTarget && (
-                <p className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <p className="mt-3 rounded-md bg-canvas px-3 py-2 text-xs text-ink-secondary">
                   Updating the existing L{level} in {selectedFamily?.name ?? "this ladder"} — its job description is
                   replaced with this one and the expectations below are added to it.{" "}
-                  <button onClick={() => setExistsTargetId(null)} className="font-medium text-gray-800 hover:underline">
+                  <button onClick={() => setExistsTargetId(null)} className="font-medium text-ink-body hover:underline">
                     Add a new level instead
                   </button>
                 </p>
@@ -457,7 +460,7 @@ export default function RoleImportPanel({
               }}
             />
 
-            <div className="mt-6 flex items-center gap-3 border-t border-gray-100 pt-4">
+            <div className="mt-6 flex items-center gap-3 border-t border-divider pt-4">
               <button onClick={commit} disabled={!canCommit} className={primaryBtnCls}>
                 {committing
                   ? "Saving..."
@@ -465,7 +468,7 @@ export default function RoleImportPanel({
                     ? `Update role + add ${includedCount} expectation${includedCount === 1 ? "" : "s"}`
                     : `Create role + ${includedCount} expectation${includedCount === 1 ? "" : "s"}`}
               </button>
-              <button onClick={() => setStage("input")} className="text-sm text-gray-500 hover:text-gray-900">
+              <button onClick={() => setStage("input")} className="text-sm text-ink-secondary hover:text-ink">
                 Back
               </button>
             </div>

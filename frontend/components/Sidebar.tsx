@@ -31,7 +31,7 @@ import { usePathname, useParams } from "next/navigation";
 import Link from "next/link";
 import {
   HOME_ITEM,
-  HUE_STYLES,
+  ZONE_STYLE,
   Icon,
   NAV_GROUPS,
   NAV_STRIP_HEIGHT,
@@ -52,7 +52,7 @@ export default function Sidebar() {
 
   return (
     <div
-      className={`sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto border-r border-[#e7e5e0] bg-[#faf9f6] transition-[width] duration-150 ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto border-r border-[#DDE0E3] bg-[#F5F8FA] transition-[width] duration-150 ${
         collapsed ? "w-14" : "w-[190px]"
       }`}
     >
@@ -66,7 +66,7 @@ export default function Sidebar() {
         <button
           onClick={toggle}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-black/5 hover:text-gray-700"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-sunken hover:text-ink-body"
         >
           <Icon name="back" className={`h-[15px] w-[15px] transition-transform ${collapsed ? "rotate-180" : ""}`} />
         </button>
@@ -78,18 +78,18 @@ export default function Sidebar() {
           title={HOME_ITEM.label}
           className={`flex items-center gap-2.5 rounded-lg text-[13px] transition ${
             collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
-          } ${isHome ? "bg-black/5 font-semibold text-gray-900" : "text-gray-600 hover:bg-black/5 hover:text-gray-900"}`}
+          } ${isHome ? "bg-black/5 font-semibold text-ink" : "text-ink-secondary hover:bg-sunken hover:text-ink"}`}
         >
           <Icon name={HOME_ITEM.icon} className="h-4 w-4 shrink-0" />
           {!collapsed && <span className="truncate">{HOME_ITEM.label}</span>}
         </Link>
 
-        <div className={`my-2 h-px shrink-0 bg-[#e7e5e0] ${collapsed ? "w-6" : "mx-2.5"}`} />
+        <div className={`my-2 h-px shrink-0 bg-[#DDE0E3] ${collapsed ? "w-6" : "mx-2.5"}`} />
 
         {NAV_GROUPS.map((group) =>
           group.items.map((item) => {
             const active = item.id === activeItemId;
-            const hue = HUE_STYLES[group.hue];
+            const hue = ZONE_STYLE;
             return (
               <Link
                 key={item.id}
@@ -97,7 +97,7 @@ export default function Sidebar() {
                 title={item.label}
                 className={`flex items-center gap-2.5 rounded-lg text-[13px] transition ${
                   collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
-                } ${active ? `font-semibold ${hue.bg} ${hue.text}` : "text-gray-600 hover:bg-black/5 hover:text-gray-900"}`}
+                } ${active ? `font-semibold ${hue.bg} ${hue.text}` : "text-ink-secondary hover:bg-sunken hover:text-ink"}`}
               >
                 <Icon name={item.icon} className="h-4 w-4 shrink-0" />
                 {!collapsed && <span className="truncate">{item.label}</span>}

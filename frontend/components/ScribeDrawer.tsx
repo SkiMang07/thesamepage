@@ -122,15 +122,15 @@ function Field({ label, value, linked }: { label: string; value: string | null |
   if (!value) {
     return (
       <div className="flex gap-2 text-sm">
-        <span className="w-28 shrink-0 text-gray-400">{label}</span>
-        <span className="text-gray-300 italic">none yet</span>
+        <span className="w-28 shrink-0 text-ink-muted">{label}</span>
+        <span className="text-ink-faint italic">none yet</span>
       </div>
     );
   }
   return (
     <div className="flex gap-2 text-sm">
-      <span className="w-28 shrink-0 text-gray-400">{label}</span>
-      <span className={linked ? "font-medium text-green-700" : "text-gray-800"}>{value}</span>
+      <span className="w-28 shrink-0 text-ink-muted">{label}</span>
+      <span className={linked ? "font-medium text-teal-700" : "text-ink-body"}>{value}</span>
     </div>
   );
 }
@@ -148,10 +148,10 @@ function EditField({
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
-      <span className="w-28 shrink-0 text-gray-400">{label}</span>
+      <span className="w-28 shrink-0 text-ink-muted">{label}</span>
       <input
         type={type}
-        className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+        className="flex-1 rounded border border-control px-2 py-1 text-sm"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -367,17 +367,17 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
   // Receipt view
   if (cardState === "confirmed" && receipt) {
     return (
-      <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+      <div className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <span className="flex items-center gap-1.5 text-sm font-medium text-green-800">
-            <span className="text-green-600">✓</span>
+          <span className="flex items-center gap-1.5 text-sm font-medium text-teal-800">
+            <span className="text-teal-700">✓</span>
             {receipt.label}
           </span>
           <div className="flex items-center gap-2">
             {receipt.href && (
               <Link
                 href={receipt.href}
-                className="text-xs text-green-700 underline hover:text-green-900"
+                className="text-xs text-teal-700 underline hover:text-teal-900"
               >
                 View →
               </Link>
@@ -385,7 +385,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
             {undoSeconds !== null && (
               <button
                 onClick={() => handleUndo(receipt.entityId)}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                className="text-xs text-ink-secondary hover:text-ink-body"
               >
                 Undo ({undoSeconds}s)
               </button>
@@ -401,10 +401,10 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
   const isLoading = cardState === "confirming";
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white">
+    <div className="rounded-lg border border-hairline bg-white">
       {/* Card header */}
-      <div className="flex items-center justify-between gap-2 rounded-t-lg border-b border-gray-100 bg-gray-50 px-4 py-2.5">
-        <span className="text-sm font-medium text-gray-700">{entityLabel(draft.entity_type)}</span>
+      <div className="flex items-center justify-between gap-2 rounded-t-lg border-b border-divider bg-canvas px-4 py-2.5">
+        <span className="text-sm font-medium text-ink-body">{entityLabel(draft.entity_type)}</span>
         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
           Draft — not saved
         </span>
@@ -412,7 +412,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
 
       {/* Fields */}
       <div className="space-y-2 px-4 py-3">
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-700">{error}</p>}
 
         {/* === PROJECT === */}
         {draft.entity_type === "project" && (
@@ -531,19 +531,19 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 rounded-b-lg border-t border-gray-100 bg-gray-50 px-4 py-2.5">
+      <div className="flex items-center gap-2 rounded-b-lg border-t border-divider bg-canvas px-4 py-2.5">
         {cardState === "editing" ? (
           <>
             <button
               onClick={handleConfirm}
               disabled={isLoading}
-              className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-gray-800"
+              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-hover"
             >
               {confirmLabel(draft.entity_type)}
             </button>
             <button
               onClick={cancelEdit}
-              className="text-xs text-gray-500 hover:text-gray-700"
+              className="text-xs text-ink-secondary hover:text-ink-body"
             >
               Cancel
             </button>
@@ -553,21 +553,21 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
             <button
               onClick={handleConfirm}
               disabled={isLoading}
-              className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-gray-800"
+              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-hover"
             >
               {isLoading ? "Saving…" : confirmLabel(draft.entity_type)}
             </button>
             <button
               onClick={openEdit}
               disabled={isLoading}
-              className="text-xs text-gray-600 hover:text-gray-900"
+              className="text-xs text-ink-secondary hover:text-ink"
             >
               Edit details
             </button>
             <button
               onClick={() => setCardState("discarded")}
               disabled={isLoading}
-              className="ml-auto text-xs text-gray-400 hover:text-gray-600"
+              className="ml-auto text-xs text-ink-muted hover:text-ink-secondary"
             >
               Discard
             </button>
@@ -597,8 +597,8 @@ function MessageBubble({
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
           isUser
-            ? "bg-gray-900 text-white"
-            : "bg-gray-100 text-gray-800"
+            ? "bg-brand text-white"
+            : "bg-sunken text-ink-body"
         }`}
       >
         {parsed ? parsed.before : msg.text}
@@ -611,7 +611,7 @@ function MessageBubble({
             <button
               key={opt}
               onClick={() => onQuickReply(opt)}
-              className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs text-gray-700 hover:border-gray-500 hover:bg-gray-50 active:bg-gray-100"
+              className="rounded-full border border-control bg-white px-3 py-1 text-xs text-ink-body hover:border-ink-faint hover:bg-canvas active:bg-sunken"
             >
               {opt}
             </button>
@@ -687,14 +687,14 @@ export default function ScribeDrawer() {
   return (
     <div className="flex h-full flex-col bg-white">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-hairline px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-base font-semibold text-gray-900">✦</span>
-          <span className="text-sm font-medium text-gray-700">The Same Page</span>
+          <span className="text-base font-semibold text-ink">✦</span>
+          <span className="text-sm font-medium text-ink-body">The Same Page</span>
         </div>
         <button
           onClick={close}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded-md p-1 text-ink-muted hover:bg-sunken hover:text-ink-secondary"
           aria-label="Close"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -706,11 +706,11 @@ export default function ScribeDrawer() {
       {/* Thread */}
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {hydrating && (
-          <p className="mt-8 text-center text-xs text-gray-400">Loading…</p>
+          <p className="mt-8 text-center text-xs text-ink-muted">Loading…</p>
         )}
         {!hydrating && messages.length === 0 && (
-          <div className="mt-8 text-center text-sm text-gray-400">
-            <p className="font-medium text-gray-500">Tell me what&apos;s happening.</p>
+          <div className="mt-8 text-center text-sm text-ink-muted">
+            <p className="font-medium text-ink-secondary">Tell me what&apos;s happening.</p>
             <p className="mt-1">I&apos;ll keep the pages up to date.</p>
           </div>
         )}
@@ -721,8 +721,8 @@ export default function ScribeDrawer() {
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-3">
-        {sendError && <p className="mb-2 text-xs text-red-600">{sendError}</p>}
+      <div className="shrink-0 border-t border-hairline bg-canvas px-4 py-3">
+        {sendError && <p className="mb-2 text-xs text-red-700">{sendError}</p>}
         <textarea
           ref={composerRef}
           value={input}
@@ -731,14 +731,14 @@ export default function ScribeDrawer() {
           disabled={sending}
           rows={3}
           placeholder="Tell me what's happening — I'll keep the pages up to date."
-          className="w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-gray-400 focus:outline-none disabled:opacity-50"
+          className="w-full resize-none rounded-lg border border-control bg-white px-3 py-2 text-sm text-ink-body placeholder-ink-faint focus:border-control focus:outline-none disabled:opacity-50"
         />
         <div className="mt-2 flex items-center justify-between">
-          <p className="text-xs text-gray-400">⌘J · Nothing saves until you confirm.</p>
+          <p className="text-xs text-ink-muted">⌘J · Nothing saves until you confirm.</p>
           <button
             onClick={() => handleSend()}
             disabled={sending || !input.trim()}
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 hover:bg-gray-800"
+            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 hover:bg-brand-hover"
           >
             {sending ? "Thinking…" : "Send"}
           </button>

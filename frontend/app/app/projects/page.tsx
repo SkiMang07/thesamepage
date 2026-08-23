@@ -48,6 +48,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { INPUT, LABEL, BTN_PRIMARY, HEX } from "@/lib/tokens";
 
 const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
   { id: "active", label: "Active" },
@@ -60,27 +61,29 @@ const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
 // Ported verbatim from frontend/app/app/team/page.tsx — same hex values as
 // Goals/Team. Do not reinvent.
 const STATUS_STYLES: Record<ProjectStatus, string> = {
-  active: "bg-gray-100 text-gray-600",
-  on_track: "bg-green-50 text-green-600",
-  at_risk: "bg-amber-50 text-amber-600",
+  active: "bg-sunken text-ink-secondary",
+  on_track: "bg-teal-50 text-teal-700",
+  at_risk: "bg-amber-50 text-amber-700",
   completed: "bg-blue-50 text-blue-600",
-  cancelled: "bg-gray-100 text-gray-400",
+  cancelled: "bg-sunken text-ink-muted",
 };
 
 // Left-border accent per status — same map/technique as Team and Goals: a
 // border-l-4 with no competing all-sides border class, so only the left
 // edge picks up a visible color.
 const STATUS_BORDER: Record<ProjectStatus, string> = {
-  active: "border-gray-300",
-  on_track: "border-green-500",
+  active: "border-control",
+  on_track: "border-brand",
   at_risk: "border-amber-500",
   completed: "border-blue-300",
-  cancelled: "border-gray-200",
+  cancelled: "border-hairline",
 };
 
-const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
-const labelCls = "mb-1 block text-xs font-medium text-gray-500";
-const primaryBtnCls = "rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50";
+// Local aliases so this file's existing call sites keep working; the value
+// itself is the shared token, so restyling happens in one place.
+const inputCls = INPUT;
+const labelCls = LABEL;
+const primaryBtnCls = BTN_PRIMARY;
 
 type ProjectFormValues = {
   title: string;
@@ -232,14 +235,14 @@ export default function ProjectsPage() {
   return (
     <PageShell maxWidth="8xl">
       <h1 className="text-2xl font-semibold">Projects</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         How your goals get done — standalone or linked to a goal, yours or a direct report&apos;s.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <div className={SECTION_GAP}>
           <KpiStrip projects={projects} />
@@ -269,12 +272,12 @@ export default function ProjectsPage() {
           )}
 
           {projects.length === 0 ? (
-            <p className={`${SECTION_GAP} text-gray-500`}>No projects yet. Add the first one above.</p>
+            <p className={`${SECTION_GAP} text-ink-secondary`}>No projects yet. Add the first one above.</p>
           ) : (
             <div className={`${SECTION_GAP} space-y-8`}>
               {grouped.map((group) => (
                 <div key={group.name}>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
                     {group.name}
                   </h2>
                   <ProjectGrid projects={group.projects} {...listProps} />
@@ -302,10 +305,10 @@ function KpiStrip({ projects }: { projects: Project[] }) {
   // for a fraction tile — "0/N on track" is not success.
   const onTrackTone =
     scored.length === 0
-      ? { from: "from-gray-400", to: "to-gray-500" }
+      ? { from: "from-carbon-500", to: "to-carbon-600" }
       : onTrack === 0
         ? { from: "from-amber-500", to: "to-amber-600" }
-        : { from: "from-green-500", to: "to-green-600" };
+        : { from: "from-teal-600", to: "to-teal-700" };
 
   const atRisk = scored.filter((p) => p.status === "at_risk").length;
 
@@ -320,8 +323,8 @@ function KpiStrip({ projects }: { projects: Project[] }) {
   const tiles = [
     { value: onTrackLabel, label: "Projects on track", from: onTrackTone.from, to: onTrackTone.to },
     { value: String(atRisk), label: "At risk", from: "from-amber-500", to: "to-amber-600" },
-    { value: String(dueThisWeek), label: "Due this week", from: "from-indigo-500", to: "to-indigo-600" },
-    { value: String(noGoal), label: "No goal attached", from: "from-rose-500", to: "to-rose-600" },
+    { value: String(dueThisWeek), label: "Due this week", from: "from-blue-600", to: "to-blue-700" },
+    { value: String(noGoal), label: "No goal attached", from: "from-red-600", to: "to-red-700" },
   ];
 
   return (
@@ -350,20 +353,20 @@ function ProgressRing({ progress }: { progress: number | null | undefined }) {
       <path
         d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
         fill="none"
-        stroke="#e5e7eb"
+        stroke={HEX.track}
         strokeWidth="3"
       />
       {progress != null && (
         <path
           d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
           fill="none"
-          stroke="#22c55e"
+          stroke={HEX.brand}
           strokeWidth="3"
           strokeDasharray={dash}
           strokeLinecap="round"
         />
       )}
-      <text x="18" y="21" textAnchor="middle" fontSize="9" fill="#111827" fontWeight="600">
+      <text x="18" y="21" textAnchor="middle" fontSize="9" fill={HEX.ink} fontWeight="600">
         {progress != null ? `${pct}%` : "–"}
       </text>
     </svg>
@@ -420,14 +423,14 @@ function ProjectGrid({
               <div className="flex min-w-0 items-start gap-3">
                 <ProgressRing progress={p.progress} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-900">{p.title}</p>
+                  <p className="truncate text-sm font-medium text-ink">{p.title}</p>
                   {p.org_unit_name && (
-                    <p className="mt-0.5 text-xs text-gray-400">Team: {p.org_unit_name}</p>
+                    <p className="mt-0.5 text-xs text-ink-muted">Team: {p.org_unit_name}</p>
                   )}
                   {p.goal_title && (
-                    <p className="mt-0.5 text-xs text-gray-400">Supports goal: {p.goal_title}</p>
+                    <p className="mt-0.5 text-xs text-ink-muted">Supports goal: {p.goal_title}</p>
                   )}
-                  {p.due_date && <p className="mt-0.5 text-xs text-gray-400">Due {formatDate(p.due_date)}</p>}
+                  {p.due_date && <p className="mt-0.5 text-xs text-ink-muted">Due {formatDate(p.due_date)}</p>}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -444,14 +447,14 @@ function ProjectGrid({
                 </select>
                 <button
                   onClick={() => onStartEdit(p.id)}
-                  className="text-xs text-gray-400 hover:text-gray-700"
+                  className="text-xs text-ink-muted hover:text-ink-body"
                   title="Edit project"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => onDelete(p.id)}
-                  className="text-xs text-gray-400 hover:text-red-500"
+                  className="text-xs text-ink-muted hover:text-red-700"
                   title="Delete project"
                 >
                   Delete
@@ -459,7 +462,7 @@ function ProjectGrid({
               </div>
             </div>
 
-            {p.description && <p className="mt-2 text-sm text-gray-500">{p.description}</p>}
+            {p.description && <p className="mt-2 text-sm text-ink-secondary">{p.description}</p>}
 
             <CheckInPanel
               status={p.status}
@@ -528,7 +531,7 @@ function ProjectForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-lg border border-dashed border-control p-4">
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>Title</label>
@@ -585,7 +588,7 @@ function ProjectForm({
             </option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-ink-muted">
           Drives which team page this shows up on under /app/team — a parent team&apos;s page also shows
           this project.
         </p>
@@ -606,7 +609,7 @@ function ProjectForm({
         <button type="submit" disabled={saving} className={primaryBtnCls}>
           {saving ? savingLabel : submitLabel}
         </button>
-        <button type="button" onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-900">
+        <button type="button" onClick={onCancel} className="text-sm text-ink-secondary hover:text-ink">
           Cancel
         </button>
       </div>

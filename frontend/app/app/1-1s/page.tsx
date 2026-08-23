@@ -87,18 +87,18 @@ export default function OneOnOnesPage() {
     [items]
   );
 
-  if (loading) return <p className="p-8 text-gray-500">Loading...</p>;
-  if (error) return <p className="p-8 text-red-500">{error}</p>;
+  if (loading) return <p className="p-8 text-ink-secondary">Loading...</p>;
+  if (error) return <p className="p-8 text-red-700">{error}</p>;
 
   return (
     <PageShell maxWidth="3xl">
       <h1 className="text-2xl font-semibold">1:1s</h1>
-      <p className="mt-1 text-sm text-gray-500">Who you owe a conversation, and what&apos;s already in flight.</p>
+      <p className="mt-1 text-sm text-ink-secondary">Who you owe a conversation, and what&apos;s already in flight.</p>
 
       {items.length === 0 ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>
           No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="underline hover:text-gray-700">
+          <Link href="/app/dashboard" className="underline hover:text-ink-body">
             Add your first one from your dashboard
           </Link>
           .
@@ -107,15 +107,15 @@ export default function OneOnOnesPage() {
         <div className={`${SECTION_GAP} space-y-10`}>
           {/* Due now */}
           <section>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
               Due now{dueNow.length > 0 && ` (${dueNow.length})`}
             </h2>
             {dueNow.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-500">
+              <p className="mt-3 text-sm text-ink-secondary">
                 You&apos;re all caught up — nobody&apos;s due for a 1:1 right now. 🎯
               </p>
             ) : (
-              <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-white">
                 {dueNow.map((r) => {
                   const badlyOverdue = r.days_since_last === null || r.days_since_last > r.cadence_days * 2;
                   return (
@@ -123,14 +123,14 @@ export default function OneOnOnesPage() {
                       <div className="flex min-w-0 items-center gap-3">
                         <div
                           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                            badlyOverdue ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                            badlyOverdue ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-700"
                           }`}
                         >
                           {initialsOf(r.name)}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
-                          <p className={`mt-0.5 text-xs ${badlyOverdue ? "text-rose-600" : "text-amber-600"}`}>
+                          <p className="truncate text-sm font-medium text-ink">{r.name}</p>
+                          <p className={`mt-0.5 text-xs ${badlyOverdue ? "text-red-700" : "text-amber-700"}`}>
                             {r.days_since_last === null ? "Never met" : `${r.days_since_last} days since last 1:1`}
                             {" · "}
                             {cadenceSourceLabel(r.cadence_days, r.cadence_source)}
@@ -139,7 +139,7 @@ export default function OneOnOnesPage() {
                       </div>
                       <Link
                         href={`/app/reports/${r.direct_report_id}/prep`}
-                        className="shrink-0 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700"
+                        className="shrink-0 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-hover"
                       >
                         Prep →
                       </Link>
@@ -152,26 +152,26 @@ export default function OneOnOnesPage() {
 
           {/* Prepped, not yet run */}
           <section>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
               Prepped, not yet run{prepped.length > 0 && ` (${prepped.length})`}
             </h2>
             {prepped.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-500">No prep sheets waiting on a meeting.</p>
+              <p className="mt-3 text-sm text-ink-secondary">No prep sheets waiting on a meeting.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-white">
                 {prepped.map((r) => (
                   <li key={r.direct_report_id}>
                     <Link
                       href={`/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session!.id}`}
-                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50"
+                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-canvas"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
-                        <p className="mt-0.5 truncate text-xs text-gray-400">
+                        <p className="truncate text-sm font-medium text-ink">{r.name}</p>
+                        <p className="mt-0.5 truncate text-xs text-ink-muted">
                           {r.planned_session!.display_summary || "Prep sheet generated — no summary yet."}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs text-gray-400">Resume →</span>
+                      <span className="shrink-0 text-xs text-ink-muted">Resume →</span>
                     </Link>
                   </li>
                 ))}
@@ -181,21 +181,21 @@ export default function OneOnOnesPage() {
 
           {/* Recently wrapped */}
           <section>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-400">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
               Recently wrapped{recentlyWrapped.length > 0 && ` (${recentlyWrapped.length})`}
             </h2>
             {recentlyWrapped.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-500">Nothing logged yet.</p>
+              <p className="mt-3 text-sm text-ink-secondary">Nothing logged yet.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-white">
                 {recentlyWrapped.map((r) => (
                   <li key={r.direct_report_id}>
                     <Link
                       href={`/app/reports/${r.direct_report_id}`}
-                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50"
+                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-canvas"
                     >
-                      <p className="truncate text-sm font-medium text-gray-900">{r.name}</p>
-                      <p className="shrink-0 text-xs text-gray-400">
+                      <p className="truncate text-sm font-medium text-ink">{r.name}</p>
+                      <p className="shrink-0 text-xs text-ink-muted">
                         {formatDate(r.last_completed!.date)}
                         {r.last_completed!.commitment_count > 0 &&
                           ` · ${r.last_completed!.commitment_count} commitment${

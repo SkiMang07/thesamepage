@@ -80,6 +80,7 @@ import {
   draftIncludedCount,
 } from "@/components/DraftExpectationRows";
 import RoleImportPanel, { RoleImportResult } from "@/components/RoleImportPanel";
+import { INPUT, LABEL, BTN_PRIMARY } from "@/lib/tokens";
 import {
   GroupedRoleSelect,
   OrgUnitSelect,
@@ -113,9 +114,11 @@ const KIND_TABS: { id: ExpectationKind; label: string }[] = [
   { id: "values", label: "Values" },
 ];
 
-const inputCls = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
-const labelCls = "mb-1 block text-xs font-medium text-gray-500";
-const primaryBtnCls = "rounded-md bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50";
+// Local aliases so this file's existing call sites keep working; the value
+// itself is the shared token, so restyling happens in one place.
+const inputCls = INPUT;
+const labelCls = LABEL;
+const primaryBtnCls = BTN_PRIMARY;
 
 // useSearchParams (for ?section=&unit=, the /app/org member-count
 // click-through, Session 42 Plan S4+S5) requires a Suspense boundary — same
@@ -191,11 +194,11 @@ function SettingsFlow() {
   return (
     <PageShell maxWidth="4xl">
       <h1 className="text-2xl font-semibold">Settings</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         Set up roles and expectations once — everything else builds on them.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       <div className={`${SECTION_GAP} flex gap-10`}>
         <nav className="w-48 shrink-0 space-y-1">
@@ -204,11 +207,11 @@ function SettingsFlow() {
               key={s.id}
               onClick={() => setSection(s.id)}
               className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                section === s.id ? "bg-gray-100 font-medium text-gray-900" : "text-gray-500 hover:bg-gray-50"
+                section === s.id ? "bg-sunken font-medium text-ink" : "text-ink-secondary hover:bg-canvas"
               }`}
             >
               {s.label}
-              <span className="block text-xs font-normal text-gray-400">{s.blurb}</span>
+              <span className="block text-xs font-normal text-ink-muted">{s.blurb}</span>
             </button>
           ))}
         </nav>
@@ -225,7 +228,7 @@ function SettingsFlow() {
                 setReports={setReports}
                 onError={setError}
               />
-              <div id="expectations-block" className="border-t border-gray-200 pt-10">
+              <div id="expectations-block" className="border-t border-hairline pt-10">
                 <ExpectationsSection
                   roleLevels={roleLevels}
                   roleFamilies={roleFamilies}
@@ -311,7 +314,7 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
     }
   }
 
-  if (!profile) return <p className="text-gray-500">Loading...</p>;
+  if (!profile) return <p className="text-ink-secondary">Loading...</p>;
 
   return (
     <form onSubmit={save} className="max-w-md space-y-4">
@@ -321,7 +324,7 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
       </div>
       <div>
         <label className={labelCls}>Email</label>
-        <input value={profile.email} disabled className={`${inputCls} bg-gray-50 text-gray-400`} />
+        <input value={profile.email} disabled className={`${inputCls} bg-canvas text-ink-muted`} />
       </div>
       <div>
         <label className={labelCls}>Company</label>
@@ -338,7 +341,7 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
           onChange={(e) => setCadenceDays(parseInt(e.target.value || "21", 10))}
           className={`${inputCls} max-w-[9rem]`}
         />
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-ink-muted">
           How often you expect to meet 1:1 with a direct report, by default. Weekly for a new hire and monthly for a
           senior IC is common — override per person on their report page.
         </p>
@@ -347,7 +350,7 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
         <button type="submit" disabled={saving} className={primaryBtnCls}>
           {saving ? "Saving..." : "Save"}
         </button>
-        {saved && <span className="text-sm text-green-600">Saved</span>}
+        {saved && <span className="text-sm text-teal-700">Saved</span>}
       </div>
     </form>
   );
@@ -418,7 +421,7 @@ function RoleForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+    <form onSubmit={handleSubmit} className="mt-3 space-y-3 rounded-lg border border-dashed border-control p-4">
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>{roleLabelText}</label>
@@ -451,7 +454,7 @@ function RoleForm({
           {saving ? savingLabel : dynamicLevelLabel ? `Add L${jobLevel}` : submitLabel}
         </button>
         {onCancel && (
-          <button type="button" onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-900">
+          <button type="button" onClick={onCancel} className="text-sm text-ink-secondary hover:text-ink">
             Cancel
           </button>
         )}
@@ -517,41 +520,41 @@ function LevelRow({
   const overrideTitle = role.role_families && role.role_families.name !== role.job_role ? role.job_role : null;
 
   return (
-    <li className="rounded-lg border border-gray-200 px-4 py-3">
+    <li className="rounded-lg border border-hairline px-4 py-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900">
+          <p className="text-sm font-medium text-ink">
             L{role.job_level}
-            {overrideTitle && <span className="ml-2 font-normal text-gray-500">&middot; {overrideTitle}</span>}
+            {overrideTitle && <span className="ml-2 font-normal text-ink-secondary">&middot; {overrideTitle}</span>}
           </p>
           {role.job_responsibilities && (
-            <p className={`mt-1 text-xs text-gray-500 ${jdExpanded ? "" : "line-clamp-2"}`}>{role.job_responsibilities}</p>
+            <p className={`mt-1 text-xs text-ink-secondary ${jdExpanded ? "" : "line-clamp-2"}`}>{role.job_responsibilities}</p>
           )}
           {role.job_responsibilities && role.job_responsibilities.length > 100 && (
-            <button onClick={onToggleJd} className="mt-0.5 text-xs text-gray-400 hover:text-gray-700">
+            <button onClick={onToggleJd} className="mt-0.5 text-xs text-ink-muted hover:text-ink-body">
               {jdExpanded ? "Show less" : "Show more"}
             </button>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <button onClick={onStartMove} className="text-xs text-gray-400 hover:text-gray-700" title="Move to another ladder">
+          <button onClick={onStartMove} className="text-xs text-ink-muted hover:text-ink-body" title="Move to another ladder">
             Move&hellip;
           </button>
-          <button onClick={onStartEdit} className="text-xs text-gray-400 hover:text-gray-700" title="Edit level">
+          <button onClick={onStartEdit} className="text-xs text-ink-muted hover:text-ink-body" title="Edit level">
             Edit
           </button>
-          <button onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500" title="Delete level">
+          <button onClick={onRemove} className="text-xs text-ink-muted hover:text-red-700" title="Delete level">
             Remove
           </button>
         </div>
       </div>
       {isMoving && (
-        <div className="mt-2 flex items-center gap-2 border-t border-gray-100 pt-2">
-          <span className="text-xs text-gray-500">Move to</span>
+        <div className="mt-2 flex items-center gap-2 border-t border-divider pt-2">
+          <span className="text-xs text-ink-secondary">Move to</span>
           <select
             defaultValue=""
             onChange={(e) => onMove(e.target.value || null)}
-            className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+            className="rounded-md border border-control px-2 py-1 text-xs"
           >
             <option value="" disabled>
               Choose a ladder&hellip;
@@ -565,7 +568,7 @@ function LevelRow({
                 </option>
               ))}
           </select>
-          <button onClick={onCancelMove} className="text-xs text-gray-400 hover:text-gray-900">
+          <button onClick={onCancelMove} className="text-xs text-ink-muted hover:text-ink">
             Cancel
           </button>
         </div>
@@ -820,11 +823,11 @@ function RolesSection({
 
   return (
     <div>
-      <h2 className="font-medium text-gray-900">Roles on your team</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <h2 className="font-medium text-ink">Roles on your team</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
         A role family is a ladder — L1, L2, L3&hellip; are levels inside it. Everything else (expectations now,
         ratings later) attaches to a level. Assigning people to roles and teams lives in{" "}
-        <span className="font-medium text-gray-700">People</span>.
+        <span className="font-medium text-ink-body">People</span>.
       </p>
 
       {/* Merge nudge (Session 43, Polish Pass B, finding P3) — a one-time
@@ -835,7 +838,7 @@ function RolesSection({
           {mergeSuggestions.map((s) => (
             <p
               key={s.family.id}
-              className="flex items-center justify-between gap-3 rounded-md bg-indigo-50 px-3 py-1.5 text-xs text-indigo-800"
+              className="flex items-center justify-between gap-3 rounded-md bg-blue-50 px-3 py-1.5 text-xs text-blue-800"
             >
               <span>
                 <span className="font-medium">{s.family.name}</span> looks like a level of{" "}
@@ -843,7 +846,7 @@ function RolesSection({
               </span>
               <button
                 onClick={() => setDismissedMergeIds((ids) => new Set(ids).add(s.family.id))}
-                className="shrink-0 text-indigo-400 hover:text-indigo-700"
+                className="shrink-0 text-blue-400 hover:text-brand-hover"
               >
                 Dismiss
               </button>
@@ -861,7 +864,7 @@ function RolesSection({
             if (g.levels.length === 0) return null;
             return (
               <div key="ungrouped">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">{UNGROUPED_LABEL}</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{UNGROUPED_LABEL}</h3>
                 <ul className="mt-2 space-y-2">
                   {g.levels.map((rl) => (
                     <LevelRow
@@ -900,7 +903,7 @@ function RolesSection({
           const isAddingBelow = addingLevel?.familyId === family.id && nextLevelDown !== null && addingLevel.level === nextLevelDown;
 
           return (
-            <div key={family.id} className="rounded-lg border border-gray-200 p-4">
+            <div key={family.id} className="rounded-lg border border-hairline p-4">
               <div className="flex items-center justify-between gap-3">
                 {renamingFamilyId === family.id ? (
                   <div className="flex flex-1 items-center gap-2">
@@ -910,17 +913,17 @@ function RolesSection({
                       className={`${inputCls} max-w-xs`}
                       autoFocus
                     />
-                    <button onClick={() => renameFamily(family.id)} className="text-xs font-medium text-gray-900 hover:underline">
+                    <button onClick={() => renameFamily(family.id)} className="text-xs font-medium text-ink hover:underline">
                       Save
                     </button>
-                    <button onClick={() => setRenamingFamilyId(null)} className="text-xs text-gray-500 hover:text-gray-900">
+                    <button onClick={() => setRenamingFamilyId(null)} className="text-xs text-ink-secondary hover:text-ink">
                       Cancel
                     </button>
                   </div>
                 ) : (
-                  <h3 className="font-medium text-gray-900">
+                  <h3 className="font-medium text-ink">
                     {family.name}
-                    <span className="ml-2 text-xs font-normal text-gray-400">
+                    <span className="ml-2 text-xs font-normal text-ink-muted">
                       {g.levels.length} level{g.levels.length === 1 ? "" : "s"}
                     </span>
                   </h3>
@@ -932,12 +935,12 @@ function RolesSection({
                         setRenamingFamilyId(family.id);
                         setRenameValue(family.name);
                       }}
-                      className="text-xs text-gray-400 hover:text-gray-700"
+                      className="text-xs text-ink-muted hover:text-ink-body"
                     >
                       Rename
                     </button>
                     {g.levels.length === 0 && (
-                      <button onClick={() => removeFamily(family.id)} className="text-xs text-gray-400 hover:text-red-500">
+                      <button onClick={() => removeFamily(family.id)} className="text-xs text-ink-muted hover:text-red-700">
                         Delete
                       </button>
                     )}
@@ -946,7 +949,7 @@ function RolesSection({
               </div>
 
               {g.levels.length === 0 ? (
-                <p className="mt-2 text-xs text-gray-400">No levels yet — add the first one below, or delete this ladder.</p>
+                <p className="mt-2 text-xs text-ink-muted">No levels yet — add the first one below, or delete this ladder.</p>
               ) : (
                 <ul className="mt-3 space-y-2">
                   {g.levels.map((rl) => (
@@ -987,7 +990,7 @@ function RolesSection({
                 <div className="mt-3 flex flex-wrap items-center gap-4">
                   <button
                     onClick={() => setAddingLevel({ familyId: family.id, level: nextLevelUp })}
-                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    className="text-xs font-medium text-brand hover:text-brand-hover"
                   >
                     + Add L{nextLevelUp}
                   </button>
@@ -996,14 +999,14 @@ function RolesSection({
                       JD import opens pre-scoped to this ladder. */}
                   <button
                     onClick={() => setImportPanel({ scopedFamilyId: family.id })}
-                    className="text-xs font-medium text-gray-500 hover:text-gray-800"
+                    className="text-xs font-medium text-ink-secondary hover:text-ink-body"
                   >
                     Import from a JD
                   </button>
                   {nextLevelDown !== null && (
                     <button
                       onClick={() => setAddingLevel({ familyId: family.id, level: nextLevelDown })}
-                      className="text-xs font-medium text-gray-500 hover:text-gray-800"
+                      className="text-xs font-medium text-ink-secondary hover:text-ink-body"
                       title={`This ladder starts at L${firstLevel.job_level} — add a lower level if one's missing`}
                     >
                       + Add L{nextLevelDown} (lower)
@@ -1016,7 +1019,7 @@ function RolesSection({
         })}
 
         {roleLevels.length === 0 && roleFamilies.length === 0 && (
-          <p className="text-sm text-gray-500">No roles yet. Add your first ladder below.</p>
+          <p className="text-sm text-ink-secondary">No roles yet. Add your first ladder below.</p>
         )}
       </div>
 
@@ -1124,7 +1127,7 @@ function SetupProgressHeader({
   status: SetupStatus | null;
   onStep: (id: "people" | "teams" | "roles" | "expectations") => void;
 }) {
-  if (!status) return <p className="mt-4 text-sm text-gray-500">Loading setup status...</p>;
+  if (!status) return <p className="mt-4 text-sm text-ink-secondary">Loading setup status...</p>;
   return (
     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
       {SETUP_STEP_DEFS.map((step) => {
@@ -1134,13 +1137,13 @@ function SetupProgressHeader({
             key={step.id}
             onClick={() => onStep(step.id)}
             className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
-              v.done ? "border-gray-200 bg-white hover:bg-gray-50" : "border-amber-200 bg-amber-50 hover:bg-amber-100"
+              v.done ? "border-hairline bg-white hover:bg-canvas" : "border-amber-200 bg-amber-50 hover:bg-amber-100"
             }`}
           >
-            <p className={`font-semibold ${step.id === "teams" ? "text-sm" : "text-lg"} ${v.done ? "text-gray-900" : "text-amber-800"}`}>
+            <p className={`font-semibold ${step.id === "teams" ? "text-sm" : "text-lg"} ${v.done ? "text-ink" : "text-amber-800"}`}>
               {v.count}
             </p>
-            <p className="text-xs text-gray-500">{step.label}</p>
+            <p className="text-xs text-ink-secondary">{step.label}</p>
           </button>
         );
       })}
@@ -1187,8 +1190,8 @@ function CreateRoleModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-900">Create a new role</h3>
-        <p className="mt-1 text-xs text-gray-500">
+        <h3 className="font-medium text-ink">Create a new role</h3>
+        <p className="mt-1 text-xs text-ink-secondary">
           Starts a new ladder at L1 — add more levels later from Roles &amp; expectations.
         </p>
         <input
@@ -1198,13 +1201,13 @@ function CreateRoleModal({
           placeholder="e.g. Account Executive"
           className={`${inputCls} mt-3`}
         />
-        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
         <div className="mt-4 flex items-center justify-between gap-2">
-          <button type="button" onClick={onPasteJd} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+          <button type="button" onClick={onPasteJd} className="text-xs font-medium text-brand hover:text-brand-hover">
             Paste a JD instead
           </button>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+            <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-ink-secondary hover:text-ink-body">
               Cancel
             </button>
             <button type="submit" disabled={saving || !name.trim()} className={primaryBtnCls}>
@@ -1250,8 +1253,8 @@ function CreateTeamModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-900">Create a new team</h3>
-        <p className="mt-1 text-xs text-gray-500">
+        <h3 className="font-medium text-ink">Create a new team</h3>
+        <p className="mt-1 text-xs text-ink-secondary">
           For the full org chart (parent units, leaders), use{" "}
           <Link href="/app/org" className="underline">
             Org
@@ -1265,9 +1268,9 @@ function CreateTeamModal({
             <option value="department">Department</option>
           </select>
         </div>
-        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-ink-secondary hover:text-ink-body">
             Cancel
           </button>
           <button type="submit" disabled={saving || !name.trim()} className={primaryBtnCls}>
@@ -1296,7 +1299,7 @@ function ExpectationsChip({
     return <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">No role</span>;
   }
   if (person.role_has_expectations) {
-    return <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">✓ Expectations</span>;
+    return <span className="rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-700">✓ Expectations</span>;
   }
   return (
     <button
@@ -1328,7 +1331,7 @@ function PersonRowMenu({
     <div className="relative shrink-0">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="rounded-md px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        className="rounded-md px-2 py-1 text-ink-muted hover:bg-sunken hover:text-ink-body"
         title="More actions"
         aria-label="More actions"
       >
@@ -1337,20 +1340,20 @@ function PersonRowMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg">
+          <div className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-hairline bg-white py-1 text-sm shadow-lg">
             <button
               onClick={() => {
                 setOpen(false);
                 onEdit();
               }}
-              className="block w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50"
+              className="block w-full px-3 py-1.5 text-left text-ink-body hover:bg-canvas"
             >
               Edit name &amp; email
             </button>
             <Link
               href={profileHref}
               onClick={() => setOpen(false)}
-              className="block w-full px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50"
+              className="block w-full px-3 py-1.5 text-left text-ink-body hover:bg-canvas"
             >
               Open profile
             </Link>
@@ -1359,7 +1362,7 @@ function PersonRowMenu({
                 setOpen(false);
                 onArchive();
               }}
-              className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50"
+              className="block w-full px-3 py-1.5 text-left text-red-700 hover:bg-red-50"
             >
               Archive&hellip;
             </button>
@@ -1405,7 +1408,7 @@ function EditPersonModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-900">Edit name &amp; email</h3>
+        <h3 className="font-medium text-ink">Edit name &amp; email</h3>
         <div className="mt-3 space-y-3">
           <div>
             <label className={labelCls}>Name</label>
@@ -1421,9 +1424,9 @@ function EditPersonModal({
             />
           </div>
         </div>
-        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-ink-secondary hover:text-ink-body">
             Cancel
           </button>
           <button type="submit" disabled={saving || !name.trim()} className={primaryBtnCls}>
@@ -1466,14 +1469,14 @@ function ArchiveConfirmModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
       <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-gray-900">Archive {report.name}?</h3>
-        <p className="mt-2 text-sm text-gray-500">
+        <h3 className="font-medium text-ink">Archive {report.name}?</h3>
+        <p className="mt-2 text-sm text-ink-secondary">
           They&apos;ll drop off your roster, rollups, and setup counts. Their 1:1 history, assessments, goals, and
           metrics all stay intact — you can unarchive them any time to bring them back.
         </p>
-        {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm text-ink-secondary hover:text-ink-body">
             Cancel
           </button>
           <button
@@ -1703,8 +1706,8 @@ function PeopleSection({
 
   return (
     <div>
-      <h2 className="font-medium text-gray-900">Set up your team</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <h2 className="font-medium text-ink">Set up your team</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
         Add your people, then wire each one to a role and a team — create either inline, right here, if it doesn&apos;t exist
         yet. Expectations follow the role automatically. Editing levels within a ladder, or merging near-duplicate roles,
         still happens in{" "}
@@ -1717,11 +1720,11 @@ function PeopleSection({
       <SetupProgressHeader status={setupStatus} onStep={handleStep} />
 
       {filterUnitId && (
-        <div className="mt-4 flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm">
-          <span className="text-gray-600">
-            Showing people in <span className="font-medium text-gray-900">{filterUnitName ?? "this unit"}</span>
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-hairline bg-canvas px-4 py-2 text-sm">
+          <span className="text-ink-secondary">
+            Showing people in <span className="font-medium text-ink">{filterUnitName ?? "this unit"}</span>
           </span>
-          <button onClick={onClearFilter} className="text-gray-500 underline hover:text-gray-700">
+          <button onClick={onClearFilter} className="text-ink-secondary underline hover:text-ink-body">
             Clear filter
           </button>
         </div>
@@ -1741,11 +1744,11 @@ function PeopleSection({
               key={r.id}
               id={`person-row-${r.id}`}
               className={`rounded-lg border px-4 py-3 transition-colors ${
-                highlightId === r.id ? "border-amber-300 bg-amber-50" : "border-gray-200"
+                highlightId === r.id ? "border-amber-300 bg-amber-50" : "border-hairline"
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <Link href={`/app/reports/${r.id}`} className="min-w-0 font-medium text-gray-900 hover:underline">
+                <Link href={`/app/reports/${r.id}`} className="min-w-0 font-medium text-ink hover:underline">
                   {r.name}
                 </Link>
                 <div className="flex shrink-0 items-center gap-2">
@@ -1758,7 +1761,7 @@ function PeopleSection({
                 </div>
               </div>
               {!r.role_level_id && r.role_title && (
-                <p className="mt-0.5 text-xs text-gray-400">was: &quot;{r.role_title}&quot;</p>
+                <p className="mt-0.5 text-xs text-ink-muted">was: &quot;{r.role_title}&quot;</p>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <GroupedRoleSelect
@@ -1767,7 +1770,7 @@ function PeopleSection({
                   value={r.role_level_id ?? ""}
                   onChange={(id) => assign(r, id)}
                   onCreateNew={() => setCreatingRoleFor(r)}
-                  className="w-48 truncate rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  className="w-48 truncate rounded-md border border-control px-2 py-1.5 text-sm"
                   placeholder="No role assigned"
                 />
                 <OrgUnitSelect
@@ -1775,23 +1778,23 @@ function PeopleSection({
                   value={r.org_unit_id ?? ""}
                   onChange={(id) => assignOrgUnit(r, id)}
                   onCreateNew={() => setCreatingTeamFor(r)}
-                  className="w-44 truncate rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  className="w-44 truncate rounded-md border border-control px-2 py-1.5 text-sm"
                 />
               </div>
             </li>
           );
         })}
         {visibleReports.length === 0 && reports.length > 0 && (
-          <p className="py-2 text-sm text-gray-500">
+          <p className="py-2 text-sm text-ink-secondary">
             No one in {filterUnitName ?? "this unit"} yet.{" "}
-            <button onClick={onClearFilter} className="underline hover:text-gray-700">
+            <button onClick={onClearFilter} className="underline hover:text-ink-body">
               Show everyone
             </button>
             .
           </p>
         )}
         {reports.length === 0 && (
-          <p className="py-2 text-sm text-gray-500">No direct reports yet — add your first one below.</p>
+          <p className="py-2 text-sm text-ink-secondary">No direct reports yet — add your first one below.</p>
         )}
       </ul>
 
@@ -1799,35 +1802,35 @@ function PeopleSection({
           a filter on the roster above — fetched on first expand so a
           manager who never archives anyone pays nothing for it. */}
       <div className="mt-4">
-        <button onClick={toggleShowArchived} className="text-xs font-medium text-gray-500 hover:text-gray-900">
+        <button onClick={toggleShowArchived} className="text-xs font-medium text-ink-secondary hover:text-ink">
           {showArchived ? "Hide" : "Show"} archived{setupStatus ? ` (${setupStatus.archived_people_count})` : ""}
         </button>
         {showArchived && (
           <ul className="mt-2 space-y-2">
-            {archivedLoading && <p className="py-2 text-sm text-gray-500">Loading...</p>}
+            {archivedLoading && <p className="py-2 text-sm text-ink-secondary">Loading...</p>}
             {!archivedLoading && archivedReports?.length === 0 && (
-              <p className="py-2 text-sm text-gray-500">No archived people.</p>
+              <p className="py-2 text-sm text-ink-secondary">No archived people.</p>
             )}
             {!archivedLoading &&
               archivedReports?.map((r) => (
                 <li
                   key={r.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-2.5"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-divider bg-canvas px-4 py-2.5"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium text-gray-500">{r.name}</p>
-                    <p className="text-xs text-gray-400">
+                    <p className="font-medium text-ink-secondary">{r.name}</p>
+                    <p className="text-xs text-ink-muted">
                       Archived {r.archived_at ? new Date(r.archived_at).toLocaleDateString() : ""} — history kept
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <Link href={`/app/reports/${r.id}`} className="text-xs text-gray-400 hover:text-gray-700">
+                    <Link href={`/app/reports/${r.id}`} className="text-xs text-ink-muted hover:text-ink-body">
                       Open profile
                     </Link>
                     <button
                       onClick={() => doUnarchive(r)}
                       disabled={unarchivingId === r.id}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                      className="text-xs font-medium text-brand hover:text-brand-hover disabled:opacity-50"
                     >
                       {unarchivingId === r.id ? "Unarchiving..." : "Unarchive"}
                     </button>
@@ -1838,7 +1841,7 @@ function PeopleSection({
         )}
       </div>
 
-      <form onSubmit={addPerson} className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-gray-300 p-3">
+      <form onSubmit={addPerson} className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-control p-3">
         <div>
           <label className={labelCls}>Name</label>
           <input
@@ -1993,7 +1996,7 @@ function ExpectationsSection({
 
   if (roleLevels.length === 0) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-ink-secondary">
         Expectations attach to a role — add your first role above, then come back here.
       </p>
     );
@@ -2001,14 +2004,14 @@ function ExpectationsSection({
 
   return (
     <div>
-      <h2 className="font-medium text-gray-900">What good looks like</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <h2 className="font-medium text-ink">What good looks like</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
         Define the metrics, skills, and values each role is measured against. Scales and weighting come later.
       </p>
 
       {view === "grid" || !roleLevelId ? (
         coverageLoading ? (
-          <p className="mt-6 text-sm text-gray-500">Loading...</p>
+          <p className="mt-6 text-sm text-ink-secondary">Loading...</p>
         ) : (
           <CoverageGrid
             roleLevels={roleLevels}
@@ -2079,10 +2082,10 @@ function CoverageGrid({
           role first. Same block also appears on a role's own Values tab
           (ExpectationDetail) for in-context editing. */}
       <OrgWideValuesBlock onError={onError} />
-      <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+      <div className="mt-4 overflow-hidden rounded-lg border border-hairline">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-500">
+            <tr className="border-b border-hairline bg-canvas text-left text-xs font-medium text-ink-secondary">
               <th className="px-4 py-2">Role</th>
               <th className="px-3 py-2 text-center">Metrics</th>
               <th className="px-3 py-2 text-center">Skills</th>
@@ -2093,8 +2096,8 @@ function CoverageGrid({
           <tbody>
             {groups.map((g) => (
               <Fragment key={g.family?.id ?? "ungrouped"}>
-                <tr className="border-b border-gray-100 bg-gray-50/60">
-                  <td colSpan={5} className="px-4 py-1.5 text-xs font-medium text-gray-500">
+                <tr className="border-b border-divider bg-canvas/60">
+                  <td colSpan={5} className="px-4 py-1.5 text-xs font-medium text-ink-secondary">
                     {g.family?.name ?? UNGROUPED_LABEL}
                   </td>
                 </tr>
@@ -2106,11 +2109,11 @@ function CoverageGrid({
                     { kind: "values", count: c?.values_count ?? 0 },
                   ];
                   return (
-                    <tr key={rl.id} className="border-b border-gray-100 last:border-0">
+                    <tr key={rl.id} className="border-b border-divider last:border-0">
                       {/* Session 43 (Polish Pass A, finding P5) — level rows
                           under a family header show "L1"/"L2", not the full
                           family name repeated on every row. */}
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{levelOnlyLabel(rl, g.family)}</td>
+                      <td className="px-4 py-2.5 font-medium text-ink">{levelOnlyLabel(rl, g.family)}</td>
                       {cells.map((cell) => (
                         <td key={cell.kind} className="px-3 py-2.5 text-center">
                           <button
@@ -2118,7 +2121,7 @@ function CoverageGrid({
                             className={`min-w-[2.5rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${
                               cell.count === 0
                                 ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                : "bg-sunken text-ink-body hover:bg-carbon-200"
                             }`}
                           >
                             {cell.count}
@@ -2126,7 +2129,7 @@ function CoverageGrid({
                         </td>
                       ))}
                       <td className="px-3 py-2.5 text-right">
-                        <button onClick={() => onDraft(rl.id)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                        <button onClick={() => onDraft(rl.id)} className="text-xs font-medium text-brand hover:text-brand-hover">
                           Draft with AI
                         </button>
                       </td>
@@ -2223,7 +2226,7 @@ function ExpectationDetail({
 
   return (
     <div className="mt-4">
-      <button onClick={onBack} className="text-xs font-medium text-gray-500 hover:text-gray-900">
+      <button onClick={onBack} className="text-xs font-medium text-ink-secondary hover:text-ink">
         &larr; Back to coverage
       </button>
 
@@ -2233,20 +2236,20 @@ function ExpectationDetail({
           roleFamilies={roleFamilies}
           value={roleLevelId}
           onChange={setRoleLevelId}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-control px-2 py-1.5 text-sm"
         />
-        <div className="flex rounded-md border border-gray-200 p-0.5">
+        <div className="flex rounded-md border border-hairline p-0.5">
           {KIND_TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setKind(t.id)}
-              className={`rounded px-3 py-1 text-sm ${kind === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-900"}`}
+              className={`rounded px-3 py-1 text-sm ${kind === t.id ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
             >
               {t.label}
             </button>
           ))}
         </div>
-        <button onClick={onDraft} className="ml-auto rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100">
+        <button onClick={onDraft} className="ml-auto rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-brand-hover hover:bg-blue-100">
           Draft with AI
         </button>
       </div>
@@ -2254,41 +2257,41 @@ function ExpectationDetail({
       {kind === "values" && <OrgWideValuesBlock onError={onError} />}
 
       {role && kind === "values" && (
-        <p className="mt-4 text-xs font-medium text-gray-500">{roleLabel(role)}-specific values</p>
+        <p className="mt-4 text-xs font-medium text-ink-secondary">{roleLabel(role)}-specific values</p>
       )}
 
       {loading ? (
-        <p className="mt-6 text-sm text-gray-500">Loading...</p>
+        <p className="mt-6 text-sm text-ink-secondary">Loading...</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {items.map((it) => (
-            <li key={it.id} className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
+            <li key={it.id} className="flex items-start justify-between gap-4 rounded-lg border border-hairline px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-ink">
                   {expectationName(it)}
                   {it.order_type && (
-                    <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">{it.order_type}</span>
+                    <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-normal text-ink-secondary">{it.order_type}</span>
                   )}
                   {kind === "metrics" && it.measurement_period && it.measurement_period !== "none" && (
-                    <span className="ml-2 text-xs font-normal text-gray-400">per {it.measurement_period}</span>
+                    <span className="ml-2 text-xs font-normal text-ink-muted">per {it.measurement_period}</span>
                   )}
                 </p>
                 {(it.expectation || it.description) && (
-                  <p className="mt-1 text-xs text-gray-500">{it.expectation || it.description}</p>
+                  <p className="mt-1 text-xs text-ink-secondary">{it.expectation || it.description}</p>
                 )}
               </div>
-              <button onClick={() => removeItem(it.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+              <button onClick={() => removeItem(it.id)} className="shrink-0 text-xs text-ink-muted hover:text-red-700">
                 Remove
               </button>
             </li>
           ))}
           {items.length === 0 && (
-            <p className="py-2 text-sm text-gray-500">Nothing here yet — add the first one below, or draft with AI above.</p>
+            <p className="py-2 text-sm text-ink-secondary">Nothing here yet — add the first one below, or draft with AI above.</p>
           )}
         </ul>
       )}
 
-      <form onSubmit={addItem} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+      <form onSubmit={addItem} className="mt-4 space-y-3 rounded-lg border border-dashed border-control p-4">
         <div className="flex gap-3">
           <div className="flex-1">
             <label className={labelCls}>{kind === "metrics" ? "Metric" : kind === "skills" ? "Skill" : "Value"}</label>
@@ -2461,11 +2464,11 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4">
+    <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/40 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-medium text-gray-900">Org-wide values</h3>
-          <p className="mt-1 text-xs text-gray-500">
+          <h3 className="text-sm font-medium text-ink">Org-wide values</h3>
+          <p className="mt-1 text-xs text-ink-secondary">
             Apply to every role automatically — no need to repeat a company value per role. Role-specific values
             below are additional to these, not a replacement.
           </p>
@@ -2473,24 +2476,24 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
         <button
           onClick={startDraft}
           disabled={drafting || !!draftRows}
-          className="shrink-0 rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+          className="shrink-0 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-hover hover:bg-blue-100 disabled:opacity-50"
         >
           {drafting ? "Drafting..." : "Draft with AI"}
         </button>
       </div>
 
       {draftRows && (
-        <div className="mt-3 rounded-md border border-indigo-200 bg-white p-3">
-          <p className="text-xs font-medium text-gray-500">
+        <div className="mt-3 rounded-md border border-blue-200 bg-white p-3">
+          <p className="text-xs font-medium text-ink-secondary">
             Drafted from your company name — review, edit, and choose what to keep.
           </p>
-          {draftError && <p className="mt-2 text-xs text-red-500">{draftError}</p>}
+          {draftError && <p className="mt-2 text-xs text-red-700">{draftError}</p>}
           {draftRows.length === 0 && !draftError && (
-            <p className="mt-2 text-xs text-gray-500">Nothing drafted — add values manually below.</p>
+            <p className="mt-2 text-xs text-ink-secondary">Nothing drafted — add values manually below.</p>
           )}
           <ul className="mt-2 space-y-2">
             {draftRows.map((row, i) => (
-              <li key={i} className="flex items-start gap-2 rounded-md border border-gray-100 p-2">
+              <li key={i} className="flex items-start gap-2 rounded-md border border-divider p-2">
                 <input
                   type="checkbox"
                   checked={row.included}
@@ -2501,13 +2504,13 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
                   <input
                     value={row.name}
                     onChange={(e) => patchDraftRow(i, { name: e.target.value })}
-                    className="w-full rounded border border-gray-200 px-2 py-1 text-sm font-medium"
+                    className="w-full rounded border border-hairline px-2 py-1 text-sm font-medium"
                   />
                   <input
                     value={row.description ?? ""}
                     onChange={(e) => patchDraftRow(i, { description: e.target.value })}
                     placeholder="What living it looks like"
-                    className="w-full rounded border border-gray-200 px-2 py-1 text-xs text-gray-500"
+                    className="w-full rounded border border-hairline px-2 py-1 text-xs text-ink-secondary"
                   />
                 </div>
               </li>
@@ -2521,7 +2524,7 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
             >
               {committingDraft ? "Saving..." : `Add ${draftRows.filter((r) => r.included).length} value${draftRows.filter((r) => r.included).length === 1 ? "" : "s"}`}
             </button>
-            <button onClick={() => setDraftRows(null)} className="text-xs text-gray-500 hover:text-gray-900">
+            <button onClick={() => setDraftRows(null)} className="text-xs text-ink-secondary hover:text-ink">
               Cancel
             </button>
           </div>
@@ -2529,21 +2532,21 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
       )}
 
       {loading ? (
-        <p className="mt-3 text-xs text-gray-500">Loading...</p>
+        <p className="mt-3 text-xs text-ink-secondary">Loading...</p>
       ) : (
         <ul className="mt-3 space-y-1.5">
           {items.map((it) => (
             <li key={it.id} className="flex items-start justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900">{expectationName(it)}</p>
-                {it.description && <p className="mt-0.5 text-xs text-gray-500">{it.description}</p>}
+                <p className="font-medium text-ink">{expectationName(it)}</p>
+                {it.description && <p className="mt-0.5 text-xs text-ink-secondary">{it.description}</p>}
               </div>
-              <button onClick={() => removeItem(it.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+              <button onClick={() => removeItem(it.id)} className="shrink-0 text-xs text-ink-muted hover:text-red-700">
                 Remove
               </button>
             </li>
           ))}
-          {items.length === 0 && <p className="text-xs text-gray-500">No org-wide values yet.</p>}
+          {items.length === 0 && <p className="text-xs text-ink-secondary">No org-wide values yet.</p>}
         </ul>
       )}
       <form onSubmit={addItem} className="mt-3 flex flex-wrap gap-2">
@@ -2688,12 +2691,12 @@ function DraftReviewPanel({
       <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="font-medium text-gray-900">Draft with AI {role ? `— ${roleLabel(role)}` : ""}</h3>
-            <p className="mt-1 text-xs text-gray-500">
+            <h3 className="font-medium text-ink">Draft with AI {role ? `— ${roleLabel(role)}` : ""}</h3>
+            <p className="mt-1 text-xs text-ink-secondary">
               Review each item before it saves. Uncheck anything that doesn&apos;t fit, edit the rest.
             </p>
           </div>
-          <button onClick={onClose} className="shrink-0 text-sm text-gray-400 hover:text-gray-900">
+          <button onClick={onClose} className="shrink-0 text-sm text-ink-muted hover:text-ink">
             Close
           </button>
         </div>
@@ -2702,20 +2705,20 @@ function DraftReviewPanel({
           <button
             onClick={runDraft}
             disabled={loading}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-control px-3 py-1.5 text-xs font-medium text-ink-body hover:bg-canvas disabled:opacity-50"
           >
             {loading ? "Drafting..." : "Regenerate with AI"}
           </button>
           {otherRoles.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">or copy from</span>
+              <span className="text-xs text-ink-secondary">or copy from</span>
               <select
                 value={copyFromId}
                 onChange={(e) => {
                   setCopyFromId(e.target.value);
                   copyFrom(e.target.value);
                 }}
-                className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                className="rounded-md border border-control px-2 py-1 text-xs"
               >
                 <option value="">Choose a role...</option>
                 {otherRoles.map((rl) => (
@@ -2728,7 +2731,7 @@ function DraftReviewPanel({
           )}
         </div>
 
-        {panelError && <p className="mt-3 text-sm text-red-500">{panelError}</p>}
+        {panelError && <p className="mt-3 text-sm text-red-700">{panelError}</p>}
 
         <DraftExpectationsReview
           metrics={metrics}
@@ -2740,11 +2743,11 @@ function DraftReviewPanel({
           loading={loading}
         />
 
-        <div className="mt-6 flex items-center gap-3 border-t border-gray-100 pt-4">
+        <div className="mt-6 flex items-center gap-3 border-t border-divider pt-4">
           <button onClick={commit} disabled={committing || loading || includedCount === 0} className={primaryBtnCls}>
             {committing ? "Saving..." : `Add ${includedCount} expectation${includedCount === 1 ? "" : "s"}`}
           </button>
-          <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-900">
+          <button onClick={onClose} className="text-sm text-ink-secondary hover:text-ink">
             Cancel
           </button>
         </div>
@@ -2848,14 +2851,14 @@ function CapacitySection({
     }
   }
 
-  if (!settings) return <p className="text-gray-500">Loading...</p>;
+  if (!settings) return <p className="text-ink-secondary">Loading...</p>;
 
   const roleLevelsWithoutUnit = roleLevels.filter((rl) => !workUnits.some((w) => w.role_level_id === rl.id));
 
   return (
     <div>
-      <h2 className="font-medium text-gray-900">Baseline capacity</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <h2 className="font-medium text-ink">Baseline capacity</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
         The default working week for everyone on your team, before time off. Target utilization is deliberately
         under 100% — it reserves room for meetings, admin, and the unexpected. Override either number for a specific
         person on their report page.
@@ -2899,7 +2902,7 @@ function CapacitySection({
             onChange={(e) => setOffDaysPerYear(parseFloat(e.target.value || "0"))}
             className={`${inputCls} max-w-[9rem]`}
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-ink-muted">
             Vacation, sick, and holiday days assumed per year (e.g. 15 vacation + 6 sick = 21). This is a separate
             buffer from target utilization — target utilization covers the daily overhead of a working day; this
             covers whole days not worked at all. It&apos;s used to smooth out capacity for a period until you log
@@ -2910,20 +2913,20 @@ function CapacitySection({
           <button type="submit" disabled={saving} className={primaryBtnCls}>
             {saving ? "Saving..." : "Save"}
           </button>
-          {saved && <span className="text-sm text-green-600">Saved</span>}
+          {saved && <span className="text-sm text-teal-700">Saved</span>}
         </div>
       </form>
 
-      <h2 className="mt-10 font-medium text-gray-900">Work units by role</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <h2 className="mt-10 font-medium text-ink">Work units by role</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
         Optional. If a role thinks in tickets, story points, or campaigns rather than hours, set the conversion here
         — the Capacity page will show both.
       </p>
 
       {roleLevels.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-ink-secondary">
           Work units attach to a role — set up your first role in{" "}
-          <span className="font-medium text-gray-700">Roles &amp; expectations</span> and come back here.
+          <span className="font-medium text-ink-body">Roles &amp; expectations</span> and come back here.
         </p>
       ) : (
         <>
@@ -2931,24 +2934,24 @@ function CapacitySection({
             {workUnits.map((wu) => {
               const rl = roleLevels.find((r) => r.id === wu.role_level_id);
               return (
-                <li key={wu.id} className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
+                <li key={wu.id} className="flex items-center justify-between gap-4 rounded-lg border border-hairline px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{rl ? roleLabel(rl) : "Unknown role"}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm font-medium text-ink">{rl ? roleLabel(rl) : "Unknown role"}</p>
+                    <p className="text-xs text-ink-secondary">
                       1 {wu.unit_name} &asymp; {wu.hours_per_unit}h
                     </p>
                   </div>
-                  <button onClick={() => removeWorkUnit(wu.id)} className="shrink-0 text-xs text-gray-400 hover:text-red-500">
+                  <button onClick={() => removeWorkUnit(wu.id)} className="shrink-0 text-xs text-ink-muted hover:text-red-700">
                     Remove
                   </button>
                 </li>
               );
             })}
-            {workUnits.length === 0 && <p className="py-2 text-sm text-gray-500">No work units set yet — hours are shown as-is.</p>}
+            {workUnits.length === 0 && <p className="py-2 text-sm text-ink-secondary">No work units set yet — hours are shown as-is.</p>}
           </ul>
 
           {roleLevelsWithoutUnit.length > 0 && (
-            <form onSubmit={addWorkUnit} className="mt-4 space-y-3 rounded-lg border border-dashed border-gray-300 p-4">
+            <form onSubmit={addWorkUnit} className="mt-4 space-y-3 rounded-lg border border-dashed border-control p-4">
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className={labelCls}>Role</label>

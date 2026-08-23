@@ -34,11 +34,11 @@ const STATUS_OPTIONS: { id: GoalStatus; label: string }[] = [
 ];
 
 const DOT_STYLES: Record<GoalStatus, string> = {
-  active: "bg-gray-400",
-  on_track: "bg-green-500",
+  active: "bg-ink-muted",
+  on_track: "bg-brand",
   at_risk: "bg-amber-500",
   completed: "bg-blue-500",
-  cancelled: "bg-gray-300",
+  cancelled: "bg-carbon-300",
 };
 
 export function daysSince(iso: string) {
@@ -59,9 +59,9 @@ export function isStale(iso: string | null | undefined) {
 
 export function TrendArrow({ trend }: { trend: CheckInTrend | null | undefined }) {
   if (!trend) return null;
-  if (trend === "up") return <span className="text-green-600" title="Progress up since last check-in">↑</span>;
-  if (trend === "down") return <span className="text-red-500" title="Progress down since last check-in">↓</span>;
-  return <span className="text-gray-400" title="Progress flat since last check-in">→</span>;
+  if (trend === "up") return <span className="text-teal-700" title="Progress up since last check-in">↑</span>;
+  if (trend === "down") return <span className="text-red-700" title="Progress down since last check-in">↓</span>;
+  return <span className="text-ink-muted" title="Progress flat since last check-in">→</span>;
 }
 
 // Average of the latest asserted progress % across a set of goals/projects
@@ -84,13 +84,13 @@ export function averageProgress(items: { progress?: number | null }[]): number |
 export function ProgressBar({ progress, status }: { progress: number | null | undefined; status: GoalStatus }) {
   if (progress == null) return null;
   const barColor =
-    status === "at_risk" ? "bg-amber-500" : status === "completed" ? "bg-blue-500" : "bg-green-500";
+    status === "at_risk" ? "bg-amber-500" : status === "completed" ? "bg-blue-500" : "bg-brand";
   return (
     <div className="flex flex-1 items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
         <div className={`h-full rounded-full ${barColor}`} style={{ width: `${progress}%` }} />
       </div>
-      <span className="shrink-0 text-xs font-medium text-gray-600">{progress}%</span>
+      <span className="shrink-0 text-xs font-medium text-ink-secondary">{progress}%</span>
     </div>
   );
 }
@@ -175,24 +175,24 @@ export default function CheckInPanel({
   }
 
   return (
-    <div className="mt-2 border-t border-gray-100 pt-2">
+    <div className="mt-2 border-t border-divider pt-2">
       {/* Summary strip */}
       <div className="flex items-center gap-3">
         <ProgressBar progress={progress} status={status} />
         <TrendArrow trend={trend} />
-        <span className={`text-xs ${stale ? "font-medium text-amber-600" : "text-gray-400"}`}>
+        <span className={`text-xs ${stale ? "font-medium text-amber-700" : "text-ink-muted"}`}>
           {freshnessLabel(lastCheckInAt)}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {lastCheckInAt && (
-            <button onClick={toggleHistory} className="text-xs text-gray-400 hover:text-gray-700">
+            <button onClick={toggleHistory} className="text-xs text-ink-muted hover:text-ink-body">
               {historyOpen ? "Hide history" : "History"}
             </button>
           )}
           {!formOpen && (
             <button
               onClick={openForm}
-              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-control px-2.5 py-1 text-xs font-medium text-ink-body hover:bg-canvas"
             >
               Check in
             </button>
@@ -202,14 +202,14 @@ export default function CheckInPanel({
 
       {/* Quick check-in form */}
       {formOpen && (
-        <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-dashed border-gray-300 p-3">
+        <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-dashed border-control p-3">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Status</label>
               <select
                 value={formStatus}
                 onChange={(e) => setFormStatus(e.target.value as GoalStatus)}
-                className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                className="rounded-md border border-control px-2 py-1.5 text-sm"
               >
                 {STATUS_OPTIONS.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -219,23 +219,23 @@ export default function CheckInPanel({
               </select>
             </div>
             <div className="w-24">
-              <label className="mb-1 block text-xs font-medium text-gray-500">Progress %</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Progress %</label>
               <input
                 type="number"
                 min={0}
                 max={100}
                 value={formProgress}
                 onChange={(e) => setFormProgress(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                className="w-full rounded-md border border-control px-2 py-1.5 text-sm"
                 placeholder="—"
               />
             </div>
             <div className="min-w-40 flex-1">
-              <label className="mb-1 block text-xs font-medium text-gray-500">Note (optional)</label>
+              <label className="mb-1 block text-xs font-medium text-ink-secondary">Note (optional)</label>
               <input
                 value={formNote}
                 onChange={(e) => setFormNote(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                className="w-full rounded-md border border-control px-2 py-1.5 text-sm"
                 placeholder="One line on where this stands"
               />
             </div>
@@ -243,16 +243,16 @@ export default function CheckInPanel({
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 {saving ? "Logging..." : "Log check-in"}
               </button>
-              <button type="button" onClick={() => setFormOpen(false)} className="text-xs text-gray-500 hover:text-gray-900">
+              <button type="button" onClick={() => setFormOpen(false)} className="text-xs text-ink-secondary hover:text-ink">
                 Cancel
               </button>
             </div>
           </div>
-          {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+          {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
         </form>
       )}
 
@@ -260,15 +260,15 @@ export default function CheckInPanel({
       {historyOpen && (
         <ul className="mt-2 space-y-1.5">
           {history === null ? (
-            <li className="text-xs text-gray-400">Loading...</li>
+            <li className="text-xs text-ink-muted">Loading...</li>
           ) : history.length === 0 ? (
-            <li className="text-xs text-gray-400">No check-ins yet.</li>
+            <li className="text-xs text-ink-muted">No check-ins yet.</li>
           ) : (
             history.map((ci) => (
-              <li key={ci.id} className="flex items-baseline gap-2 text-xs text-gray-500">
+              <li key={ci.id} className="flex items-baseline gap-2 text-xs text-ink-secondary">
                 <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 self-center rounded-full ${DOT_STYLES[ci.status]}`} />
-                <span className="shrink-0 text-gray-400">{formatDateTime(ci.created_at)}</span>
-                <span className="shrink-0 font-medium text-gray-600">
+                <span className="shrink-0 text-ink-muted">{formatDateTime(ci.created_at)}</span>
+                <span className="shrink-0 font-medium text-ink-secondary">
                   {STATUS_OPTIONS.find((s) => s.id === ci.status)?.label}
                   {ci.progress != null && ` · ${ci.progress}%`}
                 </span>

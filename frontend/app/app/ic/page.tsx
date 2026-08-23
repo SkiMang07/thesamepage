@@ -36,10 +36,10 @@ function ICLanding() {
   return (
     <main className="mx-auto max-w-sm px-6 py-24 text-center">
       <h1 className="text-2xl font-semibold">You&apos;re logged in</h1>
-      {status === "pending" && <p className="mt-4 text-gray-500">Setting up your account…</p>}
-      {status === "error" && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {status === "pending" && <p className="mt-4 text-ink-secondary">Setting up your account…</p>}
+      {status === "error" && <p className="mt-4 text-sm text-red-700">{error}</p>}
       {status === "done" && (
-        <p className="mt-4 text-gray-500">
+        <p className="mt-4 text-ink-secondary">
           Your manager will be adding more here soon. There&apos;s nothing to do on your end yet.
         </p>
       )}

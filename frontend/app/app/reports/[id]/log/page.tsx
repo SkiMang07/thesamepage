@@ -57,13 +57,13 @@ export default function LogOneOnOnePage() {
 
   return (
     <PageShell maxWidth="2xl">
-      <Link href={`/app/reports/${id}`} className="text-sm text-gray-500 hover:underline">
+      <Link href={`/app/reports/${id}`} className="text-sm text-ink-secondary hover:underline">
         ← Back
       </Link>
       <h1 className="mt-4 text-2xl font-semibold">
         Log a 1:1{reportName && ` with ${reportName.split(" ")[0]}`}
       </h1>
-      <p className="mt-2 text-gray-500">
+      <p className="mt-2 text-ink-secondary">
         For conversations that happened without prep. Type what you talked
         about, or paste your notes from Granola or whatever you record with —
         we&apos;ll draft the summary and pull out the commitments for you to review.
@@ -75,13 +75,13 @@ export default function LogOneOnOnePage() {
           onChange={(e) => setNotes(e.target.value)}
           placeholder={"– Caught up after standup about the Acme renewal\n– I'll pull the usage numbers before Thursday\n– She'll set up a call with their new champion"}
           rows={10}
-          className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 placeholder-gray-400 focus:border-gray-900 focus:outline-none"
+          className="w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
         />
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
         <button
           type="submit"
           disabled={wrappingUp || !notes.trim()}
-          className="mt-4 w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+          className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
         >
           {wrappingUp ? "Drafting your log…" : "Wrap up & log →"}
         </button>

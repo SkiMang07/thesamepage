@@ -7,7 +7,7 @@ export default function BlogIndexPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-24">
       <h1 className="text-3xl font-semibold">Notes on managing people</h1>
-      <p className="mt-4 text-gray-600">Posts coming soon.</p>
+      <p className="mt-4 text-ink-secondary">Posts coming soon.</p>
     </main>
   );
 }

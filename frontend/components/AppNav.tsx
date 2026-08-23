@@ -37,6 +37,7 @@ import { useQuickAdd } from "@/lib/quick-add-context";
 import { createClient } from "@/lib/supabase";
 import { Icon, NAV_STRIP_HEIGHT, getNavContext, useZoneData } from "@/components/ZoneMap";
 import QuickAddModal from "@/components/QuickAddModal";
+import Logo from "@/components/Logo";
 
 function initialsOf(name: string | null) {
   if (!name) return "—";
@@ -98,19 +99,17 @@ export default function AppNav() {
       {/* Header — invariant chrome, every page. Bar spans full width; inner
           wrapper (mx-auto max-w-7xl) aligns the actual content with the
           page's own <main> below it. */}
-      <header className="sticky top-0 z-40 border-b border-[#e7e5e0] bg-[#faf9f6]/92 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-[#DDE0E3] bg-[#F5F8FA]/92 backdrop-blur">
         <div className={`mx-auto flex ${NAV_STRIP_HEIGHT} max-w-7xl items-center gap-3 px-6 sm:px-8`}>
-          <Link href="/app/dashboard" className="flex shrink-0 items-center gap-2 text-[14.5px] font-semibold text-gray-900">
-            <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#4f46e5] to-[#7c4ddb] text-xs text-white">
-              ●
-            </span>
+          <Link href="/app/dashboard" className="flex shrink-0 items-center gap-2 text-[14.5px] font-semibold text-ink">
+            <Logo className="h-[22px] w-auto text-brand" />
             The Same Page
           </Link>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
               onClick={openQuickAdd}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover"
             >
               + Quick add
             </button>
@@ -119,13 +118,13 @@ export default function AppNav() {
               title={drawerOpen ? "Close Scribe (⌘J)" : "Open Scribe (⌘J)"}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium shadow-sm transition-all ${
                 drawerOpen
-                  ? "bg-gray-900 text-white"
-                  : "bg-gradient-to-br from-[#4f46e5] to-[#7c4ddb] text-white hover:shadow-md hover:brightness-105"
+                  ? "bg-brand text-white"
+                  : "bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md"
               }`}
             >
               <span aria-hidden>✦</span>
               <span>Scribe</span>
-              <span className={`text-xs ${drawerOpen ? "text-gray-400" : "text-white/70"}`}>⌘J</span>
+              <span className={`text-xs ${drawerOpen ? "text-ink-muted" : "text-white/70"}`}>⌘J</span>
             </button>
             <div className="relative" ref={avatarMenuRef}>
               <button
@@ -133,7 +132,7 @@ export default function AppNav() {
                 title={zone.profileName ?? undefined}
                 aria-haspopup="menu"
                 aria-expanded={avatarMenuOpen}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#15171c] text-[11px] font-semibold text-white transition hover:ring-2 hover:ring-[#4f46e5]/30"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#222B32] text-[11px] font-semibold text-white transition hover:ring-2 hover:ring-[#087E78]/30"
               >
                 {initialsOf(zone.profileName)}
               </button>
@@ -141,28 +140,28 @@ export default function AppNav() {
               {avatarMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-9 z-50 w-56 overflow-hidden rounded-lg border border-[#e7e5e0] bg-white shadow-lg"
+                  className="absolute right-0 top-9 z-50 w-56 overflow-hidden rounded-lg border border-[#DDE0E3] bg-white shadow-lg"
                 >
-                  <div className="border-b border-[#f1efeb] px-3 py-2.5">
-                    <p className="truncate text-sm font-medium text-gray-900">{zone.profileName || "—"}</p>
-                    {zone.profileEmail && <p className="truncate text-xs text-gray-400">{zone.profileEmail}</p>}
+                  <div className="border-b border-[#ECEFF2] px-3 py-2.5">
+                    <p className="truncate text-sm font-medium text-ink">{zone.profileName || "—"}</p>
+                    {zone.profileEmail && <p className="truncate text-xs text-ink-muted">{zone.profileEmail}</p>}
                   </div>
                   <Link
                     href="/app/settings"
                     role="menuitem"
                     onClick={() => setAvatarMenuOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-ink-body hover:bg-canvas"
                   >
-                    <Icon name="settings" className="h-[15px] w-[15px] text-gray-400" />
+                    <Icon name="settings" className="h-[15px] w-[15px] text-ink-muted" />
                     Settings
                   </Link>
                   <button
                     role="menuitem"
                     onClick={handleSignOut}
                     disabled={signingOut}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-body hover:bg-canvas disabled:opacity-50"
                   >
-                    <Icon name="back" className="h-[15px] w-[15px] text-gray-400" />
+                    <Icon name="back" className="h-[15px] w-[15px] text-ink-muted" />
                     {signingOut ? "Signing out…" : "Sign out"}
                   </button>
                 </div>
@@ -181,7 +180,7 @@ export default function AppNav() {
           height; now an exact match since the header's height is a fixed
           token rather than something to measure). */}
       {ctx.kind === "person" && (
-        <div className="sticky top-14 z-30 border-b border-[#f1efeb] bg-[#faf9f6]/92 backdrop-blur">
+        <div className="sticky top-14 z-30 border-b border-[#ECEFF2] bg-[#F5F8FA]/92 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-6 py-2 sm:px-8">
             {zone.roster.map((p) => {
               const active = p.id === ctx.reportId;
@@ -190,7 +189,7 @@ export default function AppNav() {
                   key={p.id}
                   href={ctx.viaItem.id === "assessments" ? `/app/assessments/${p.id}` : `/app/reports/${p.id}`}
                   className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border py-1 pl-1 pr-3 text-[13px] transition hover:-translate-y-px ${
-                    active ? "border-[#e7e5e0] bg-white font-semibold shadow-sm" : "border-transparent text-gray-600 hover:border-[#e7e5e0] hover:bg-white"
+                    active ? "border-[#DDE0E3] bg-white font-semibold shadow-sm" : "border-transparent text-ink-secondary hover:border-[#DDE0E3] hover:bg-white"
                   }`}
                 >
                   <span
@@ -200,12 +199,12 @@ export default function AppNav() {
                     {p.initials}
                   </span>
                   {p.firstName}
-                  {p.due && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#d99b28]" />}
+                  {p.due && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#B67118]" />}
                 </Link>
               );
             })}
 
-            <Link href="/app/team" className="ml-auto shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] text-gray-500 hover:bg-white hover:text-gray-900">
+            <Link href="/app/team" className="ml-auto shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] text-ink-secondary hover:bg-white hover:text-ink">
               All {zone.roster.length} →
             </Link>
           </div>

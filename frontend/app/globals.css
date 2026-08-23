@@ -1,3 +1,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Current & Carbon base layer.
+   Colour tokens themselves live in tailwind.config.js; this file only sets the
+   app-wide defaults that are awkward to express as utilities.
+   --------------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    /* The page ground. Cards are white and sit ON this, so a card is legible
+       by its own fill, not only by its 1px hairline — which is also how the
+       input/border contrast requirement (WCAG 1.4.11) is satisfied without
+       darkening every border to a heavy 3:1 grey. */
+    background-color: theme("colors.canvas");
+  }
+  body {
+    color: theme("colors.ink.DEFAULT");
+  }
+
+  /* Focus. Before this the app had eight `focus:outline-none` and five
+     `focus:border-gray-900` and nothing else — ~70 inputs inherited the bare
+     browser outline and several controls had no focus affordance at all.
+     Blue is the locked accent for focus (docs/branding/colors/README.md),
+     which also keeps it visually distinct from teal selection state. */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid theme("colors.blue.600");
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+}

@@ -76,8 +76,8 @@ export default function WrapUpReview({
 
   function WhoToggle({ c }: { c: EditableCommitment }) {
     const base = "rounded-full px-3 py-1 text-xs font-medium";
-    const on = "bg-gray-900 text-white";
-    const off = "bg-gray-100 text-gray-500 hover:bg-gray-200";
+    const on = "bg-brand text-white";
+    const off = "bg-sunken text-ink-secondary hover:bg-carbon-200";
     const set = (committed_by: CommittedBy) => updateCommitment(c.key, { committed_by });
     return (
       <div className="flex gap-1">
@@ -93,19 +93,19 @@ export default function WrapUpReview({
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
-      <button onClick={onBack} className="text-sm text-gray-500 hover:underline">
+      <button onClick={onBack} className="text-sm text-ink-secondary hover:underline">
         ← {backLabel}
       </button>
       <h1 className="mt-4 text-2xl font-semibold">Review before saving</h1>
-      <p className="mt-2 text-gray-500">
+      <p className="mt-2 text-ink-secondary">
         Drafted from your notes — fix anything that&apos;s off. The summary shows up in
         history and next time you prep; commitments get tracked until resolved.
       </p>
 
       <div className="mt-8">
-        <label className="block text-sm font-medium text-gray-700">Summary</label>
+        <label className="block text-sm font-medium text-ink-body">Summary</label>
         {!draft.summary && (
-          <p className="mt-1 text-sm text-amber-600">
+          <p className="mt-1 text-sm text-amber-700">
             Couldn&apos;t draft a summary from these notes — write a quick one below.
           </p>
         )}
@@ -113,36 +113,36 @@ export default function WrapUpReview({
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
           rows={5}
-          className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 focus:border-gray-900 focus:outline-none"
+          className="mt-2 w-full rounded-lg border border-control px-4 py-3 text-ink-body focus:border-brand focus:outline-none"
         />
       </div>
 
       <div className="mt-8">
-        <p className="block text-sm font-medium text-gray-700">
+        <p className="block text-sm font-medium text-ink-body">
           Commitments{" "}
-          <span className="font-normal text-gray-400">— who owes what by when</span>
+          <span className="font-normal text-ink-muted">— who owes what by when</span>
         </p>
 
         {commitments.length === 0 && (
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-sm text-ink-secondary">
             None picked up from the notes. Add one below if something was agreed.
           </p>
         )}
 
         <ul className="mt-3 space-y-3">
           {commitments.map((c) => (
-            <li key={c.key} className="rounded-lg border border-gray-200 px-4 py-3">
+            <li key={c.key} className="rounded-lg border border-hairline px-4 py-3">
               <div className="flex items-start gap-3">
                 <input
                   value={c.description}
                   onChange={(e) => updateCommitment(c.key, { description: e.target.value })}
                   placeholder="What was agreed?"
-                  className="min-w-0 flex-1 border-0 p-0 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
+                  className="min-w-0 flex-1 border-0 p-0 text-ink-body placeholder-ink-faint focus:outline-none focus:ring-0"
                 />
                 <button
                   type="button"
                   onClick={() => setCommitments((cs) => cs.filter((x) => x.key !== c.key))}
-                  className="text-gray-300 hover:text-gray-500"
+                  className="text-ink-faint hover:text-ink-secondary"
                   title="Remove"
                 >
                   ×
@@ -154,7 +154,7 @@ export default function WrapUpReview({
                   type="date"
                   value={c.due_date ?? ""}
                   onChange={(e) => updateCommitment(c.key, { due_date: e.target.value || null })}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 focus:border-gray-400 focus:outline-none"
+                  className="rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary focus:border-control focus:outline-none"
                 />
               </div>
             </li>
@@ -164,18 +164,18 @@ export default function WrapUpReview({
         <button
           type="button"
           onClick={addCommitment}
-          className="mt-3 text-sm text-gray-500 hover:underline"
+          className="mt-3 text-sm text-ink-secondary hover:underline"
         >
           + Add commitment
         </button>
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       <button
         onClick={handleSave}
         disabled={saving || !summary.trim()}
-        className="mt-8 w-full rounded-md bg-gray-900 px-4 py-3 font-medium text-white hover:bg-gray-700 disabled:opacity-40"
+        className="mt-8 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
       >
         {saving ? "Saving…" : "Save and finish"}
       </button>

@@ -23,6 +23,50 @@ automatically.
 
 ---
 
+## Session 58 — 2026-08-23
+
+**Goal:** Andrew had settled the brand with ChatGPT in another session — Current & Carbon (palette
+#11) and the T10-C logo — and asked to get both into the live app. His words: the layout and frame
+are right, "the colors are all over the place."
+
+**What was done:** Measured it first — 12 hue families live across the app (Team alone used ten),
+`theme.extend` empty, no `public/` at all. Built `frontend/tailwind.config.js` into the colour system
+(OKLCH ramps pinned so each locked hex reproduces exactly) and `frontend/lib/tokens.ts` for the
+recurring class strings. Migrated 31 files, 1,395 substitutions; zero hardcoded hexes remain under
+`app/` or `components/`. Vector-traced the logo — `components/Logo.tsx` plus `public/` masters,
+favicon and app icons. Collapsed the three zone hues in `ZoneMap.tsx`/`Sidebar.tsx`. New
+`docs/systems/brand.md`.
+
+**Decisions made / locked:**
+- **Five colour roles, nothing else:** brand teal, attention amber, critical red, info blue, inert
+  carbon. **Blue is reserved for Scribe, AI surfaces and focus rings** — the palette README names
+  blue creep as the specific way this palette goes generic, so blue is never a status or a zone.
+- **The locked success green `#24745B` is not used; teal absorbs "good".** It measures dE2000 = 8.8
+  from brand teal — the same colour to the eye. Keeping both meant one was decoration pretending to
+  be meaning.
+- **The ink scale's floor for real text is `ink-muted` (5.2:1).** This was a defect, not a taste
+  call: Tailwind `gray-400` was the app's most-used text colour at 232 usages and sits at 2.54:1 on
+  white — every metadata line a manager was expected to read.
+- **Zone hues dropped**; zones are told apart by icon, label and position. Teal, blue and carbon
+  minus reserved blue left no third zone colour that wouldn't dilute the brand. Session 55's bold
+  gradient tile *shape* stands — only its per-hue colouring is superseded.
+- **`tailwind.config.js` remaps the stock gray/green/indigo/rose/sky/cyan families onto brand ramps**,
+  so a missed `text-rose-500` renders as on-brand red. The palette is closed by construction rather
+  than by everyone remembering the rule.
+- Andrew waived the usual mockup-first step for this one and asked to build straight through.
+
+**Found along the way:** T10-C's negative channels close up below ~32px and it reads as a blob — the
+limitation `docs/branding/tsp/README.md` predicted. `public/tsp-mark-small.svg` (widened channels) and
+`public/favicon.svg` (knocked out of a teal tile) are the small-size cuts; recorded in
+`docs/systems/brand.md`.
+
+**Next step:** Andrew to dogfood the recolour against real data — the sandbox has no Supabase creds,
+so only the static marketing route and a throwaway token proof page were rendered. Two build tarballs
+are stranded in `_to_delete/` (gitignored; device_bash can't delete). Wordmark lockups, the typeface
+pairing and trademark clearance are all still open.
+
+---
+
 ## Session 57 — 2026-08-22
 
 **Goal:** Andrew flagged that the reference docs had gotten long enough to burn real tokens every
@@ -214,53 +258,6 @@ convention as the Team/Goals/Projects KPI strips, or stay a deliberately calmer 
 
 ---
 
-## Session 53 — 2026-08-22
-
-**Goal:** Build Goals and Projects per the Option A direction Session 52 locked (KPI strip + border-l-4
-card grid + inline-SVG progress ring), matching the visual language Team (Session 24) and the Person
-page (Session 50) already shipped. A build session, not a design session — direction was pre-approved
-via the published "Goals and Projects Redesign Options" canvas.
-
-**What was done:**
-- `frontend/app/app/goals/page.tsx` — widened `max-w-3xl` → `max-w-7xl`; added a `KpiStrip` (4
-  gradient tiles: goals on track, at risk, due this week, no initiative attached — scoped to
-  whichever level tab is currently selected, so the strip moves with the tab the same way Team's
-  strip moves with its team-selector filter); kept the level-tab pill row, unretired; replaced the
-  plain bordered `<ul>` list with a responsive `GoalGrid` of `border-l-4` accented cards
-  (`STATUS_BORDER`/`STATUS_STYLES` ported verbatim from `team/page.tsx`, same hex values), each
-  carrying its own inline-SVG `ProgressRing` (same donut path/stroke as Team's `GoalsCard` ring, but
-  driven by the single goal's own `progress` instead of an aggregate — renders an honest em-dash when
-  no check-in exists rather than a fabricated 0%). `CheckInPanel` reused as-is inside each card;
-  add/edit forms untouched, just refit (the edit form now spans the full grid row).
-- `frontend/app/app/projects/page.tsx` — same treatment, no level tabs (flat list grouped by
-  assignee, unchanged from before). `KpiStrip`'s 4th tile is "no goal attached" — the inverse of
-  Goals' "no initiative attached," completing the goals=what/projects=how cross-check from the other
-  direction. `ProjectGrid` mirrors `GoalGrid`'s card shape exactly.
-
-**Decisions made / locked:**
-- Only the on-track fraction tile gets the dynamic gray/amber/green tone (Team's exact data-trust
-  rule: a fraction tile must never render a fixed "success" color — "0/N on track" is not success);
-  the other 3 tiles (at risk, due this week, no-initiative/no-goal) use a fixed tone regardless of
-  count, matching how Team's own `KpiStrip` treats its non-fraction tiles.
-- The progress ring stays a fixed green stroke regardless of goal/project status — an exact port of
-  Team's ring, which is status-agnostic — rather than inventing a per-status recoloring convention
-  the source doesn't have.
-- Card left-accent uses `border-l-4` plus the ported `STATUS_BORDER` class with no competing
-  all-sides border class on the card (same technique Team's list items use), so the ported hex
-  values apply unmodified instead of needing a new directional-border map.
-
-**Verification:** Frontend-only change (no schema/backend touch). Repo tarred from the device's
-working copy (git status clean going in) and rebuilt in the cloud sandbox since `next build` exceeds
-device_bash's ~45s per-call cap: fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean
-(21/21 routes, `/app/goals` and `/app/projects` both compiled with no errors). Both files written back
-to Andrew's disk via the device bridge (mtime-guarded).
-
-**Next step:** Andrew to dogfood both pages live — confirm the KPI counts read right against real
-data, and decide whether a level tab with zero goals needs a Person-page-style empty state (currently
-still just plain text, unchanged from before this pass).
-
----
-
 ## Archived sessions (compact index)
 
 The 20 most recent archived sessions keep their goal plus the decisions locked
@@ -271,6 +268,7 @@ lines keep the goal alone. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 53 — 2026-08-22:** Build Goals and Projects per Session 52's locked Option A — KPI strip, `border-l-4` card grid, inline-SVG progress ring. **Decided:** only the on-track *fraction* tile takes the dynamic gray/amber/green tone — a fraction tile must never render a fixed success colour, since "0/N on track" is not success; the progress ring keeps a fixed stroke regardless of status, an exact port of Team's status-agnostic ring rather than a new per-status recolouring convention.
 - **Session 52 — 2026-08-22:** Give Mission Control the persistent sidebar after all, and scope Goals/Projects into Team's visual language via a 3-option design canvas. **Decided:** every authenticated page shows the same rail — Session 51's "already the map" exclusion read as inconsistent in use, not as deliberate simplification; Goals/Projects locked to Option A (KPI strip + border-l-4 card grid + progress ring), level tabs kept as a pill filter.
 - **Session 51 — 2026-08-22:** Simplify the persistent nav (Sessions 36-38) by retiring the duplicated breadcrumb + zone-chip idiom in favor of a fully static top bar and a persistent left rail (`Sidebar.tsx`) on every page except Mission Control. **Decided:** Mission Control gets no sidebar since its own card grid + inline ZoneMap already is the map; the all-areas map overlay is retired outright, not rehomed, since the sidebar already puts every section one click away.
 - **Session 50 — 2026-08-21:** Rebuild `/app/reports/[id]` from a single-column form wall into the "Command Deck" hub (identity band, KPI strip, 3-column layout, settings drawer). **Decided:** new `dr_capture_notes` is its own inbox table (not a column on `one_on_ones`); goal progress bars only render with a real check-in, never fabricated from status alone.
@@ -290,8 +288,8 @@ specific decision.
 - **Session 37 — 2026-08-16:** Nav rework pass 2 (tracked in code comments as Session 38 — see `docs/archive/scoping/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). **Decided:** `resolve_cadence_days()` returns `(days, source)` rather than a bare int — a deliberate deviation from the spec's literal…; `one_on_ones` still has no status column — status stays derived (`planned` = prep_guide set + summary null; `completed` = summary….
 - **Session 35 — 2026-08-16:** Widen the Scribe drawer from its fixed 400px to roughly 25–33% of the viewport width, so the conversation and draft cards get more room without…
 - **Session 34 — 2026-08-13:** S3 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out. **Decided:** **Thread is now fully server-managed.** The client no longer passes a thread to the backend; it only sends the new message + optional page context.; **Page context is ephemeral, not stored.** It's injected into the system prompt per request, not into the `assistant_messages` table..
-- **Session 33 — 2026-08-13:** S2 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Drawer UI + confirm flow. **Decided:** **Commitment confirm path:** `POST /api/commitments` (new endpoint) rather than reusing `POST /api/team/commitments` (which always sets `is_team_commitment = true`).; **`link_project_goal` confirm:** two API calls (GET project, then PUT with goal_id)..
-- **Session 32 — 2026-08-13:** S1 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): agent loop + eval harness, no UI. **Decided:** **MVR schema verification:** all six verb schemas were verified against `schema.sql` before locking the system prompt.; **`emit_draft` as the write primitive:** the model calls `emit_draft` (a tool returning `{"ok": true}`) to stage drafts rather than emitting JSON in its text output..
+- **Session 33 — 2026-08-13:** S2 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Drawer UI + confirm flow.
+- **Session 32 — 2026-08-13:** S1 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): agent loop + eval harness, no UI.
 - **Session 31 — 2026-08-12:** Build Session VI of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): staleness + precedence surfacing — the final session of the….
 - **Session 30 — 2026-08-12:** Build Session V of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): the Brain visualization.
 - **Session 29 — 2026-08-12:** Build Session IV of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): retrieval + agent integration, backend only.

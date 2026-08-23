@@ -26,11 +26,11 @@ function formatDate(iso: string) {
 // Warmer color the higher the ordinal reads relative to a 1-5 scale — a
 // rough visual cue, not a precise mapping to whatever labels the org set.
 function levelStyle(ordinal: number | null): string {
-  if (ordinal === null) return "bg-gray-100 text-gray-400";
-  if (ordinal <= 1) return "bg-red-50 text-red-600";
-  if (ordinal === 2) return "bg-amber-50 text-amber-600";
-  if (ordinal === 3) return "bg-gray-100 text-gray-600";
-  if (ordinal === 4) return "bg-green-50 text-green-600";
+  if (ordinal === null) return "bg-sunken text-ink-muted";
+  if (ordinal <= 1) return "bg-red-50 text-red-700";
+  if (ordinal === 2) return "bg-amber-50 text-amber-700";
+  if (ordinal === 3) return "bg-sunken text-ink-secondary";
+  if (ordinal === 4) return "bg-teal-50 text-teal-700";
   return "bg-blue-50 text-blue-600";
 }
 
@@ -49,17 +49,17 @@ export default function AssessmentsPage() {
   return (
     <PageShell maxWidth="2xl">
       <h1 className="text-2xl font-semibold">Assessments</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-ink-secondary">
         How each person is doing against their role&apos;s configured expectations — metrics, skills, and values.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
       {loading ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>Loading...</p>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : team.length === 0 ? (
-        <p className={`${SECTION_GAP} text-gray-500`}>
+        <p className={`${SECTION_GAP} text-ink-secondary`}>
           No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="underline hover:text-gray-700">
+          <Link href="/app/dashboard" className="underline hover:text-ink-body">
             Add your first one
           </Link>
           .
@@ -70,19 +70,19 @@ export default function AssessmentsPage() {
             <li key={r.id}>
               <Link
                 href={`/app/assessments/${r.id}`}
-                className="block rounded-lg border border-gray-200 px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+                className="block rounded-lg border border-hairline px-5 py-4 transition-colors hover:border-control hover:bg-canvas"
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="font-medium text-gray-900">{r.name}</p>
-                    {r.role_title && <p className="text-sm text-gray-500">{r.role_title}</p>}
+                    <p className="font-medium text-ink">{r.name}</p>
+                    {r.role_title && <p className="text-sm text-ink-secondary">{r.role_title}</p>}
                   </div>
                   <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${levelStyle(r.latest_level_ordinal)}`}>
                     {r.latest_level_label ?? "Not yet assessed"}
                   </span>
                 </div>
                 {r.assessed_at && (
-                  <p className="mt-2 text-xs text-gray-400">Last assessed {formatDate(r.assessed_at)}</p>
+                  <p className="mt-2 text-xs text-ink-muted">Last assessed {formatDate(r.assessed_at)}</p>
                 )}
               </Link>
             </li>
