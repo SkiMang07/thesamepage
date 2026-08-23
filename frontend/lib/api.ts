@@ -4,6 +4,18 @@
 import { createClient } from "./supabase";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+export const RECORDS_CHANGED_EVENT = "tsp:records-changed";
+export const RECORDS_CHANGED_STORAGE_KEY = "tsp:records-changed-at";
+
+function announceRecordChange(path: string, method: string) {
+  if (typeof window === "undefined" || method === "GET") return;
+  // Recommendation analytics and assistant conversation turns are not source
+  // record changes. Confirmed Scribe drafts use the normal source endpoints and
+  // are announced there.
+  if (path.startsWith("/api/dashboard/") || path.startsWith("/api/assistant/")) return;
+  window.dispatchEvent(new Event(RECORDS_CHANGED_EVENT));
+  window.localStorage.setItem(RECORDS_CHANGED_STORAGE_KEY, String(Date.now()));
+}
 
 async function authedFetch(path: string, options: RequestInit = {}) {
   const supabase = createClient();
@@ -19,7 +31,9 @@ async function authedFetch(path: string, options: RequestInit = {}) {
   });
 
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
-  return res.json();
+  const data = await res.json();
+  announceRecordChange(path, (options.method || "GET").toUpperCase());
+  return data;
 }
 
 // Session 28 (Context Engine upload) — the first multipart/form-data call
@@ -39,7 +53,9 @@ async function authedFormFetch(path: string, formData: FormData) {
   });
 
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
-  return res.json();
+  const data = await res.json();
+  announceRecordChange(path, "POST");
+  return data;
 }
 
 // ---------------------------------------------------------------------------

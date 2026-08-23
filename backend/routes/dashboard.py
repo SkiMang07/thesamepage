@@ -265,6 +265,7 @@ _SAFE_METADATA_KEYS = {
     "target_ids",
     "explanation_source",
 }
+_BRIEF_REFRESH_AFTER = timedelta(hours=24)
 
 
 class MissionControlEventIn(BaseModel):
@@ -547,7 +548,7 @@ async def get_action_brief(
         "variant": "action_first",
         "brief_id": str(uuid.uuid4()),
         "generated_at": generated_at.isoformat(),
-        "stale_after": (generated_at + timedelta(minutes=10)).isoformat(),
+        "stale_after": (generated_at + _BRIEF_REFRESH_AFTER).isoformat(),
         "timezone": timezone_name[:64],
         **result,
     }

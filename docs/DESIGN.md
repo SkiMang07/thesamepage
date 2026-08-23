@@ -174,6 +174,10 @@ Candidate eligibility and ranking begin deterministic; AI may explain the
 recommendation but does not silently rank unrelated domains. Every suggestion is
 inspectable and contestable through Why this? / Addressed / Snooze / Not relevant.
 
+Age alone never removes or disables the brief. Confirmed source-record writes
+refresh it automatically; after 24 hours, an unchanged open brief keeps its
+content and shows only a quiet optional refresh prompt.
+
 The detailed current behavior lives in `docs/systems/mission-control.md`; the
 approved reasoning and state requirements remain in
 `docs/Redesign Scoping/MISSION_CONTROL_ACTION_FIRST_DECISION.md`.

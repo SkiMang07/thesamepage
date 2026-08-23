@@ -73,9 +73,11 @@ It never mutates those records.
 ## States and rollout
 
 The brief has normal-week, busy-week, early-use, empty, all-clear, loading,
-partial-source, AI-failure, and stale-response states. Early use makes no team
-judgment. Empty accounts receive one Add direct report action. A stale brief is
-collapsed and disables dispositions/AI until refresh; source links remain.
+partial-source, AI-failure, and aged-response states. Early use makes no team
+judgment. Empty accounts receive one Add direct report action. Confirmed source
+writes in the same browser refresh the brief automatically, including writes from
+another tab. After 24 hours the full brief remains usable and gains a quiet,
+optional refresh prompt; content never disappears merely because time passed.
 
 `MISSION_CONTROL_ACTION_FIRST_MODE=off|allowlist|on` is the rollback switch, with
 `MISSION_CONTROL_ACTION_FIRST_ALLOWLIST` for a manager UUID allowlist. The old

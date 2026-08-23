@@ -41,7 +41,8 @@ inspectable; AI can only paraphrase an already-selected recommendation. Addresse
 relevant, and setup dismissal suppress an exact evidence fingerprint and never update a source
 record. Actual logged time off can corroborate a dated commitment but cannot create a capacity
 priority. Linked goal/project review chains use one slot. Partial core coverage cannot produce an
-all-clear. Rollback is an environment switch, not a data reversal.
+all-clear. Age alone never removes the brief: source writes refresh it automatically and 24 hours
+only adds an optional refresh prompt. Rollback is an environment switch, not a data reversal.
 
 **Next step:** Dogfood the shipped brief, then run the five-manager first-session comprehension test
 defined in the implementation plan before tuning thresholds or provisional copy.

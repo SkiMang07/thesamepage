@@ -51,6 +51,8 @@ import {
   Project,
   TeamAssessmentItem,
   TeamOverviewItem,
+  RECORDS_CHANGED_EVENT,
+  RECORDS_CHANGED_STORAGE_KEY,
   getCapacityOverview,
   getDashboardInsight,
   getMissionControlBrief,
@@ -210,6 +212,10 @@ export default function DashboardPage() {
   const [failed, setFailed] = useState(false);
   const [legacyOverride, setLegacyOverride] = useState(false);
   const [reload, setReload] = useState(0);
+  const refreshBrief = useCallback(() => {
+    setVariant(null);
+    setReload((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -224,10 +230,28 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, [reload]);
 
+  useEffect(() => {
+    let timer: number | undefined;
+    const refreshAfterChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(refreshBrief, 250);
+    };
+    const refreshFromAnotherTab = (event: StorageEvent) => {
+      if (event.key === RECORDS_CHANGED_STORAGE_KEY) refreshAfterChange();
+    };
+    window.addEventListener(RECORDS_CHANGED_EVENT, refreshAfterChange);
+    window.addEventListener("storage", refreshFromAnotherTab);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(RECORDS_CHANGED_EVENT, refreshAfterChange);
+      window.removeEventListener("storage", refreshFromAnotherTab);
+    };
+  }, [refreshBrief]);
+
   if (legacyOverride || variant?.variant === "legacy") return <LegacyDashboardPage />;
   if (failed) return <ActionBriefLoadFailure onRetry={() => setReload((value) => value + 1)} onLegacy={() => setLegacyOverride(true)} />;
   if (!variant) return <ActionBriefLoading />;
-  return <ActionBrief brief={variant} onRefresh={() => { setVariant(null); setReload((value) => value + 1); }} />;
+  return <ActionBrief brief={variant} onRefresh={refreshBrief} />;
 }
 
 function LegacyDashboardPage() {

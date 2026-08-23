@@ -354,33 +354,6 @@ export function ActionBrief({ brief, onRefresh }: { brief: MissionControlBrief; 
     window.setTimeout(onRefresh, 700);
   }
 
-  if (stale) {
-    const checkedAt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(brief.generated_at));
-    return (
-      <PageShell maxWidth="7xl">
-        <h1 className="text-2xl font-semibold text-ink">Mission Control</h1>
-        <section className={`${CARD} mt-5 p-6`} role="status">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Refresh needed</p>
-          <h2 className="mt-2 text-lg font-medium text-ink">This brief was last checked at {checkedAt}.</h2>
-          <p className="mt-2 text-sm text-ink-secondary">Refresh before marking, snoozing, or asking AI to explain a recommendation. Source-page links remain available.</p>
-          <button type="button" onClick={onRefresh} className={`mt-4 ${BTN_PRIMARY}`}>Refresh brief</button>
-          <details className="mt-5 border-t border-divider pt-4">
-            <summary className="cursor-pointer text-sm font-medium text-ink-body">Show the last checked brief</summary>
-            <div className="mt-4 space-y-3">
-              {candidates.map((candidate) => (
-                <div key={candidate.candidate_key} className="rounded-lg bg-sunken px-4 py-3">
-                  <p className="text-sm text-ink-body">{candidate.title}</p>
-                  <Link href={candidate.action.href} className="mt-1 inline-block text-xs text-brand">Open source →</Link>
-                </div>
-              ))}
-              <p className="text-sm text-ink-secondary">{brief.truth_signal.title} {brief.truth_signal.detail}</p>
-            </div>
-          </details>
-        </section>
-      </PageShell>
-    );
-  }
-
   return (
     <PageShell maxWidth="7xl">
       <div className="mb-5 flex items-end justify-between gap-4">
@@ -392,6 +365,13 @@ export function ActionBrief({ brief, onRefresh }: { brief: MissionControlBrief; 
         </div>
         <button type="button" onClick={onRefresh} className="text-xs text-ink-muted hover:text-ink-secondary">Refresh</button>
       </div>
+
+      {stale && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-surface px-4 py-3" role="status">
+          <p className="text-sm text-ink-secondary">This brief is more than 24 hours old. Refresh when you want to check for changes.</p>
+          <button type="button" onClick={onRefresh} className="text-xs font-medium text-brand hover:text-brand-hover">Refresh brief</button>
+        </div>
+      )}
 
       <CoverageNotice brief={brief} />
       {toast && <p className="mb-4 text-sm text-brand" aria-live="polite">{toast}</p>}
