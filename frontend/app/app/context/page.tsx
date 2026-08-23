@@ -463,7 +463,7 @@ function ConfirmCard({
         <div className="flex flex-wrap gap-2">
           <label
             className={`cursor-pointer rounded-full border px-3 py-1 text-xs ${
-              scopeIds.has(null) ? "border-brand bg-brand text-white" : "border-control text-ink-secondary"
+              scopeIds.has(null) ? "border-brand bg-brand text-on-brand" : "border-control text-ink-secondary"
             }`}
           >
             <input type="checkbox" checked={scopeIds.has(null)} onChange={() => toggleScope(null)} className="hidden" />
@@ -474,7 +474,7 @@ function ConfirmCard({
               key={unit.id}
               className={`cursor-pointer rounded-full border px-3 py-1 text-xs ${
                 scopeIds.has(unit.id)
-                  ? "border-brand bg-brand text-white"
+                  ? "border-brand bg-brand text-on-brand"
                   : "border-control text-ink-secondary"
               }`}
             >
@@ -562,7 +562,7 @@ function BrainCategoryCard({
     <button
       onClick={onClick}
       className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition ${
-        selected ? "border-blue-300 bg-blue-50/60" : "border-hairline bg-white hover:border-control"
+        selected ? "border-blue-300 bg-blue-50/60" : "border-hairline bg-surface hover:border-control"
       }`}
     >
       <div className="relative inline-flex items-center justify-center">
@@ -593,7 +593,7 @@ function BrainCategoryCard({
 
 function BrainDetailPanel({ coverage }: { coverage: CategoryCoverage }) {
   return (
-    <div className="mt-4 rounded-xl border border-hairline bg-white p-5">
+    <div className="mt-4 rounded-xl border border-hairline bg-surface p-5">
       <div className="flex items-center justify-between gap-4">
         <h3 className="text-sm font-semibold text-ink">{coverage.label}</h3>
         {coverage.citations_this_week > 0 && (

@@ -52,7 +52,11 @@ export default function Sidebar() {
 
   return (
     <div
-      className={`sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto border-r border-[#DDE0E3] bg-[#F5F8FA] transition-[width] duration-150 ${
+      // The rail and AppNav's header are one coordinated shell: both sit on
+      // `canvas` (a shade BELOW the cards they frame), separated from the
+      // content column by a single structural hairline. Hardcoded #DDE0E3 /
+      // #F5F8FA replaced with the tokens so the rail follows the theme.
+      className={`sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto border-r border-hairline bg-canvas transition-[width] duration-150 ${
         collapsed ? "w-14" : "w-[190px]"
       }`}
     >
@@ -78,13 +82,17 @@ export default function Sidebar() {
           title={HOME_ITEM.label}
           className={`flex items-center gap-2.5 rounded-lg text-[13px] transition ${
             collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
-          } ${isHome ? "bg-black/5 font-semibold text-ink" : "text-ink-secondary hover:bg-sunken hover:text-ink"}`}
+          } ${
+            isHome
+              ? "bg-brand-tint font-medium text-brand"
+              : "text-ink-secondary hover:bg-sunken hover:text-ink"
+          }`}
         >
           <Icon name={HOME_ITEM.icon} className="h-4 w-4 shrink-0" />
           {!collapsed && <span className="truncate">{HOME_ITEM.label}</span>}
         </Link>
 
-        <div className={`my-2 h-px shrink-0 bg-[#DDE0E3] ${collapsed ? "w-6" : "mx-2.5"}`} />
+        <div className={`my-2 h-px shrink-0 bg-hairline ${collapsed ? "w-6" : "mx-2.5"}`} />
 
         {NAV_GROUPS.map((group) =>
           group.items.map((item) => {
@@ -97,7 +105,11 @@ export default function Sidebar() {
                 title={item.label}
                 className={`flex items-center gap-2.5 rounded-lg text-[13px] transition ${
                   collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
-                } ${active ? `font-semibold ${hue.bg} ${hue.text}` : "text-ink-secondary hover:bg-sunken hover:text-ink"}`}
+                } ${
+                  active
+                    ? `font-medium ${hue.bg} ${hue.text}`
+                    : "text-ink-secondary hover:bg-sunken hover:text-ink"
+                }`}
               >
                 <Icon name={item.icon} className="h-4 w-4 shrink-0" />
                 {!collapsed && <span className="truncate">{item.label}</span>}

@@ -3,19 +3,244 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   Current & Carbon base layer.
-   Colour tokens themselves live in tailwind.config.js; this file only sets the
-   app-wide defaults that are awkward to express as utilities.
+   Current & Carbon — the theme value layer.
+
+   tailwind.config.js declares every colour as `rgb(var(--c-*) / <alpha-value>)`.
+   THIS file is where those variables get their values, and it is the only place
+   in the app where a colour is written as a literal.
+
+   Two scopes:
+
+     :root         the LIGHT theme. Marketing, /app/login, /invite, and any
+                   surface that is not inside the authenticated product.
+     .theme-dark   the DARK theme. Applied once, in app/app/layout.tsx, to the
+                   shell that wraps every authenticated /app/* page.
+
+   Because both scopes define the SAME token names, no component needs a
+   `dark:` variant: `bg-surface` is a card in both themes, it is just a
+   different colour depending on which scope it renders inside. That is also
+   what keeps the marketing site visually isolated — it simply never enters
+   the `.theme-dark` scope.
+
+   The dark values come from the approved mockup
+   (docs/Redesign Scoping/mission-control-action-first.html), reconciled with
+   the locked Current & Carbon anchors. See docs/systems/brand.md.
    --------------------------------------------------------------------------- */
 
 @layer base {
+  :root {
+    color-scheme: light;
+
+    /* --- feature gradient: the ONE gradient the system spends --- */
+    --c-feature-from: #E9F2F1;
+    --c-feature-to: #FFFFFF;
+
+    --c-canvas: 245 248 250;  /* #F5F8FA */
+    --c-surface: 255 255 255;  /* #FFFFFF */
+    --c-elevated: 255 255 255;  /* #FFFFFF */
+    --c-sunken: 236 239 242;  /* #ECEFF2 */
+    --c-hairline: 221 224 227;  /* #DDE0E3 */
+    --c-divider: 236 239 242;  /* #ECEFF2 */
+    --c-control: 201 205 208;  /* #C9CDD0 */
+    --c-ink: 34 43 50;  /* #222B32 */
+    --c-ink-body: 57 65 72;  /* #394148 */
+    --c-ink-secondary: 79 87 93;  /* #4F575D */
+    --c-ink-muted: 104 110 116;  /* #686E74 */
+    --c-ink-faint: 135 141 146;  /* #878D92 */
+    --c-brand: 8 126 120;  /* #087E78 */
+    --c-brand-hover: 0 99 95;  /* #00635F */
+    --c-brand-tint: 238 245 244;  /* #EEF5F4 */
+    --c-on-brand: 255 255 255;  /* #FFFFFF */
+    --c-on-critical: 255 255 255;  /* #FFFFFF */
+    --c-on-attention: 255 255 255;  /* #FFFFFF */
+    --c-on-info: 255 255 255;  /* #FFFFFF */
+    --c-on-carbon: 255 255 255;  /* #FFFFFF */
+    --c-focus: 40 120 208;  /* #2878D0 */
+    --c-id-1: 8 126 120;  /* #087E78 */
+    --c-id-2: 7 85 160;  /* #0755A0 */
+    --c-id-3: 79 87 93;  /* #4F575D */
+    --c-id-4: 0 75 71;  /* #004B47 */
+    --c-id-5: 40 120 208;  /* #2878D0 */
+    --c-id-6: 34 43 50;  /* #222B32 */
+    --c-on-identity: 255 255 255;  /* #FFFFFF */
+
+    --c-carbon-50: 245 248 250;   /* #F5F8FA */
+    --c-carbon-100: 236 239 242;  /* #ECEFF2 */
+    --c-carbon-200: 221 224 227;  /* #DDE0E3 */
+    --c-carbon-300: 201 205 208;  /* #C9CDD0 */
+    --c-carbon-400: 167 172 176;  /* #A7ACB0 */
+    --c-carbon-500: 135 141 146;  /* #878D92 */
+    --c-carbon-600: 104 110 116;  /* #686E74 */
+    --c-carbon-700: 79 87 93;     /* #4F575D */
+    --c-carbon-800: 57 65 72;     /* #394148 */
+    --c-carbon-900: 34 43 50;     /* #222B32 */
+    --c-carbon-950: 19 27 34;     /* #131B22 */
+
+    --c-teal-50: 232 252 250;     /* #E8FCFA */
+    --c-teal-100: 221 244 242;    /* #DDF4F2 */
+    --c-teal-200: 202 231 228;    /* #CAE7E4 */
+    --c-teal-300: 177 213 209;    /* #B1D5D1 */
+    --c-teal-400: 133 183 178;    /* #85B7B2 */
+    --c-teal-500: 87 154 149;     /* #579A95 */
+    --c-teal-600: 8 126 120;      /* #087E78 */
+    --c-teal-700: 0 99 95;        /* #00635F */
+    --c-teal-800: 0 75 71;        /* #004B47 */
+    --c-teal-900: 0 49 47;        /* #00312F */
+    --c-teal-950: 0 32 30;        /* #00201E */
+
+    --c-blue-50: 242 248 255;     /* #F2F8FF */
+    --c-blue-100: 228 240 255;    /* #E4F0FF */
+    --c-blue-200: 203 226 255;    /* #CBE2FF */
+    --c-blue-300: 174 208 249;    /* #AED0F9 */
+    --c-blue-400: 129 175 231;    /* #81AFE7 */
+    --c-blue-500: 82 143 215;     /* #528FD7 */
+    --c-blue-600: 40 120 208;     /* #2878D0 */
+    --c-blue-700: 7 85 160;       /* #0755A0 */
+    --c-blue-800: 0 63 125;       /* #003F7D */
+    --c-blue-900: 0 41 85;        /* #002955 */
+    --c-blue-950: 0 25 58;        /* #00193A */
+
+    --c-amber-50: 255 246 237;    /* #FFF6ED */
+    --c-amber-100: 255 235 216;   /* #FFEBD8 */
+    --c-amber-200: 246 219 193;   /* #F6DBC1 */
+    --c-amber-300: 232 197 164;   /* #E8C5A4 */
+    --c-amber-400: 209 161 113;   /* #D1A171 */
+    --c-amber-500: 182 113 24;    /* #B67118 */
+    --c-amber-600: 155 93 0;      /* #9B5D00 */
+    --c-amber-700: 123 72 0;      /* #7B4800 */
+    --c-amber-800: 93 54 0;       /* #5D3600 */
+    --c-amber-900: 62 34 0;       /* #3E2200 */
+    --c-amber-950: 41 21 0;       /* #291500 */
+
+    --c-red-50: 255 245 243;      /* #FFF5F3 */
+    --c-red-100: 255 233 230;     /* #FFE9E6 */
+    --c-red-200: 255 212 207;     /* #FFD4CF */
+    --c-red-300: 247 188 181;     /* #F7BCB5 */
+    --c-red-400: 226 147 139;     /* #E2938B */
+    --c-red-500: 206 107 99;      /* #CE6B63 */
+    --c-red-600: 189 61 57;       /* #BD3D39 */
+    --c-red-700: 152 37 36;       /* #982524 */
+    --c-red-800: 122 14 19;       /* #7A0E13 */
+    --c-red-900: 85 0 6;          /* #550006 */
+    --c-red-950: 57 0 3;          /* #390003 */
+  }
+
+  /* ---------------------------------------------------------------------------
+     DARK — the authenticated product shell.
+     --------------------------------------------------------------------------- */
+  .theme-dark {
+    color-scheme: dark;
+
+    /* Deep teal into carbon. Identity bands and hero summaries only — the
+       brief's "reserve gradients for a small number of meaningful feature
+       surfaces", and the mockup's one gradient (the manager brief panel). */
+    --c-feature-from: #17363B;
+    --c-feature-to: #222B32;
+
+    --c-canvas: 24 32 38;  /* #182026 */
+    --c-surface: 34 43 50;  /* #222B32 */
+    --c-elevated: 41 51 58;  /* #29333A */
+    --c-sunken: 45 55 62;  /* #2D373E */
+    --c-hairline: 61 73 80;  /* #3D4950 */
+    --c-divider: 51 61 68;  /* #333D44 */
+    --c-control: 119 132 140;  /* #77848C */
+    --c-ink: 242 245 246;  /* #F2F5F6 */
+    --c-ink-body: 212 218 221;  /* #D4DADD */
+    --c-ink-secondary: 182 192 197;  /* #B6C0C5 */
+    --c-ink-muted: 150 163 170;  /* #96A3AA */
+    --c-ink-faint: 110 123 131;  /* #6E7B83 */
+    --c-brand: 80 183 176;  /* #50B7B0 */
+    --c-brand-hover: 116 201 195;  /* #74C9C3 */
+    --c-brand-tint: 23 61 59;  /* #173D3B */
+    --c-on-brand: 8 25 27;  /* #08191B */
+    --c-on-critical: 42 16 13;  /* #2A100D */
+    --c-on-attention: 43 28 7;  /* #2B1C07 */
+    --c-on-info: 6 32 47;  /* #06202F */
+    --c-on-carbon: 15 23 28;  /* #0F171C */
+    --c-focus: 104 168 238;  /* #68A8EE */
+    --c-id-1: 86 189 182;  /* #56BDB6 */
+    --c-id-2: 125 182 240;  /* #7DB6F0 */
+    --c-id-3: 163 175 182;  /* #A3AFB6 */
+    --c-id-4: 53 160 153;  /* #35A099 */
+    --c-id-5: 92 156 224;  /* #5C9CE0 */
+    --c-id-6: 203 211 215;  /* #CBD3D7 */
+    --c-on-identity: 16 25 29;  /* #10191D */
+
+    --c-carbon-50: 19 27 34;      /* #131B22 */
+    --c-carbon-100: 27 36 42;     /* #1B242A */
+    --c-carbon-200: 45 55 62;     /* #2D373E */
+    --c-carbon-300: 61 73 80;     /* #3D4950 */
+    --c-carbon-400: 85 98 106;    /* #55626A */
+    --c-carbon-500: 107 122 130;  /* #6B7A82 */
+    --c-carbon-600: 138 151 158;  /* #8A979E */
+    --c-carbon-700: 169 180 186;  /* #A9B4BA */
+    --c-carbon-800: 198 206 210;  /* #C6CED2 */
+    --c-carbon-900: 228 233 235;  /* #E4E9EB */
+    --c-carbon-950: 245 248 250;  /* #F5F8FA */
+
+    --c-teal-50: 14 42 41;        /* #0E2A29 */
+    --c-teal-100: 18 54 52;       /* #123634 */
+    --c-teal-200: 23 61 59;       /* #173D3B */
+    --c-teal-300: 30 84 80;       /* #1E5450 */
+    --c-teal-400: 42 117 111;     /* #2A756F */
+    --c-teal-500: 60 153 146;     /* #3C9992 */
+    --c-teal-600: 80 183 176;     /* #50B7B0 */
+    --c-teal-700: 122 204 198;    /* #7ACCC6 */
+    --c-teal-800: 164 222 218;    /* #A4DEDA */
+    --c-teal-900: 200 237 234;    /* #C8EDEA */
+    --c-teal-950: 230 248 246;    /* #E6F8F6 */
+
+    --c-blue-50: 20 37 47;        /* #14252F */
+    --c-blue-100: 23 50 63;       /* #17323F */
+    --c-blue-200: 28 65 87;       /* #1C4157 */
+    --c-blue-300: 36 90 125;      /* #245A7D */
+    --c-blue-400: 47 123 174;     /* #2F7BAE */
+    --c-blue-500: 66 149 214;     /* #4295D6 */
+    --c-blue-600: 104 168 238;    /* #68A8EE */
+    --c-blue-700: 146 194 243;    /* #92C2F3 */
+    --c-blue-800: 182 214 247;    /* #B6D6F7 */
+    --c-blue-900: 213 231 251;    /* #D5E7FB */
+    --c-blue-950: 237 244 253;    /* #EDF4FD */
+
+    --c-amber-50: 44 31 13;       /* #2C1F0D */
+    --c-amber-100: 62 44 20;      /* #3E2C14 */
+    --c-amber-200: 79 58 27;      /* #4F3A1B */
+    --c-amber-300: 107 78 36;     /* #6B4E24 */
+    --c-amber-400: 153 113 51;    /* #997133 */
+    --c-amber-500: 223 164 78;    /* #DFA44E */
+    --c-amber-600: 233 178 103;   /* #E9B267 */
+    --c-amber-700: 242 198 140;   /* #F2C68C */
+    --c-amber-800: 247 216 175;   /* #F7D8AF */
+    --c-amber-900: 251 233 210;   /* #FBE9D2 */
+    --c-amber-950: 254 246 235;   /* #FEF6EB */
+
+    --c-red-50: 46 25 24;         /* #2E1918 */
+    --c-red-100: 64 32 30;        /* #40201E */
+    --c-red-200: 86 41 38;        /* #562926 */
+    --c-red-300: 116 56 51;       /* #743833 */
+    --c-red-400: 160 79 70;       /* #A04F46 */
+    --c-red-500: 201 100 89;      /* #C96459 */
+    --c-red-600: 240 137 127;     /* #F0897F */
+    --c-red-700: 246 165 157;     /* #F6A59D */
+    --c-red-800: 249 193 187;     /* #F9C1BB */
+    --c-red-900: 252 219 216;     /* #FCDBD8 */
+    --c-red-950: 254 240 238;     /* #FEF0EE */
+  }
+
+  /* The page ground. `html` normally paints the light canvas; when the dark
+     app shell is on the page it paints the dark one instead, so the colour
+     behind an overscroll bounce or a short page matches the shell rather than
+     flashing white. `:has()` keeps this declarative — no class on <html>, no
+     JS, no hydration flash. Browsers without :has() simply keep the light
+     ground behind a full-bleed dark shell, which is invisible in practice. */
   html {
-    /* The page ground. Cards are white and sit ON this, so a card is legible
-       by its own fill, not only by its 1px hairline — which is also how the
-       input/border contrast requirement (WCAG 1.4.11) is satisfied without
-       darkening every border to a heavy 3:1 grey. */
     background-color: theme("colors.canvas");
   }
+  html:has(.theme-dark) {
+    background-color: #182026;
+    color-scheme: dark;
+  }
+
   body {
     color: theme("colors.ink.DEFAULT");
   }
@@ -24,10 +249,57 @@
      `focus:border-gray-900` and nothing else — ~70 inputs inherited the bare
      browser outline and several controls had no focus affordance at all.
      Blue is the locked accent for focus (docs/branding/colors/README.md),
-     which also keeps it visually distinct from teal selection state. */
+     which also keeps it visually distinct from teal selection state. The ring
+     is now themed: #2878D0 on light, #68A8EE on dark (5.8:1 on the dark card
+     surface — a dark theme needs a brighter ring to stay as visible). */
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-    outline: 2px solid theme("colors.blue.600");
+    outline: 2px solid rgb(var(--c-focus));
     outline-offset: 2px;
     border-radius: 3px;
+  }
+
+  /* Browser autofill. Chrome/Safari paint their own near-white fill and near-
+     black text over any input the password manager touches, which on a dark
+     form is a bright white bar with invisible text. There is no way to set
+     `background-color` on an autofilled input, so the standard workaround is
+     an inset shadow the size of the field plus an explicit text fill colour.
+     Applied in both themes so the field looks identical filled or not. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: rgb(var(--c-ink));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--c-sunken)) inset;
+    box-shadow: 0 0 0 1000px rgb(var(--c-sunken)) inset;
+    caret-color: rgb(var(--c-ink));
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
+  /* Scrollbars inside the dark shell. `color-scheme: dark` already hands
+     Firefox and Safari the right rendering; this is the WebKit/Blink cut so a
+     scrolling drawer or table doesn't show a light-grey track on carbon. */
+  .theme-dark ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  .theme-dark ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .theme-dark ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--c-carbon-300));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  .theme-dark ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--c-carbon-400));
+  }
+
+  /* Placeholders. `placeholder-ink-faint` is set per-input in lib/tokens.ts;
+     this is the floor for any input that predates that token. */
+  ::placeholder {
+    color: rgb(var(--c-ink-faint));
+    opacity: 1;
   }
 }

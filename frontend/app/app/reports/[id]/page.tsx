@@ -106,7 +106,10 @@ import {
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
-import { HEX } from "@/lib/tokens";
+import {
+  HEX, FEATURE_SURFACE, BTN_PRIMARY, BTN_SECONDARY,
+  TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone,
+} from "@/lib/tokens";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
@@ -572,12 +575,8 @@ export default function ReportDetailPage() {
   const scoredGoals = goals.filter((g) => g.status !== "cancelled");
   const onTrackGoals = scoredGoals.filter((g) => g.status === "on_track").length;
   const goalsTileValue = scoredGoals.length > 0 ? `${onTrackGoals}/${scoredGoals.length}` : "—";
-  const goalsTileTone =
-    scoredGoals.length === 0
-      ? { from: "from-carbon-500", to: "to-carbon-600" }
-      : onTrackGoals === 0
-        ? { from: "from-amber-500", to: "to-amber-600" }
-        : { from: "from-teal-600", to: "to-teal-700" };
+  const goalsTileTone: TileTone =
+    scoredGoals.length === 0 ? "neutral" : onTrackGoals === 0 ? "attention" : "brand";
 
   // KPI tile 4 — this week's resolved available hours (supply only, same as
   // /app/capacity).
@@ -595,32 +594,37 @@ export default function ReportDetailPage() {
   return (
     <PageShell maxWidth="7xl">
       {/* Identity band */}
-      <div className="rounded-2xl bg-gradient-to-br from-blue-700 via-blue-800 to-carbon-900 px-6 py-6 text-white">
+      {/* Identity band — the one place on this page that earns a gradient.
+          It used to be blue-700 -> blue-800 -> carbon-900, which is exactly
+          the blue creep the palette README warns about: blue is Scribe's and
+          this band has nothing to do with AI. FEATURE_SURFACE is the single
+          deep teal-into-carbon gradient the system spends (lib/tokens.ts). */}
+      <div className={`${FEATURE_SURFACE} px-6 py-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-lg font-semibold">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-tint text-lg font-semibold text-brand">
               {initials(report.name)}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold">{report.name}</h1>
+                <h1 className="text-2xl font-semibold text-ink">{report.name}</h1>
                 {ratingLabel && (
-                  <span className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium">{ratingLabel}</span>
+                  <span className="rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-body">{ratingLabel}</span>
                 )}
               </div>
               {(roleLevel || orgUnit || report.role_title) && (
-                <p className="mt-1 text-sm text-blue-100">
+                <p className="mt-1 text-sm text-ink-secondary">
                   {roleLevel ? roleLabel(roleLevel) : report.role_title ?? "No role assigned"}
                   {orgUnit && ` · ${orgUnitLabel(orgUnit)}`}
                 </p>
               )}
-              {report.notes && <p className="mt-1 text-sm text-blue-100/80">{report.notes}</p>}
+              {report.notes && <p className="mt-1 text-sm text-ink-muted">{report.notes}</p>}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Link
               href={`/app/reports/${id}/log`}
-              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20"
+              className={`${BTN_SECONDARY} px-4 py-2`}
             >
               Log a 1:1
             </Link>
@@ -630,7 +634,7 @@ export default function ReportDetailPage() {
                   ? `/app/reports/${id}/prep?resume=${plannedSession.id}`
                   : `/app/reports/${id}/prep`
               }
-              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-brand-hover hover:bg-blue-50"
+              className={`${BTN_PRIMARY} whitespace-nowrap`}
             >
               {plannedSession ? "Resume prep sheet →" : "Start 1:1 prep →"}
             </Link>
@@ -638,7 +642,7 @@ export default function ReportDetailPage() {
               onClick={() => setSettingsOpen(true)}
               aria-label="Settings"
               title="Cadence, capacity & time off"
-              className="rounded-md border border-white/25 bg-white/10 p-2.5 text-white hover:bg-white/20"
+              className={`${BTN_SECONDARY} px-2.5 py-2.5`}
             >
               ⚙
             </button>
@@ -650,9 +654,11 @@ export default function ReportDetailPage() {
 
       {/* KPI strip */}
       <div className={`${SECTION_GAP} grid grid-cols-2 gap-3 sm:grid-cols-4`}>
-        <div className="rounded-xl bg-gradient-to-br from-carbon-500 to-carbon-600 px-4 py-3 text-white">
-          <p className="text-2xl font-semibold">{daysSinceLast != null ? `${daysSinceLast}d` : "—"}</p>
-          <p className="text-xs text-white/80">
+        <div className={TILE}>
+          <p className={`${TILE_VALUE} ${TILE_TONE[daysUntilNext != null && daysUntilNext < 0 ? "attention" : "neutral"]}`}>
+            {daysSinceLast != null ? `${daysSinceLast}d` : "—"}
+          </p>
+          <p className={TILE_LABEL}>
             {daysSinceLast == null
               ? "No 1:1 logged yet"
               : daysUntilNext! > 0
@@ -662,30 +668,28 @@ export default function ReportDetailPage() {
                   : `Last 1:1 · ${Math.abs(daysUntilNext!)}d overdue`}
           </p>
         </div>
-        <div
-          className={`rounded-xl bg-gradient-to-br px-4 py-3 text-white ${
-            overdueCommitments.length > 0
-              ? "from-amber-500 to-amber-600"
-              : open.length > 0
-                ? "from-blue-600 to-blue-700"
-                : "from-carbon-500 to-carbon-600"
-          }`}
-        >
-          <p className="text-2xl font-semibold">{open.length}</p>
-          <p className="text-xs text-white/80">
+        <div className={TILE}>
+          <p
+            className={`${TILE_VALUE} ${
+              TILE_TONE[overdueCommitments.length > 0 ? "attention" : "neutral"]
+            }`}
+          >
+            {open.length}
+          </p>
+          <p className={TILE_LABEL}>
             Open commitment{open.length === 1 ? "" : "s"}
             {overdueCommitments.length > 0 && ` · ${overdueCommitments.length} overdue`}
           </p>
         </div>
-        <div className={`rounded-xl bg-gradient-to-br px-4 py-3 text-white ${goalsTileTone.from} ${goalsTileTone.to}`}>
-          <p className="text-2xl font-semibold">{goalsTileValue}</p>
-          <p className="text-xs text-white/80">Goals on track</p>
+        <div className={TILE}>
+          <p className={`${TILE_VALUE} ${TILE_TONE[goalsTileTone]}`}>{goalsTileValue}</p>
+          <p className={TILE_LABEL}>Goals on track</p>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 px-4 py-3 text-white">
-          <p className="text-2xl font-semibold">
+        <div className={TILE}>
+          <p className={`${TILE_VALUE} ${TILE_TONE.neutral}`}>
             {capacityItem ? `${Math.round(capacityItem.available_hours)}h` : "—"}
           </p>
-          <p className="text-xs text-white/80">Available this week</p>
+          <p className={TILE_LABEL}>Available this week</p>
         </div>
       </div>
 
@@ -693,7 +697,7 @@ export default function ReportDetailPage() {
       <div className={`${SECTION_GAP} grid grid-cols-1 gap-5 lg:grid-cols-3`}>
         {/* Col 1 — Conversation */}
         <div className="space-y-5">
-          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Next 1:1</p>
               <Link
@@ -748,7 +752,7 @@ export default function ReportDetailPage() {
                 <button
                   onClick={saveCapture}
                   disabled={savingCapture || !newCapture.trim()}
-                  className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-50"
                 >
                   {savingCapture ? "Saving..." : "Save"}
                 </button>
@@ -792,7 +796,7 @@ export default function ReportDetailPage() {
 
         {/* Col 2 — Work */}
         <div className="space-y-5">
-          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Goals{goals.length > 0 && ` (${goals.length})`}
@@ -837,7 +841,7 @@ export default function ReportDetailPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Initiatives{projects.length > 0 && ` (${projects.length})`}
@@ -877,7 +881,7 @@ export default function ReportDetailPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Recent 1:1 sessions</p>
             {history.length === 0 ? (
               <p className="mt-3 text-sm text-ink-muted">
@@ -941,7 +945,7 @@ export default function ReportDetailPage() {
 
         {/* Col 3 — Person */}
         <div className="space-y-5">
-          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
               Open commitments{open.length > 0 && ` (${open.length})`}
             </p>
@@ -1031,7 +1035,7 @@ export default function ReportDetailPage() {
             />
           )}
 
-          <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Expectations</p>
             {report.expectations ? (
               <>
@@ -1135,7 +1139,7 @@ function AssessmentCard({
     : null;
 
   return (
-    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Assessment</p>
         <Link href={`/app/assessments/${reportId}`} className="text-xs text-ink-muted hover:text-ink-secondary">
@@ -1247,9 +1251,9 @@ function SettingsDrawer({
   removeTimeOff: (id: string) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/55" onClick={onClose}>
       <div
-        className="h-full w-full max-w-md overflow-y-auto bg-white px-6 py-6 shadow-xl"
+        className="h-full w-full max-w-md overflow-y-auto bg-surface px-6 py-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -1279,7 +1283,7 @@ function SettingsDrawer({
             <button
               type="submit"
               disabled={savingCadence}
-              className="rounded-md bg-brand px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-4 py-2 text-sm text-on-brand disabled:opacity-50"
             >
               {savingCadence ? "Saving..." : "Save"}
             </button>
@@ -1344,7 +1348,7 @@ function SettingsDrawer({
               <button
                 type="submit"
                 disabled={savingCapacity}
-                className="rounded-md bg-brand px-4 py-2 text-sm text-white disabled:opacity-50"
+                className="rounded-md bg-brand px-4 py-2 text-sm text-on-brand disabled:opacity-50"
               >
                 {savingCapacity ? "Saving..." : "Save"}
               </button>
@@ -1751,7 +1755,7 @@ function DevelopmentSection({
             onChange={(e) => setNewNote(e.target.value)}
             rows={2}
             placeholder="Add a private note about this person's growth..."
-            className="w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-md border border-amber-200 bg-surface px-3 py-2 text-sm"
           />
           <div className="mt-2 flex justify-end gap-2">
             <button
@@ -1765,7 +1769,7 @@ function DevelopmentSection({
             <button
               type="submit"
               disabled={addingNote}
-              className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+              className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-on-attention hover:bg-amber-400 disabled:opacity-50"
             >
               {addingNote ? "Adding..." : "Add"}
             </button>
@@ -1779,7 +1783,7 @@ function DevelopmentSection({
   // "growth" section — plan text, aspiration, opportunities, training, Col 3
   // -------------------------------------------------------------------------
   return (
-    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-baseline justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Development</p>
         <button
@@ -1821,7 +1825,7 @@ function DevelopmentSection({
             type="button"
             onClick={savePlanText}
             disabled={savingPlan || !planDirty}
-            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-50"
           >
             {savingPlan ? "Saving..." : "Save"}
           </button>
@@ -1881,7 +1885,7 @@ function DevelopmentSection({
               <button
                 type="submit"
                 disabled={savingAspiration}
-                className="rounded-md bg-brand px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                className="rounded-md bg-brand px-3 py-1.5 text-xs text-on-brand disabled:opacity-50"
               >
                 {savingAspiration ? "Saving..." : "Save"}
               </button>
@@ -1923,7 +1927,7 @@ function DevelopmentSection({
                       )
                     }
                     disabled={addingOpp}
-                    className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                    className="shrink-0 rounded-md border border-amber-300 bg-surface px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
                   >
                     Add
                   </button>
@@ -1944,7 +1948,7 @@ function DevelopmentSection({
                   <button
                     onClick={() => addAiOpportunity(i)}
                     disabled={addingAiOppIndex === i}
-                    className="rounded-md border border-blue-300 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                    className="rounded-md border border-blue-300 bg-surface px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                   >
                     {addingAiOppIndex === i ? "Adding..." : "Add"}
                   </button>

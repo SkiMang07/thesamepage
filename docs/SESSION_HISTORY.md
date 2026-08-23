@@ -23,6 +23,57 @@ automatically.
 
 ---
 
+## Session 59 — 2026-08-23
+
+**Goal:** Andrew's read on the live product after Session 58: the frame is right, but the app is a
+light interface and he wants the dark, composed, premium shell of the approved mockup
+(`docs/Redesign Scoping/mission-control-action-first.html`). Strictly a visual pass — no changes to
+content, IA, routes, data or workflows.
+
+**What was done:** Rewrote the colour layer as two themes rather than one. `tailwind.config.js` now
+declares every colour as `rgb(var(--c-*) / <alpha-value>)`; the values live in `app/globals.css` in
+two blocks, `:root` (light) and `.theme-dark` (dark). `app/app/layout.tsx` applies `theme-dark` once,
+to the authenticated shell. New tokens in `lib/tokens.ts`: `elevated`, `on-brand`/`on-critical`/
+`on-attention`/`on-info`, `identity-1..6` + `on-identity`, `FEATURE_SURFACE`, `ELEVATED`, `SCRIM`,
+`BTN_GHOST`, `BTN_SCRIBE`, `STATUS_GLYPH`. 27 files; the last hardcoded hexes (AppNav, Sidebar) are
+gone. Also: KPI tiles off gradients onto surfaces, Mission Control's zone cards off gradients, and
+the person page's blue identity band onto the one feature gradient.
+
+**Decisions made / locked:**
+- **Two scopes, one token set — no `dark:` variants anywhere.** A component is written once and is
+  correct in both themes because `bg-surface` resolves differently inside `.theme-dark`. This is also
+  what keeps marketing, `/app/login` and `/invite` light with zero overrides: they never render
+  inside that element. A `dark:` prefix per component would have meant 27 files of paired classes and
+  a guaranteed drift.
+- **The ramps are re-authored for a dark ground, not inverted hex-for-hex, but they keep their
+  direction of meaning:** 50–200 is always "a tint you put behind something", 700–900 always "the ink
+  you put on it". That single property is why `bg-amber-50 text-amber-700` — the at-risk badge,
+  declared once — is legible in both themes.
+- **`text-on-brand`, not `text-white`, on any brand fill.** The mockup puts white on `#50B7B0` at
+  2.40:1; a deep carbon-teal measures 7.50:1. This is the one deliberate break from the mockup, and
+  the same reasoning gives `on-critical` / `on-attention` / `on-info`.
+- **Gradients are spent once, not per card.** `FEATURE_SURFACE` (deep teal into carbon) is for
+  identity bands and hero summaries only. Session 55's bold-gradient tile *shape* is superseded —
+  three saturated slabs read as emphasis on white and as glare on carbon, and the approved mockup has
+  none.
+- **KPI tiles are neutral by default; the tone sits on the value, not the tile.** "Active
+  initiatives", "Due this week" and "Until next meeting" were blue purely so the row had four
+  colours — blue is Scribe's, and a count is not a status.
+- **Inputs are recessed (`bg-sunken`), not flush.** A white field on a white card was already
+  identifiable only by its border; on a dark card that is nothing at all. `control` is `#77848C`,
+  ≥3:1 against every surface in both themes (WCAG 1.4.11).
+
+**Found along the way:** Session 58's "zero hardcoded hexes remain" was true of plain utilities but
+not of arbitrary-value classes — `AppNav.tsx` carried seven (`bg-[#F5F8FA]`, `border-[#DDE0E3]`,
+`bg-[#222B32]`, …) and `Sidebar.tsx` three. Both are on tokens now.
+
+**Next step:** Andrew to dogfood the dark shell against real data — this was verified by `tsc` and
+`next build` only, not rendered, so contrast was checked numerically rather than by eye. Specifically
+worth a look: the Scribe drawer, Settings' modals, and empty/loading/disabled states. Chrome autofill
+is overridden in `globals.css`; confirm it behaves on the login form.
+
+---
+
 ## Session 58 — 2026-08-23
 
 **Goal:** Andrew had settled the brand with ChatGPT in another session — Current & Carbon (palette
@@ -210,54 +261,6 @@ running app and confirm the final look holds up outside the mockup.
 
 ---
 
-## Session 54 — 2026-08-22
-
-**Goal:** Andrew reviewed Session 53's Goals/Projects rebuild live and flagged that alignment/spacing
-felt "not perfect" now that Session 51/52 added the persistent header + sidebar. Asked me to review
-as a product/UX lead and identify what to fix; after the review, asked me to act on the top finding.
-
-**What was done:**
-- Audited every `/app/*` page's top-level `<main>` wrapper against `AppNav.tsx`'s header container.
-  Confirmed by grep: `AppNav`'s header uses `mx-auto max-w-7xl px-6 sm:px-8`; every page except
-  Dashboard used `px-6` with no `sm:` bump, and top/bottom padding was scattered (`py-10` Dashboard,
-  `py-16` most pages, `py-12` the direct-report detail page, `py-24` login/ic) — drift accumulated
-  across ~50 sessions of each page copying its own `<main>` line independently, invisible until
-  Session 51/52 gave the app a fixed header/sidebar to visibly drift away from.
-- New `frontend/components/PageShell.tsx` — one shared container: `mx-auto max-w-{size} px-6 py-10
-  sm:px-8`, matching AppNav's header exactly; a `maxWidth` prop (`2xl`/`3xl`/`4xl`/`6xl`/`7xl`) lets
-  each page keep its own width (that dimension varies legitimately; the padding/breakpoint recipe
-  didn't).
-- Migrated all 14 pages that render under the sidebar/header onto `PageShell`: `dashboard`, `team`,
-  `goals`, `projects`, `capacity`, `org`, `context`, `settings`, `assessments`,
-  `assessments/[reportId]`, `1-1s`, `reports/[id]`, `reports/[id]/log`, and `reports/[id]/prep`
-  (which has 3 separate `<main>` branches — loading/error, step 1, step 2 — each its own
-  `PageShell` instance). `login`/`ic` deliberately left untouched — they render outside
-  AppNav/Sidebar entirely (`layout.tsx`'s `NO_NAV_PATHS`), so they have no header to align against.
-
-**Decisions made / locked:**
-- Standardized top/bottom padding on `py-10` app-wide (down from the `py-16` most pages had drifted
-  to) — Dashboard's own pre-existing value, chosen because it was the one page that already
-  (accidentally) matched the header's breakpoint padding, not a new invented number.
-- Container recipe (`px-6 sm:px-8`, vertical padding) is now owned by one component; per-page
-  max-width stays a prop rather than being folded into a fixed set of page "types," since widths
-  vary for legitimate content reasons (a single-column form vs. a card grid).
-- `login`/`ic` are explicitly out of scope for this shell — different rendering context (no
-  persistent chrome above them), not an oversight.
-
-**Verification:** Frontend-only change (14 files + 1 new component, no schema/backend touch). Repo
-already present in the cloud sandbox from Session 53's tar; re-verified there: `npx tsc --noEmit`
-clean, `next build` clean (21/21 routes). All 15 files written back to Andrew's disk via the device
-bridge.
-
-**Next step:** Andrew to eyeball the app again for the two follow-on items flagged in the same UX
-review but deliberately not acted on this pass: (1) give the sidebar's top row and AppNav's header an
-explicit shared height token so the rail and header read as one coordinated unit rather than two
-independently-padded rows that happen to look close; (2) decide whether Mission Control's pastel
-"Your people/The work/Foundation" summary cards should move onto the same bold gradient-tile
-convention as the Team/Goals/Projects KPI strips, or stay a deliberately calmer "home" treatment.
-
----
-
 ## Archived sessions (compact index)
 
 The 20 most recent archived sessions keep their goal plus the decisions locked
@@ -268,6 +271,7 @@ lines keep the goal alone. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 54 — 2026-08-22:** UX review of alignment/spacing after the persistent header+sidebar landed; built and migrated 14 pages onto a shared PageShell. **Decided:** one component owns the container recipe (`px-6 sm:px-8` + vertical padding), per-page max-width stays a prop since widths vary for real content reasons; `login`/`ic` are explicitly out of the shell's scope, not an oversight.
 - **Session 53 — 2026-08-22:** Build Goals and Projects per Session 52's locked Option A — KPI strip, `border-l-4` card grid, inline-SVG progress ring. **Decided:** only the on-track *fraction* tile takes the dynamic gray/amber/green tone — a fraction tile must never render a fixed success colour, since "0/N on track" is not success; the progress ring keeps a fixed stroke regardless of status, an exact port of Team's status-agnostic ring rather than a new per-status recolouring convention.
 - **Session 52 — 2026-08-22:** Give Mission Control the persistent sidebar after all, and scope Goals/Projects into Team's visual language via a 3-option design canvas. **Decided:** every authenticated page shows the same rail — Session 51's "already the map" exclusion read as inconsistent in use, not as deliberate simplification; Goals/Projects locked to Option A (KPI strip + border-l-4 card grid + progress ring), level tabs kept as a pill filter.
 - **Session 51 — 2026-08-22:** Simplify the persistent nav (Sessions 36-38) by retiring the duplicated breadcrumb + zone-chip idiom in favor of a fully static top bar and a persistent left rail (`Sidebar.tsx`) on every page except Mission Control. **Decided:** Mission Control gets no sidebar since its own card grid + inline ZoneMap already is the map; the all-areas map overlay is retired outright, not rehomed, since the sidebar already puts every section one click away.
@@ -287,7 +291,7 @@ specific decision.
 - **Session 36 — 2026-08-16:** Nav rework pass 1 (tracked in code comments and DESIGN.md as Session 36/37; documented here retroactively — Andrew asked to hold… **Decided:** all six recorded directly in `docs/DESIGN.md`'s 2026-08-16 rows — hub & orbit locked in from nav_redesign_options.md; ZoneMap.tsx….
 - **Session 37 — 2026-08-16:** Nav rework pass 2 (tracked in code comments as Session 38 — see `docs/archive/scoping/ONE_ON_ONES_PAGE_SPEC.md`, the canonical spec for this pass). **Decided:** `resolve_cadence_days()` returns `(days, source)` rather than a bare int — a deliberate deviation from the spec's literal…; `one_on_ones` still has no status column — status stays derived (`planned` = prep_guide set + summary null; `completed` = summary….
 - **Session 35 — 2026-08-16:** Widen the Scribe drawer from its fixed 400px to roughly 25–33% of the viewport width, so the conversation and draft cards get more room without…
-- **Session 34 — 2026-08-13:** S3 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out. **Decided:** **Thread is now fully server-managed.** The client no longer passes a thread to the backend; it only sends the new message + optional page context.; **Page context is ephemeral, not stored.** It's injected into the system prompt per request, not into the `assistant_messages` table..
+- **Session 34 — 2026-08-13:** S3 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Hardening + close-out.
 - **Session 33 — 2026-08-13:** S2 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): Drawer UI + confirm flow.
 - **Session 32 — 2026-08-13:** S1 of the Scribe build plan (`docs/archive/scoping/AGENT_SCRIBE_SCOPING.md`): agent loop + eval harness, no UI.
 - **Session 31 — 2026-08-12:** Build Session VI of the Context Engine build plan (`docs/archive/scoping/CONTEXT_ENGINE_BUILD_PLAN.md`): staleness + precedence surfacing — the final session of the….

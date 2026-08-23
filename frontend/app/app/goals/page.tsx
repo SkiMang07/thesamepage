@@ -53,7 +53,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
-import { INPUT, LABEL, BTN_PRIMARY, HEX } from "@/lib/tokens";
+import { INPUT, LABEL, BTN_PRIMARY, HEX, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone } from "@/lib/tokens";
 
 const LEVEL_TABS: { id: GoalLevel; label: string; blurb: string }[] = [
   { id: "individual", label: "Individual", blurb: "Goals for one direct report" },
@@ -294,7 +294,7 @@ export default function GoalsPage() {
                   key={t.id}
                   onClick={() => setLevel(t.id)}
                   className={`rounded px-3 py-1.5 text-sm ${
-                    level === t.id ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"
+                    level === t.id ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"
                   }`}
                 >
                   {t.label}
@@ -374,10 +374,10 @@ function KpiStrip({ goals, projects }: { goals: Goal[]; projects: Project[] }) {
   // there's nothing to score at all.
   const onTrackTone =
     scored.length === 0
-      ? { from: "from-carbon-500", to: "to-carbon-600" }
+      ? "neutral"
       : onTrack === 0
-        ? { from: "from-amber-500", to: "to-amber-600" }
-        : { from: "from-teal-600", to: "to-teal-700" };
+        ? "attention"
+        : "brand";
 
   const atRisk = scored.filter((g) => g.status === "at_risk").length;
 
@@ -390,19 +390,21 @@ function KpiStrip({ goals, projects }: { goals: Goal[]; projects: Project[] }) {
   const goalIdsWithProjects = new Set(projects.map((p) => p.goal_id).filter((id): id is string => id != null));
   const noInitiative = scored.filter((g) => !goalIdsWithProjects.has(g.id)).length;
 
-  const tiles = [
-    { value: onTrackLabel, label: "Goals on track", from: onTrackTone.from, to: onTrackTone.to },
-    { value: String(atRisk), label: "At risk", from: "from-amber-500", to: "to-amber-600" },
-    { value: String(dueThisWeek), label: "Due this week", from: "from-blue-600", to: "to-blue-700" },
-    { value: String(noInitiative), label: "No initiative attached", from: "from-red-600", to: "to-red-700" },
+  const tiles: { value: string; label: string; tone: TileTone }[] = [
+    { value: onTrackLabel, label: "Goals on track", tone: onTrackTone },
+    { value: String(atRisk), label: "At risk", tone: atRisk > 0 ? "attention" : "neutral" },
+    // "Due this week" was blue, which is Scribe's colour and not a status.
+    // A count of upcoming work is neutral information until it is overdue.
+    { value: String(dueThisWeek), label: "Due this week", tone: "neutral" },
+    { value: String(noInitiative), label: "No initiative attached", tone: noInitiative > 0 ? "critical" : "neutral" },
   ];
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {tiles.map((t) => (
-        <div key={t.label} className={`rounded-xl bg-gradient-to-br ${t.from} ${t.to} px-4 py-3 text-white`}>
-          <p className="text-2xl font-semibold">{t.value}</p>
-          <p className="text-xs text-white/80">{t.label}</p>
+        <div key={t.label} className={TILE}>
+          <p className={`${TILE_VALUE} ${TILE_TONE[t.tone]}`}>{t.value}</p>
+          <p className={TILE_LABEL}>{t.label}</p>
         </div>
       ))}
     </div>
@@ -492,7 +494,7 @@ function GoalGrid({
         ) : (
           <div
             key={g.id}
-            className={`rounded-lg border-l-4 bg-white px-4 py-4 shadow-sm ${STATUS_BORDER[g.status]}`}
+            className={`rounded-lg border-l-4 bg-surface px-4 py-4 shadow-sm ${STATUS_BORDER[g.status]}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">

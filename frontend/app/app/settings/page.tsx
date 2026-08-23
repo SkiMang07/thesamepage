@@ -1137,7 +1137,7 @@ function SetupProgressHeader({
             key={step.id}
             onClick={() => onStep(step.id)}
             className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
-              v.done ? "border-hairline bg-white hover:bg-canvas" : "border-amber-200 bg-amber-50 hover:bg-amber-100"
+              v.done ? "border-hairline bg-surface hover:bg-canvas" : "border-amber-200 bg-amber-50 hover:bg-amber-100"
             }`}
           >
             <p className={`font-semibold ${step.id === "teams" ? "text-sm" : "text-lg"} ${v.done ? "text-ink" : "text-amber-800"}`}>
@@ -1188,8 +1188,8 @@ function CreateRoleModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
-      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-24" onClick={onClose}>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-medium text-ink">Create a new role</h3>
         <p className="mt-1 text-xs text-ink-secondary">
           Starts a new ladder at L1 — add more levels later from Roles &amp; expectations.
@@ -1251,8 +1251,8 @@ function CreateTeamModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
-      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-24" onClick={onClose}>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-medium text-ink">Create a new team</h3>
         <p className="mt-1 text-xs text-ink-secondary">
           For the full org chart (parent units, leaders), use{" "}
@@ -1340,7 +1340,7 @@ function PersonRowMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-hairline bg-white py-1 text-sm shadow-lg">
+          <div className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-hairline bg-surface py-1 text-sm shadow-lg">
             <button
               onClick={() => {
                 setOpen(false);
@@ -1406,8 +1406,8 @@ function EditPersonModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
-      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-24" onClick={onClose}>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-medium text-ink">Edit name &amp; email</h3>
         <div className="mt-3 space-y-3">
           <div>
@@ -1467,8 +1467,8 @@ function ArchiveConfirmModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-24" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-medium text-ink">Archive {report.name}?</h3>
         <p className="mt-2 text-sm text-ink-secondary">
           They&apos;ll drop off your roster, rollups, and setup counts. Their 1:1 history, assessments, goals, and
@@ -1483,7 +1483,7 @@ function ArchiveConfirmModal({
             type="button"
             onClick={confirm}
             disabled={archiving}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+            className="rounded-md bg-red-600 px-4 py-2 text-sm text-on-critical hover:bg-red-500 disabled:opacity-50"
           >
             {archiving ? "Archiving..." : "Archive"}
           </button>
@@ -2243,7 +2243,7 @@ function ExpectationDetail({
             <button
               key={t.id}
               onClick={() => setKind(t.id)}
-              className={`rounded px-3 py-1 text-sm ${kind === t.id ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
+              className={`rounded px-3 py-1 text-sm ${kind === t.id ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`}
             >
               {t.label}
             </button>
@@ -2476,14 +2476,14 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
         <button
           onClick={startDraft}
           disabled={drafting || !!draftRows}
-          className="shrink-0 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-hover hover:bg-blue-100 disabled:opacity-50"
+          className="shrink-0 rounded-md border border-blue-200 bg-surface px-3 py-1.5 text-xs font-medium text-brand-hover hover:bg-blue-100 disabled:opacity-50"
         >
           {drafting ? "Drafting..." : "Draft with AI"}
         </button>
       </div>
 
       {draftRows && (
-        <div className="mt-3 rounded-md border border-blue-200 bg-white p-3">
+        <div className="mt-3 rounded-md border border-blue-200 bg-surface p-3">
           <p className="text-xs font-medium text-ink-secondary">
             Drafted from your company name — review, edit, and choose what to keep.
           </p>
@@ -2536,7 +2536,7 @@ function OrgWideValuesBlock({ onError }: { onError: (m: string | null) => void }
       ) : (
         <ul className="mt-3 space-y-1.5">
           {items.map((it) => (
-            <li key={it.id} className="flex items-start justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm">
+            <li key={it.id} className="flex items-start justify-between gap-3 rounded-md bg-surface px-3 py-2 text-sm">
               <div className="min-w-0">
                 <p className="font-medium text-ink">{expectationName(it)}</p>
                 {it.description && <p className="mt-0.5 text-xs text-ink-secondary">{it.description}</p>}
@@ -2687,8 +2687,8 @@ function DraftReviewPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-surface p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-medium text-ink">Draft with AI {role ? `— ${roleLabel(role)}` : ""}</h3>

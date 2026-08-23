@@ -129,7 +129,7 @@ export function DraftExpectationsReview({
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`rounded px-3 py-1 text-sm ${tab === t.id ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
+              className={`rounded px-3 py-1 text-sm ${tab === t.id ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`}
             >
               {t.label} ({count})
             </button>

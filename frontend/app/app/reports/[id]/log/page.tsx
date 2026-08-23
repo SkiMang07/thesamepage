@@ -81,7 +81,7 @@ export default function LogOneOnOnePage() {
         <button
           type="submit"
           disabled={wrappingUp || !notes.trim()}
-          className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
+          className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
         >
           {wrappingUp ? "Drafting your log…" : "Wrap up & log →"}
         </button>

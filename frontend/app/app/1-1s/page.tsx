@@ -115,7 +115,7 @@ export default function OneOnOnesPage() {
                 You&apos;re all caught up — nobody&apos;s due for a 1:1 right now. 🎯
               </p>
             ) : (
-              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-white">
+              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-surface">
                 {dueNow.map((r) => {
                   const badlyOverdue = r.days_since_last === null || r.days_since_last > r.cadence_days * 2;
                   return (
@@ -139,7 +139,7 @@ export default function OneOnOnesPage() {
                       </div>
                       <Link
                         href={`/app/reports/${r.direct_report_id}/prep`}
-                        className="shrink-0 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-hover"
+                        className="shrink-0 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand hover:bg-brand-hover"
                       >
                         Prep →
                       </Link>
@@ -158,7 +158,7 @@ export default function OneOnOnesPage() {
             {prepped.length === 0 ? (
               <p className="mt-3 text-sm text-ink-secondary">No prep sheets waiting on a meeting.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-white">
+              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-surface">
                 {prepped.map((r) => (
                   <li key={r.direct_report_id}>
                     <Link
@@ -187,7 +187,7 @@ export default function OneOnOnesPage() {
             {recentlyWrapped.length === 0 ? (
               <p className="mt-3 text-sm text-ink-secondary">Nothing logged yet.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-white">
+              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-surface">
                 {recentlyWrapped.map((r) => (
                   <li key={r.direct_report_id}>
                     <Link

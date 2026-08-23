@@ -27,7 +27,7 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
   const [open, setOpen] = useState(index === 0); // first card open by default
 
   return (
-    <div className="rounded-lg border border-hairline bg-white">
+    <div className="rounded-lg border border-hairline bg-surface">
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-start justify-between px-5 py-4 text-left"
@@ -246,7 +246,7 @@ function PrepFlow() {
           <button
             type="submit"
             disabled={loading || !notes.trim()}
-            className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
+            className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
           >
             {loading ? "Generating prep sheet…" : "Generate prep sheet →"}
           </button>
@@ -333,7 +333,7 @@ function PrepFlow() {
             <button
               onClick={handleWrapUp}
               disabled={wrappingUp || !callNotes.trim()}
-              className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
+              className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
             >
               {wrappingUp ? "Drafting your log…" : "Wrap up & log →"}
             </button>

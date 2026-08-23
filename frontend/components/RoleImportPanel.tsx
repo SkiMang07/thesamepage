@@ -216,8 +216,8 @@ export default function RoleImportPanel({
   const pinnedFamily = scopedFamilyId ? roleFamilies.find((f) => f.id === scopedFamilyId) : undefined;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-surface p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-medium text-ink">
@@ -409,7 +409,7 @@ export default function RoleImportPanel({
                   <div className="mt-2 flex items-center gap-3">
                     <button
                       onClick={() => setExistsTargetId(blockingCollision.id)}
-                      className="rounded-md bg-amber-800 px-2.5 py-1 font-medium text-white"
+                      className="rounded-md bg-amber-500 px-2.5 py-1 font-medium text-on-attention hover:bg-amber-400"
                     >
                       Update L{level} instead
                     </button>

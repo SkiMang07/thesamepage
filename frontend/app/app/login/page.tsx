@@ -70,7 +70,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading || !email.trim()}
-            className="w-full rounded-md bg-brand px-4 py-2 text-white disabled:opacity-40"
+            className="w-full rounded-md bg-brand px-4 py-2 text-on-brand disabled:opacity-40"
           >
             {loading ? "Sending…" : "Send login link"}
           </button>

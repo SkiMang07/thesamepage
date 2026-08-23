@@ -285,9 +285,16 @@ export function getNavContext(pathname: string, params: Record<string, string | 
 // manager actually navigates by; colour is spent on the brand instead of on
 // wayfinding that the labels already do.
 //
-// The gradient TILE SHAPE from Session 55 is deliberately kept — that was
-// picked from a real comparison canvas and only its per-hue colouring is
-// superseded, not the decision to use bold tiles over pastel cards.
+// The gradient tile SHAPE from Session 55 is superseded by the dark pass. On a
+// light canvas, three saturated teal blocks read as "the important row"; on a
+// dark canvas they read as three glowing slabs, and the approved mockup
+// (docs/Redesign Scoping/mission-control-action-first.html) has no such thing
+// — its cards are all one calm surface and it spends its single gradient on
+// the manager-brief panel. The rounded tile, the group title + blurb, the
+// item rows and their door-state labels are all unchanged; only the ground
+// they sit on is now `surface` instead of a gradient, and the door-state tone
+// colours go back to the shared TONE_TEXT (amber / red / faint) that the rest
+// of the app uses, so an "8 overdue" reads the same here as anywhere else.
 // ---------------------------------------------------------------------------
 
 export const ZONE_STYLE = {
@@ -297,11 +304,8 @@ export const ZONE_STYLE = {
   chipOn: "bg-brand-tint border-teal-200 text-brand",
 };
 
-const ZONE_GRADIENT = {
-  from: "from-teal-600",
-  to: "to-teal-700",
-  shadow: "shadow-[0_4px_14px_rgba(8,126,120,0.25)]",
-};
+/** The zone card ground. One surface, no gradient. */
+const ZONE_CARD = "rounded-2xl border border-hairline bg-surface";
 
 export type Tone = "warn" | "risk" | "setup";
 
@@ -309,14 +313,6 @@ const TONE_TEXT: Record<Tone, string> = {
   warn: "text-amber-700 font-semibold",
   risk: "text-red-700 font-semibold",
   setup: "text-ink-faint italic",
-};
-
-// Tone colours for text sitting directly on a gradient tile rather than on a
-// light ground — must stay readable on teal.
-const TONE_TEXT_ON_GRADIENT: Record<Tone, string> = {
-  warn: "text-amber-100 font-semibold",
-  risk: "text-red-100 font-semibold",
-  setup: "text-white/65 italic",
 };
 
 // Person-identity colours. Drawn only from the brand families so a roster
@@ -521,53 +517,45 @@ export function useZoneData(): ZoneData {
 export function ZoneMap({ doorStates }: { doorStates: Partial<Record<string, DoorState>> }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-      {NAV_GROUPS.map((g) => {
-        const gradient = ZONE_GRADIENT;
-        return (
-          <div
-            key={g.group}
-            className={`rounded-2xl bg-gradient-to-br p-4 ${gradient.from} ${gradient.to} ${gradient.shadow}`}
-          >
-            <div className="text-[13px] font-bold tracking-tight text-white">{g.group}</div>
-            <div className="mt-0.5 text-xs text-white/75">{g.blurb}</div>
-            <div className="mt-2 space-y-1">
-              {g.items.map((item) => {
-                const state = doorStates[item.id];
-                const inner = (
-                  <>
-                    <Icon name={item.icon} className="h-[15px] w-[15px] shrink-0 text-white/80" />
-                    <span className="flex-1 truncate text-[13px] font-medium text-white">{item.label}</span>
-                    {state && (
-                      <span
-                        className={`shrink-0 text-[11.5px] ${state.tone ? TONE_TEXT_ON_GRADIENT[state.tone] : "text-white/85"}`}
-                      >
-                        {state.label}
-                      </span>
-                    )}
-                  </>
-                );
-                return item.disabled ? (
-                  <div
-                    key={item.id}
-                    className="flex cursor-default items-center gap-2 rounded-lg bg-white/[0.14] px-2.5 py-2 opacity-70"
-                    title="Coming in a later pass"
-                  >
-                    {inner}
-                  </div>
-                ) : (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    className="flex items-center gap-2 rounded-lg bg-white/[0.14] px-2.5 py-2 transition hover:translate-x-0.5 hover:bg-white/25"
-                  >
-                    {inner}
-                  </Link>
-                );
-              })}
-            </div>
+      {NAV_GROUPS.map((g) => (
+        <div key={g.group} className={`${ZONE_CARD} p-4`}>
+          <div className="text-[13px] font-semibold tracking-tight text-ink">{g.group}</div>
+          <div className="mt-0.5 text-xs text-ink-muted">{g.blurb}</div>
+          <div className="mt-2.5 space-y-1">
+            {g.items.map((item) => {
+              const state = doorStates[item.id];
+              const inner = (
+                <>
+                  <Icon name={item.icon} className="h-[15px] w-[15px] shrink-0 text-ink-muted" />
+                  <span className="flex-1 truncate text-[13px] font-medium text-ink-body">{item.label}</span>
+                  {state && (
+                    <span className={`shrink-0 text-[11.5px] ${state.tone ? TONE_TEXT[state.tone] : "text-ink-muted"}`}>
+                      {state.label}
+                    </span>
+                  )}
+                </>
+              );
+              return item.disabled ? (
+                <div
+                  key={item.id}
+                  className="flex cursor-default items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 opacity-60"
+                  title="Coming in a later pass"
+                >
+                  {inner}
+                </div>
+              ) : (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 transition hover:bg-brand-tint"
+                >
+                  {inner}
+                </Link>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }

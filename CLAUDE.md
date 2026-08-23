@@ -47,6 +47,10 @@ Pending work that is scoped but not built has its own doc:
 `docs/NOTES_INGESTION_SCOPING.md`. Shipped scoping docs live in
 `docs/archive/scoping/` — historical, never current intent.
 
+`docs/Redesign Scoping/mission-control-action-first.html` is the **approved
+visual authority** for the app's dark theme — open it before any visual work.
+It is a look-and-feel reference, not an IA proposal.
+
 ---
 
 ## How to find things

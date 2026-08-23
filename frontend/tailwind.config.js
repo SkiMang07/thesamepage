@@ -1,18 +1,40 @@
 /** @type {import('tailwindcss').Config} */
 
 // ---------------------------------------------------------------------------
-// CURRENT & CARBON — the locked brand system.
+// CURRENT & CARBON — the locked brand system, now theme-aware.
 //
-// Locked anchors (docs/branding/colors/README.md, direction #11) reproduce
-// EXACTLY at these steps and must not be hand-edited:
+// WHAT CHANGED (dark-theme pass): every colour below used to be a literal hex.
+// They are now `rgb(var(--c-*) / <alpha-value>)` references, and the actual
+// values live in app/globals.css as two sets of custom properties:
+//
+//     :root        the light theme — marketing, /app/login, /invite
+//     .theme-dark  the dark theme  — every authenticated /app/* page
+//
+// Nothing about the SEMANTICS moved. `bg-surface` is still "a card", `text-
+// ink-muted` is still "metadata you are expected to read", `text-amber-700`
+// is still "attention". Each token simply resolves to a different value
+// depending on which theme scope it renders inside, so a page written once
+// is correct in both. `<alpha-value>` support is preserved, so `bg-canvas/60`
+// and `ring-blue-600/25` keep working.
+//
+// THE RAMPS ARE NOT INVERTED HEX-FOR-HEX. They are re-authored for a dark
+// ground, but they keep their DIRECTION OF MEANING: the low steps (50-200)
+// are always "a tint you put behind something" and the high steps (700-900)
+// are always "the readable ink you put on that tint". In light mode a tint is
+// pale and its ink is deep; in dark mode a tint is deep and its ink is pale.
+// That is what makes `bg-amber-50 text-amber-700` — the at-risk badge, written
+// once in lib/tokens.ts — legible in both themes without a single `dark:`
+// variant anywhere in the app.
+//
+// Locked anchors (docs/branding/colors/README.md, direction #11) still
+// reproduce EXACTLY in the LIGHT theme and must not be hand-edited:
 //     teal-600  #087E78   primary
 //     blue-600  #2878D0   accent  (Scribe / focus / informational only)
 //     amber-500 #B67118   warning
 //     carbon-900 #222B32  carbon
 //     brand.tint #EEF5F4  light surface
-// Ramps around them were generated in OKLCH with chroma tapering toward both
-// ends, so every step is perceptually even. Regenerate with the script
-// recorded in the brand_system project memory rather than nudging hexes here.
+// The dark ramps are the same five hues re-anchored for a carbon ground, per
+// the approved mockup (docs/Redesign Scoping/mission-control-action-first.html).
 //
 // WHY THE STOCK TAILWIND FAMILIES ARE OVERRIDDEN BELOW:
 // gray / green / emerald / indigo / violet / purple / rose / pink / sky / cyan
@@ -20,35 +42,28 @@
 // families live across the app (Team alone used ten). Remapping them means a
 // missed `text-rose-500` in some corner renders as on-brand critical red
 // instead of an off-palette pink — the palette becomes closed by construction,
-// not by everyone remembering the rule. Semantic tokens (ink/surface/brand/...)
-// are the names to REACH FOR; the family overrides are the safety net.
+// not by everyone remembering the rule. It now also means such a stray class
+// is theme-aware for free. Semantic tokens (ink/surface/brand/...) are the
+// names to REACH FOR; the family overrides are the safety net.
 // ---------------------------------------------------------------------------
 
-const carbon = {
-  50: "#F5F8FA", 100: "#ECEFF2", 200: "#DDE0E3", 300: "#C9CDD0", 400: "#A7ACB0",
-  500: "#878D92", 600: "#686E74", 700: "#4F575D", 800: "#394148", 900: "#222B32",
-  950: "#131B22",
-};
-const teal = {
-  50: "#E8FCFA", 100: "#DDF4F2", 200: "#CAE7E4", 300: "#B1D5D1", 400: "#85B7B2",
-  500: "#579A95", 600: "#087E78", 700: "#00635F", 800: "#004B47", 900: "#00312F",
-  950: "#00201E",
-};
-const blue = {
-  50: "#F2F8FF", 100: "#E4F0FF", 200: "#CBE2FF", 300: "#AED0F9", 400: "#81AFE7",
-  500: "#528FD7", 600: "#2878D0", 700: "#0755A0", 800: "#003F7D", 900: "#002955",
-  950: "#00193A",
-};
-const amber = {
-  50: "#FFF6ED", 100: "#FFEBD8", 200: "#F6DBC1", 300: "#E8C5A4", 400: "#D1A171",
-  500: "#B67118", 600: "#9B5D00", 700: "#7B4800", 800: "#5D3600", 900: "#3E2200",
-  950: "#291500",
-};
-const red = {
-  50: "#FFF5F3", 100: "#FFE9E6", 200: "#FFD4CF", 300: "#F7BCB5", 400: "#E2938B",
-  500: "#CE6B63", 600: "#BD3D39", 700: "#982524", 800: "#7A0E13", 900: "#550006",
-  950: "#390003",
-};
+/** Build an 11-step ramp of `rgb(var(--c-<name>-<step>) / <alpha-value>)`. */
+const ramp = (name) =>
+  Object.fromEntries(
+    [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((step) => [
+      step,
+      `rgb(var(--c-${name}-${step}) / <alpha-value>)`,
+    ]),
+  );
+
+/** A single semantic token. */
+const v = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
+const carbon = ramp("carbon");
+const teal = ramp("teal");
+const blue = ramp("blue");
+const amber = ramp("amber");
+const red = ramp("red");
 
 module.exports = {
   content: [
@@ -72,35 +87,66 @@ module.exports = {
     extend: {
       colors: {
         carbon,
+
         // --- semantic surface tokens ---
-        canvas: "#F5F8FA",   // page ground
-        surface: "#FFFFFF",  // cards sitting on the canvas
-        sunken: "#ECEFF2",   // recessed sub-panels, quoted AI text, table heads
-        hairline: "#DDE0E3", // card outer edge
-        divider: "#ECEFF2",  // rule between rows INSIDE a card
-        control: "#C9CDD0",  // input / secondary-button border
+        // Four levels of depth, which is what gives the dark theme its
+        // layered feel instead of one flat sheet of grey:
+        //   canvas   the page ground
+        //   surface  a card sitting on the canvas
+        //   elevated a thing floating ABOVE a card (menu, modal, drawer)
+        //   sunken   a panel recessed INTO a card (quoted AI text, inputs,
+        //            table heads, row hover)
+        canvas: v("canvas"),
+        surface: v("surface"),
+        elevated: v("elevated"),
+        sunken: v("sunken"),
+        hairline: v("hairline"), // card outer edge
+        divider: v("divider"),   // rule between rows INSIDE a card
+        control: v("control"),   // input / secondary-button border
 
         // --- ink scale ---
-        // Replaces the gray-400-vs-gray-500 muddle. Tailwind's gray-400
-        // (#9CA3AF) was the app's most-used text colour at 232 usages and
-        // fails WCAG AA on white at 2.54:1; `ink-muted` is the corrected
-        // floor for real text at 5.16:1. `ink-faint` is 3.36:1 and is for
-        // disabled glyphs and decoration ONLY — never small body copy.
+        // Replaces the gray-400-vs-gray-500 muddle. `ink-muted` is the FLOOR
+        // for real text in both themes (5.16:1 light / 5.56:1 dark). `ink-faint`
+        // (3.36:1 / 3.30:1) is for disabled glyphs and decoration ONLY — never
+        // small body copy. See docs/systems/brand.md.
         ink: {
-          DEFAULT: "#222B32",   // 14.39:1 — headings, high emphasis
-          body: "#394148",      // 10.38:1 — body copy
-          secondary: "#4F575D", //  7.36:1 — labels, prose, empty states
-          muted: "#686E74",     //  5.16:1 — metadata, eyebrows, icons
-          faint: "#878D92",     //  3.36:1 — disabled / decorative only
+          DEFAULT: v("ink"),
+          body: v("ink-body"),
+          secondary: v("ink-secondary"),
+          muted: v("ink-muted"),
+          faint: v("ink-faint"),
         },
 
         // --- brand ---
         brand: {
-          DEFAULT: "#087E78",   // teal-600, locked
-          hover: "#00635F",     // teal-700
-          tint: "#EEF5F4",      // locked "light surface" — selection ground
+          DEFAULT: v("brand"),
+          hover: v("brand-hover"),
+          tint: v("brand-tint"), // selection ground
           ...teal,
         },
+
+        // --- "on" colours: what text/icons become when they sit ON a filled
+        // swatch. In light mode every one of these is white. In dark mode the
+        // fills are BRIGHT (teal #50B7B0, red #F0897F, amber #DFA44E), so white
+        // on them measures 2.2-2.6:1 — the approved mockup does exactly this
+        // and it is the one place the mockup is not accessible. Dark ink on the
+        // bright fill measures 7.3-7.5:1 and is the standard dark-UI answer.
+        // Reach for `text-on-brand` wherever you would have written
+        // `bg-brand text-white`.
+        "on-brand": v("on-brand"),
+        "on-critical": v("on-critical"),
+        "on-attention": v("on-attention"),
+        "on-info": v("on-info"),
+        "on-carbon": v("on-carbon"),
+
+        // --- person identity (avatars, card accents) ---
+        // Six distinguishable fills drawn only from the brand families. Text on
+        // them is `text-on-identity`.
+        identity: {
+          1: v("id-1"), 2: v("id-2"), 3: v("id-3"),
+          4: v("id-4"), 5: v("id-5"), 6: v("id-6"),
+        },
+        "on-identity": v("on-identity"),
 
         teal, blue, amber, red,
 
@@ -130,7 +176,14 @@ module.exports = {
           "Helvetica Neue", "Arial", "sans-serif",
         ],
       },
-      ringColor: { DEFAULT: "#2878D0" },
+      // The one gradient the system spends: a deep teal-into-carbon feature
+      // surface, for identity bands and hero summaries only. Everything else
+      // is a flat surface — see lib/tokens.ts FEATURE_SURFACE.
+      backgroundImage: {
+        feature: "linear-gradient(145deg, var(--c-feature-from), var(--c-feature-to))",
+      },
+      ringColor: { DEFAULT: v("focus") },
+      ringOffsetColor: { DEFAULT: v("canvas") },
     },
   },
   plugins: [],

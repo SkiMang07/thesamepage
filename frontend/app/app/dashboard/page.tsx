@@ -400,7 +400,7 @@ export default function DashboardPage() {
       {insight && insight.insight && !insightDismissed && (
         <div className={`${SECTION_GAP} flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4`}>
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600">
-            <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-3 w-3 text-on-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
@@ -409,7 +409,7 @@ export default function DashboardPage() {
             {insight.cta_label && insight.cta_direct_report_id && (
               <Link
                 href={`/app/reports/${insight.cta_direct_report_id}`}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-on-info hover:bg-blue-500"
               >
                 {insight.cta_label} →
               </Link>
@@ -487,7 +487,7 @@ export default function DashboardPage() {
           only, per capacity.py). Full breakdown + department rollup live on
           /app/capacity. */}
       {!loading && (
-        <section className={`${SECTION_GAP} rounded-xl border border-hairline bg-white`}>
+        <section className={`${SECTION_GAP} rounded-xl border border-hairline bg-surface`}>
           <div className="flex items-center justify-between border-b border-divider px-5 py-4">
             <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Capacity — this week</h2>
             <Link href="/app/capacity" className="text-xs text-ink-muted hover:text-ink-secondary">
@@ -603,7 +603,7 @@ function IndividualPerformanceCard({
   }
 
   return (
-    <section className="rounded-xl border border-hairline bg-white">
+    <section className="rounded-xl border border-hairline bg-surface">
       <div className="flex items-center justify-between border-b border-divider px-5 py-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
           Individual Performance{team.length > 0 && ` (${team.length})`}
@@ -688,7 +688,7 @@ function TriageCard({
 }) {
   const [showHealthy, setShowHealthy] = useState(false);
   return (
-    <section className="rounded-xl border border-hairline bg-white">
+    <section className="rounded-xl border border-hairline bg-surface">
       <div className="flex items-center justify-between border-b border-divider px-5 py-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
           {title}

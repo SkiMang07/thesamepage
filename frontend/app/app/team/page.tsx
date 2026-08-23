@@ -121,7 +121,7 @@ import {
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
-import { IDENTITY_BG, IDENTITY_BORDER, HEX } from "@/lib/tokens";
+import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, HEX, FEATURE_SURFACE, EYEBROW, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone } from "@/lib/tokens";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
@@ -436,7 +436,7 @@ export default function TeamPage() {
           <select
             value={selectedTeamId ?? ""}
             onChange={(e) => setSelectedTeamId(e.target.value || null)}
-            className="rounded-md border border-control bg-white px-2 py-1 text-sm text-ink-body"
+            className="rounded-md border border-control bg-surface px-2 py-1 text-sm text-ink-body"
             aria-label="Select team"
           >
             <option value="">All teams</option>
@@ -547,10 +547,10 @@ function KpiStrip({
   // and nothing is on track yet; gray when there's nothing to score at all.
   const goalsTileTone =
     scoredGoals.length === 0
-      ? { from: "from-carbon-500", to: "to-carbon-600" }
+      ? "neutral"
       : onTrackGoals === 0
-        ? { from: "from-amber-500", to: "to-amber-600" }
-        : { from: "from-teal-600", to: "to-teal-700" };
+        ? "attention"
+        : "brand";
 
   const today = localDateStr();
   const weekOut = addDaysStr(today, 7);
@@ -562,19 +562,22 @@ function KpiStrip({
   const meetingLabel = nextAgenda ? `${Math.max(daysBetweenTodayAnd(nextAgenda.meeting_date!), 0)}d` : "—";
   const meetingSubLabel = nextAgenda ? "Until next meeting" : "No meeting planned";
 
-  const tiles = [
-    { value: goalsLabel, label: "Goals on track", from: goalsTileTone.from, to: goalsTileTone.to },
-    { value: String(initiatives.length), label: "Active initiatives", from: "from-blue-600", to: "to-blue-700" },
-    { value: String(dueThisWeek), label: "Commitments due this week", from: "from-amber-500", to: "to-amber-600" },
-    { value: meetingLabel, label: meetingSubLabel, from: "from-blue-600", to: "to-blue-700" },
+  const tiles: { value: string; label: string; tone: TileTone }[] = [
+    { value: goalsLabel, label: "Goals on track", tone: goalsTileTone },
+    // Both of these were blue purely so the row had four colours in it —
+    // blue is Scribe's and a KPI is not AI. Neither is a status: a count of
+    // initiatives and a countdown to a meeting are just numbers.
+    { value: String(initiatives.length), label: "Active initiatives", tone: "neutral" },
+    { value: String(dueThisWeek), label: "Commitments due this week", tone: dueThisWeek > 0 ? "attention" : "neutral" },
+    { value: meetingLabel, label: meetingSubLabel, tone: "neutral" },
   ];
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {tiles.map((t) => (
-        <div key={t.label} className={`rounded-xl bg-gradient-to-br ${t.from} ${t.to} px-4 py-3 text-white`}>
-          <p className="text-2xl font-semibold">{t.value}</p>
-          <p className="text-xs text-white/80">{t.label}</p>
+        <div key={t.label} className={TILE}>
+          <p className={`${TILE_VALUE} ${TILE_TONE[t.tone]}`}>{t.value}</p>
+          <p className={TILE_LABEL}>{t.label}</p>
         </div>
       ))}
     </div>
@@ -601,7 +604,7 @@ function InitiativesCard({
   });
 
   return (
-    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Initiatives</p>
         {initiatives.length > 0 && (
@@ -660,7 +663,7 @@ function GoalsCard({ goals, selectedTeamId }: { goals: TeamGoal[]; selectedTeamI
   const sorted = [...goals].sort((a, b) => (a.level === b.level ? 0 : a.level === "company" ? -1 : 1));
 
   return (
-    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">Goal progress</p>
       {goals.length === 0 ? (
         <p className="text-sm text-ink-muted">No company or team goals yet.</p>
@@ -775,7 +778,7 @@ function CommitmentsCard({
   }
 
   return (
-    <div className="rounded-xl border border-hairline bg-white px-4 py-4">
+    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
           Team commitments{open.length > 0 && ` (${open.length})`}
@@ -822,7 +825,7 @@ function CommitmentsCard({
             <button
               onClick={submit}
               disabled={saving || !reportId || !description.trim()}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -920,7 +923,7 @@ function CalloutsPanel({
   }
 
   return (
-    <div className="flex flex-col rounded-xl border border-hairline bg-white px-4 py-4">
+    <div className="flex flex-col rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Critical callouts</p>
         {!editing && (
@@ -954,7 +957,7 @@ function CalloutsPanel({
             <button
               onClick={save}
               disabled={saving}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -1033,7 +1036,7 @@ function DevFocusPanel({
   }
 
   return (
-    <div className="flex flex-col rounded-xl border border-hairline bg-white px-4 py-4">
+    <div className="flex flex-col rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Training focus</p>
         {!editing && (
@@ -1067,7 +1070,7 @@ function DevFocusPanel({
             <button
               onClick={save}
               disabled={saving}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -1156,10 +1159,10 @@ function MeetingsPanel({
   return (
     <div>
       {nextAgenda ? (
-        <div className="rounded-xl bg-gradient-to-br from-carbon-900 via-carbon-800 to-carbon-900 px-5 py-4 text-white">
+        <div className={`${FEATURE_SURFACE} px-5 py-4`}>
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-200">Next meeting</p>
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium">
+            <p className={EYEBROW}>Next meeting</p>
+            <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-body">
               {formatMeetingDate(nextAgenda.meeting_date!)}
             </span>
           </div>
@@ -1175,7 +1178,7 @@ function MeetingsPanel({
         <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
           Plan next meeting
         </summary>
-        <div className="mt-2 rounded-xl border border-hairline bg-white px-4 py-3">
+        <div className="mt-2 rounded-xl border border-hairline bg-surface px-4 py-3">
           <label className="mb-1 block text-xs font-medium text-ink-secondary">Meeting date</label>
           <input
             type="date"
@@ -1197,7 +1200,7 @@ function MeetingsPanel({
             <button
               onClick={submitAgenda}
               disabled={agendaSaving || !agendaDraft.trim() || !agendaDate}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
             >
               {agendaSaving ? "Saving..." : "Save agenda"}
             </button>
@@ -1205,7 +1208,7 @@ function MeetingsPanel({
         </div>
       </details>
 
-      <div className="mt-4 rounded-xl border border-hairline bg-white px-4 py-3">
+      <div className="mt-4 rounded-xl border border-hairline bg-surface px-4 py-3">
         <label className="mb-1 block text-xs font-medium text-ink-secondary">Log a past meeting</label>
         <textarea
           value={draft}
@@ -1219,7 +1222,7 @@ function MeetingsPanel({
           <button
             onClick={submitLog}
             disabled={saving || !draft.trim()}
-            className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
           >
             {saving ? "Saving..." : "Log note"}
           </button>
@@ -1234,7 +1237,7 @@ function MeetingsPanel({
             <button
               key={n.id}
               onClick={() => setSelected(n)}
-              className="w-56 shrink-0 overflow-hidden rounded-xl border border-hairline bg-white text-left hover:border-control hover:shadow-sm"
+              className="w-56 shrink-0 overflow-hidden rounded-xl border border-hairline bg-surface text-left hover:border-control hover:shadow-sm"
             >
               <div className={`h-1.5 ${CARD_ACCENTS[i % CARD_ACCENTS.length]}`} />
               <div className="px-3 py-2.5">
@@ -1250,10 +1253,10 @@ function MeetingsPanel({
 
       {selected && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
           onClick={() => setSelected(null)}
         >
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                 {selected.meeting_date ? formatMeetingDate(selected.meeting_date) : timeAgo(selected.created_at)}
@@ -1341,12 +1344,12 @@ function RosterRow({
               <button
                 key={m.id}
                 onClick={() => toggleExpand(m.id)}
-                className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left hover:border-control ${
+                className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-3 text-left hover:border-control ${
                   expandedId === m.id ? "border-brand" : "border-hairline"
                 }`}
               >
                 <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${IDENTITY_TEXT} ${avatarColor(
                     m.id,
                     members
                   )}`}
@@ -1500,7 +1503,7 @@ function MemberDetailPanel({
             <button
               onClick={submitMessage}
               disabled={sending || !draft.trim()}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
             >
               {sending ? "Saving..." : "Save update"}
             </button>
@@ -1534,11 +1537,11 @@ function MemberDetailPanel({
                       readOnly
                       value={inviteUrl}
                       onFocus={(e) => e.target.select()}
-                      className="w-full truncate rounded-md border border-hairline bg-white px-2 py-1 text-xs text-ink-secondary"
+                      className="w-full truncate rounded-md border border-hairline bg-surface px-2 py-1 text-xs text-ink-secondary"
                     />
                     <button
                       onClick={() => navigator.clipboard?.writeText(inviteUrl)}
-                      className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-white"
+                      className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-surface"
                     >
                       Copy
                     </button>
@@ -1556,7 +1559,7 @@ function MemberDetailPanel({
                   <button
                     onClick={submitInvite}
                     disabled={inviteSending || !inviteEmail.trim()}
-                    className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                    className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-xs text-on-brand disabled:opacity-50"
                   >
                     {inviteSending ? "Sending…" : "Send"}
                   </button>

@@ -205,7 +205,7 @@ export default function CapacityPage() {
             <button
               key={k}
               onClick={() => setPeriodKind(k)}
-              className={`rounded px-3 py-1.5 text-sm ${periodKind === k ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
+              className={`rounded px-3 py-1.5 text-sm ${periodKind === k ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`}
             >
               {PERIOD_LABEL[k]}
             </button>

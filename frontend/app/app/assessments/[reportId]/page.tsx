@@ -82,7 +82,7 @@ function SkillValueRow({
               title={label || undefined}
               onClick={() => onChange({ ...pending, evaluation_point: selected ? null : p })}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                selected ? "bg-brand text-white" : "border border-control text-ink-secondary hover:bg-canvas"
+                selected ? "bg-brand text-on-brand" : "border border-control text-ink-secondary hover:bg-canvas"
               }`}
             >
               {p}
@@ -309,7 +309,7 @@ export default function AssessmentScorecardPage() {
         <button
           onClick={runDraft}
           disabled={drafting || totalConfigured === 0}
-          className="shrink-0 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover disabled:opacity-50"
+          className="shrink-0 rounded-md bg-brand px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-hover disabled:opacity-50"
           title={totalConfigured === 0 ? "No metrics/skills/values configured for this role yet" : undefined}
         >
           {drafting ? "Drafting…" : "Draft with AI →"}
@@ -335,7 +335,7 @@ export default function AssessmentScorecardPage() {
               type="button"
               onClick={() => setOverallOrdinal(overallOrdinal === lv.ordinal ? null : lv.ordinal)}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                overallOrdinal === lv.ordinal ? "bg-brand text-white" : "border border-control text-ink-secondary hover:bg-canvas"
+                overallOrdinal === lv.ordinal ? "bg-brand text-on-brand" : "border border-control text-ink-secondary hover:bg-canvas"
               }`}
             >
               {lv.ordinal} — {lv.label}
@@ -418,7 +418,7 @@ export default function AssessmentScorecardPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover disabled:opacity-50"
+          className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-hover disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save assessment"}
         </button>

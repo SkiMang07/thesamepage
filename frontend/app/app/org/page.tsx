@@ -190,19 +190,19 @@ export default function OrgPage() {
         <div className="flex rounded-md border border-hairline p-0.5">
           <button
             onClick={() => setView("build")}
-            className={`rounded px-3 py-1.5 text-sm ${view === "build" ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
+            className={`rounded px-3 py-1.5 text-sm ${view === "build" ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`}
           >
             Build
           </button>
           <button
             onClick={() => setView("chart")}
-            className={`rounded px-3 py-1.5 text-sm ${view === "chart" ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
+            className={`rounded px-3 py-1.5 text-sm ${view === "chart" ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`}
           >
             Chart
           </button>
           <button
             onClick={() => setView("rollup")}
-            className={`rounded px-3 py-1.5 text-sm ${view === "rollup" ? "bg-brand text-white" : "text-ink-secondary hover:text-ink"}`}
+            className={`rounded px-3 py-1.5 text-sm ${view === "rollup" ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`}
           >
             Rollup
           </button>
@@ -519,7 +519,7 @@ function OrgChart({ tree, companyName, members }: { tree: OrgNode[]; companyName
     <div className={`org-chart ${SECTION_GAP} overflow-x-auto pb-6`}>
       <ul className="flex justify-center">
         <li>
-          <div className="inline-block rounded-lg border border-brand bg-brand px-4 py-2 text-sm font-medium text-white">
+          <div className="inline-block rounded-lg border border-brand bg-brand px-4 py-2 text-sm font-medium text-on-brand">
             {companyName}
           </div>
           {tree.length > 0 && (
@@ -600,7 +600,7 @@ function ChartNode({ node, members }: { node: OrgNode; members: OrgMember[] }) {
   const leader = memberName(node.leader_user_id, members);
   return (
     <li>
-      <div className="inline-block rounded-lg border border-hairline bg-white px-4 py-2 text-sm text-ink shadow-sm">
+      <div className="inline-block rounded-lg border border-hairline bg-surface px-4 py-2 text-sm text-ink shadow-sm">
         {node.name}
         <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-normal text-ink-secondary">
           {TYPE_LABEL[node.unit_type]}

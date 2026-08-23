@@ -9,6 +9,54 @@ here.
 
 ---
 
+## Session 54 — 2026-08-22
+
+**Goal:** Andrew reviewed Session 53's Goals/Projects rebuild live and flagged that alignment/spacing
+felt "not perfect" now that Session 51/52 added the persistent header + sidebar. Asked me to review
+as a product/UX lead and identify what to fix; after the review, asked me to act on the top finding.
+
+**What was done:**
+- Audited every `/app/*` page's top-level `<main>` wrapper against `AppNav.tsx`'s header container.
+  Confirmed by grep: `AppNav`'s header uses `mx-auto max-w-7xl px-6 sm:px-8`; every page except
+  Dashboard used `px-6` with no `sm:` bump, and top/bottom padding was scattered (`py-10` Dashboard,
+  `py-16` most pages, `py-12` the direct-report detail page, `py-24` login/ic) — drift accumulated
+  across ~50 sessions of each page copying its own `<main>` line independently, invisible until
+  Session 51/52 gave the app a fixed header/sidebar to visibly drift away from.
+- New `frontend/components/PageShell.tsx` — one shared container: `mx-auto max-w-{size} px-6 py-10
+  sm:px-8`, matching AppNav's header exactly; a `maxWidth` prop (`2xl`/`3xl`/`4xl`/`6xl`/`7xl`) lets
+  each page keep its own width (that dimension varies legitimately; the padding/breakpoint recipe
+  didn't).
+- Migrated all 14 pages that render under the sidebar/header onto `PageShell`: `dashboard`, `team`,
+  `goals`, `projects`, `capacity`, `org`, `context`, `settings`, `assessments`,
+  `assessments/[reportId]`, `1-1s`, `reports/[id]`, `reports/[id]/log`, and `reports/[id]/prep`
+  (which has 3 separate `<main>` branches — loading/error, step 1, step 2 — each its own
+  `PageShell` instance). `login`/`ic` deliberately left untouched — they render outside
+  AppNav/Sidebar entirely (`layout.tsx`'s `NO_NAV_PATHS`), so they have no header to align against.
+
+**Decisions made / locked:**
+- Standardized top/bottom padding on `py-10` app-wide (down from the `py-16` most pages had drifted
+  to) — Dashboard's own pre-existing value, chosen because it was the one page that already
+  (accidentally) matched the header's breakpoint padding, not a new invented number.
+- Container recipe (`px-6 sm:px-8`, vertical padding) is now owned by one component; per-page
+  max-width stays a prop rather than being folded into a fixed set of page "types," since widths
+  vary for legitimate content reasons (a single-column form vs. a card grid).
+- `login`/`ic` are explicitly out of scope for this shell — different rendering context (no
+  persistent chrome above them), not an oversight.
+
+**Verification:** Frontend-only change (14 files + 1 new component, no schema/backend touch). Repo
+already present in the cloud sandbox from Session 53's tar; re-verified there: `npx tsc --noEmit`
+clean, `next build` clean (21/21 routes). All 15 files written back to Andrew's disk via the device
+bridge.
+
+**Next step:** Andrew to eyeball the app again for the two follow-on items flagged in the same UX
+review but deliberately not acted on this pass: (1) give the sidebar's top row and AppNav's header an
+explicit shared height token so the rail and header read as one coordinated unit rather than two
+independently-padded rows that happen to look close; (2) decide whether Mission Control's pastel
+"Your people/The work/Foundation" summary cards should move onto the same bold gradient-tile
+convention as the Team/Goals/Projects KPI strips, or stay a deliberately calmer "home" treatment.
+
+---
+
 ## Session 53 — 2026-08-22
 
 **Goal:** Build Goals and Projects per the Option A direction Session 52 locked (KPI strip + border-l-4

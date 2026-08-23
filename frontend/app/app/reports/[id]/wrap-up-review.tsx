@@ -76,7 +76,7 @@ export default function WrapUpReview({
 
   function WhoToggle({ c }: { c: EditableCommitment }) {
     const base = "rounded-full px-3 py-1 text-xs font-medium";
-    const on = "bg-brand text-white";
+    const on = "bg-brand text-on-brand";
     const off = "bg-sunken text-ink-secondary hover:bg-carbon-200";
     const set = (committed_by: CommittedBy) => updateCommitment(c.key, { committed_by });
     return (
@@ -175,7 +175,7 @@ export default function WrapUpReview({
       <button
         onClick={handleSave}
         disabled={saving || !summary.trim()}
-        className="mt-8 w-full rounded-md bg-brand px-4 py-3 font-medium text-white hover:bg-brand-hover disabled:opacity-40"
+        className="mt-8 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
       >
         {saving ? "Saving…" : "Save and finish"}
       </button>

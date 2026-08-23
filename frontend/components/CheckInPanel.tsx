@@ -243,7 +243,7 @@ export default function CheckInPanel({
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-50"
               >
                 {saving ? "Logging..." : "Log check-in"}
               </button>

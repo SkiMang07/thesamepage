@@ -401,7 +401,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
   const isLoading = cardState === "confirming";
 
   return (
-    <div className="rounded-lg border border-hairline bg-white">
+    <div className="rounded-lg border border-hairline bg-surface">
       {/* Card header */}
       <div className="flex items-center justify-between gap-2 rounded-t-lg border-b border-divider bg-canvas px-4 py-2.5">
         <span className="text-sm font-medium text-ink-body">{entityLabel(draft.entity_type)}</span>
@@ -537,7 +537,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
             <button
               onClick={handleConfirm}
               disabled={isLoading}
-              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-hover"
+              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-50 hover:bg-brand-hover"
             >
               {confirmLabel(draft.entity_type)}
             </button>
@@ -553,7 +553,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
             <button
               onClick={handleConfirm}
               disabled={isLoading}
-              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-brand-hover"
+              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-50 hover:bg-brand-hover"
             >
               {isLoading ? "Saving…" : confirmLabel(draft.entity_type)}
             </button>
@@ -597,7 +597,7 @@ function MessageBubble({
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
           isUser
-            ? "bg-brand text-white"
+            ? "bg-brand text-on-brand"
             : "bg-sunken text-ink-body"
         }`}
       >
@@ -611,7 +611,7 @@ function MessageBubble({
             <button
               key={opt}
               onClick={() => onQuickReply(opt)}
-              className="rounded-full border border-control bg-white px-3 py-1 text-xs text-ink-body hover:border-ink-faint hover:bg-canvas active:bg-sunken"
+              className="rounded-full border border-control bg-surface px-3 py-1 text-xs text-ink-body hover:border-ink-faint hover:bg-canvas active:bg-sunken"
             >
               {opt}
             </button>
@@ -685,7 +685,7 @@ export default function ScribeDrawer() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full flex-col bg-surface">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-hairline px-4 py-3">
         <div className="flex items-center gap-2">
@@ -731,14 +731,14 @@ export default function ScribeDrawer() {
           disabled={sending}
           rows={3}
           placeholder="Tell me what's happening — I'll keep the pages up to date."
-          className="w-full resize-none rounded-lg border border-control bg-white px-3 py-2 text-sm text-ink-body placeholder-ink-faint focus:border-control focus:outline-none disabled:opacity-50"
+          className="w-full resize-none rounded-lg border border-control bg-surface px-3 py-2 text-sm text-ink-body placeholder-ink-faint focus:border-control focus:outline-none disabled:opacity-50"
         />
         <div className="mt-2 flex items-center justify-between">
           <p className="text-xs text-ink-muted">⌘J · Nothing saves until you confirm.</p>
           <button
             onClick={() => handleSend()}
             disabled={sending || !input.trim()}
-            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40 hover:bg-brand-hover"
+            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-40 hover:bg-brand-hover"
           >
             {sending ? "Thinking…" : "Send"}
           </button>

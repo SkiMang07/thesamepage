@@ -18,16 +18,16 @@ recorded, including superseded ones — is `docs/archive/DESIGN_ARCHIVE.md`.
 - **Shared components:** `frontend/components/` — `AppNav`, `Sidebar`, `PageShell`,
   `ZoneMap`, `QuickAddModal`, `ScribeDrawer`, `CheckInPanel`, `RolePicker`,
   `RoleImportPanel`, `DraftExpectationRows`.
-- **Colour lives in `tailwind.config.js`; recurring class strings live in
-  `lib/tokens.ts`.** The full system — the five colour roles, the ink scale and
-  its contrast floors, surfaces, the status vocabulary — is
-  `docs/systems/brand.md`. Read that before touching colour anywhere.
-  Arbitrary hex values (`text-[#4f46e5]`) are no longer used; there are none
-  left in the app.
+- **Colour values live in `app/globals.css`; token names in
+  `tailwind.config.js`; recurring class strings in `lib/tokens.ts`.** The app
+  runs two themes off one token set — dark for everything authenticated, light
+  for marketing/login/invite — with **no `dark:` variants anywhere**. The full
+  system is `docs/systems/brand.md`. Read that before touching colour anywhere.
+  Arbitrary hex values (`text-[#4f46e5]`, `bg-[#F5F8FA]`) are outside the
+  palette's safety net and there are none left in the app.
 - **Layout tokens live in `ZoneMap.tsx`**: `NAV_GROUPS`, `ZONE_STYLE`,
-  `ZONE_GRADIENT`, `TONE_TEXT` / `TONE_TEXT_ON_GRADIENT`, `NAV_STRIP_HEIGHT`,
-  `SECTION_GAP`. Import from there rather than redefining a value locally —
-  that drift is what these tokens exist to stop.
+  `TONE_TEXT`, `NAV_STRIP_HEIGHT`, `SECTION_GAP`. Import from there rather than
+  redefining a value locally — that drift is what these tokens exist to stop.
 - **Icons and fonts:** not yet decided. The wordmark currently sets in the
   default sans; a pairing for the editorial T10-C mark is still open.
 
@@ -49,11 +49,16 @@ recorded, including superseded ones — is `docs/archive/DESIGN_ARCHIVE.md`.
 ## App shell
 
 Every authenticated page renders inside one shell, built once in
-`app/app/layout.tsx`:
+`app/app/layout.tsx`. That shell is also **where the dark theme is switched
+on** — a single `theme-dark` class, applied on the same condition that renders
+the nav, so `/app/login` and `/app/ic` stay light without any override:
 
-- **`AppNav`** — a static top bar on every page. Contains the global "+ Quick add",
-  the Scribe toggle (a filled indigo→violet "✦ Scribe ⌘J" pill), and the avatar
-  dropdown (Settings + Sign out — the app's only sign-out control; no "switch org",
+- **`AppNav`** — a static top bar on every page, on `canvas` with a single
+  hairline under it so it and the rail read as one shell. Contains the global
+  "+ Quick add" (`BTN_PRIMARY`), the Scribe toggle (a filled blue "✦ Scribe ⌘J"
+  pill that flips to a quiet blue-tinted chip when the drawer is open, so
+  "Scribe is open" doesn't read as "primary action"), and the avatar dropdown
+  (Settings + Sign out — the app's only sign-out control; no "switch org",
   there's no multi-org concept).
 - **`Sidebar`** — a persistent left rail on **every** authenticated page, built from
   `ZoneMap.tsx`'s `NAV_GROUPS`. Collapses to a 56px icon-only rail with native
@@ -65,7 +70,8 @@ Every authenticated page renders inside one shell, built once in
   fourteen of them drifted out of alignment before this existed.
 - **`ScribeDrawer`** — a persistent right drawer, `w-[clamp(400px,30vw,640px)]`,
   content reflows beside it, thread survives navigation. ⌘J summons focused, Esc
-  closes.
+  closes. It sits inside the dark scope like everything else — blue makes it
+  recognisable, it does not make it a separate visual system.
 
 `/app/login` and `/app/ic` render none of this — one is pre-auth, the other is an
 IC stub, and a manager-oriented nav would fetch data neither has.
@@ -116,7 +122,9 @@ behind the person page's settings drawer — off the main flow, not in Settings.
 - **Amber is the app's one "needs attention" color.** At-risk, aging, stale,
   conflicting, unfinished setup all read as one visual language. Don't invent a
   second warning color or a new severity system.
-- **Only counts that need attention get color.** Healthy stays grey.
+- **Only counts that need attention get color.** Healthy stays grey. A KPI
+  tile is a neutral surface and the *value* carries the tone — colour on a tile
+  must report a state, never differentiate it from the tile beside it.
 - **Never invent tiers the data doesn't support.** Individual Performance stays
   binary (due for a 1:1, or not) plus a raw commitment count, not a synthesized
   3-tier on-track/needs-check-in/at-risk.
@@ -178,7 +186,7 @@ in `docs/archive/DESIGN_ARCHIVE.md`, complete and unedited.
 
 | Date | Decision | Rationale |
 |---|---|---|
-| 2026-08-09 | `/app/team`'s structure: KPI strip, then Initiatives/Goals/Commitments, then Critical callouts + Meetings, then the roster as a bottom row | Andrew's layout call from a mockup review; leans more colorful than the rest of the app on purpose |
+| 2026-08-09 | `/app/team`'s structure: KPI strip, then Initiatives/Goals/Commitments, then Critical callouts + Meetings, then the roster as a bottom row | Andrew's layout call from a mockup review |
 | 2026-08-11 | Check-in staleness turns the freshness label amber after 14 days, vs. the 21-day 1:1 cadence | A stale green is more dangerous than an honest yellow, and goals drift faster than relationships |
 | 2026-08-12 | The Context Engine gets its own top-level page (`/app/context`, "The Space") | Managers return to it repeatedly to teach the Librarian; it's not a configure-once setting |
 | 2026-08-12 | The Brain's coverage rings are plain inline SVG, not a charting dependency | Mission Control turned out to have no radial component to actually reuse; "radial in spirit" didn't justify a dependency for one visualization |
@@ -195,11 +203,16 @@ in `docs/archive/DESIGN_ARCHIVE.md`, complete and unedited.
 | 2026-08-23 | Current & Carbon is the app's colour system: five roles (brand teal / attention amber / critical red / info blue / inert carbon) and nothing else. Full spec in `docs/systems/brand.md` | Twelve hue families were live across the app — Team alone used ten — so adjacent pages read as different products. Five roles is the fewest that still distinguishes "going well" from "needs you" from "broken" |
 | 2026-08-23 | Blue is reserved for Scribe, AI surfaces and focus rings. It is never a status, a zone, or a decorative accent | `docs/branding/colors/README.md` names blue creep as the specific way this palette goes generic. Narrowness is the whole value of the token |
 | 2026-08-23 | The locked success green `#24745B` is not used; teal absorbs "good" | It measures dE2000 = 8.8 from brand teal — the same colour to the eye. Keeping both meant one was decoration pretending to be meaning |
-| 2026-08-23 | Zone hues are dropped; nav zones are told apart by icon, label and position. Session 55's bold-gradient tile *shape* stands, only its per-hue colouring is superseded | The palette offers teal, blue and carbon, and blue is reserved — there was no third zone colour to spend that wouldn't dilute the brand |
+| 2026-08-23 | Zone hues are dropped; nav zones are told apart by icon, label and position | The palette offers teal, blue and carbon, and blue is reserved — there was no third zone colour to spend that wouldn't dilute the brand |
 | 2026-08-23 | `tailwind.config.js` remaps the stock gray/green/indigo/rose/sky/cyan/… families onto brand ramps | Makes the palette closed by construction. A stray `text-rose-500` renders as on-brand critical red instead of an off-palette pink, rather than relying on everyone remembering the rule |
 | 2026-08-23 | The ink scale's floor for real text is `ink-muted` (5.2:1); `ink-faint` (3.4:1) is disabled-and-decoration only | Tailwind `gray-400` was the app's most-used text colour at 232 usages and sits at 2.54:1 on white. This was an accessibility defect, not a taste question |
 | 2026-08-23 | The T10-C mark ships as traced vector (`components/Logo.tsx` + `public/`), with a separate widened-channel cut for 16–24px | Below ~32px the full mark's negative channels close up into a blob — the limitation `docs/branding/tsp/README.md` predicted for T10 |
 | 2026-08-22 | `NAV_STRIP_HEIGHT` (`h-14`) and `SECTION_GAP` (`mt-5`) are named tokens rather than emergent properties of each component's own padding | Two independently-padded rows landed ~4px apart, and 13 pages each picked their own block margin. `mt-5` was chosen because it was already the tightest value in real use, not invented |
+| 2026-08-23 | The authenticated app is dark; marketing, `/app/login` and `/invite` are light. One token set, two value blocks in `globals.css`, one `theme-dark` class in `app/app/layout.tsx` — **no `dark:` variants anywhere** | A component written once is correct in both themes, and marketing stays light by never entering the scope rather than by overriding anything. Per-component `dark:` pairs would have meant 27 files of doubled classes and guaranteed drift |
+| 2026-08-23 | Dark ramps are re-authored for a carbon ground, not inverted, but keep their direction of meaning: 50–200 is always a tint, 700–900 always the ink on it | It is the single property that lets `bg-amber-50 text-amber-700` — declared once — be the at-risk badge in both themes. A dark `teal-50` that reads *light* would break every badge in the app at once |
+| 2026-08-23 | Never `bg-brand text-white`; use `text-on-brand` (and `on-critical`/`on-attention`/`on-info`/`on-identity`) | White on the dark theme's bright teal is 2.40:1; carbon-teal on it is 7.50:1. The approved mockup does the former — this is the one deliberate departure from it, and it is an accessibility fix rather than a taste call |
+| 2026-08-23 | Gradients are spent once, on `FEATURE_SURFACE` (identity bands, hero summaries). KPI tiles and Mission Control's zone cards are flat surfaces — reversing Session 55's gradient-tile shape | Three saturated tiles read as emphasis on white and as glare on carbon, and the approved mockup carries exactly one gradient on the page. Blue tiles ("Active initiatives", "Until next meeting") were colour with no state behind it |
+| 2026-08-23 | Inputs are recessed (`bg-sunken`), not flush with the card, and `control` clears 3:1 against every surface | A white field on a white card was identifiable only by its border; on a dark card that is nothing at all. Fill plus border is two independent cues, which is what WCAG 1.4.11 is actually asking for |
 
 _(Add new decisions here. If one reverses an existing row, move the old row to
 `docs/archive/DESIGN_ARCHIVE.md` rather than leaving both.)_

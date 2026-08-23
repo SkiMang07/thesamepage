@@ -79,8 +79,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  // THEME SCOPE. `theme-dark` is applied exactly once, here, and every colour
+  // token in the tree below resolves to its dark value because of it (see
+  // app/globals.css). Nothing else in the app opts in or out — which is what
+  // keeps the marketing site, /app/login and /invite on the light theme
+  // without a single override: they never render inside this element.
+  //
+  // /app/login and /app/ic sit UNDER this layout but outside the product
+  // chrome (NO_NAV_PATHS), so they stay light too — same condition that hides
+  // the nav. `bg-canvas` paints the ground; globals.css mirrors it onto <html>
+  // via :has() so an overscroll bounce doesn't flash white.
   return (
-    <div className="flex min-h-screen">
+    <div className={`flex min-h-screen ${showNav ? "theme-dark bg-canvas text-ink" : ""}`}>
       {showNav && <Sidebar />}
 
       {/* Main content — flex-1 so it gives up space to the sidebar/drawer.
@@ -94,7 +104,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
       {showNav && isOpen && (
         <aside
-          className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-hairline bg-white shadow-sm"
+          className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-hairline bg-surface shadow-xl"
           style={{ zIndex: 40 }}
         >
           <ScribeDrawer />

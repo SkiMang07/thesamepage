@@ -191,8 +191,8 @@ export default function QuickAddModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-24" onClick={handleClose}>
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-24" onClick={handleClose}>
+      <div className="w-full max-w-md rounded-xl bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-divider px-5 py-4">
           <h2 className="text-sm font-semibold text-ink">Quick add</h2>
           <button onClick={handleClose} className="text-ink-muted hover:text-ink-secondary" aria-label="Close">
@@ -287,7 +287,7 @@ export default function QuickAddModal({
                   type="button"
                   onClick={handleCreateRole}
                   disabled={creatingRoleSaving || !newRoleName.trim()}
-                  className="rounded-md bg-brand px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                  className="rounded-md bg-brand px-3 py-1.5 text-xs text-on-brand disabled:opacity-50"
                 >
                   {creatingRoleSaving ? "Creating..." : "Create role"}
                 </button>
@@ -351,7 +351,7 @@ export default function QuickAddModal({
             <button
               type="submit"
               disabled={saving || !title.trim()}
-              className="rounded-md bg-brand px-4 py-2 text-sm text-white hover:bg-brand-hover disabled:opacity-50"
+              className="rounded-md bg-brand px-4 py-2 text-sm text-on-brand hover:bg-brand-hover disabled:opacity-50"
             >
               {saving ? "Adding..." : `Add ${TYPE_LABELS[type].toLowerCase()}`}
             </button>
