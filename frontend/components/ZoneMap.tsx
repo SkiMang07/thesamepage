@@ -205,7 +205,7 @@ export const HOME_ITEM: NavItem = { id: "home", label: "Mission Control", href: 
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    group: "Your people",
+    group: "People",
     blurb: "The rhythm you keep with humans",
     items: [
       { id: "team", label: "Team", href: "/app/team", icon: "team" },
@@ -214,7 +214,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    group: "The work",
+    group: "Work",
     blurb: "What we said we'd deliver",
     items: [
       { id: "goals", label: "Goals", href: "/app/goals", icon: "goals" },
@@ -223,7 +223,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    group: "Foundation",
+    group: "Workspace",
     blurb: "Set once, tuned rarely",
     items: [
       { id: "org", label: "Org", href: "/app/org", icon: "org" },
@@ -235,7 +235,9 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-const TEAM_GROUP = NAV_GROUPS.find((g) => g.group === "Your people")!;
+export const SETTINGS_ITEM = NAV_GROUPS.flatMap((group) => group.items).find((item) => item.id === "settings")!;
+
+const TEAM_GROUP = NAV_GROUPS.find((g) => g.group === "People")!;
 const TEAM_ITEM = TEAM_GROUP.items.find((i) => i.id === "team")!;
 const ASSESSMENTS_ITEM = TEAM_GROUP.items.find((i) => i.id === "assessments")!;
 

@@ -1,79 +1,89 @@
 # Mission Control (`/app/dashboard`)
 
-The app's landing page and PRODUCT_VISION.md's "mission control" surface. Replaced
-the old team + 1:1-cadence dashboard in place rather than shipping alongside it —
-one home page, not two competing for the slot.
+The authenticated landing page is a manager's action brief. It chooses one
+deterministic Suggested focus, up to two quieter secondary priorities, and one
+factual progress or all-clear signal. The persistent sidebar owns wayfinding;
+Mission Control no longer duplicates it with a zone map.
 
-Frontend: `frontend/app/app/dashboard/page.tsx` + `components/ZoneMap.tsx`.
-Backend: `routes/dashboard.py`.
+Frontend: `frontend/app/app/dashboard/page.tsx` and
+`frontend/components/mission-control/ActionBrief.tsx`.
+Backend: `backend/routes/dashboard.py` and
+`backend/mission_control_engine.py`.
 
-## Layout
+## Brief and ranking
 
-A stat ribbon (team size, due-for-1:1 count, at-risk goal count, available hours
-this week — all client-side from data already fetched), then a 3-column grid
-across the top, then a full-width capacity strip.
+`GET /api/dashboard/brief` loads conversations, commitments, goals, projects,
+check-ins, expectations coverage, logged time off, and prior dispositions
+independently. Each domain reports `ok`, `partial`, or `unavailable`; incomplete
+core coverage can never produce an all-clear.
 
-| Column | Source |
-|---|---|
-| Individual Performance | `getTeamOverview()` + `getTeamAssessments()` merged by `direct_report_id` |
-| Goals | `getGoals()` filtered to non-individual levels, grouped Organization / Department / Team |
-| Key Initiatives | `getProjects()` filtered to `active`/`on_track`/`at_risk` |
-| Capacity — this week | `getCapacityOverview()` for the current Mon–Sun week |
+The pure engine establishes eligibility before ranking:
 
-Capacity is a full-width strip rather than a 4th column on purpose: it's a
-snapshot stat per person, not a scrollable triage list.
+- saved 1:1 prep;
+- due 1:1 prep from the existing per-person/org/default cadence;
+- open dated commitments due within seven days;
+- active goals/projects that are explicitly at risk, due within 14 days,
+  stale beyond 14 days, or inconsistent with their latest check-in.
 
-**Individual Performance sorts worst-first** — due-for-1:1 before everyone else,
-then by open commitment count.
+Missing dates never become urgent. Capacity never creates a candidate: actual
+logged time off can only corroborate an already-eligible dated commitment.
+Assessment scores, capture-note content, private 1:1 notes, and inferred employee
+risk do not enter the brief.
 
-Every section follows the "summary here, edit there" pattern used on the person
-page: a compact read view linking to the full page for editing.
+Eligible items share one domain-neutral score based on date urgency, explicit
+status/integrity, staleness, saved-prep momentum, corroboration, and whether the
+CTA opens the exact workflow. Ties break by strongest date bucket, evidence
+count, exact-workflow availability, oldest attention date, then stable candidate
+key. Person items deduplicate to one action; a linked goal/project review chain
+uses one slot. The engine is clock-injected and AI-free, so identical records and
+local date always return the same order.
 
-## AI insight
+## Evidence and AI boundary
 
-`GET /api/dashboard/insight` — real AI-generated text (`generate_text()`,
-`AI_DEFAULT_MODEL_LIGHT`), not a client-side computation. This is the page's
-"magic," which is why it isn't rule-based.
+Every candidate includes factual evidence, fixed source labels, computed
+freshness, human-readable rank components, and any relevant boundary (for
+example, default cadence or logged-time-off limits). `Why this?` exposes these
+deterministic facts.
 
-- **Returns null most days by design** — the same restraint as every other AI
-  path here. Nothing to say is a valid answer.
-- **Fails quiet** on any AI or parse error rather than 500ing.
-- **Cached in-memory, keyed by `user_id`, 20-minute TTL**, covering all four DB
-  queries plus the AI call, so refreshing the page doesn't re-run any of it.
-  Deliberately *not* invalidated on writes: logging a 1:1 or resolving a
-  commitment can leave a stale insight for up to 20 minutes. Accepted tradeoff;
-  revisit only if it causes a real complaint. The "no reports yet" and AI-failure
-  paths are **not** cached, so those retry on the next load.
-- Rate-limited, like every AI endpoint.
+`POST /api/dashboard/explain` is optional and rate-limited. It recomputes the
+candidate and exact evidence fingerprint before asking the light model for a
+one-sentence paraphrase. AI cannot select, reorder, add facts, infer causes, or
+write a source record. Failure leaves the deterministic brief unchanged.
 
-## Zone map
+## Dispositions and analytics
 
-`components/ZoneMap.tsx` renders the "Your people / The work / Foundation" summary
-cards as bold gradient tiles, matching the Team/Goals/Projects KPI strips.
+`mission_control_events` is append-only and manager-scoped. RLS permits only
+selecting and inserting the authenticated manager's rows; there is no update or
+delete policy. It records impressions, explanation opens, CTA clicks,
+Addressed, Snooze, Not relevant, setup dismissal, AI result, and inferred
+downstream completion.
 
-Two token sets, deliberately separate:
+Addressed and Not relevant suppress only the exact
+`candidate_key + evidence_fingerprint`. Snooze suppresses that instance until
+Tomorrow, next Monday, or one week. The optional early-use role-grounding prompt
+can be dismissed until the next local day. None of these handlers calls a 1:1,
+goal, project, commitment, assessment, capacity, expectation, or setup writer.
+Addressed explicitly does not close or update the underlying record.
 
-- `HUE_GRADIENT` + `TONE_TEXT_ON_GRADIENT` — the card tiles. The tone colors
-  (warn/risk/setup) are picked to stay readable across all three gradients, not
-  tuned to one hue.
-- `HUE_STYLES` + `TONE_TEXT` — the original pastel tokens. Still canonical for nav
-  chrome; `Sidebar.tsx` reads `HUE_STYLES` for its active-state chips.
+`POST /api/dashboard/reconcile` can append a completion event when later records
+honestly establish one: new prep after a start-prep click, a specifically
+included commitment resolved after its click, or a later goal/project check-in.
+It never mutates those records.
 
-Two different surfaces, not a half-finished restyle. `doorStates` computation,
-icons, and group copy are independent of styling.
+## States and rollout
+
+The brief has normal-week, busy-week, early-use, empty, all-clear, loading,
+partial-source, AI-failure, and stale-response states. Early use makes no team
+judgment. Empty accounts receive one Add direct report action. A stale brief is
+collapsed and disables dispositions/AI until refresh; source links remain.
+
+`MISSION_CONTROL_ACTION_FIRST_MODE=off|allowlist|on` is the rollback switch, with
+`MISSION_CONTROL_ACTION_FIRST_ALLOWLIST` for a manager UUID allowlist. The old
+dashboard component and `GET /api/dashboard/insight` remain available while the
+flag exists. Turning the mode off restores the previous UI without reversing the
+additive event table or changing source data.
 
 ## Quick add
 
-`components/QuickAddModal.tsx` — a type picker (Direct report / Goal / Project)
-with a minimal form each, reusing the existing create functions. Scoped as a
-simple modal, **not** a global ⌘K command palette: the app isn't big enough for
-one to earn its complexity. It's the only add path from this page.
-
-## Not built
-
-Department Head / Team / Individual role-scoped versions of this page (the
-4-dashboard concept in PRODUCT_VISION.md — Session-15 infrastructure could support
-a Dept Head toggle). Any card type with no data model yet: Team Health KPIs,
-Customer Demand / Staffing / Forecasting / Budget / Compensation, Recruiting,
-Employee Feedback, Improvement Plans, formal Performance Reviews. A synthesized
-team-level rating rollup — each report's latest score shows as-is.
+`components/QuickAddModal.tsx` remains the lightweight create path for a direct
+report, goal, or project. It is not a global command palette.

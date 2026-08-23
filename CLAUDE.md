@@ -60,7 +60,7 @@ Don't trust a file map in a doc — it goes stale. Ask the repo:
 ```bash
 ls backend/routes/                          # every API module (20 today)
 grep -rn "@router\." backend/routes/        # every endpoint
-grep -n "CREATE TABLE" database/schema.sql  # every table (44 today)
+grep -n "CREATE TABLE" database/schema.sql  # every table (46 today)
 ls database/migrations/                     # every schema change, dated
 ls frontend/app/app/                        # every auth-gated page
 ls frontend/components/                     # shared components
@@ -79,7 +79,7 @@ backend/     FastAPI, deploys to Railway on push
   routes/              one module per API area
 
 database/
-  schema.sql             source of truth for tables, indexes, RLS policies
+  schema.sql             source of truth for 46 tables, indexes, RLS policies
   migrations/            dated .sql files — every schema change lands here first
   local_verify_stub.sql  lets schema.sql run against a throwaway local Postgres
 

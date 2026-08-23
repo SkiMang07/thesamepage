@@ -23,6 +23,56 @@ automatically.
 
 ---
 
+## Session 61 — 2026-08-23
+
+**Goal:** Turn Session 60's approved action-first Mission Control direction into a buildable plan,
+then implement it end to end once Andrew approved the plan, including the live Supabase migration.
+
+**What was done:** Added the pure deterministic recommendation engine, reference fixtures, brief /
+event / reconcile / optional-explanation routes, and the action-brief UI with normal, busy, early,
+empty, all-clear, partial, stale, loading, and AI-failure states. Reworked the persistent sidebar to
+People / Work / Workspace with Settings separate. Added append-only `mission_control_events`, folded
+the cadence and Scribe schema drift into `schema.sql`, applied the migration to production Supabase,
+and updated the current-state Mission Control and engineering references. The previous dashboard and
+AI insight endpoint remain behind the rollback flag.
+
+**Decisions made / locked:** Eligibility and cross-domain ordering remain deterministic and
+inspectable; AI can only paraphrase an already-selected recommendation. Addressed, Snooze, Not
+relevant, and setup dismissal suppress an exact evidence fingerprint and never update a source
+record. Actual logged time off can corroborate a dated commitment but cannot create a capacity
+priority. Linked goal/project review chains use one slot. Partial core coverage cannot produce an
+all-clear. Rollback is an environment switch, not a data reversal.
+
+**Next step:** Dogfood the shipped brief, then run the five-manager first-session comprehension test
+defined in the implementation plan before tuning thresholds or provisional copy.
+
+---
+
+## Session 60 — 2026-08-23
+
+**Goal:** Review the proposed action-first Mission Control, resolve its product trade-offs with the
+advisory board, approve a bounded-synthesis mockup, and lock the direction without changing code.
+
+**What was done:** Reviewed the live shell, UX/GTM/brand references, Aug 22 analysis and first mockup.
+Customer, Marketing, Product & Technology, and People & Management lenses completed an independent
+pass plus challenge round. Andrew approved the revised three-state mockup. Created
+`docs/Redesign Scoping/MISSION_CONTROL_ACTION_FIRST_DECISION.md` and added the approved-but-not-
+shipped direction to `docs/DESIGN.md`. Preserved the exact approved interactive reference as
+`docs/Redesign Scoping/mission-control-bounded-synthesis.html`, making the decision portable into a
+fresh implementation session. Product code and current-state subsystem docs are untouched.
+
+**Decisions made / locked:** Mission Control becomes a manager's action brief: one deterministic,
+evidence-linked Suggested focus, up to two secondary priorities, and one factual truth signal. The
+zone map is removed when built. AI may explain but does not silently rank unrelated domains. Why
+this? / Addressed / Snooze / Not relevant are distinct learning signals. Setup appears only when it
+blocks value and is dismissible for the day. Sparse accounts get an early-use state; detailed
+onboarding is separate. Current dogfood data is placeholder-thin, not realistic priority evidence.
+
+**Next step:** Build an implementation plan against coherent normal-week, busy-week and early-use
+reference data; review ranking, persistence and partial-failure behavior before changing code.
+
+---
+
 ## Session 59 — 2026-08-23
 
 **Goal:** Andrew's read on the live product after Session 58: the frame is right, but the app is a
@@ -162,105 +212,6 @@ remaining items from Session 54's UX review.
 
 ---
 
-## Session 56 — 2026-08-22
-
-**Goal:** Close out the last open item from Session 54's UX review — give AppNav's header and
-Sidebar's top row a shared height token so the nav chrome reads as one coordinated strip — then open
-a new UX discussion about excessive white space/margins across the app, bring a concrete before/after
-direction, and (once approved) build it.
-
-**What was done:**
-- `frontend/components/ZoneMap.tsx` — added `NAV_STRIP_HEIGHT = "h-14"`, a shared height token
-  importable by both nav components instead of each deriving its height independently from padding +
-  tallest child (previously off by ~4px). `AppNav.tsx`'s header inner div and `Sidebar.tsx`'s top row
-  both now use it; AppNav's roster-switcher sticky offset (`top-[55px]` → `top-14`) follows the same
-  fixed value.
-- Published a "White Space Audit" comparison canvas (Claude Design skill,
-  https://claude.ai/code/artifact/4727ef04-4a36-422d-a931-de015dadc36e) proposing two directions
-  against real content: tightened page-level vertical rhythm via one shared spacing token, and a wider
-  `PageShell` tier for grid-heavy pages. Andrew approved both ("i am good with this - lets
-  change/update").
-- Added `SECTION_GAP = "mt-5"` to `ZoneMap.tsx` and a new `8xl` (`max-w-[1600px]`) tier to
-  `PageShell.tsx`'s `MAX_WIDTHS`; also tightened `PageShell`'s own vertical padding (`py-10` → `py-8`).
-- Replaced ad hoc `mt-4/5/6/8/10` page-level transition margins with `SECTION_GAP` across 13 pages
-  (dashboard, goals, projects, team, capacity, org, context, assessments, 1-1s, settings,
-  reports/[id], reports/[id]/log, reports/[id]/prep) and widened Dashboard/Goals/Projects/Team to the
-  new `8xl` tier. Deliberately left untouched any spacing that was already internally consistent
-  rather than drifting ad hoc (Team's and 1-1s' inter-section `space-y-10`, the assessment scorecard's
-  `mt-10`, nested column-internal spacing on the Person page and prep step 2, and Settings' internal
-  sub-section spacing) — each exception is documented inline in that file's own header comment.
-
-**Decisions made / locked:**
-- Nav chrome height is now a single named token (`NAV_STRIP_HEIGHT`) rather than an emergent property
-  of independently-chosen padding — prevents this specific 4px drift from recurring as either
-  component changes.
-- `SECTION_GAP` (`mt-5`) is the app-wide standard for page-level block transitions, chosen because it
-  was already the tightest value in active use (`reports/[id]`) rather than an invented number — it's
-  for the "compounding independent per-block choice" pattern the audit measured, not for tight
-  same-thought-group spacing or already-uniform internal rhythm, which stay as-is by design.
-- Four grid-heavy pages (Dashboard, Goals, Projects, Team) get a new `8xl` (1600px) `PageShell` tier to
-  close the dead space measured on wide monitors; narrower content pages (Capacity, Org, Context,
-  Settings, Assessments, 1-1s, reports/[id]) keep their existing widths.
-
-**Verification:** Frontend-only change (17 files, no schema/backend touch). Repo tarred from the
-device's working copy and rebuilt in the cloud sandbox (device_bash's ~45s cap is too short for `next
-build`): fresh `npm install`, `npx tsc --noEmit` clean, `next build` clean (all 19 routes, no
-type/lint errors) — run twice, once for the height-token fix alone and once for the full white-space
-change set. All 15 content-changed files (PageShell.tsx, ZoneMap.tsx, plus 13 page files) written back
-to Andrew's disk via the device bridge, mtime-guarded.
-
-**Next step:** Andrew to dogfood the tightened rhythm and wider grid pages live, especially on a wide
-monitor where the 8xl tier matters most. `KpiStrip` remains duplicated across team/goals/projects
-pages (a pre-existing Session 53 choice) — worth a shared-component pass if a 4th page ever needs it.
-
----
-
-## Session 55 — 2026-08-22
-
-**Goal:** Finish the one open item from Session 54's UX review: whether Mission Control's pastel
-"Your people/The work/Foundation" summary cards should move onto the same bold gradient-tile
-convention as the Team/Goals/Projects KPI strips. Andrew wasn't sure, so asked to see both first.
-
-**What was done:**
-- Built a two-artboard comparison canvas via the Claude Design skill — `CurrentBaseline.dc.html`
-  (today's pastel cards, recreated pixel-for-pixel from `ZoneMap.tsx`'s real `HUE_STYLES`/
-  `TONE_TEXT`/icon paths) and `Main.dc.html` (the same real content restyled as gradient tiles:
-  indigo/emerald/violet gradients, white text). Both used the actual live door-state content (9
-  people, 8 due, 5 goals, 241h free, etc.) rather than placeholder numbers. Published as an Artifact
-  (`mission-control-card-styles.html`) for Andrew to review side by side; he picked the gradient
-  option ("the right one").
-- Implemented the chosen direction in `frontend/components/ZoneMap.tsx`: added `HUE_GRADIENT` (a
-  from/to/shadow token set per hue, separate from `HUE_STYLES`) and `TONE_TEXT_ON_GRADIENT` (warn/
-  risk/setup colors picked to stay readable across all three gradients, not just one hue's pastel).
-  Rewrote the `ZoneMap()` render to use `bg-gradient-to-br` tiles with white group titles/blurbs,
-  translucent-white icon/item-row backgrounds, and the new gradient-aware tone colors. `HUE_STYLES`
-  and `TONE_TEXT` (the original pastel tokens) are untouched — `Sidebar.tsx` still reads `HUE_STYLES`
-  for its active-state chips, so that pastel token set stays canonical for nav chrome; only the
-  Mission Control card row itself changed visual language.
-- No changes to `doorStates` computation, icons, group copy, or any data-fetching logic — this was a
-  pure restyle of an already-correct real-data component.
-
-**Decisions made / locked:**
-- Mission Control's summary cards now match Team/Goals/Projects' gradient-tile convention rather
-  than staying a deliberately calmer "home" treatment — resolves the question Session 54 left open.
-- The pastel `HUE_STYLES`/`TONE_TEXT` tokens remain the source of truth for nav chrome (sidebar chips,
-  breadcrumbs) even though ZoneMap's cards no longer use them directly — two different UI surfaces,
-  not a conflicting restyle.
-- Show-a-mockup-before-touching-code (via the Design skill, using real fetched data rather than
-  placeholder numbers) is confirmed as the right call for a visually subjective decision like this one.
-
-**Verification:** Frontend-only change (1 file). Cloud sandbox already had the repo from Session
-54's build; re-verified there: `npx tsc --noEmit` clean, `npx next build` clean (full route table
-built with no type/lint errors). Delivered via the device bridge and committed straight to
-`frontend/components/ZoneMap.tsx` on Andrew's disk before this push.
-
-**Next step:** The other item flagged in Session 54's original UX review is still open: give the
-sidebar's top row and AppNav's header an explicit shared height token so the rail and header read as
-one coordinated unit. Otherwise, Andrew to eyeball the live gradient Mission Control cards in the
-running app and confirm the final look holds up outside the mockup.
-
----
-
 ## Archived sessions (compact index)
 
 The 20 most recent archived sessions keep their goal plus the decisions locked
@@ -271,6 +222,9 @@ lines keep the goal alone. Full entries
 original text. Open that file when you need the full detail behind a
 specific decision.
 
+- **Session 56 — 2026-08-22:** Close the last nav-alignment item and standardize excessive page whitespace. **Decided:** AppNav and Sidebar share `NAV_STRIP_HEIGHT`; `SECTION_GAP` (`mt-5`) owns page-level transitions; Dashboard/Goals/Projects/Team use the 1600px `8xl` shell while narrower pages keep their existing tiers.
+
+- **Session 55 — 2026-08-22:** Move Mission Control's “Your people/The work/Foundation” summary cards to the bold gradient-tile convention after a real-data mockup comparison. **Decided:** gradient tiles over pastel; pastel tokens remained canonical for nav chrome; mockup-before-code confirmed for subjective visual decisions.
 - **Session 54 — 2026-08-22:** UX review of alignment/spacing after the persistent header+sidebar landed; built and migrated 14 pages onto a shared PageShell. **Decided:** one component owns the container recipe (`px-6 sm:px-8` + vertical padding), per-page max-width stays a prop since widths vary for real content reasons; `login`/`ic` are explicitly out of the shell's scope, not an oversight.
 - **Session 53 — 2026-08-22:** Build Goals and Projects per Session 52's locked Option A — KPI strip, `border-l-4` card grid, inline-SVG progress ring. **Decided:** only the on-track *fraction* tile takes the dynamic gray/amber/green tone — a fraction tile must never render a fixed success colour, since "0/N on track" is not success; the progress ring keeps a fixed stroke regardless of status, an exact port of Team's status-agnostic ring rather than a new per-status recolouring convention.
 - **Session 52 — 2026-08-22:** Give Mission Control the persistent sidebar after all, and scope Goals/Projects into Team's visual language via a 3-option design canvas. **Decided:** every authenticated page shows the same rail — Session 51's "already the map" exclusion read as inconsistent in use, not as deliberate simplification; Goals/Projects locked to Option A (KPI strip + border-l-4 card grid + progress ring), level tabs kept as a pill filter.

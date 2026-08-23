@@ -161,6 +161,23 @@ behind the person page's settings drawer — off the main flow, not in Settings.
   receipt with a view link and a 30s Undo. Ambiguity candidates render as tappable
   quick-reply chips.
 
+### Mission Control action brief
+
+Mission Control is a manager's action brief, not an
+information-architecture dashboard. The persistent sidebar owns wayfinding, so
+the large “Your people / The work / Foundation” zone map is absent from the
+landing page.
+
+The mature first viewport contains one evidence-linked **Suggested focus**, no
+more than two secondary priorities, and one factual progress/all-clear signal.
+Candidate eligibility and ranking begin deterministic; AI may explain the
+recommendation but does not silently rank unrelated domains. Every suggestion is
+inspectable and contestable through Why this? / Addressed / Snooze / Not relevant.
+
+The detailed current behavior lives in `docs/systems/mission-control.md`; the
+approved reasoning and state requirements remain in
+`docs/Redesign Scoping/MISSION_CONTROL_ACTION_FIRST_DECISION.md`.
+
 ### Card and form patterns
 
 - **Edit in place.** An Edit action swaps the card for the same form used to create
@@ -186,6 +203,7 @@ in `docs/archive/DESIGN_ARCHIVE.md`, complete and unedited.
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-08-23 | Mission Control's next redesign is action-first: remove the large zone map; lead with one evidence-linked Suggested focus, up to two secondary priorities and one factual truth signal. Ranking starts deterministic; AI explanation is bounded and contestable | The persistent sidebar already owns product orientation. The manager needs a trusted next move, not a second sitemap or an anxiety-producing backlog. Full approved direction in `docs/Redesign Scoping/MISSION_CONTROL_ACTION_FIRST_DECISION.md`; not yet shipped |
 | 2026-08-09 | `/app/team`'s structure: KPI strip, then Initiatives/Goals/Commitments, then Critical callouts + Meetings, then the roster as a bottom row | Andrew's layout call from a mockup review |
 | 2026-08-11 | Check-in staleness turns the freshness label amber after 14 days, vs. the 21-day 1:1 cadence | A stale green is more dangerous than an honest yellow, and goals drift faster than relationships |
 | 2026-08-12 | The Context Engine gets its own top-level page (`/app/context`, "The Space") | Managers return to it repeatedly to teach the Librarian; it's not a configure-once setting |

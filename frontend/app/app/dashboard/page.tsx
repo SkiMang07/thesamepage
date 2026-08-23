@@ -53,6 +53,7 @@ import {
   TeamOverviewItem,
   getCapacityOverview,
   getDashboardInsight,
+  getMissionControlBrief,
   getGoals,
   getOneOnOnesOverview,
   getProjects,
@@ -61,6 +62,7 @@ import {
 } from "@/lib/api";
 import { SECTION_GAP, useZoneData, ZoneMap } from "@/components/ZoneMap";
 import PageShell from "@/components/PageShell";
+import { ActionBrief, ActionBriefLoadFailure, ActionBriefLoading } from "@/components/mission-control/ActionBrief";
 
 function daysSince(iso: string) {
   const then = new Date(iso).getTime();
@@ -204,6 +206,31 @@ type PerformanceRow = TeamOverviewItem & {
 };
 
 export default function DashboardPage() {
+  const [variant, setVariant] = useState<Awaited<ReturnType<typeof getMissionControlBrief>> | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [legacyOverride, setLegacyOverride] = useState(false);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    getMissionControlBrief()
+      .then((result) => {
+        if (!cancelled) setVariant(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => { cancelled = true; };
+  }, [reload]);
+
+  if (legacyOverride || variant?.variant === "legacy") return <LegacyDashboardPage />;
+  if (failed) return <ActionBriefLoadFailure onRetry={() => setReload((value) => value + 1)} onLegacy={() => setLegacyOverride(true)} />;
+  if (!variant) return <ActionBriefLoading />;
+  return <ActionBrief brief={variant} onRefresh={() => { setVariant(null); setReload((value) => value + 1); }} />;
+}
+
+function LegacyDashboardPage() {
   const zone = useZoneData();
   const [team, setTeam] = useState<PerformanceRow[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);

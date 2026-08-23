@@ -693,6 +693,125 @@ export type DashboardInsight = {
 export const getDashboardInsight = (): Promise<DashboardInsight> =>
   authedFetch("/api/dashboard/insight");
 
+// Action-first Mission Control. Ranking and evidence are deterministic on the
+// backend; AI can only add an optional explanation after selection.
+export type MissionControlCoverage = Record<
+  "conversations" | "commitments" | "goals" | "projects" | "check_ins" | "capacity" | "expectations" | "feedback",
+  "ok" | "partial" | "unavailable"
+>;
+
+export type MissionControlEvidence = {
+  code: string;
+  label: string;
+  source: string;
+  observed_at: string | null;
+  freshness: string;
+};
+
+export type MissionControlCandidate = {
+  candidate_key: string;
+  evidence_fingerprint: string;
+  candidate_type: string;
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  explanation: string;
+  action: { label: string; href: string };
+  score: number;
+  rank: number;
+  rank_basis: { code: string; label: string; points: number }[];
+  evidence: MissionControlEvidence[];
+  target_ids: string[];
+  boundaries: string[];
+};
+
+export type MissionControlBrief = {
+  variant: "action_first";
+  brief_id: string;
+  mode: "normal" | "busy" | "early_use" | "empty" | "all_clear" | "partial";
+  generated_at: string;
+  stale_after: string;
+  timezone: string;
+  primary: MissionControlCandidate | null;
+  secondary: MissionControlCandidate[];
+  truth_signal: { kind: "progress" | "all_clear" | "limited" | "factual"; title: string; detail: string };
+  supporting: {
+    conversations: { id: string; title: string; meta: string; href: string }[];
+    changes: { id: string; title: string; meta: string; freshness: string }[];
+  };
+  coverage: MissionControlCoverage;
+  optional_context: {
+    candidate_key: string;
+    evidence_fingerprint: string;
+    title: string;
+    detail: string;
+    href: string;
+  } | null;
+  eligible_count: number;
+};
+
+export type MissionControlVariant = MissionControlBrief | { variant: "legacy" };
+
+function browserLocalDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export const getMissionControlBrief = (): Promise<MissionControlVariant> => {
+  const query = new URLSearchParams({
+    local_date: browserLocalDate(),
+    timezone_name: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  });
+  return authedFetch(`/api/dashboard/brief?${query}`);
+};
+
+export type MissionControlEventInput = {
+  brief_id: string;
+  event_type:
+    | "impression"
+    | "why_opened"
+    | "cta_clicked"
+    | "addressed"
+    | "snoozed"
+    | "not_relevant"
+    | "setup_dismissed_today"
+    | "ai_explanation_succeeded"
+    | "ai_explanation_failed";
+  candidate_key: string;
+  evidence_fingerprint: string;
+  candidate_type: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  rank?: number | null;
+  score?: number | null;
+  snoozed_until?: string | null;
+  parent_event_id?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export const recordMissionControlEvents = (
+  events: MissionControlEventInput[]
+): Promise<{ events: { id: string; event_type: string }[] }> =>
+  authedFetch("/api/dashboard/events", { method: "POST", body: JSON.stringify({ events }) });
+
+export const reconcileMissionControlOutcomes = (): Promise<{ completed: number }> =>
+  authedFetch("/api/dashboard/reconcile", { method: "POST" });
+
+export const explainMissionControlCandidate = (
+  candidate: Pick<MissionControlCandidate, "candidate_key" | "evidence_fingerprint">
+): Promise<{ status: "ok" | "failed" | "unavailable"; explanation: string | null }> =>
+  authedFetch("/api/dashboard/explain", {
+    method: "POST",
+    body: JSON.stringify({
+      ...candidate,
+      local_date: browserLocalDate(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    }),
+  });
+
 // ---------------------------------------------------------------------------
 // Team View (Session 21) — the "team space" surface Andrew floated
 // 2026-08-03: a single home for "my team" as a unit (who's on it, what

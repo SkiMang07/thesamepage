@@ -35,6 +35,7 @@ import {
   Icon,
   NAV_GROUPS,
   NAV_STRIP_HEIGHT,
+  SETTINGS_ITEM,
   getNavContext,
 } from "@/components/ZoneMap";
 import { useSidebar } from "@/lib/sidebar-context";
@@ -94,8 +95,12 @@ export default function Sidebar() {
 
         <div className={`my-2 h-px shrink-0 bg-hairline ${collapsed ? "w-6" : "mx-2.5"}`} />
 
-        {NAV_GROUPS.map((group) =>
-          group.items.map((item) => {
+        {NAV_GROUPS.map((group) => {
+          const visibleItems = group.items.filter((item) => item.id !== SETTINGS_ITEM.id);
+          return (
+            <div key={group.group} className={collapsed ? "contents" : "mt-1"}>
+              {!collapsed && <p className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">{group.group}</p>}
+              {visibleItems.map((item) => {
             const active = item.id === activeItemId;
             const hue = ZONE_STYLE;
             return (
@@ -115,8 +120,28 @@ export default function Sidebar() {
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </Link>
             );
-          }),
-        )}
+              })}
+            </div>
+          );
+        })}
+
+        <div className="mt-auto pt-3">
+          <div className={`mb-2 h-px shrink-0 bg-hairline ${collapsed ? "w-6" : "mx-2.5"}`} />
+          <Link
+            href={SETTINGS_ITEM.href}
+            title={SETTINGS_ITEM.label}
+            className={`flex items-center gap-2.5 rounded-lg text-[13px] transition ${
+              collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
+            } ${
+              SETTINGS_ITEM.id === activeItemId
+                ? `font-medium ${ZONE_STYLE.bg} ${ZONE_STYLE.text}`
+                : "text-ink-secondary hover:bg-sunken hover:text-ink"
+            }`}
+          >
+            <Icon name={SETTINGS_ITEM.icon} className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="truncate">{SETTINGS_ITEM.label}</span>}
+          </Link>
+        </div>
       </nav>
     </div>
   );

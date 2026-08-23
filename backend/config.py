@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # App
     ENVIRONMENT: str = "development"
     FRONTEND_URL: str = "http://localhost:3000"
+    # Reversible Mission Control rollout. `allowlist` accepts a comma-separated
+    # set of authenticated user UUIDs in MISSION_CONTROL_ACTION_FIRST_ALLOWLIST.
+    MISSION_CONTROL_ACTION_FIRST_MODE: str = "on"
+    MISSION_CONTROL_ACTION_FIRST_ALLOWLIST: str = ""
 
     class Config:
         env_file = ".env"

@@ -1,0 +1,101 @@
+{
+  "anchor_date": "2026-08-24",
+  "scenarios": {
+    "normal": {
+      "coverage": {"conversations": "ok", "commitments": "ok", "goals": "ok", "projects": "ok", "capacity": "ok", "expectations": "ok"},
+      "reports": [
+        {"id": "leah", "name": "Leah Welborn", "created_at": "2026-05-01T12:00:00Z", "cadence_days": 14, "cadence_source": "custom", "role_level_id": "csm-l2", "role_has_expectations": true},
+        {"id": "beth", "name": "Beth Cambridge", "created_at": "2026-04-01T12:00:00Z", "cadence_days": 14, "cadence_source": "org", "role_level_id": "csm-l3", "role_has_expectations": true},
+        {"id": "david", "name": "David O’Brien", "created_at": "2026-06-01T12:00:00Z", "cadence_days": 21, "cadence_source": "default", "role_level_id": "ae-l2", "role_has_expectations": true}
+      ],
+      "sessions": [
+        {"id": "leah-last", "direct_report_id": "leah", "summary": "Recorded", "prep_guide": null, "created_at": "2026-08-09T14:00:00Z"},
+        {"id": "leah-prep", "direct_report_id": "leah", "summary": null, "prep_guide": {"situation_summary": "Saved"}, "created_at": "2026-08-23T14:00:00Z"},
+        {"id": "beth-this-week", "direct_report_id": "beth", "summary": "Recorded", "prep_guide": null, "created_at": "2026-08-24T13:00:00Z"},
+        {"id": "david-last", "direct_report_id": "david", "summary": "Recorded", "prep_guide": null, "created_at": "2026-08-15T13:00:00Z"}
+      ],
+      "commitments": [
+        {"id": "leah-commitment", "direct_report_id": "leah", "status": "open", "committed_by": "direct_report", "due_date": "2026-08-25", "created_at": "2026-08-09T14:30:00Z", "completed_at": null},
+        {"id": "david-commitment", "direct_report_id": "david", "status": "open", "committed_by": "manager", "due_date": "2026-08-26", "created_at": "2026-08-15T14:30:00Z", "completed_at": null}
+      ],
+      "goals": [
+        {"id": "expansion", "title": "Q3 expansion readiness", "status": "on_track", "due_date": "2026-09-30", "created_at": "2026-06-15T12:00:00Z"}
+      ],
+      "projects": [
+        {"id": "renewal", "title": "Renewal playbook", "status": "on_track", "due_date": "2026-09-15", "goal_id": "expansion", "created_at": "2026-07-01T12:00:00Z"}
+      ],
+      "check_ins": [
+        {"id": "goal-check", "goal_id": "expansion", "project_id": null, "status": "on_track", "created_at": "2026-08-07T12:00:00Z"},
+        {"id": "project-check", "goal_id": null, "project_id": "renewal", "status": "on_track", "created_at": "2026-08-21T12:00:00Z"}
+      ],
+      "capacity": {"david": {"actual_time_off_hours": 8}}
+    },
+    "busy": {
+      "coverage": {"conversations": "ok", "commitments": "ok", "goals": "ok", "projects": "ok", "capacity": "ok", "expectations": "ok"},
+      "reports": [
+        {"id": "maya", "name": "Maya Patel", "created_at": "2026-03-01T12:00:00Z", "cadence_days": 14, "cadence_source": "custom", "role_level_id": "csm-l3", "role_has_expectations": true},
+        {"id": "leah", "name": "Leah Welborn", "created_at": "2026-05-01T12:00:00Z", "cadence_days": 14, "cadence_source": "org", "role_level_id": "csm-l2", "role_has_expectations": true}
+      ],
+      "sessions": [
+        {"id": "maya-last", "direct_report_id": "maya", "summary": "Recorded", "prep_guide": null, "created_at": "2026-08-20T12:00:00Z"},
+        {"id": "leah-last", "direct_report_id": "leah", "summary": "Recorded", "prep_guide": null, "created_at": "2026-08-07T12:00:00Z"}
+      ],
+      "commitments": [
+        {"id": "maya-one", "direct_report_id": "maya", "status": "open", "committed_by": "direct_report", "due_date": "2026-08-25", "created_at": "2026-08-18T12:00:00Z", "completed_at": null},
+        {"id": "maya-two", "direct_report_id": "maya", "status": "open", "committed_by": "direct_report", "due_date": "2026-08-26", "created_at": "2026-08-18T12:00:00Z", "completed_at": null}
+      ],
+      "goals": [
+        {"id": "hiring", "title": "Support hiring", "status": "at_risk", "due_date": "2026-09-04", "created_at": "2026-05-01T12:00:00Z"},
+        {"id": "retention", "title": "Improve retention", "status": "on_track", "due_date": "2026-10-01", "created_at": "2026-05-01T12:00:00Z"}
+      ],
+      "projects": [
+        {"id": "launch", "title": "Customer launch", "status": "at_risk", "due_date": "2026-08-28", "goal_id": null, "created_at": "2026-06-01T12:00:00Z"},
+        {"id": "enablement", "title": "Enablement refresh", "status": "on_track", "due_date": "2026-10-15", "goal_id": null, "created_at": "2026-07-01T12:00:00Z"}
+      ],
+      "check_ins": [
+        {"id": "hiring-check", "goal_id": "hiring", "project_id": null, "status": "at_risk", "created_at": "2026-08-01T12:00:00Z"},
+        {"id": "retention-check", "goal_id": "retention", "project_id": null, "status": "on_track", "created_at": "2026-08-22T12:00:00Z"},
+        {"id": "launch-check", "goal_id": null, "project_id": "launch", "status": "at_risk", "created_at": "2026-08-02T12:00:00Z"},
+        {"id": "enablement-check", "goal_id": null, "project_id": "enablement", "status": "on_track", "created_at": "2026-08-23T12:00:00Z"}
+      ],
+      "capacity": {"maya": {"actual_time_off_hours": 8}}
+    },
+    "early": {
+      "coverage": {"conversations": "ok", "commitments": "ok", "goals": "ok", "projects": "ok", "capacity": "ok", "expectations": "ok"},
+      "reports": [
+        {"id": "leah", "name": "Leah Welborn", "created_at": "2026-08-24T12:00:00Z", "cadence_days": 21, "cadence_source": "default", "role_level_id": "csm-l2", "role_has_expectations": false}
+      ],
+      "sessions": [],
+      "commitments": [],
+      "goals": [
+        {"id": "first-goal", "title": "First active goal", "status": "active", "due_date": "2026-10-01", "created_at": "2026-08-24T12:00:00Z"}
+      ],
+      "projects": [],
+      "check_ins": [],
+      "capacity": {"leah": {"actual_time_off_hours": 0}}
+    },
+    "all_clear": {
+      "coverage": {"conversations": "ok", "commitments": "ok", "goals": "ok", "projects": "ok", "capacity": "ok", "expectations": "ok"},
+      "reports": [
+        {"id": "leah", "name": "Leah Welborn", "created_at": "2026-05-01T12:00:00Z", "cadence_days": 21, "cadence_source": "org", "role_level_id": "csm-l2", "role_has_expectations": true}
+      ],
+      "sessions": [
+        {"id": "leah-last", "direct_report_id": "leah", "summary": "Recorded", "prep_guide": null, "created_at": "2026-08-20T12:00:00Z"}
+      ],
+      "commitments": [
+        {"id": "future", "direct_report_id": "leah", "status": "open", "committed_by": "direct_report", "due_date": "2026-09-20", "created_at": "2026-08-20T12:00:00Z", "completed_at": null}
+      ],
+      "goals": [
+        {"id": "healthy-goal", "title": "Healthy goal", "status": "on_track", "due_date": "2026-10-01", "created_at": "2026-06-01T12:00:00Z"}
+      ],
+      "projects": [
+        {"id": "healthy-project", "title": "Healthy project", "status": "on_track", "due_date": "2026-10-01", "goal_id": "healthy-goal", "created_at": "2026-06-01T12:00:00Z"}
+      ],
+      "check_ins": [
+        {"id": "healthy-goal-check", "goal_id": "healthy-goal", "project_id": null, "status": "on_track", "created_at": "2026-08-20T12:00:00Z"},
+        {"id": "healthy-project-check", "goal_id": null, "project_id": "healthy-project", "status": "on_track", "created_at": "2026-08-20T12:00:00Z"}
+      ],
+      "capacity": {"leah": {"actual_time_off_hours": 0}}
+    }
+  }
+}
