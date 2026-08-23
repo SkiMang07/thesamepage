@@ -4,14 +4,15 @@ The core feature: 1:1 prep + logging.
 POST /prep generates a structured prep sheet for an upcoming 1:1 using the
 manager's raw notes plus that direct report's open commitments (the
 "remembers what you told them" hook). It persists a "planned" one_on_ones
-row (prep_guide set, summary null) so the sheet survives the gap between
-prepping and the actual meeting — see _find_planned_session(). The manager
+row (prep_guide set, summary null), attaching it to an existing scheduled
+occurrence when present. The manager
 reviews/edits, then POST / logs the meeting: if it was prepped, this fills
 in summary/notes on that SAME row (planned -> completed) instead of
 inserting a second row.
 
-Status is derived, not stored: a row with summary is "completed"; a row
-without summary (only prep_guide) is "planned". See _serialize_session().
+Status is derived, not stored: scheduled_at-only is "scheduled", prep_guide
+without summary is "planned", and summary is "completed". A recurring series
+creates the next scheduled occurrence only after the current call is logged.
 
 Context Engine integration (Session IV, 2026-08-12): /prep is the pilot call
 site for backend/context_engine.py's retrieval helper — see that module's
@@ -24,10 +25,10 @@ Capture notes (Session 50, 2026-08-21): a small between-sessions inbox
 "Capture notes" section near the bottom of this file.
 """
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import context_engine
 from ai_core import generate_text
@@ -52,6 +53,10 @@ router = APIRouter()
 class PrepRequest(BaseModel):
     direct_report_id: str
     raw_notes: str  # manager's quick freeform input: what's going on, what's on their mind
+    one_on_one_id: str | None = None
+    scheduled_at: str | None = None
+    recurrence_weeks: int | None = None
+    timezone: str = "UTC"
 
 
 class AgendaItem(BaseModel):
@@ -65,6 +70,9 @@ class PrepResponse(BaseModel):
     situation_summary: str
     agenda_items: list[AgendaItem]
     open_commitments_to_check: list[dict]
+    scheduled_at: str | None = None
+    recurrence_weeks: int | None = None
+    carry_forward_items: list[str] = Field(default_factory=list)
 
 
 class NewCommitmentIn(BaseModel):
@@ -79,9 +87,10 @@ class LogOneOnOneIn(BaseModel):
     # Raw in-call notes (typed live or pasted from a recorder like Granola).
     # Stored on one_on_ones.notes — private to the writing manager (RLS).
     notes: str | None = None
-    new_commitments: list[NewCommitmentIn] = []
-    # Set when this meeting was prepped: the id of the "planned" one_on_ones
-    # row created by POST /prep. Logging then UPDATEs that row (planned ->
+    new_commitments: list[NewCommitmentIn] = Field(default_factory=list)
+    carry_forward_items: list[str] = Field(default_factory=list)
+    # Set when this meeting was scheduled/prepped: the open one_on_ones row.
+    # Logging then UPDATEs that row (scheduled/planned ->
     # completed) instead of inserting a second one. Omitted for ad-hoc logs
     # (the standalone /log flow, which never went through /prep).
     one_on_one_id: str | None = None
@@ -102,6 +111,13 @@ class WrapUpDraft(BaseModel):
     """AI-drafted log for the manager to review — nothing is saved yet."""
     summary: str
     commitments: list[WrapUpCommitment]
+    follow_up_items: list[str]
+
+
+class ScheduleUpdate(BaseModel):
+    scheduled_at: str | None = None
+    recurrence_weeks: int | None = None
+    timezone: str = "UTC"
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +191,7 @@ def _build_prep_prompt(
     cadence_days: int,
     role_expectations: dict | None = None,
     context_engine_block: str = "",
+    carry_forward_items: list[str] | None = None,
 ) -> str:
     # --- Recency context ---
     if days_since_last is None:
@@ -212,6 +229,15 @@ def _build_prep_prompt(
     else:
         commitments_block = "  (None on record.)"
 
+    carry_forward_block = ""
+    if carry_forward_items:
+        items = "\n".join(f"  • {item}" for item in carry_forward_items)
+        carry_forward_block = f"""
+CONFIRMED FOLLOW-UPS FROM THE LAST 1:1:
+{items}
+These were explicitly carried forward by the manager. Address each one in the agenda unless newer context clearly resolves it.
+"""
+
     return f"""You are a management coach helping a manager prepare for a 1:1 with {report_name}.
 
 Your output must be grounded in the specific details provided. Do not give generic management advice. Every agenda item, question, and talking point must follow from something the manager actually wrote, something in recent history, or an open commitment that needs follow-up.
@@ -225,9 +251,9 @@ RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
 
 OPEN COMMITMENTS (unresolved — each is marked with who owes it):
 {commitments_block}
-{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
+{carry_forward_block}{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
 MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
-{raw_notes}
+{raw_notes or '(No additional notes were added.)'}
 
 ---
 FRAMEWORKS TO APPLY — read carefully before generating output:
@@ -285,8 +311,8 @@ Generate 3–5 agenda items total (including the commitment review if applicable
 
 def _build_wrapup_prompt(report_name: str, raw_notes: str, today_iso: str) -> str:
     """Distill raw in-call notes (typed live or pasted from a recorder) into a
-    draft summary + commitments from BOTH sides. The manager reviews and edits
-    the draft before anything is saved — err toward precision, not coverage."""
+    draft summary, commitments from BOTH sides, and possible carry-forward
+    topics. The manager reviews and edits everything before it is saved."""
     return f"""You are helping a manager log a 1:1 they just had with {report_name}. Distill the raw call notes below into a clean, reviewable record. The manager will edit your draft before saving — be precise, not exhaustive.
 
 Today's date: {today_iso} (use it to resolve relative deadlines like "by Friday" or "end of month").
@@ -305,46 +331,191 @@ Produce:
    - Phrase each as one short actionable sentence starting with a verb ("Send intro to the design team").
    - Do NOT invent commitments. An empty list is a valid answer.
 
+3. follow_up_items — unresolved topics or questions the manager may want to revisit in the next 1:1. Rules:
+   - These are NOT actions someone agreed to take; those belong in commitments.
+   - Include only topics clearly left open, explicitly deferred, or needing a future check-in.
+   - Phrase each as a short, concrete reminder that will still make sense weeks from now.
+   - Do NOT invent follow-ups. An empty list is a valid answer.
+
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
-{{"summary": "...", "commitments": [{{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}}]}}"""
+{{"summary": "...", "commitments": [{{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"]}}"""
 
 
 # ---------------------------------------------------------------------------
 # Session status — derived from which columns are filled, never stored.
+# scheduled: scheduled_at set, prep_guide/summary null
 # planned:   prep_guide set, summary null (prepped, meeting hasn't happened)
 # completed: summary set (logged, whether or not it was prepped first)
 # ---------------------------------------------------------------------------
 
 def _serialize_session(row: dict) -> dict:
-    """Adds a derived `status` + `display_summary` to a one_on_ones row for
-    the frontend's combined past+planned list. Doesn't mutate storage."""
+    """Adds derived display fields for the frontend's combined history."""
     is_completed = bool(row.get("summary"))
     prep_guide = row.get("prep_guide") or {}
+    series = row.get("one_on_one_series") or {}
+    if isinstance(series, list):
+        series = series[0] if series else {}
+    is_recurring = bool(series and series.get("active"))
+    if is_completed:
+        status = "completed"
+    elif prep_guide:
+        status = "planned"
+    else:
+        status = "scheduled"
     return {
         **row,
-        "status": "completed" if is_completed else "planned",
-        "display_summary": row["summary"] if is_completed else prep_guide.get("situation_summary", ""),
+        "status": status,
+        "display_summary": (
+            row.get("summary", "")
+            if is_completed
+            else prep_guide.get("situation_summary", "")
+            or ((row.get("carry_forward_items") or [""])[0])
+        ),
+        "recurrence_weeks": series.get("interval_weeks") if is_recurring else None,
+        "recurrence_timezone": series.get("timezone") if is_recurring else None,
     }
 
 
-def _find_planned_session(supabase, user_id: str, direct_report_id: str) -> dict | None:
-    """The DR's current unfinished prep, if any. At most one planned session
-    per report is expected at a time — re-running /prep for the same report
-    updates this row in place rather than piling up duplicates."""
+def _find_open_session(supabase, user_id: str, direct_report_id: str) -> dict | None:
+    """The current unfinished occurrence, scheduled or already prepped."""
     rows = (
         supabase.table("one_on_ones")
-        .select("id")
+        .select("*,one_on_one_series(interval_weeks,timezone,active)")
         .eq("manager_id", user_id)
         .eq("direct_report_id", direct_report_id)
         .is_("summary", "null")
-        .not_.is_("prep_guide", "null")
         .order("created_at", desc=True)
         .limit(1)
         .execute()
         .data
     )
     return rows[0] if rows else None
+
+
+def _clean_follow_up_items(items: list[str]) -> list[str]:
+    """Trim, de-duplicate, and bound manager-confirmed carry-forward topics."""
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for raw in items:
+        item = raw.strip()
+        key = item.casefold()
+        if not item or key in seen:
+            continue
+        cleaned.append(item[:500])
+        seen.add(key)
+        if len(cleaned) == 10:
+            break
+    return cleaned
+
+
+def _normalize_scheduled_at(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=422, detail="scheduled_at must be an ISO timestamp")
+    if parsed.tzinfo is None:
+        raise HTTPException(status_code=422, detail="scheduled_at must include a timezone")
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _validate_recurrence(recurrence_weeks: int | None, scheduled_at: str | None) -> None:
+    if recurrence_weeks is not None and recurrence_weeks not in (1, 2, 3, 4):
+        raise HTTPException(status_code=422, detail="recurrence_weeks must be between 1 and 4")
+    if recurrence_weeks is not None and not scheduled_at:
+        raise HTTPException(status_code=422, detail="A recurring 1:1 needs a meeting date")
+
+
+def _next_occurrence_at(scheduled_at: str, interval_weeks: int, now: datetime | None = None) -> str:
+    """Advance from the scheduled occurrence, preserving the series rhythm.
+
+    If an old meeting is logged late, skip already-past occurrences instead of
+    creating a new scheduled shell in the past.
+    """
+    current = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    reference = now or datetime.now(timezone.utc)
+    step = timedelta(weeks=interval_weeks)
+    candidate = current + step
+    while candidate <= reference:
+        candidate += step
+    return candidate.astimezone(timezone.utc).isoformat()
+
+
+def _upsert_series_for_session(
+    supabase,
+    user_id: str,
+    direct_report_id: str,
+    session: dict,
+    scheduled_at: str | None,
+    recurrence_weeks: int | None,
+    recurrence_timezone: str,
+) -> dict:
+    """Persist schedule fields and return the updated occurrence."""
+    _validate_recurrence(recurrence_weeks, scheduled_at)
+    series_id = session.get("series_id")
+
+    if recurrence_weeks is not None:
+        series = None
+        if series_id:
+            rows = (
+                supabase.table("one_on_one_series")
+                .select("id")
+                .eq("id", series_id)
+                .eq("manager_id", user_id)
+                .limit(1)
+                .execute()
+                .data
+            )
+            series = rows[0] if rows else None
+        if not series:
+            rows = (
+                supabase.table("one_on_one_series")
+                .select("id")
+                .eq("manager_id", user_id)
+                .eq("direct_report_id", direct_report_id)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+                .data
+            )
+            series = rows[0] if rows else None
+
+        values = {
+            "manager_id": user_id,
+            "direct_report_id": direct_report_id,
+            "interval_weeks": recurrence_weeks,
+            "anchor_at": scheduled_at,
+            "timezone": (recurrence_timezone or "UTC")[:100],
+            "active": True,
+        }
+        if series:
+            series_id = series["id"]
+            supabase.table("one_on_one_series").update(values).eq("id", series_id).eq("manager_id", user_id).execute()
+        else:
+            series_id = supabase.table("one_on_one_series").insert(values).execute().data[0]["id"]
+    elif series_id:
+        supabase.table("one_on_one_series").update({"active": False}).eq("id", series_id).eq("manager_id", user_id).execute()
+        series_id = None
+
+    saved = (
+        supabase.table("one_on_ones")
+        .update({"scheduled_at": scheduled_at, "series_id": series_id})
+        .eq("id", session["id"])
+        .eq("manager_id", user_id)
+        .eq("direct_report_id", direct_report_id)
+        .execute()
+        .data
+    )
+    if not saved:
+        raise HTTPException(status_code=404, detail="1:1 session not found")
+    updated = saved[0]
+    updated["recurrence_weeks"] = recurrence_weeks
+    updated["recurrence_timezone"] = recurrence_timezone if recurrence_weeks else None
+    return updated
 
 
 # ---------------------------------------------------------------------------
@@ -392,7 +563,10 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
     # means the first hit per report is the latest of each kind.
     sessions = (
         supabase.table("one_on_ones")
-        .select("id,direct_report_id,summary,notes,prep_guide,created_at")
+        .select(
+            "id,direct_report_id,series_id,scheduled_at,summary,notes,prep_guide,"
+            "carry_forward_items,created_at,one_on_one_series(interval_weeks,timezone,active)"
+        )
         .eq("manager_id", user_id)
         .order("created_at", desc=True)
         .execute()
@@ -405,7 +579,7 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
         rid = row["direct_report_id"]
         if row.get("summary"):
             completed_by_report.setdefault(rid, row)
-        elif row.get("prep_guide"):
+        elif row.get("prep_guide") or row.get("scheduled_at") or row.get("carry_forward_items"):
             planned_by_report.setdefault(rid, row)
 
     # Commitments logged against each report's last completed session —
@@ -474,6 +648,14 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
     return result
 
 
+@router.get("/open/{direct_report_id}")
+async def get_open_session(direct_report_id: str, auth=Depends(get_authenticated_client)):
+    """Return the report's current scheduled/prepped occurrence, if one exists."""
+    user_id, supabase = auth
+    row = _find_open_session(supabase, user_id, direct_report_id)
+    return _serialize_session(row) if row else None
+
+
 @router.post("/prep", response_model=PrepResponse)
 @limiter.limit("10/minute")
 async def prep_one_on_one(
@@ -483,6 +665,47 @@ async def prep_one_on_one(
     authorization: str = Header(None),
 ):
     user_id, supabase = auth
+
+    existing = None
+    if body.one_on_one_id:
+        rows = (
+            supabase.table("one_on_ones")
+            .select("*,one_on_one_series(interval_weeks,timezone,active)")
+            .eq("id", body.one_on_one_id)
+            .eq("manager_id", user_id)
+            .eq("direct_report_id", body.direct_report_id)
+            .is_("summary", "null")
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Open 1:1 session not found")
+        existing = rows[0]
+    else:
+        existing = _find_open_session(supabase, user_id, body.direct_report_id)
+
+    fields_set = body.model_fields_set
+    scheduled_at = (
+        _normalize_scheduled_at(body.scheduled_at)
+        if "scheduled_at" in fields_set
+        else existing.get("scheduled_at") if existing else None
+    )
+    existing_series = (existing or {}).get("one_on_one_series") or {}
+    if isinstance(existing_series, list):
+        existing_series = existing_series[0] if existing_series else {}
+    recurrence_weeks = (
+        body.recurrence_weeks
+        if "recurrence_weeks" in fields_set
+        else existing_series.get("interval_weeks") if existing_series.get("active") else None
+    )
+    recurrence_timezone = (
+        body.timezone
+        if "timezone" in fields_set
+        else existing_series.get("timezone") or "UTC"
+    )
+    _validate_recurrence(recurrence_weeks, scheduled_at)
+    carry_forward_items = _clean_follow_up_items((existing or {}).get("carry_forward_items") or [])
 
     # Fetch direct report name (+ org_unit_id, for the Context Engine's
     # scope cascade below)
@@ -571,6 +794,7 @@ async def prep_one_on_one(
         cadence_days=cadence_days,
         role_expectations=role_expectations,
         context_engine_block=context_engine_block,
+        carry_forward_items=carry_forward_items,
     )
 
     raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)
@@ -620,7 +844,6 @@ async def prep_one_on_one(
         "agenda_items": [item.model_dump() for item in agenda_items],
         "open_commitments_to_check": open_commitments,
     }
-    existing = _find_planned_session(supabase, user_id, body.direct_report_id)
     if existing:
         saved = (
             supabase.table("one_on_ones")
@@ -636,16 +859,30 @@ async def prep_one_on_one(
                 "manager_id": user_id,
                 "direct_report_id": body.direct_report_id,
                 "prep_guide": prep_guide,
+                "scheduled_at": scheduled_at,
             })
             .execute()
             .data[0]
         )
+
+    saved = _upsert_series_for_session(
+        supabase,
+        user_id,
+        body.direct_report_id,
+        {**saved, "series_id": (existing or {}).get("series_id") or saved.get("series_id")},
+        scheduled_at,
+        recurrence_weeks,
+        recurrence_timezone,
+    )
 
     return PrepResponse(
         id=saved["id"],
         situation_summary=prep_guide["situation_summary"],
         agenda_items=agenda_items,
         open_commitments_to_check=open_commitments,
+        scheduled_at=scheduled_at,
+        recurrence_weeks=recurrence_weeks,
+        carry_forward_items=carry_forward_items,
     )
 
 
@@ -690,7 +927,7 @@ async def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends
     except json.JSONDecodeError:
         # Empty draft — the review screen requires a summary before saving,
         # so the manager writes one by hand instead of getting an error.
-        parsed = {"summary": "", "commitments": []}
+        parsed = {"summary": "", "commitments": [], "follow_up_items": []}
 
     commitments: list[WrapUpCommitment] = []
     for item in parsed.get("commitments", []):
@@ -710,18 +947,38 @@ async def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends
             WrapUpCommitment(description=description, committed_by=committed_by, due_date=due_date)
         )
 
-    return WrapUpDraft(summary=parsed.get("summary", "") or "", commitments=commitments)
+    follow_up_items = _clean_follow_up_items(parsed.get("follow_up_items") or [])
+    return WrapUpDraft(
+        summary=parsed.get("summary", "") or "",
+        commitments=commitments,
+        follow_up_items=follow_up_items,
+    )
 
 
 @router.post("")
 async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
+    source_session = None
 
     if body.one_on_one_id:
-        # This meeting was prepped — fill in the existing planned row
-        # (planned -> completed) rather than inserting a second one.
+        # This meeting was scheduled/prepped — complete the existing occurrence
+        # rather than inserting a second one.
         # Scoped by manager_id + direct_report_id so a stale/foreign id
         # can't be used to overwrite someone else's row.
+        source_rows = (
+            supabase.table("one_on_ones")
+            .select("id,series_id,scheduled_at,summary")
+            .eq("id", body.one_on_one_id)
+            .eq("manager_id", user_id)
+            .eq("direct_report_id", body.direct_report_id)
+            .is_("summary", "null")
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not source_rows:
+            raise HTTPException(status_code=404, detail="Planned session not found")
+        source_session = source_rows[0]
         result = (
             supabase.table("one_on_ones")
             .update({
@@ -731,6 +988,7 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
             .eq("id", body.one_on_one_id)
             .eq("manager_id", user_id)
             .eq("direct_report_id", body.direct_report_id)
+            .is_("summary", "null")
             .execute()
         )
         if not result.data:
@@ -749,6 +1007,7 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
             .execute()
             .data[0]
         )
+        source_session = meeting
 
     for c in body.new_commitments:
         description = c.description.strip()
@@ -765,18 +1024,83 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
             "status": "open",
         }).execute()
 
-    return meeting
+    carry_forward_items = _clean_follow_up_items(body.carry_forward_items)
+    next_session = None
+    series = None
+    if source_session and source_session.get("series_id"):
+        rows = (
+            supabase.table("one_on_one_series")
+            .select("id,interval_weeks,timezone,active,anchor_at")
+            .eq("id", source_session["series_id"])
+            .eq("manager_id", user_id)
+            .eq("active", True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        series = rows[0] if rows else None
+
+    if series:
+        current_at = source_session.get("scheduled_at") or series["anchor_at"]
+        next_at = _next_occurrence_at(current_at, series["interval_weeks"])
+        open_rows = (
+            supabase.table("one_on_ones")
+            .select("*")
+            .eq("manager_id", user_id)
+            .eq("direct_report_id", body.direct_report_id)
+            .eq("series_id", series["id"])
+            .is_("summary", "null")
+            .limit(1)
+            .execute()
+            .data
+        )
+        if open_rows:
+            merged = _clean_follow_up_items(
+                [*(open_rows[0].get("carry_forward_items") or []), *carry_forward_items]
+            )
+            next_session = (
+                supabase.table("one_on_ones")
+                .update({"scheduled_at": next_at, "carry_forward_items": merged})
+                .eq("id", open_rows[0]["id"])
+                .eq("manager_id", user_id)
+                .execute()
+                .data[0]
+            )
+        else:
+            next_session = (
+                supabase.table("one_on_ones")
+                .insert({
+                    "manager_id": user_id,
+                    "direct_report_id": body.direct_report_id,
+                    "series_id": series["id"],
+                    "scheduled_at": next_at,
+                    "carry_forward_items": carry_forward_items,
+                })
+                .execute()
+                .data[0]
+            )
+        next_session["one_on_one_series"] = series
+        next_session = _serialize_session(next_session)
+    elif carry_forward_items:
+        # An ad-hoc/non-recurring call still carries confirmed follow-ups into
+        # the existing capture inbox so they seed the next prep.
+        for item in carry_forward_items:
+            supabase.table("dr_capture_notes").insert({
+                "manager_id": user_id,
+                "direct_report_id": body.direct_report_id,
+                "content": item,
+            }).execute()
+
+    return {"meeting": _serialize_session(meeting), "next_session": next_session}
 
 
 @router.get("/{direct_report_id}/history")
 async def get_history(direct_report_id: str, auth=Depends(get_authenticated_client)):
-    """Combined past + planned sessions for the DR detail page — newest
-    first, which naturally surfaces an in-progress planned session near the
-    top since it was just prepped."""
+    """Combined completed + scheduled/prepped occurrences for the person page."""
     user_id, supabase = auth
     result = (
         supabase.table("one_on_ones")
-        .select("*")
+        .select("*,one_on_one_series(interval_weeks,timezone,active)")
         .eq("direct_report_id", direct_report_id)
         .eq("manager_id", user_id)
         .order("created_at", desc=True)
@@ -793,7 +1117,7 @@ async def get_session(one_on_one_id: str, auth=Depends(get_authenticated_client)
     try:
         result = (
             supabase.table("one_on_ones")
-            .select("*")
+            .select("*,one_on_one_series(interval_weeks,timezone,active)")
             .eq("id", one_on_one_id)
             .eq("manager_id", user_id)
             .single()
@@ -806,16 +1130,54 @@ async def get_session(one_on_one_id: str, auth=Depends(get_authenticated_client)
     return _serialize_session(result.data)
 
 
+@router.patch("/session/{one_on_one_id}/schedule")
+async def update_session_schedule(
+    one_on_one_id: str,
+    body: ScheduleUpdate,
+    auth=Depends(get_authenticated_client),
+):
+    """Edit the date/repeat rule for an unfinished occurrence."""
+    user_id, supabase = auth
+    rows = (
+        supabase.table("one_on_ones")
+        .select("*,one_on_one_series(interval_weeks,timezone,active)")
+        .eq("id", one_on_one_id)
+        .eq("manager_id", user_id)
+        .is_("summary", "null")
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Open 1:1 session not found")
+    session = rows[0]
+    scheduled_at = _normalize_scheduled_at(body.scheduled_at)
+    saved = _upsert_series_for_session(
+        supabase,
+        user_id,
+        session["direct_report_id"],
+        session,
+        scheduled_at,
+        body.recurrence_weeks,
+        body.timezone,
+    )
+    saved["one_on_one_series"] = {
+        "interval_weeks": body.recurrence_weeks,
+        "timezone": body.timezone,
+        "active": body.recurrence_weeks is not None,
+    }
+    return _serialize_session(saved)
+
+
 @router.delete("/session/{one_on_one_id}")
 async def dismiss_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
-    """Dismiss a planned session that isn't going to happen (e.g. the 1:1
-    got cancelled). Refuses to delete a completed session — that's real
-    history, not a stub to clean up."""
+    """Dismiss an unfinished occurrence and stop its series, if attached.
+    Completed history is never deletable through this route."""
     user_id, supabase = auth
     try:
         result = (
             supabase.table("one_on_ones")
-            .select("id,summary")
+            .select("id,summary,series_id")
             .eq("id", one_on_one_id)
             .eq("manager_id", user_id)
             .single()
@@ -828,6 +1190,8 @@ async def dismiss_session(one_on_one_id: str, auth=Depends(get_authenticated_cli
     if result.data.get("summary"):
         raise HTTPException(status_code=400, detail="Cannot dismiss a completed 1:1")
 
+    if result.data.get("series_id"):
+        supabase.table("one_on_one_series").update({"active": False}).eq("id", result.data["series_id"]).eq("manager_id", user_id).execute()
     supabase.table("one_on_ones").delete().eq("id", one_on_one_id).eq("manager_id", user_id).execute()
     return {"deleted": True}
 

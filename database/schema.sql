@@ -188,11 +188,37 @@ create table manager_report_connections (
 alter table manager_report_connections enable row level security;
 
 -- -------------------------
+-- RECURRING 1:1 SERIES
+-- One active series per manager/report relationship. Individual occurrences
+-- remain one_on_ones rows so reschedules, cancellations, prep, and history do
+-- not mutate the recurrence rule itself.
+-- -------------------------
+create table one_on_one_series (
+  id               uuid primary key default uuid_generate_v4(),
+  manager_id       uuid not null references auth.users(id),
+  direct_report_id uuid not null references direct_reports(id) on delete cascade,
+  interval_weeks   smallint not null check (interval_weeks between 1 and 4),
+  anchor_at        timestamptz not null,
+  timezone         text not null default 'UTC',
+  active           boolean not null default true,
+  created_at       timestamptz not null default now(),
+  constraint one_on_one_series_occurrence_owner_key
+    unique (id, manager_id, direct_report_id)
+);
+
+alter table one_on_one_series enable row level security;
+
+create unique index one_on_one_series_active_report_idx
+  on one_on_one_series (manager_id, direct_report_id)
+  where active;
+
+-- -------------------------
 -- 1:1 MEETINGS
 -- manager_id = auth.uid() of the manager who runs the meeting.
 -- summary = post-meeting log (visible in history).
 -- notes = private manager thoughts (not shown in history).
 -- prep_guide = AI-generated prep stored for reference.
+-- carry_forward_items = manager-confirmed topics seeded from the prior call.
 -- org_id nullable for MVP.
 -- -------------------------
 create table one_on_ones (
@@ -200,14 +226,26 @@ create table one_on_ones (
   org_id           uuid references organizations(id),  -- nullable for MVP
   manager_id       uuid not null references auth.users(id),
   direct_report_id uuid not null references direct_reports(id) on delete cascade,
+  series_id        uuid,
   scheduled_at     timestamptz,
   summary          text,   -- post-meeting log, shown in history
   notes            text,   -- private to manager only
   prep_guide       jsonb,  -- AI-generated prep, stored for reference
-  created_at       timestamptz not null default now()
+  carry_forward_items jsonb not null default '[]'::jsonb
+                    constraint one_on_ones_carry_forward_items_array
+                    check (jsonb_typeof(carry_forward_items) = 'array'),
+  created_at       timestamptz not null default now(),
+  constraint one_on_ones_series_owner_fkey
+    foreign key (series_id, manager_id, direct_report_id)
+    references one_on_one_series (id, manager_id, direct_report_id)
+    deferrable initially deferred
 );
 
 alter table one_on_ones enable row level security;
+
+create index one_on_ones_upcoming_idx
+  on one_on_ones (manager_id, scheduled_at)
+  where summary is null and scheduled_at is not null;
 
 -- -------------------------
 -- COMMITMENTS
@@ -1188,6 +1226,10 @@ create policy "connections_select_own" on manager_report_connections
 
 -- one_on_ones — private to the manager who created them
 create policy "one_on_ones_all_own" on one_on_ones
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
+-- one_on_one_series — recurrence belongs to the same writing manager
+create policy "one_on_one_series_all_own" on one_on_one_series
   for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
 -- commitments — visible to the owner (manager who made the commitment)

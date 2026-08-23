@@ -23,6 +23,32 @@ automatically.
 
 ---
 
+## Session 62 — 2026-08-23
+
+**Goal:** Turn 1:1 prep into a recurring management loop: set the meeting date, repeat every 1–4
+weeks, complete the call, and begin the next occurrence with confirmed commitments and follow-ups.
+
+**What was done:** Activated `one_on_ones.scheduled_at` end to end and added manager-scoped
+`one_on_one_series`, a scheduled derived state, date/repeat controls in prep, upcoming-session
+surfacing on the 1:1 and person pages, and automatic rollover from the scheduled date. Wrap-up now
+drafts a separate manager-reviewed carry-forward list; recurring calls place confirmed topics on the
+next occurrence, while non-recurring calls use the capture inbox. Open commitments remain live and
+are pulled dynamically rather than copied. Added route/helper tests, full schema/RLS verification,
+and applied the additive migration to production Supabase.
+
+**Decisions made / locked:** Recurrence belongs to a series; each meeting remains its own occurrence.
+The current release schedules a date and says “Repeat,” never “invite,” until calendar sync exists.
+Logging late advances to the next future date without changing the series rhythm. AI may suggest
+follow-ups but cannot carry them forward until the manager confirms the wrap-up. The final prep is
+generated near the meeting rather than immediately after the prior call, so it can include current
+commitment state and newer context.
+
+**Next step:** Dogfood a complete recurring cycle in production, including reschedule, stop-repeat,
+late-log, and no-follow-up cases; then scope calendar-provider sync against this series/occurrence
+boundary.
+
+---
+
 ## Session 61 — 2026-08-23
 
 **Goal:** Turn Session 60's approved action-first Mission Control direction into a buildable plan,
@@ -169,50 +195,6 @@ pairing and trademark clearance are all still open.
 
 ---
 
-## Session 57 — 2026-08-22
-
-**Goal:** Andrew flagged that the reference docs had gotten long enough to burn real tokens every
-session, and asked for a hard look at how the non-dev docs are organized.
-
-**What was done:** Measured it — a typical build session loaded ~51k tokens of docs before reading any
-code. Rewrote `CLAUDE.md` from the filesystem (it still claimed 4 tables and 2 route modules against
-44 and 20). Split `ENGINEERING.md` 111 KB → 14 KB plus 11 current-state docs under `docs/systems/`,
-merging the four Team Mission Control sections into one and the six Context Engine sub-sessions into
-one. Restructured `DESIGN.md` around conventions plus 16 live decisions; all 122 original rows moved
-unedited to `docs/archive/DESIGN_ARCHIVE.md`. Created `docs/archive/` for the session archive and the
-seven shipped scoping docs, each bannered. Capped the compact index at 20 decision-carrying lines.
-Rewrote the `tsp-push` skill (delivered as a `.skill` file for Andrew to save).
-
-**Decisions made / locked:**
-- **Reference docs describe the present; SESSION_HISTORY describes the past.** No session-stamped
-  headings or inline "(Session N)" in any reference doc — that convention is what grew ENGINEERING.md
-  to 111 KB, since `tsp-push` Step 6 explicitly said to append rather than rewrite.
-- **A new feature area gets a new `docs/systems/<area>.md`**, never a new section in ENGINEERING.md.
-- **Nothing is deleted, only moved** to the matching file under `docs/archive/`.
-- `tsp-push` now runs a documentation GC pass every 10th session, and checks CLAUDE.md's counts
-  against reality whenever `routes/` or `schema.sql` changes.
-- **Every paste-ready git block starts with `rm -f .git/index.lock`** — Andrew's standing ask.
-  The stale lock this repo accumulates can't be cleared from the sandbox, and without the line the
-  paste fails on `git add` in a way that reads like a git problem. Recorded in CLAUDE.md and in
-  `tsp-push` Step 8.
-
-**Folder hygiene (same session):** rewrote `README.md`, which was stale the same way CLAUDE.md was
-(2 route files, "production deploy not yet built") and duplicated CLAUDE.md's file map — it now points
-at CLAUDE.md as the entry point rather than carrying a second map to keep in sync. Gitignored
-`_to_delete/` (55 MB of sandbox rebuild tarballs) and `docs/branding/` + `docs/marketing/` (31 MB of
-logo/palette PNGs, kept on disk, deliberately out of git history). Removed
-`docs/NOTES_INGESTION_SCOPING.md` from `.gitignore` — CLAUDE.md routes sessions to it as the one live
-scoping doc, so an ignored copy would vanish on any clone or sandbox rebuild.
-
-**Found along the way:** `assistant_messages` is live (migration applied 13 Aug) but was never folded
-into `schema.sql`, so a local verification run from `schema.sql` alone is missing a table production
-has. Recorded under "Known drift" in ENGINEERING.md; the new hard rule #4 is what prevents the next one.
-
-**Next step:** Fold `assistant_messages` into `schema.sql`. Then Session 56's open thread — the
-remaining items from Session 54's UX review.
-
----
-
 ## Archived sessions (compact index)
 
 The 20 most recent archived sessions keep their goal plus the decisions locked
@@ -222,6 +204,8 @@ lines keep the goal alone. Full entries
 `docs/archive/SESSION_HISTORY_ARCHIVE.md`, newest-first, unchanged from their
 original text. Open that file when you need the full detail behind a
 specific decision.
+
+- **Session 57 — 2026-08-22:** Reorganize the project references so current-state docs stay compact and historical narrative moves to the session archive. **Decided:** reference docs describe the present; nothing is deleted, only moved; every tenth session gets a documentation GC pass.
 
 - **Session 56 — 2026-08-22:** Close the last nav-alignment item and standardize excessive page whitespace. **Decided:** AppNav and Sidebar share `NAV_STRIP_HEIGHT`; `SECTION_GAP` (`mt-5`) owns page-level transitions; Dashboard/Goals/Projects/Team use the 1600px `8xl` shell while narrower pages keep their existing tiers.
 

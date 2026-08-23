@@ -103,9 +103,9 @@ export type RoleExpectations = {
 };
 
 // A session's status is derived server-side from which columns are filled —
-// never set directly. planned: prepped, meeting hasn't happened yet
-// (prep_guide set, summary null). completed: logged (summary set).
-export type SessionStatus = "planned" | "completed";
+// never set directly. scheduled: date exists but prep has not been generated;
+// planned: prep_guide set, summary null; completed: summary set.
+export type SessionStatus = "scheduled" | "planned" | "completed";
 
 export type PrepGuide = {
   situation_summary: string;
@@ -119,6 +119,11 @@ export type OneOnOne = {
   summary: string | null;
   notes?: string | null;
   prep_guide?: PrepGuide | null;
+  scheduled_at: string | null;
+  series_id?: string | null;
+  recurrence_weeks?: 1 | 2 | 3 | 4 | null;
+  recurrence_timezone?: string | null;
+  carry_forward_items: string[];
   created_at: string;
   status: SessionStatus;
   // completed -> summary; planned -> the prep sheet's situation_summary.
@@ -156,6 +161,9 @@ export type PrepResponse = {
   agenda_items: AgendaItem[];
   // The prep endpoint returns only these fields per commitment.
   open_commitments_to_check: Pick<Commitment, "description" | "due_date" | "committed_by">[];
+  scheduled_at: string | null;
+  recurrence_weeks: 1 | 2 | 3 | 4 | null;
+  carry_forward_items: string[];
 };
 
 // AI-drafted wrap-up of a 1:1 — reviewed and edited by the manager before
@@ -169,6 +177,7 @@ export type WrapUpCommitment = {
 export type WrapUpDraft = {
   summary: string;
   commitments: WrapUpCommitment[];
+  follow_up_items: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -1047,13 +1056,38 @@ export const getOneOnOneHistory = (directReportId: string): Promise<OneOnOne[]> 
 export const getOneOnOne = (id: string): Promise<OneOnOne> =>
   authedFetch(`/api/one-on-ones/session/${id}`);
 
-// Dismiss a planned session that isn't going to happen. Refuses (400) on a
-// completed session — that's real history, not a stub to clean up.
+// The current unfinished occurrence for a person — either date-only
+// scheduled or already prepped. Used when entering prep without ?resume=.
+export const getOpenOneOnOne = (directReportId: string): Promise<OneOnOne | null> =>
+  authedFetch(`/api/one-on-ones/open/${directReportId}`);
+
+// Dismiss an unfinished occurrence. If it belongs to an active series, this
+// also stops recurrence. Completed history is never deleted here.
 export const deleteOneOnOne = (id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/one-on-ones/session/${id}`, { method: "DELETE" });
 
-export const prepOneOnOne = (body: { direct_report_id: string; raw_notes: string }): Promise<PrepResponse> =>
+export const prepOneOnOne = (body: {
+  direct_report_id: string;
+  raw_notes: string;
+  one_on_one_id?: string;
+  scheduled_at?: string | null;
+  recurrence_weeks?: 1 | 2 | 3 | 4 | null;
+  timezone?: string;
+}): Promise<PrepResponse> =>
   authedFetch("/api/one-on-ones/prep", { method: "POST", body: JSON.stringify(body) });
+
+export const updateOneOnOneSchedule = (
+  id: string,
+  body: {
+    scheduled_at: string | null;
+    recurrence_weeks: 1 | 2 | 3 | 4 | null;
+    timezone: string;
+  }
+): Promise<OneOnOne> =>
+  authedFetch(`/api/one-on-ones/session/${id}/schedule`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 
 // Raw call notes → AI-drafted summary + commitments (both sides). Draft only —
 // nothing is saved until logOneOnOne.
@@ -1065,10 +1099,11 @@ export const logOneOnOne = (body: {
   summary: string;
   notes?: string;
   new_commitments?: WrapUpCommitment[];
+  carry_forward_items?: string[];
   // Set when this meeting was prepped: fills in the existing planned row
   // instead of creating a second one. Omitted for ad-hoc logs.
   one_on_one_id?: string;
-}): Promise<OneOnOne> =>
+}): Promise<{ meeting: OneOnOne; next_session: OneOnOne | null }> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 
 // ---------------------------------------------------------------------------

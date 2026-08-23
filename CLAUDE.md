@@ -29,7 +29,7 @@ the thing you're actually touching:
 never all at once:
 
 ```
-one-on-ones.md      prep, the call, wrap-up, cadence, capture notes
+one-on-ones.md      scheduling, recurrence, prep, the call, wrap-up, carry-forward
 team.md             /app/team — roster, goals, meeting notes, callouts, IC invites
 mission-control.md  /app/dashboard — action brief, ranking, dispositions, rollback
 context-engine.md   document ingest, extraction, retrieval, the Brain
@@ -79,7 +79,7 @@ backend/     FastAPI, deploys to Railway on push
   routes/              one module per API area
 
 database/
-  schema.sql             source of truth for 46 tables, indexes, RLS policies
+  schema.sql             source of truth for 47 tables, indexes, RLS policies
   migrations/            dated .sql files — every schema change lands here first
   local_verify_stub.sql  lets schema.sql run against a throwaway local Postgres
 

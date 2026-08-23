@@ -551,9 +551,8 @@ export default function ReportDetailPage() {
   const open = commitments.filter((c) => c.status === "open");
   const resolved = commitments.filter((c) => c.status !== "open");
   const overdueCommitments = open.filter((c) => isOverdue(c.due_date));
-  // Most-recent planned session, if any — lets the header CTA jump straight
-  // back into an existing prep sheet instead of regenerating one.
-  const plannedSession = history.find((h) => h.status === "planned");
+  // Most-recent unfinished occurrence — scheduled or already prepped.
+  const plannedSession = history.find((h) => h.status !== "completed");
   const lastCompleted = history.find((h) => h.status === "completed");
 
   const roleLevel = roleLevels.find((r) => r.id === report.role_level_id);
@@ -636,7 +635,11 @@ export default function ReportDetailPage() {
               }
               className={`${BTN_PRIMARY} whitespace-nowrap`}
             >
-              {plannedSession ? "Resume prep sheet →" : "Start 1:1 prep →"}
+              {plannedSession?.status === "planned"
+                ? "Resume prep sheet →"
+                : plannedSession
+                  ? "Prepare scheduled 1:1 →"
+                  : "Start 1:1 prep →"}
             </Link>
             <button
               onClick={() => setSettingsOpen(true)}
@@ -708,9 +711,20 @@ export default function ReportDetailPage() {
                 }
                 className="text-xs font-medium text-brand hover:text-brand-hover"
               >
-                {plannedSession ? "Resume prep →" : "Start prep →"}
+                {plannedSession?.status === "planned"
+                  ? "Resume prep →"
+                  : plannedSession
+                    ? "Prepare →"
+                    : "Start prep →"}
               </Link>
             </div>
+            {plannedSession?.scheduled_at && (
+              <p className="mt-1 text-sm font-medium text-ink-body">
+                {formatDate(plannedSession.scheduled_at)}
+                {plannedSession.recurrence_weeks &&
+                  ` · every ${plannedSession.recurrence_weeks} week${plannedSession.recurrence_weeks === 1 ? "" : "s"}`}
+              </p>
+            )}
             <p className="mt-1 text-xs text-ink-muted">Worth raising, pulled from what&apos;s on record.</p>
 
             {worthRaising.length === 0 ? (
@@ -890,29 +904,36 @@ export default function ReportDetailPage() {
             ) : (
               <ul className="mt-3 divide-y divide-divider">
                 {history.slice(0, 6).map((h) => {
-                  const isPlanned = h.status === "planned";
+                  const isOpen = h.status !== "completed";
                   const body = (
                     <>
                       <div className="flex items-center gap-2">
-                        <p className="text-xs text-ink-muted">{formatDate(h.created_at)}</p>
+                        <p className="text-xs text-ink-muted">{formatDate(h.scheduled_at || h.created_at)}</p>
                         <span
                           className={
-                            isPlanned
+                            h.status === "planned"
                               ? "rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-500"
                               : "rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-secondary"
                           }
                         >
-                          {isPlanned ? "Planned" : "Completed"}
+                          {h.status === "scheduled" ? "Scheduled" : h.status === "planned" ? "Prepped" : "Completed"}
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-ink-body">
-                        {h.display_summary || (isPlanned ? "Prep sheet generated — no summary yet." : "")}
+                        {h.display_summary ||
+                          (h.status === "scheduled"
+                            ? h.recurrence_weeks
+                              ? `Repeats every ${h.recurrence_weeks} week${h.recurrence_weeks === 1 ? "" : "s"}`
+                              : "Meeting scheduled — prep not started yet."
+                            : h.status === "planned"
+                              ? "Prep sheet generated — no summary yet."
+                              : "")}
                       </p>
                     </>
                   );
                   return (
                     <li key={h.id} className="py-2.5">
-                      {isPlanned ? (
+                      {isOpen ? (
                         <div className="flex items-start justify-between gap-4">
                           <Link
                             href={`/app/reports/${id}/prep?resume=${h.id}`}

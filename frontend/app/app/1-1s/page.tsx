@@ -4,7 +4,7 @@
 // 2026-08-16). See docs/ONE_ON_ONES_PAGE_SPEC.md — this page answers one
 // question: who do I owe a conversation, and what's already in flight?
 //
-// Owns the 1:1 loop end to end: due now, prepped-not-yet-run, and recently
+// Owns the 1:1 loop end to end: due now, scheduled/prepped, and recently
 // wrapped, all sourced from the single GET /api/one-on-ones/overview call
 // (the canonical is_due/cadence computation — see backend/utils.py's
 // resolve_cadence_days()). This page does no staleness math of its own,
@@ -15,9 +15,9 @@
 // 3 sections (Due now / Prepped / Recently wrapped) is left as-is, same
 // reasoning as team/page.tsx.
 //
-// Page actions are triage + start/resume prep only (spec decision #4) — no
-// new write paths. Logging an off-platform 1:1, bulk actions, search across
-// history, and calendar integration are all explicitly out of scope.
+// Page actions remain triage + start/resume prep. Scheduling/repeat settings
+// live inside prep; off-platform logging, bulk actions, search, and provider
+// calendar sync do not belong on this overview.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -67,7 +67,7 @@ export default function OneOnOnesPage() {
   const dueNow = useMemo(
     () =>
       items
-        .filter((i) => i.is_due)
+        .filter((i) => i.is_due && i.planned_session === null)
         .sort((a, b) => {
           const aGap = a.days_since_last ?? Number.POSITIVE_INFINITY;
           const bGap = b.days_since_last ?? Number.POSITIVE_INFINITY;
@@ -76,7 +76,7 @@ export default function OneOnOnesPage() {
     [items]
   );
 
-  const prepped = useMemo(() => items.filter((i) => i.planned_session !== null), [items]);
+  const inFlight = useMemo(() => items.filter((i) => i.planned_session !== null), [items]);
 
   const recentlyWrapped = useMemo(
     () =>
@@ -150,16 +150,16 @@ export default function OneOnOnesPage() {
             )}
           </section>
 
-          {/* Prepped, not yet run */}
+          {/* Scheduled or prepped, not yet run */}
           <section>
             <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
-              Prepped, not yet run{prepped.length > 0 && ` (${prepped.length})`}
+              Upcoming 1:1s{inFlight.length > 0 && ` (${inFlight.length})`}
             </h2>
-            {prepped.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-secondary">No prep sheets waiting on a meeting.</p>
+            {inFlight.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-secondary">No meetings scheduled or prepped yet.</p>
             ) : (
               <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-surface">
-                {prepped.map((r) => (
+                {inFlight.map((r) => (
                   <li key={r.direct_report_id}>
                     <Link
                       href={`/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session!.id}`}
@@ -168,10 +168,17 @@ export default function OneOnOnesPage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-ink">{r.name}</p>
                         <p className="mt-0.5 truncate text-xs text-ink-muted">
-                          {r.planned_session!.display_summary || "Prep sheet generated — no summary yet."}
+                          {r.planned_session!.scheduled_at && `${formatDate(r.planned_session!.scheduled_at)} · `}
+                          {r.planned_session!.status === "planned"
+                            ? r.planned_session!.display_summary || "Prep sheet ready"
+                            : r.planned_session!.recurrence_weeks
+                              ? `Repeats every ${r.planned_session!.recurrence_weeks} week${r.planned_session!.recurrence_weeks === 1 ? "" : "s"}`
+                              : "Scheduled — prep when you’re ready"}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs text-ink-muted">Resume →</span>
+                      <span className="shrink-0 text-xs text-ink-muted">
+                        {r.planned_session!.status === "planned" ? "Resume →" : "Prep →"}
+                      </span>
                     </Link>
                   </li>
                 ))}

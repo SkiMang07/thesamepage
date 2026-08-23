@@ -9,6 +9,50 @@ here.
 
 ---
 
+## Session 57 — 2026-08-22
+
+**Goal:** Andrew flagged that the reference docs had gotten long enough to burn real tokens every
+session, and asked for a hard look at how the non-dev docs are organized.
+
+**What was done:** Measured it — a typical build session loaded ~51k tokens of docs before reading any
+code. Rewrote `CLAUDE.md` from the filesystem (it still claimed 4 tables and 2 route modules against
+44 and 20). Split `ENGINEERING.md` 111 KB → 14 KB plus 11 current-state docs under `docs/systems/`,
+merging the four Team Mission Control sections into one and the six Context Engine sub-sessions into
+one. Restructured `DESIGN.md` around conventions plus 16 live decisions; all 122 original rows moved
+unedited to `docs/archive/DESIGN_ARCHIVE.md`. Created `docs/archive/` for the session archive and the
+seven shipped scoping docs, each bannered. Capped the compact index at 20 decision-carrying lines.
+Rewrote the `tsp-push` skill (delivered as a `.skill` file for Andrew to save).
+
+**Decisions made / locked:**
+- **Reference docs describe the present; SESSION_HISTORY describes the past.** No session-stamped
+  headings or inline "(Session N)" in any reference doc — that convention is what grew ENGINEERING.md
+  to 111 KB, since `tsp-push` Step 6 explicitly said to append rather than rewrite.
+- **A new feature area gets a new `docs/systems/<area>.md`**, never a new section in ENGINEERING.md.
+- **Nothing is deleted, only moved** to the matching file under `docs/archive/`.
+- `tsp-push` now runs a documentation GC pass every 10th session, and checks CLAUDE.md's counts
+  against reality whenever `routes/` or `schema.sql` changes.
+- **Every paste-ready git block starts with `rm -f .git/index.lock`** — Andrew's standing ask.
+  The stale lock this repo accumulates can't be cleared from the sandbox, and without the line the
+  paste fails on `git add` in a way that reads like a git problem. Recorded in CLAUDE.md and in
+  `tsp-push` Step 8.
+
+**Folder hygiene (same session):** rewrote `README.md`, which was stale the same way CLAUDE.md was
+(2 route files, "production deploy not yet built") and duplicated CLAUDE.md's file map — it now points
+at CLAUDE.md as the entry point rather than carrying a second map to keep in sync. Gitignored
+`_to_delete/` (55 MB of sandbox rebuild tarballs) and `docs/branding/` + `docs/marketing/` (31 MB of
+logo/palette PNGs, kept on disk, deliberately out of git history). Removed
+`docs/NOTES_INGESTION_SCOPING.md` from `.gitignore` — CLAUDE.md routes sessions to it as the one live
+scoping doc, so an ignored copy would vanish on any clone or sandbox rebuild.
+
+**Found along the way:** `assistant_messages` is live (migration applied 13 Aug) but was never folded
+into `schema.sql`, so a local verification run from `schema.sql` alone is missing a table production
+has. Recorded under "Known drift" in ENGINEERING.md; the new hard rule #4 is what prevents the next one.
+
+**Next step:** Fold `assistant_messages` into `schema.sql`. Then Session 56's open thread — the
+remaining items from Session 54's UX review.
+
+---
+
 ## Session 56 — 2026-08-22
 
 **Goal:** Close out the last open item from Session 54's UX review — give AppNav's header and

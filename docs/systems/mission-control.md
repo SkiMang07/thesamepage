@@ -30,6 +30,12 @@ logged time off can only corroborate an already-eligible dated commitment.
 Assessment scores, capture-note content, private 1:1 notes, and inferred employee
 risk do not enter the brief.
 
+Scheduled dates now come from the recurring 1:1 workflow. A saved prep with a
+date uses that fact directly and no longer carries the old "no scheduled meeting
+date" boundary. A date-only scheduled shell without a generated prep sheet is
+visible on `/app/1-1s`, but does not become a Mission Control candidate by
+itself; cadence still determines whether starting prep needs attention.
+
 Eligible items share one domain-neutral score based on date urgency, explicit
 status/integrity, staleness, saved-prep momentum, corroboration, and whether the
 CTA opens the exact workflow. Ties break by strongest date bucket, evidence

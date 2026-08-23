@@ -6,7 +6,9 @@ import Link from "next/link";
 import {
   getDirectReport,
   getOneOnOne,
+  getOpenOneOnOne,
   prepOneOnOne,
+  updateOneOnOneSchedule,
   wrapUpOneOnOne,
   getCaptureNotes,
   deleteCaptureNote,
@@ -63,6 +65,22 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
 // ---------------------------------------------------------------------------
 
 type Step = 1 | 2 | 3;
+type RecurrenceWeeks = 1 | 2 | 3 | 4;
+
+function scheduledAtToDate(value: string | null | undefined) {
+  return value ? value.slice(0, 10) : "";
+}
+
+// The first release schedules a calendar day, not a clock time. Noon UTC
+// keeps that date stable while preserving the existing timestamptz field for
+// the later calendar-sync pass.
+function dateToScheduledAt(value: string) {
+  return value ? `${value}T12:00:00.000Z` : null;
+}
+
+function browserTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
 
 // useSearchParams (for ?resume=) requires a Suspense boundary — same
 // pattern as app/app/login/page.tsx.
@@ -85,6 +103,11 @@ function PrepFlow() {
   const [error, setError] = useState<string | null>(null);
   const [prep, setPrep] = useState<PrepResponse | null>(null);
   const [reportName, setReportName] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [recurrenceWeeks, setRecurrenceWeeks] = useState<RecurrenceWeeks | null>(null);
+  const [carryForwardItems, setCarryForwardItems] = useState<string[]>([]);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
 
   // The planned one_on_ones row this prep sheet is saved to — set either by
   // a fresh /prep call below, or by loading an existing planned session when
@@ -95,7 +118,7 @@ function PrepFlow() {
   // Resuming a planned session (?resume=<id> from the DR detail page's
   // session list) skips straight to step 2 with the stored prep sheet —
   // no regenerating it.
-  const [resumeLoading, setResumeLoading] = useState(!!resumeId);
+  const [resumeLoading, setResumeLoading] = useState(true);
   const [resumeError, setResumeError] = useState<string | null>(null);
 
   // Captures (Session 50) — quick between-sessions jots from the Person
@@ -134,36 +157,57 @@ function PrepFlow() {
   }, [id, resumeId]);
 
   useEffect(() => {
-    if (!resumeId) return;
-    getOneOnOne(resumeId)
+    const loadSession = resumeId ? getOneOnOne(resumeId) : getOpenOneOnOne(id);
+    loadSession
       .then((session) => {
-        if (session.direct_report_id !== id || session.status !== "planned" || !session.prep_guide) {
+        if (!session) return;
+        if (session.direct_report_id !== id || session.status === "completed") {
           setResumeError("This prep sheet is no longer available.");
           return;
         }
-        setPrep({
-          id: session.id,
-          situation_summary: session.prep_guide.situation_summary,
-          agenda_items: session.prep_guide.agenda_items,
-          open_commitments_to_check: session.prep_guide.open_commitments_to_check,
-        });
         setOneOnOneId(session.id);
-        setStep(2);
+        setScheduleDate(scheduledAtToDate(session.scheduled_at));
+        setRecurrenceWeeks(session.recurrence_weeks ?? null);
+        setCarryForwardItems(session.carry_forward_items ?? []);
+        if (session.prep_guide) {
+          setPrep({
+            id: session.id,
+            situation_summary: session.prep_guide.situation_summary,
+            agenda_items: session.prep_guide.agenda_items,
+            open_commitments_to_check: session.prep_guide.open_commitments_to_check,
+            scheduled_at: session.scheduled_at,
+            recurrence_weeks: session.recurrence_weeks ?? null,
+            carry_forward_items: session.carry_forward_items ?? [],
+          });
+          setStep(2);
+        }
       })
-      .catch(() => setResumeError("This prep sheet is no longer available."))
+      .catch(() => {
+        if (resumeId) setResumeError("This prep sheet is no longer available.");
+      })
       .finally(() => setResumeLoading(false));
   }, [resumeId, id]);
 
   // Step 1 → 2: call AI prep endpoint
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
-    if (!notes.trim()) return;
+    if (!notes.trim() && carryForwardItems.length === 0) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await prepOneOnOne({ direct_report_id: id, raw_notes: notes });
+      const result = await prepOneOnOne({
+        direct_report_id: id,
+        raw_notes: notes,
+        one_on_one_id: oneOnOneId ?? undefined,
+        scheduled_at: dateToScheduledAt(scheduleDate),
+        recurrence_weeks: scheduleDate ? recurrenceWeeks : null,
+        timezone: browserTimezone(),
+      });
       setPrep(result);
       setOneOnOneId(result.id);
+      setScheduleDate(scheduledAtToDate(result.scheduled_at));
+      setRecurrenceWeeks(result.recurrence_weeks);
+      setCarryForwardItems(result.carry_forward_items);
       setStep(2);
       // Captured content is now folded into this sheet — clear the inbox so
       // it doesn't get pulled in again next time. Best-effort: a failure
@@ -177,6 +221,27 @@ function PrepFlow() {
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function persistSchedule(nextDate: string, nextRecurrence: RecurrenceWeeks | null) {
+    if (!oneOnOneId) return;
+    setScheduleSaving(true);
+    setScheduleSaved(false);
+    setError(null);
+    try {
+      const saved = await updateOneOnOneSchedule(oneOnOneId, {
+        scheduled_at: dateToScheduledAt(nextDate),
+        recurrence_weeks: nextDate ? nextRecurrence : null,
+        timezone: browserTimezone(),
+      });
+      setScheduleDate(scheduledAtToDate(saved.scheduled_at));
+      setRecurrenceWeeks(saved.recurrence_weeks ?? null);
+      setScheduleSaved(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not save the meeting date.");
+    } finally {
+      setScheduleSaving(false);
     }
   }
 
@@ -235,6 +300,58 @@ function PrepFlow() {
         )}
 
         <form onSubmit={handleGenerate} className={SECTION_GAP}>
+          <div className="mb-5 grid gap-4 rounded-xl border border-hairline bg-surface p-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-ink-body">Meeting date</span>
+              <input
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => {
+                  const nextDate = e.target.value;
+                  setScheduleDate(nextDate);
+                  if (!nextDate) setRecurrenceWeeks(null);
+                }}
+                className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink-body focus:border-brand focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-ink-body">Repeat this 1:1</span>
+              <select
+                value={recurrenceWeeks ?? ""}
+                disabled={!scheduleDate}
+                onChange={(e) =>
+                  setRecurrenceWeeks(e.target.value ? (Number(e.target.value) as RecurrenceWeeks) : null)
+                }
+                className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink-body focus:border-brand focus:outline-none disabled:opacity-50"
+              >
+                <option value="">Does not repeat</option>
+                <option value="1">Every week</option>
+                <option value="2">Every 2 weeks</option>
+                <option value="3">Every 3 weeks</option>
+                <option value="4">Every 4 weeks</option>
+              </select>
+            </label>
+            <p className="text-xs text-ink-muted sm:col-span-2">
+              This schedules the rhythm inside The Same Page. Calendar invitations will come with calendar sync.
+            </p>
+          </div>
+
+          {carryForwardItems.length > 0 && (
+            <div className="mb-5 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                Carried forward from your last 1:1
+              </p>
+              <ul className="mt-2 space-y-1">
+                {carryForwardItems.map((item, index) => (
+                  <li key={index} className="flex gap-2 text-sm text-ink-body">
+                    <span className="text-amber-500">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -245,7 +362,7 @@ function PrepFlow() {
           {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
           <button
             type="submit"
-            disabled={loading || !notes.trim()}
+            disabled={loading || (!notes.trim() && carryForwardItems.length === 0)}
             className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
           >
             {loading ? "Generating prep sheet…" : "Generate prep sheet →"}
@@ -268,7 +385,52 @@ function PrepFlow() {
         <div className={`${SECTION_GAP} grid gap-10 lg:grid-cols-2`}>
           {/* Left — the prep sheet, what you planned to talk about */}
           <div>
-            <h1 className="text-2xl font-semibold">Your prep sheet</h1>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-semibold">Your prep sheet</h1>
+                <p className="mt-1 text-sm text-ink-muted">
+                  {reportName ? `1:1 with ${reportName}` : "Upcoming 1:1"}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="block">
+                  <span className="block text-[11px] font-medium uppercase tracking-wide text-ink-muted">Meeting date</span>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => {
+                      const nextDate = e.target.value;
+                      setScheduleDate(nextDate);
+                      if (!nextDate) setRecurrenceWeeks(null);
+                    }}
+                    onBlur={() => persistSchedule(scheduleDate, scheduleDate ? recurrenceWeeks : null)}
+                    className="mt-1 rounded-md border border-control bg-sunken px-2.5 py-1.5 text-sm text-ink-body focus:border-brand focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-medium uppercase tracking-wide text-ink-muted">Repeats</span>
+                  <select
+                    value={recurrenceWeeks ?? ""}
+                    disabled={!scheduleDate || scheduleSaving}
+                    onChange={(e) => {
+                      const next = e.target.value ? (Number(e.target.value) as RecurrenceWeeks) : null;
+                      setRecurrenceWeeks(next);
+                      persistSchedule(scheduleDate, next);
+                    }}
+                    className="mt-1 rounded-md border border-control bg-sunken px-2.5 py-1.5 text-sm text-ink-body focus:border-brand focus:outline-none disabled:opacity-50"
+                  >
+                    <option value="">Does not repeat</option>
+                    <option value="1">Weekly</option>
+                    <option value="2">Every 2 weeks</option>
+                    <option value="3">Every 3 weeks</option>
+                    <option value="4">Every 4 weeks</option>
+                  </select>
+                </label>
+                <span className="pb-2 text-[11px] text-ink-muted">
+                  {scheduleSaving ? "Saving…" : scheduleSaved ? "Saved" : ""}
+                </span>
+              </div>
+            </div>
 
             {/* Situation summary */}
             <div className="mt-6 rounded-lg border border-blue-100 bg-blue-50 px-5 py-4">
@@ -356,6 +518,7 @@ function PrepFlow() {
         onBack={() => setStep(2)}
         backLabel="Back to the call"
         oneOnOneId={oneOnOneId ?? undefined}
+        willRecur={recurrenceWeeks !== null}
       />
     );
   }

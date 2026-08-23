@@ -7,8 +7,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
+import PageShell from "@/components/PageShell";
 
 type EditableCommitment = WrapUpCommitment & { key: number };
+type EditableFollowUp = { key: number; text: string };
 
 export default function WrapUpReview({
   directReportId,
@@ -18,6 +20,7 @@ export default function WrapUpReview({
   onBack,
   backLabel,
   oneOnOneId,
+  willRecur = false,
 }: {
   directReportId: string;
   reportName: string;
@@ -29,6 +32,7 @@ export default function WrapUpReview({
   // saving fills in that row instead of creating a new one. Omitted for
   // ad-hoc logs from the standalone Log a 1:1 flow.
   oneOnOneId?: string;
+  willRecur?: boolean;
 }) {
   const router = useRouter();
   const [summary, setSummary] = useState(draft.summary);
@@ -36,6 +40,10 @@ export default function WrapUpReview({
     draft.commitments.map((c, i) => ({ ...c, key: i }))
   );
   const [nextKey, setNextKey] = useState(draft.commitments.length);
+  const [followUps, setFollowUps] = useState<EditableFollowUp[]>(
+    (draft.follow_up_items ?? []).map((text, i) => ({ key: i, text }))
+  );
+  const [nextFollowUpKey, setNextFollowUpKey] = useState(draft.follow_up_items?.length ?? 0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +73,7 @@ export default function WrapUpReview({
         new_commitments: commitments
           .map(({ key: _key, ...c }) => ({ ...c, description: c.description.trim() }))
           .filter((c) => c.description),
+        carry_forward_items: followUps.map((item) => item.text.trim()).filter(Boolean),
         one_on_one_id: oneOnOneId,
       });
       router.push(`/app/reports/${directReportId}`);
@@ -92,7 +101,7 @@ export default function WrapUpReview({
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
+    <PageShell maxWidth="2xl">
       <button onClick={onBack} className="text-sm text-ink-secondary hover:underline">
         ← {backLabel}
       </button>
@@ -115,6 +124,65 @@ export default function WrapUpReview({
           rows={5}
           className="mt-2 w-full rounded-lg border border-control px-4 py-3 text-ink-body focus:border-brand focus:outline-none"
         />
+      </div>
+
+      <div className="mt-8">
+        <p className="block text-sm font-medium text-ink-body">
+          Carry into the next 1:1{" "}
+          <span className="font-normal text-ink-muted">— unresolved topics worth revisiting</span>
+        </p>
+        <p className="mt-1 text-xs text-ink-muted">
+          These are suggestions from your notes. Confirm, edit, or remove them before saving.
+        </p>
+
+        {followUps.length === 0 && (
+          <p className="mt-3 text-sm text-ink-secondary">
+            Nothing was clearly left open. Add a topic if you want it waiting next time.
+          </p>
+        )}
+
+        <ul className="mt-3 space-y-2">
+          {followUps.map((item) => (
+            <li key={item.key} className="flex items-start gap-3 rounded-lg border border-hairline px-4 py-3">
+              <input
+                value={item.text}
+                onChange={(e) =>
+                  setFollowUps((items) =>
+                    items.map((current) =>
+                      current.key === item.key ? { ...current, text: e.target.value } : current
+                    )
+                  )
+                }
+                placeholder="What should you revisit next time?"
+                className="min-w-0 flex-1 border-0 p-0 text-ink-body placeholder-ink-faint focus:outline-none focus:ring-0"
+              />
+              <button
+                type="button"
+                onClick={() => setFollowUps((items) => items.filter((current) => current.key !== item.key))}
+                className="text-ink-faint hover:text-ink-secondary"
+                title="Remove"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <button
+          type="button"
+          onClick={() => {
+            setFollowUps((items) => [...items, { key: nextFollowUpKey, text: "" }]);
+            setNextFollowUpKey((key) => key + 1);
+          }}
+          className="mt-3 text-sm text-ink-secondary hover:underline"
+        >
+          + Add follow-up topic
+        </button>
+        <p className="mt-2 text-xs text-ink-muted">
+          {willRecur
+            ? "Saving completes this meeting and starts the next scheduled 1:1 with these topics ready."
+            : "These topics will be saved for the next time you prepare with this person."}
+        </p>
       </div>
 
       <div className="mt-8">
@@ -177,8 +245,8 @@ export default function WrapUpReview({
         disabled={saving || !summary.trim()}
         className="mt-8 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
       >
-        {saving ? "Saving…" : "Save and finish"}
+        {saving ? "Saving…" : willRecur ? "Save and start next 1:1" : "Save and finish"}
       </button>
-    </main>
+    </PageShell>
   );
 }
