@@ -13,8 +13,9 @@ Three files, three jobs:
 
 Source of the locked decisions: `docs/branding/colors/README.md` (palette
 direction #11), `docs/branding/tsp/README.md` (logo T10-C), and
-`docs/Redesign Scoping/mission-control-action-first.html` (the approved dark
-mockup). The first two folders are gitignored — they exist on Andrew's disk only.
+`docs/Redesign Scoping/mission-control-bounded-synthesis.html` (the approved
+Mission Control reference in the dark product theme). The first two folders are
+gitignored — they exist on Andrew's disk only.
 
 ---
 

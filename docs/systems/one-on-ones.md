@@ -9,7 +9,7 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 | Route | Notes |
 |---|---|
 | `GET`/`POST ""` | the log |
-| `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the dashboard zone map |
+| `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `POST /prep` | generates the prep sheet |
 | `POST /wrapup` | notes → draft log |
 | `GET`/`POST /{direct_report_id}/captures`, `DELETE /captures/{id}` | between-session capture notes |

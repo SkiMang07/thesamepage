@@ -138,10 +138,10 @@ behind the person page's settings drawer — off the main flow, not in Settings.
 - **Label which rule produced a number.** "every 14 days (custom)" vs "every 21
   days (org default)"; capacity's logged-vs-assumed off hours. A manager should be
   able to tell whether a figure is theirs, the org's, or a fallback.
-- **Distinguish "nothing to report" from "it broke."** The AI insight renders
-  nothing when there's legitimately nothing to flag, and a small muted line when
-  the call failed. Identical silence for both erodes trust in every other all-clear
-  signal.
+- **Distinguish "nothing to report" from "it broke."** Mission Control claims an
+  all-clear only with complete core coverage; partial-source and optional-AI
+  failures are labeled explicitly. Identical silence for those states would erode
+  trust in every other all-clear signal.
 - **Never fabricate a derived number.** Progress bars render only with a real
   check-in, never inferred from status.
 
@@ -203,7 +203,7 @@ in `docs/archive/DESIGN_ARCHIVE.md`, complete and unedited.
 
 | Date | Decision | Rationale |
 |---|---|---|
-| 2026-08-23 | Mission Control's next redesign is action-first: remove the large zone map; lead with one evidence-linked Suggested focus, up to two secondary priorities and one factual truth signal. Ranking starts deterministic; AI explanation is bounded and contestable | The persistent sidebar already owns product orientation. The manager needs a trusted next move, not a second sitemap or an anxiety-producing backlog. Full approved direction in `docs/Redesign Scoping/MISSION_CONTROL_ACTION_FIRST_DECISION.md`; not yet shipped |
+| 2026-08-23 | Mission Control is action-first: no large zone map; one evidence-linked Suggested focus, up to two secondary priorities and one factual truth signal. Ranking is deterministic; AI explanation is bounded and contestable | The persistent sidebar already owns product orientation. The manager needs a trusted next move, not a second sitemap or an anxiety-producing backlog. Full decision in `docs/Redesign Scoping/MISSION_CONTROL_ACTION_FIRST_DECISION.md` |
 | 2026-08-09 | `/app/team`'s structure: KPI strip, then Initiatives/Goals/Commitments, then Critical callouts + Meetings, then the roster as a bottom row | Andrew's layout call from a mockup review |
 | 2026-08-11 | Check-in staleness turns the freshness label amber after 14 days, vs. the 21-day 1:1 cadence | A stale green is more dangerous than an honest yellow, and goals drift faster than relationships |
 | 2026-08-12 | The Context Engine gets its own top-level page (`/app/context`, "The Space") | Managers return to it repeatedly to teach the Librarian; it's not a configure-once setting |

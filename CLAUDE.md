@@ -31,7 +31,7 @@ never all at once:
 ```
 one-on-ones.md      prep, the call, wrap-up, cadence, capture notes
 team.md             /app/team — roster, goals, meeting notes, callouts, IC invites
-mission-control.md  /app/dashboard — zone map, AI insight, quick add
+mission-control.md  /app/dashboard — action brief, ranking, dispositions, rollback
 context-engine.md   document ingest, extraction, retrieval, the Brain
 scribe.md           conversational data entry, the agent loop, eval harness
 expectations.md     role ladders, coverage grid, JD import, AI draft
@@ -47,9 +47,9 @@ Pending work that is scoped but not built has its own doc:
 `docs/NOTES_INGESTION_SCOPING.md`. Shipped scoping docs live in
 `docs/archive/scoping/` — historical, never current intent.
 
-`docs/Redesign Scoping/mission-control-action-first.html` is the **approved
-visual authority** for the app's dark theme — open it before any visual work.
-It is a look-and-feel reference, not an IA proposal.
+`docs/Redesign Scoping/mission-control-bounded-synthesis.html` is the **approved
+Mission Control visual authority** — open it before visual work on that surface.
+Its example data is reference content, not validated customer data or final copy.
 
 ---
 

@@ -41,8 +41,8 @@ from and saves to `assistant_messages`; body is `{message, page_context?}`) and
 `GET /api/assistant/thread` for hydration.
 
 `assistant_messages` is manager-scoped with a JSONB `drafts` column so draft cards
-re-render on hydration, indexed on `(manager_id, created_at asc)`. **It is applied
-live but missing from `schema.sql`** — see ENGINEERING.md → Known drift.
+re-render on hydration, indexed on `(manager_id, created_at asc)`. It is included
+in both its dated migration and the current `schema.sql` source of truth.
 
 Two endpoints exist because of the Scribe: `POST /api/commitments` (standalone
 create, validates DR ownership, `source_type='manual'`) — deliberately not

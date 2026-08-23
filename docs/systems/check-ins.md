@@ -21,9 +21,10 @@ under `/api/projects`.
 ## Write-through
 
 `create_check_in()` inserts the row, then updates the parent's `status` column. So
-every pre-existing status-reading surface — team KPI strip, org-unit rollup SQL,
-person-page sections, dashboard stat ribbon — kept working with zero changes. The
-migration was purely additive.
+status-reading surfaces such as the team KPI strip, org-unit rollup SQL, and
+person-page sections stay current. Mission Control also reads the timestamped rows
+for goal/project eligibility, freshness evidence, conflicts, and the weekly truth
+signal.
 
 ## Derived, never stored
 
