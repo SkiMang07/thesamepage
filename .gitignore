@@ -31,5 +31,11 @@ _to_delete/
 docs/branding/
 docs/marketing/
 
-# Session tooling scratch (Claude skills cache) — not project state
-.agents/
+# Local agent caches and generated packages are not project state. The shared
+# TSP Push source is the exception: Codex loads it in place and the Claude
+# package is generated from these tracked files.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/tsp-push/
+!.agents/skills/tsp-push/**

@@ -1,0 +1,4 @@
+interface:
+  display_name: "TSP Push"
+  short_description: "Close, document, commit, and push TSP work"
+  default_prompt: "Use $tsp-push to close out and push this work."

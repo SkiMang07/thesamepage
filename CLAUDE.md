@@ -1,4 +1,4 @@
-# The Same Page — Session Index
+# The Same Page — Project Guide
 
 Management OS for first-time and newly-promoted managers: 1:1 prep, commitment
 tracking, and judgment-on-demand for conversations most managers never got
@@ -6,16 +6,22 @@ trained to have. Solo founder, content/SEO distribution, $20/mo self-serve.
 
 ---
 
-## Read this before starting any session
+## Start every task here
 
-**Always read `docs/SESSION_HISTORY.md` first.** It holds the 5 most recent
-sessions in full and tells you the current state and next task, so you don't
-relitigate decisions already made. Older sessions are compact index lines
-pointing to `docs/archive/SESSION_HISTORY_ARCHIVE.md` — open the archive only
-when you need the full detail behind one specific past decision.
+Do not preload project history or every reference doc. Start from Andrew's task,
+then retrieve only the current context that can change the work:
 
-Then read by task type — read the *core* doc, and only the subsystem doc for
-the thing you're actually touching:
+- **New task:** ignore any handoff and use the routing table below.
+- **Continuation:** when Andrew says to continue, resume, or finish earlier work,
+  read `docs/HANDOFF.md` if it exists, then the relevant current-state docs and
+  code. A handoff is active task state, not general project memory.
+- **Historical question:** search the relevant file's Git history and commit
+  bodies first. `docs/SESSION_HISTORY.md` and
+  `docs/archive/SESSION_HISTORY_ARCHIVE.md` are frozen legacy references; open
+  them only when Git and a current decision record do not answer the question.
+
+Read the *core* doc for the task type, and only the subsystem doc for the thing
+you're actually touching:
 
 | Task type | Read |
 |---|---|
@@ -55,12 +61,12 @@ Its example data is reference content, not validated customer data or final copy
 
 ## How to find things
 
-Don't trust a file map in a doc — it goes stale. Ask the repo:
+Don't trust volatile counts in a doc — they go stale. Ask the repo:
 
 ```bash
-ls backend/routes/                          # every API module (20 today)
+ls backend/routes/                          # every API module
 grep -rn "@router\." backend/routes/        # every endpoint
-grep -n "CREATE TABLE" database/schema.sql  # every table (46 today)
+grep -n "CREATE TABLE" database/schema.sql  # every table
 ls database/migrations/                     # every schema change, dated
 ls frontend/app/app/                        # every auth-gated page
 ls frontend/components/                     # shared components
@@ -79,7 +85,7 @@ backend/     FastAPI, deploys to Railway on push
   routes/              one module per API area
 
 database/
-  schema.sql             source of truth for 47 tables, indexes, RLS policies
+  schema.sql             source of truth for tables, indexes, RLS policies
   migrations/            dated .sql files — every schema change lands here first
   local_verify_stub.sql  lets schema.sql run against a throwaway local Postgres
 
@@ -121,6 +127,9 @@ docs/        see the table above
 
 ## Handing Andrew a terminal command
 
+When the environment has authorized Git write and network access, commit and
+push directly when Andrew asks. If it cannot, hand Andrew a paste-ready block.
+
 Any paste-ready block that runs `git add` / `commit` / `push` **must** start with the
 lock removal:
 
@@ -140,13 +149,18 @@ one. Include it every time, unprompted. It's a no-op when no lock is present.
 
 ## Keeping these docs true
 
-`tsp-push` closes out every session: it writes the SESSION_HISTORY entry and
-updates whichever docs the session actually changed. Two rules it enforces that
-matter when you're editing docs by hand:
+`tsp-push` closes out completed or continuing work. Git records completed
+history; `docs/HANDOFF.md` exists only when another session must resume genuinely
+unfinished work; canonical docs are updated only when their current truth
+changed. `docs/SESSION_HISTORY.md` is frozen and must not receive new entries.
+
+Two rules matter when editing docs by hand:
 
 - **Subsystem docs describe the present, not the history.** When a session
   changes how something works, rewrite that subsystem's doc to current state.
-  The story of how it got there belongs in SESSION_HISTORY, and only there — no
-  "(Session N)" stamps in reference docs.
-- **Nothing is deleted, only moved.** Superseded content goes to the matching
-  file under `docs/archive/`.
+  Durable reasoning belongs in the commit body or a load-bearing decision
+  record — no new "(Session N)" stamps in reference docs.
+- **Historical reference content is preserved.** Materially superseded
+  canonical content moves to the matching file under `docs/archive/`. This does
+  not apply to the temporary `docs/HANDOFF.md`, which is retired when its work
+  is complete.

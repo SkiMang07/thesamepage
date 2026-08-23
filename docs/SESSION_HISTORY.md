@@ -1,9 +1,14 @@
 # The Same Page — Session History
 
-One entry per session, newest first. **Read the top entry first** — it tells you
-the current state and what to do next so you don't relitigate settled decisions.
+> **FROZEN — legacy history through 2026-08-23.** Do not add new entries or load
+> this file at the start of ordinary work. Git commits now record completed
+> history, current-state docs describe the product today, and `docs/HANDOFF.md`
+> is created only for genuinely unfinished work. Consult this file only when a
+> historical question cannot be answered from Git or a current decision record.
 
-Format per entry, and nothing else:
+The entries below preserve the former session-memory system, newest first.
+
+Historical format per entry:
 
 - **Goal** — what Andrew asked for, or the problem that prompted the session
 - **What was done** — specific files, functions, routes, migrations
@@ -18,8 +23,8 @@ doc it belongs to.
 This file holds the **5 most recent sessions in full**. Older ones appear as index
 lines at the bottom; the last 20 keep their locked decisions, everything before
 that keeps its goal alone. Full text of every archived entry lives unchanged in
-`docs/archive/SESSION_HISTORY_ARCHIVE.md`. `tsp-push` maintains all of this
-automatically.
+`docs/archive/SESSION_HISTORY_ARCHIVE.md`. The previous `tsp-push` maintained
+this structure automatically; the replacement skill leaves it frozen.
 
 ---
 

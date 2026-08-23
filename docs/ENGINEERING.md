@@ -5,8 +5,9 @@ auth, AI integration, or infrastructure.
 
 This doc holds what is true across the whole app. Anything specific to one
 feature area lives in `docs/systems/<area>.md` — read only the one you're
-touching. Nothing here is dated or session-stamped; the story of how a decision
-was reached is in `docs/SESSION_HISTORY.md`, and only there.
+touching. Nothing here is dated or session-stamped. Durable reasoning belongs in
+Git commit bodies or a load-bearing decision record; the session-history files
+are frozen legacy references, not default context.
 
 ---
 
