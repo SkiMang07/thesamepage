@@ -382,6 +382,10 @@ class TeamMeetingPatch(BaseModel):
     # Explicit, because "recurrence_weeks omitted" and "stop repeating" are
     # different intentions and null cannot express both.
     clear_recurrence: bool = False
+    # Only meaningful on an already-logged meeting — fixing the wording of a
+    # write-up. See update_team_meeting for why that is the one thing a
+    # logged meeting will accept.
+    summary: str | None = None
 
 
 class TeamWrapUpRequest(BaseModel):
@@ -682,11 +686,46 @@ def _fetch_agenda_items(supabase, user_id: str, meeting_id: str) -> list[dict]:
 async def update_team_meeting(
     meeting_id: str, body: TeamMeetingPatch, auth=Depends(get_authenticated_client)
 ):
-    """Edit an unlogged meeting's date, agenda, or repeat rule."""
+    """Edit an unlogged meeting's date, agenda, or repeat rule — or fix the
+    wording of a logged meeting's summary.
+
+    A logged meeting's date, agenda and repeat rule stay frozen. Agenda items
+    carry the per-item notes written during the wrap-up, and this endpoint
+    replaces the item set wholesale, so allowing an agenda edit after logging
+    would silently destroy what was typed. Correcting a typo in a summary
+    destroys nothing, so that one is allowed.
+    """
     user_id, supabase = auth
     meeting = _fetch_meeting(supabase, user_id, meeting_id)
+
     if meeting.get("summary"):
-        raise HTTPException(status_code=409, detail="This meeting has already been logged")
+        if (
+            body.scheduled_at is not None
+            or body.agenda_items is not None
+            or body.recurrence_weeks is not None
+            or body.clear_recurrence
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="A logged meeting's date and agenda can't be changed",
+            )
+        summary = (body.summary or "").strip()
+        if not summary:
+            raise HTTPException(status_code=422, detail="Summary cannot be empty")
+        (
+            supabase.table("team_meetings")
+            .update({"summary": summary})
+            .eq("id", meeting_id)
+            .eq("manager_id", user_id)
+            .execute()
+        )
+        return _serialize_meeting(
+            {**meeting, "summary": summary},
+            {meeting_id: _fetch_agenda_items(supabase, user_id, meeting_id)},
+        )
+
+    if body.summary is not None:
+        raise HTTPException(status_code=409, detail="This meeting hasn't been logged yet")
 
     updates: dict = {}
     scheduled_at = meeting.get("scheduled_at")
@@ -729,9 +768,16 @@ async def update_team_meeting(
 
 @router.delete("/meetings/{meeting_id}")
 async def delete_team_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
-    """Drop a planned meeting. Agenda items cascade."""
+    """Drop a PLANNED meeting. Agenda items cascade.
+
+    A logged meeting is history and is not deletable here — the same posture
+    as 1:1s, where logging is the point of no return. Deleting one would also
+    orphan any commitments pointing at it through source_id.
+    """
     user_id, supabase = auth
     meeting = _fetch_meeting(supabase, user_id, meeting_id)
+    if meeting.get("summary"):
+        raise HTTPException(status_code=409, detail="A logged meeting can't be deleted")
     _deactivate_series(supabase, user_id, meeting.get("series_id"))
     (
         supabase.table("team_meetings")

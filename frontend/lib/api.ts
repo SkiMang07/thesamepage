@@ -1003,8 +1003,20 @@ export const updateTeamMeeting = (
     }),
   });
 
+// Planned meetings only — the backend refuses to delete a logged one, since
+// that is history and commitments point at it through source_id.
 export const deleteTeamMeeting = (id: string): Promise<{ ok: boolean }> =>
   authedFetch(`/api/team/meetings/${id}`, { method: "DELETE" });
+
+// The one edit a LOGGED meeting accepts: fixing the wording of the write-up.
+// Sends summary alone so the shared PATCH body's nulls don't read as "clear
+// the date and the repeat rule" — the backend rejects those on a logged
+// meeting rather than silently destroying per-item notes.
+export const updateTeamMeetingSummary = (id: string, summary: string): Promise<TeamMeeting> =>
+  authedFetch(`/api/team/meetings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ summary }),
+  });
 
 // Draft only — nothing is written until logTeamMeeting confirms it.
 export const wrapUpTeamMeeting = (

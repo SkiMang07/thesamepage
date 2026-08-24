@@ -95,8 +95,10 @@ into the past-meetings list. Everything unlogged is now simply a list.
 
 `scheduled_at` is a date encoded at **noon UTC**, exactly like `one_on_ones` —
 stable across timezones, and able to carry a real start time later without
-another migration. `meeting_date` survives as a legacy column for one migration
-of overlap so the backfill stays recoverable; a follow-up migration drops it.
+another migration. The legacy `meeting_date` column was dropped by
+`2026-08-25_drop_team_meeting_date.sql` once the backfill had been verified
+against live data; that migration guards itself, refusing to drop the column
+while any row still has a `meeting_date` but no `scheduled_at`.
 
 ### Agenda items
 
@@ -111,6 +113,24 @@ twice" answerable at all.
 Agenda edits replace the item set wholesale. That is safe because per-item
 notes only exist after a meeting is logged, and a logged meeting's agenda is
 never editable.
+
+### What each state allows
+
+| | Planned | Logged |
+|---|---|---|
+| Date, agenda, repeat rule | editable | **frozen** — `PATCH` returns 409 |
+| Summary | n/a | editable in place |
+| Delete | allowed | **refused** — 409 |
+
+A logged meeting is history, and commitments point at it through `source_id`;
+deleting one would orphan them. Freezing the agenda is what protects the
+per-item notes, since `PATCH` replaces the item set wholesale. Correcting the
+wording of a summary destroys nothing, so it is the one edit that survives
+logging — `updateTeamMeetingSummary()` sends `summary` alone rather than the
+shared PATCH body, whose nulls would otherwise read as "clear the repeat rule".
+
+Deleting a planned meeting also deactivates its series, so "delete" and "stop
+this repeating" are one action rather than two.
 
 ### Series and rollover
 

@@ -120,6 +120,7 @@ import {
   TeamMeetingWrapUpDraft,
   createTeamCommitment,
   createTeamMeeting,
+  deleteTeamMeeting,
   getDirectReports,
   getLedOrgUnits,
   getOrgUnits,
@@ -140,6 +141,7 @@ import {
   updateTeamCallout,
   updateTeamDevFocus,
   updateTeamMeeting,
+  updateTeamMeetingSummary,
   wrapUpTeamMeeting,
 } from "@/lib/api";
 import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWrapUpReview";
@@ -1192,6 +1194,7 @@ function MeetingsPanel({
 }) {
   const [mode, setMode] = useState<"idle" | "plan" | "edit" | "log" | "review">("idle");
   const [selected, setSelected] = useState<TeamMeeting | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Plan / edit form
@@ -1276,6 +1279,13 @@ function MeetingsPanel({
     } finally {
       setFormSaving(false);
     }
+  }
+
+  async function removeMeeting(meeting: TeamMeeting) {
+    await deleteTeamMeeting(meeting.id);
+    setMeetings((rows) => rows.filter((m) => m.id !== meeting.id));
+    setConfirmingDelete(false);
+    reset();
   }
 
   // The notes the wrap-up actually reads: each agenda item that has notes,
@@ -1366,6 +1376,9 @@ function MeetingsPanel({
               </button>
               <button onClick={() => openEdit(next)} className={BTN_SECONDARY}>
                 Edit agenda
+              </button>
+              <button onClick={() => setConfirmingDelete(true)} className={BTN_GHOST}>
+                Delete
               </button>
             </div>
           )}
@@ -1551,14 +1564,126 @@ function MeetingsPanel({
         </div>
       )}
 
-      {selected && <LoggedMeetingModal meeting={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <LoggedMeetingModal
+          meeting={selected}
+          onClose={() => setSelected(null)}
+          onSaved={(updated) => {
+            setMeetings((rows) => rows.map((m) => (m.id === updated.id ? updated : m)));
+            setSelected(updated);
+          }}
+        />
+      )}
+
+      {confirmingDelete && next && (
+        <DeleteMeetingModal
+          meeting={next}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={() => removeMeeting(next)}
+        />
+      )}
+    </div>
+  );
+}
+
+// A small modal rather than a bare window.confirm, matching how the settings
+// page confirms an archive.
+function DeleteMeetingModal({
+  meeting,
+  onClose,
+  onConfirm,
+}: {
+  meeting: TeamMeeting;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await onConfirm();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete meeting");
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-24"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-medium text-ink">
+          Delete{" "}
+          {meeting.scheduled_at
+            ? formatMeetingDate(isoToDateStr(meeting.scheduled_at))
+            : "this undated meeting"}
+          ?
+        </h3>
+        <p className="mt-2 text-sm text-ink-secondary">
+          The agenda goes with it, including anything that carried forward into it.
+          {meeting.recurrence_weeks
+            ? " This also stops the meeting repeating — logged meetings and their commitments stay."
+            : " Logged meetings and their commitments stay."}
+        </p>
+        {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={BTN_GHOST} disabled={deleting}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirm}
+            disabled={deleting}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm text-on-critical hover:bg-red-500 disabled:opacity-50"
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 // One meeting, agenda and outcome together — the thing the old two-row model
-// could not show at all.
-function LoggedMeetingModal({ meeting, onClose }: { meeting: TeamMeeting; onClose: () => void }) {
+// could not show at all. The summary is editable in place; the agenda is not,
+// because its items carry the per-item notes written during the wrap-up and
+// the PATCH that edits an agenda replaces the item set wholesale.
+function LoggedMeetingModal({
+  meeting,
+  onClose,
+  onSaved,
+}: {
+  meeting: TeamMeeting;
+  onClose: () => void;
+  onSaved: (meeting: TeamMeeting) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(meeting.summary ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (!draft.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      onSaved(await updateTeamMeetingSummary(meeting.id, draft.trim()));
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save summary");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
@@ -1574,12 +1699,50 @@ function LoggedMeetingModal({ meeting, onClose }: { meeting: TeamMeeting; onClos
               ? formatMeetingDate(isoToDateStr(meeting.scheduled_at))
               : timeAgo(meeting.created_at)}
           </p>
-          <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink-body">
-            &times;
-          </button>
+          <div className="flex items-center gap-2">
+            {!editing && (
+              <button
+                onClick={() => {
+                  setDraft(meeting.summary ?? "");
+                  setEditing(true);
+                }}
+                className={BTN_GHOST}
+              >
+                Edit
+              </button>
+            )}
+            <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink-body">
+              &times;
+            </button>
+          </div>
         </div>
 
-        <p className="mt-3 whitespace-pre-wrap text-sm text-ink-body">{meeting.summary}</p>
+        {editing ? (
+          <div className="mt-3">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={5}
+              className={`${TEXTAREA} text-sm`}
+              aria-label="Summary"
+            />
+            {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
+            <div className="mt-2 flex justify-end gap-2">
+              <button onClick={() => setEditing(false)} className={BTN_SECONDARY} disabled={saving}>
+                Cancel
+              </button>
+              <button
+                onClick={save}
+                disabled={saving || !draft.trim()}
+                className={BTN_PRIMARY_SM}
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 whitespace-pre-wrap text-sm text-ink-body">{meeting.summary}</p>
+        )}
 
         {meeting.agenda_items.length > 0 && (
           <div className="mt-5">

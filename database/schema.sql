@@ -795,10 +795,6 @@ create unique index team_meeting_series_active_all_teams_idx
 -- team_meeting_agenda_items below. raw_notes is what the manager typed or
 -- pasted before extraction, kept so a wrap-up can be re-run.
 --
--- meeting_date is retained for one migration of overlap so the 2026-08-24
--- backfill (which infers agenda-vs-recap from it) stays recoverable, and
--- is dropped in a follow-up migration.
---
 -- org_unit_id: which led team this meeting belongs to. Null means "all
 -- teams". ON DELETE SET NULL here, unlike team_callouts below.
 -- ============================================================
@@ -811,7 +807,6 @@ create table team_meetings (
   scheduled_at  timestamptz,   -- date encoded at noon UTC
   series_id     uuid references team_meeting_series(id) on delete set null,
   logged_at     timestamptz,
-  meeting_date  date,          -- legacy, dropped in a follow-up migration
   org_unit_id   uuid references org_units(id) on delete set null,
   created_at    timestamptz not null default now()
 );
