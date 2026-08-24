@@ -3,7 +3,8 @@
 One home for "my team as a unit." Scoped to the caller's **own direct reports**,
 not an org_unit rollup — that's a different concept, see `org-scoping.md`.
 
-Backend: `routes/team.py`. Frontend: `frontend/app/app/team/page.tsx`.
+Backend: `routes/team.py`. Frontend: `frontend/app/app/team/page.tsx`, plus
+`frontend/app/app/team/meetings/[id]/page.tsx` for a single meeting.
 
 ## Page structure, top to bottom
 
@@ -14,7 +15,8 @@ Backend: `routes/team.py`. Frontend: `frontend/app/app/team/page.tsx`.
 3. **This week's focus** — Initiatives, Goals, Commitments as three cards.
 4. **Meetings row** — Critical callouts left, Meetings right. The meeting card
    carries the agenda and its own logging action; there is no separate
-   "log a past meeting" box.
+   "log a past meeting" box. "Open meeting" leads to the dedicated meeting
+   screen; the inline quick log stays on the card.
 5. **Roster** — a row of cards at the bottom that expand into a shared detail
    panel on click.
 
@@ -149,14 +151,49 @@ needing a date.
 
 No calendar invitation is sent, and the UI says so.
 
+### The meeting screen (`/app/team/meetings/[id]`)
+
+Two columns, the same shape as the 1:1 call screen and for the same reason:
+the screen open *during* a meeting has to answer "what were we going to cover"
+and "what is actually happening" at once. Agenda, what carried in, and the
+team's open commitments on the left; a live notes pane on the right.
+
+There are deliberately **two logging paths, not two doors to the same one**.
+The card's quick log is for "we already met, let me write it up"; this screen
+is for running the meeting. Both assemble raw notes identically — each agenda
+item that has notes, headed by the item, plus whatever came up off-agenda —
+and both end in `MeetingWrapUpReview`.
+
+Agenda items carry a checkbox and their own notes box. Unticking one keeps it
+out of the notes and offers it as carry-forward, exactly as the quick log
+does. Commitments list with the manager's own (null `direct_report_id`) shown
+as "You" and resolvable in place through `PATCH /api/commitments/{id}`.
+
+**Notes autosave to `localStorage`, not to the server.** `raw_notes` is only
+written at log time and there is no draft-notes endpoint, so the pane buys
+back a refresh or a closed tab and nothing more — it says so in as many words
+rather than implying the notes are on the account, the same honesty posture as
+store-only team messages. The key is per meeting, restored notes are merged
+onto the *current* agenda by item id, every access is wrapped (localStorage
+throws outright in some privacy modes), and the entry is cleared the moment
+the meeting is logged.
+
+A **logged** meeting opens as a read-only record — summary, per-item outcomes
+and notes, raw notes — with the summary editable in place and nothing else.
+An **undated** meeting (the carry-forward shell created when items carried
+with no series) is the one place this screen writes outside the wrap-up: it
+offers a date, since otherwise it is a dead end. Date only — the repeat rule
+re-anchors a series and stays with the agenda edit on `/app/team`.
+
 ### Wrap-up
 
 `POST /meetings/{id}/wrapup` is a pure AI call — **nothing is written**. It
 returns a draft summary, commitments, and carry-forward items;
-`components/team/MeetingWrapUpReview.tsx` is the confirm step, shared from the
-first pass so the dedicated meeting screen and external-notes ingestion reuse
-it rather than forking. Extraction failure returns an empty draft, never an
-error.
+`components/team/MeetingWrapUpReview.tsx` is the confirm step, shared by the
+card's quick log and the dedicated meeting screen — and by external-notes
+ingestion when it lands — rather than forked per surface. A second review
+surface would drift from this one on the exact rule that must not drift.
+Extraction failure returns an empty draft, never an error.
 
 A `direct_report_id` the model returns that isn't on the roster is discarded
 rather than trusted — a hallucinated id would attach a real person's name to a

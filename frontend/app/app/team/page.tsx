@@ -85,8 +85,9 @@
 //   - "Wrap up & log" runs an AI draft and hands it to
 //     components/team/MeetingWrapUpReview.tsx. NOTHING IS WRITTEN until the
 //     manager confirms there — same locked rule as the 1:1 wrap-up. That
-//     component is shared from this first pass on purpose: the dedicated
-//     meeting screen (/app/team/meetings/[id], pass 2) reuses it.
+//     component is shared on purpose: the dedicated meeting screen
+//     (/app/team/meetings/[id]) reuses it rather than forking a second
+//     review surface.
 //   - Extracted commitments may be the manager's own (null
 //     direct_report_id), which is why the owner picker offers "You".
 //
@@ -1178,7 +1179,11 @@ function DevFocusPanel({
 // the surface: the agenda is on the card, and logging happens on it.
 //
 // Three actions, matching the approved option: Open meeting (the dedicated
-// screen — pass 2), Quick log (expands in place), Edit agenda.
+// two-column screen at /app/team/meetings/[id], where a meeting is actually
+// run), Quick log (expands in place, for writing up one that already
+// happened), Edit agenda. Both logging paths assemble raw notes the same way
+// and end in the same MeetingWrapUpReview — the surface differs, the rule
+// that nothing is written until the manager confirms does not.
 // ---------------------------------------------------------------------------
 
 function MeetingsPanel({
@@ -1368,11 +1373,15 @@ function MeetingsPanel({
 
           {mode === "idle" && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {/* Pass 2 turns this into a link to /app/team/meetings/[id] —
-                  the two-column live screen. Until then Quick log is the
-                  whole logging path, so the button is not shown yet. */}
-              <button onClick={() => openLog(next)} className={BTN_PRIMARY_SM}>
-                Log what happened
+              {/* The primary action, because the two-column screen is where a
+                  meeting is actually run. Quick log stays for "we already met,
+                  let me write it up in ten seconds" — the two are different
+                  postures, not two doors to the same thing. */}
+              <Link href={`/app/team/meetings/${next.id}`} className={BTN_PRIMARY_SM}>
+                Open meeting
+              </Link>
+              <button onClick={() => openLog(next)} className={BTN_SECONDARY}>
+                Quick log
               </button>
               <button onClick={() => openEdit(next)} className={BTN_SECONDARY}>
                 Edit agenda
@@ -1701,15 +1710,22 @@ function LoggedMeetingModal({
           </p>
           <div className="flex items-center gap-2">
             {!editing && (
-              <button
-                onClick={() => {
-                  setDraft(meeting.summary ?? "");
-                  setEditing(true);
-                }}
-                className={BTN_GHOST}
-              >
-                Edit
-              </button>
+              <>
+                {/* The same record with the raw notes attached — the modal is
+                    the quick look, the screen is the whole thing. */}
+                <Link href={`/app/team/meetings/${meeting.id}`} className={BTN_GHOST}>
+                  Open full record
+                </Link>
+                <button
+                  onClick={() => {
+                    setDraft(meeting.summary ?? "");
+                    setEditing(true);
+                  }}
+                  className={BTN_GHOST}
+                >
+                  Edit
+                </button>
+              </>
             )}
             <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink-body">
               &times;

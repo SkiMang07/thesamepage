@@ -3,11 +3,11 @@
 // ---------------------------------------------------------------------------
 // Team meeting wrap-up review (2026-08-24)
 //
-// The confirm step between an AI draft and the record. Extracted as a shared
-// component from the first pass on purpose: the dedicated meeting screen
-// (/app/team/meetings/[id], pass 2) and the pending external-notes ingestion
-// both land here, and a second review surface would drift from this one on
-// the exact rule that must not drift —
+// The confirm step between an AI draft and the record. A shared component on
+// purpose: /app/team's quick log, the dedicated meeting screen
+// (/app/team/meetings/[id]) and the pending external-notes ingestion all land
+// here, and a second review surface would drift from this one on the exact
+// rule that must not drift —
 //
 //   NOTHING IS WRITTEN UNTIL THE MANAGER CONFIRMS.
 //
