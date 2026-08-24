@@ -12,14 +12,19 @@ import {
   wrapUpOneOnOne,
   getCaptureNotes,
   deleteCaptureNote,
+  getCommitments,
+  getGoals,
+  getDevelopmentPlan,
   PrepResponse,
   AgendaItem,
   WrapUpDraft,
   CaptureNote,
+  Commitment,
 } from "@/lib/api";
 import WrapUpReview from "../wrap-up-review";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { deriveOneOnOneSuggestions, OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -96,6 +101,7 @@ function PrepFlow() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const resumeId = searchParams.get("resume");
+  const editSources = searchParams.get("edit") === "1";
 
   const [step, setStep] = useState<Step>(1);
   const [notes, setNotes] = useState("");
@@ -106,6 +112,9 @@ function PrepFlow() {
   const [scheduleDate, setScheduleDate] = useState("");
   const [recurrenceWeeks, setRecurrenceWeeks] = useState<RecurrenceWeeks | null>(null);
   const [carryForwardItems, setCarryForwardItems] = useState<string[]>([]);
+  const [suggestedTopics, setSuggestedTopics] = useState<OneOnOneSuggestion[]>([]);
+  const [openCommitments, setOpenCommitments] = useState<Commitment[]>([]);
+  const [excludedCommitmentIds, setExcludedCommitmentIds] = useState<string[]>([]);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [scheduleSaved, setScheduleSaved] = useState(false);
 
@@ -121,11 +130,8 @@ function PrepFlow() {
   const [resumeLoading, setResumeLoading] = useState(true);
   const [resumeError, setResumeError] = useState<string | null>(null);
 
-  // Captures (Session 50) — quick between-sessions jots from the Person
-  // Page's cockpit box, folded into step 1's raw-notes textarea so they
-  // "land on the next prep sheet" per the person_page_redesign scoping note.
-  // Only relevant on a fresh /prep pass, not a resumed one (a resumed sheet
-  // was already generated, so its notes are frozen in prep_guide already).
+  // Captures are live workspace sources. New captures are appended to the
+  // saved source notes when a prepared sheet is reopened for editing.
   const [captures, setCaptures] = useState<CaptureNote[]>([]);
 
   // Step 2 — notes taken during the call (typed live or pasted afterward)
@@ -141,30 +147,34 @@ function PrepFlow() {
   }, [id]);
 
   useEffect(() => {
-    // Skip when resuming — a resumed sheet is already generated, so there's
-    // no step-1 textarea to prefill.
-    if (resumeId) return;
-    getCaptureNotes(id)
-      .then((cs) => {
-        setCaptures(cs);
-        if (cs.length > 0) {
-          // Oldest first reads as a timeline of what came up since the last
-          // 1:1, same chronological framing as everywhere else notes stack.
-          setNotes([...cs].reverse().map((c) => c.content).join("\n"));
-        }
-      })
-      .catch(() => {});
-  }, [id, resumeId]);
-
-  useEffect(() => {
     const loadSession = resumeId ? getOneOnOne(resumeId) : getOpenOneOnOne(id);
-    loadSession
-      .then((session) => {
-        if (!session) return;
-        if (session.direct_report_id !== id || session.status === "completed") {
+    Promise.all([
+      loadSession,
+      getCaptureNotes(id).catch(() => [] as CaptureNote[]),
+      getCommitments({ directReportId: id, status: "open" }).catch(() => [] as Commitment[]),
+      getGoals({ directReportId: id }).catch(() => []),
+      getDevelopmentPlan(id).catch(() => null),
+    ])
+      .then(([session, captured, commitments, goals, development]) => {
+        if (session && (session.direct_report_id !== id || session.status === "completed")) {
           setResumeError("This prep sheet is no longer available.");
           return;
         }
+
+        setCaptures(captured);
+        setOpenCommitments(commitments);
+        setSuggestedTopics(
+          deriveOneOnOneSuggestions({
+            goals,
+            planText: development?.development_plan.plan_text,
+          })
+        );
+
+        const savedNotes = session?.prep_guide?.source_notes?.trim() ?? "";
+        const capturedNotes = [...captured].reverse().map((note) => note.content).join("\n");
+        setNotes([savedNotes, capturedNotes].filter(Boolean).join("\n"));
+
+        if (!session) return;
         setOneOnOneId(session.id);
         setScheduleDate(scheduledAtToDate(session.scheduled_at));
         setRecurrenceWeeks(session.recurrence_weeks ?? null);
@@ -179,19 +189,31 @@ function PrepFlow() {
             recurrence_weeks: session.recurrence_weeks ?? null,
             carry_forward_items: session.carry_forward_items ?? [],
           });
-          setStep(2);
+          setStep(editSources ? 1 : 2);
         }
       })
       .catch(() => {
-        if (resumeId) setResumeError("This prep sheet is no longer available.");
+        setResumeError(
+          resumeId
+            ? "This prep sheet is no longer available."
+            : "Could not assemble this 1:1. Try again."
+        );
       })
       .finally(() => setResumeLoading(false));
-  }, [resumeId, id]);
+  }, [resumeId, editSources, id]);
 
   // Step 1 → 2: call AI prep endpoint
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
-    if (!notes.trim() && carryForwardItems.length === 0) return;
+    const includedCommitments = openCommitments.filter(
+      (commitment) => !excludedCommitmentIds.includes(commitment.id)
+    );
+    if (
+      !notes.trim() &&
+      carryForwardItems.length === 0 &&
+      suggestedTopics.length === 0 &&
+      includedCommitments.length === 0
+    ) return;
     setLoading(true);
     setError(null);
     try {
@@ -202,6 +224,9 @@ function PrepFlow() {
         scheduled_at: dateToScheduledAt(scheduleDate),
         recurrence_weeks: scheduleDate ? recurrenceWeeks : null,
         timezone: browserTimezone(),
+        carry_forward_items: carryForwardItems,
+        suggested_topics: suggestedTopics.map((topic) => topic.text),
+        excluded_commitment_ids: excludedCommitmentIds,
       });
       setPrep(result);
       setOneOnOneId(result.id);
@@ -279,7 +304,7 @@ function PrepFlow() {
   }
 
   // ---------------------------------------------------------------------------
-  // Step 1 — Notes input
+  // Step 1 — Review the automatically assembled next-meeting workspace
   // ---------------------------------------------------------------------------
   if (step === 1) {
     return (
@@ -287,17 +312,11 @@ function PrepFlow() {
         <Link href={`/app/reports/${id}`} className="text-sm text-ink-secondary hover:underline">
           ← Back
         </Link>
-        <h1 className="mt-4 text-2xl font-semibold">Prep for 1:1</h1>
+        <h1 className="mt-4 text-2xl font-semibold">Review next 1:1</h1>
         <p className="mt-2 text-ink-secondary">
-          Jot down what&apos;s on your mind before the meeting — what&apos;s going on with
-          this person, anything you&apos;re worried about, anything you want to celebrate.
-          The more specific, the better the prep sheet.
+          The Same Page has gathered what may matter. Remove anything you don&apos;t want
+          in this conversation, add context if needed, then build the agenda.
         </p>
-        {captures.length > 0 && (
-          <p className="mt-2 text-xs text-ink-muted">
-            Prefilled with {captures.length} thing{captures.length > 1 ? "s" : ""} you captured since the last 1:1 — edit freely below.
-          </p>
-        )}
 
         <form onSubmit={handleGenerate} className={SECTION_GAP}>
           <div className="mb-5 grid gap-4 rounded-xl border border-hairline bg-surface p-4 sm:grid-cols-2">
@@ -337,35 +356,113 @@ function PrepFlow() {
           </div>
 
           {carryForwardItems.length > 0 && (
-            <div className="mb-5 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+            <div className="mb-5 rounded-lg border border-hairline bg-surface px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Carried forward from your last 1:1
               </p>
-              <ul className="mt-2 space-y-1">
+              <ul className="mt-2 space-y-2">
                 {carryForwardItems.map((item, index) => (
-                  <li key={index} className="flex gap-2 text-sm text-ink-body">
-                    <span className="text-amber-500">•</span>
+                  <li key={index} className="flex items-start justify-between gap-3 text-sm text-ink-body">
                     <span>{item}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCarryForwardItems((items) => items.filter((_, i) => i !== index))}
+                      className="shrink-0 text-xs text-ink-muted hover:text-red-700"
+                    >
+                      Remove
+                    </button>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. She's been quiet in standups lately. She closed the Acme deal last week — worth calling out. There's a commitment from two weeks ago about the onboarding doc I need to follow up on."
-            rows={8}
-            className="w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
-          />
+          {suggestedTopics.length > 0 && (
+            <div className="mb-5 rounded-lg border border-hairline bg-surface px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Suggested topics</p>
+              <p className="mt-1 text-xs text-ink-muted">Pulled from goals, development, and the last conversation.</p>
+              <ul className="mt-3 space-y-2">
+                {suggestedTopics.map((topic) => (
+                  <li key={topic.key} className="flex items-start justify-between gap-3 text-sm text-ink-body">
+                    <span>{topic.text}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSuggestedTopics((topics) => topics.filter((item) => item.key !== topic.key))}
+                      className="shrink-0 text-xs text-ink-muted hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {openCommitments.length > 0 && (
+            <div className="mb-5 rounded-lg border border-hairline bg-surface px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Open commitments</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Linked live from the commitment tracker. Uncheck one to leave it out of this agenda only.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {openCommitments.map((commitment) => (
+                  <li key={commitment.id} className="flex items-start gap-3 text-sm text-ink-body">
+                    <input
+                      type="checkbox"
+                      checked={!excludedCommitmentIds.includes(commitment.id)}
+                      onChange={(event) =>
+                        setExcludedCommitmentIds((ids) =>
+                          event.target.checked
+                            ? ids.filter((id) => id !== commitment.id)
+                            : [...ids, commitment.id]
+                        )
+                      }
+                      className="mt-1 h-4 w-4 rounded border-control"
+                      aria-label={`Include commitment: ${commitment.description}`}
+                    />
+                    <span>
+                      {commitment.description}
+                      <span className="ml-1 text-xs text-ink-muted">
+                        {commitment.committed_by === "direct_report"
+                          ? `(${reportName.split(" ")[0] || "theirs"})`
+                          : "(yours)"}
+                        {commitment.due_date && ` · due ${commitment.due_date}`}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <label className="block">
+            <span className="text-sm font-medium text-ink-body">Notes for this 1:1</span>
+            <span className="mt-1 block text-xs text-ink-muted">
+              {captures.length > 0
+                ? `${captures.length} captured note${captures.length === 1 ? " is" : "s are"} already included. Edit freely.`
+                : "Add anything the record does not already know."}
+            </span>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Anything else worth discussing, celebrating, or checking on…"
+              rows={6}
+              className="mt-2 w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
+            />
+          </label>
           {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
           <button
             type="submit"
-            disabled={loading || (!notes.trim() && carryForwardItems.length === 0)}
+            disabled={
+              loading ||
+              (!notes.trim() &&
+                carryForwardItems.length === 0 &&
+                suggestedTopics.length === 0 &&
+                openCommitments.every((commitment) => excludedCommitmentIds.includes(commitment.id)))
+            }
             className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
           >
-            {loading ? "Generating prep sheet…" : "Generate prep sheet →"}
+            {loading ? "Building agenda…" : "Build agenda →"}
           </button>
         </form>
       </PageShell>
@@ -379,7 +476,7 @@ function PrepFlow() {
     return (
       <PageShell maxWidth="6xl">
         <button onClick={() => setStep(1)} className="text-sm text-ink-secondary hover:underline">
-          ← Edit prep notes
+          ← Edit prep
         </button>
 
         <div className={`${SECTION_GAP} grid gap-10 lg:grid-cols-2`}>

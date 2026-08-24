@@ -10,8 +10,8 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 |---|---|
 | `GET`/`POST ""` | the log |
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
-| `GET /open/{direct_report_id}` | current unfinished occurrence, whether only scheduled or already prepped |
-| `POST /prep` | generates the prep sheet and attaches it to the current scheduled occurrence, or creates one |
+| `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
+| `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one |
 | `PATCH /session/{id}/schedule` | edits an unfinished occurrence's date and 1–4 week repeat rule |
 | `POST /wrapup` | notes → draft summary, commitments, and carry-forward topics |
 | `GET`/`POST /{direct_report_id}/captures`, `DELETE /captures/{id}` | between-session capture notes |
@@ -20,16 +20,21 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 
 ## Status is derived, never stored
 
-`one_on_ones` has no status column. **Scheduled** = `scheduled_at` set while
-`prep_guide` and `summary` are null. **Planned** = `prep_guide` set and `summary`
-null. **Completed** = `summary` set. One less thing that can drift out of sync.
+`one_on_ones` has no status column. **Gathering** = the next-meeting workspace
+exists while `scheduled_at`, `prep_guide`, and `summary` are null. **Scheduled**
+= `scheduled_at` set while `prep_guide` and `summary` are null. **Planned** =
+`prep_guide` set and `summary` null. **Completed** = `summary` set. One less thing
+that can drift out of sync.
 
 "Deferred" is deliberately not a tracked status — nothing in the app triggers it.
 
-The person page and `/app/1-1s` list scheduled and planned occurrences alongside
-completed history. Either unfinished state clicks into the same prep route: a
-scheduled occurrence opens step 1 with its date, repeat rule, and carried topics;
-a planned occurrence resumes the generated sheet.
+Every completed conversation leaves exactly one unfinished next-meeting
+workspace, even when the next date is unknown. The person page treats it as the
+single accumulating object for carry-forwards, captures, live commitments, and
+current goal/development signals. `/app/1-1s` remains a triage surface: an
+undated gathering workspace does not make a not-yet-due person look scheduled.
+Gathering and scheduled occurrences open the source review; a planned occurrence
+resumes the generated sheet.
 
 ## Scheduling and recurrence
 
@@ -45,12 +50,13 @@ a real calendar start time. The browser timezone is already stored on the
 series for that later integration. Copy says “Repeat this 1:1,” never “invite”:
 The Same Page does not send a calendar invitation yet.
 
-Logging a recurring occurrence creates the next scheduled shell from the prior
-scheduled date plus the interval, never from when the manager happened to log
-it. If logging is late enough that one or more occurrences are already past,
-the rollover advances to the next future date instead of creating stale shells.
-Removing repeat deactivates the series; dismissing its unfinished occurrence
-also stops it.
+Logging always creates the next occurrence. A recurring occurrence gets its
+date from the prior scheduled date plus the interval, never from when the
+manager happened to log it; an ad-hoc occurrence leaves the next workspace
+undated. If logging is late enough that one or more recurring occurrences are
+already past, the rollover advances to the next future date instead of creating
+stale shells. Removing repeat deactivates the series; dismissing its unfinished
+occurrence also stops it.
 
 ## Cadence
 
@@ -70,17 +76,28 @@ RLS.
 
 Its own table rather than a draft column on `one_on_ones`, because captures can
 happen with or without a scheduled series and accumulate independently between
-meetings. A scheduled occurrence carries only manager-confirmed follow-up topics
+meetings. The unfinished occurrence carries only manager-confirmed follow-up topics
 from the prior wrap-up, not every quick jot added later.
 
-**Consumption is entirely in `/prep`:** step 1's raw-notes textarea prefills from
-the report's unconsumed captures, oldest-first and newline-joined, when opening a
-fresh prep flow (skipped on `resumeId`). Once `handleGenerate` succeeds, every
-fetched capture is deleted — best-effort and non-blocking on failure. That's the
-"lands on the next prep sheet" mechanic end to end, with no new backend
-computation.
+Captures appear as one source on the next-meeting workspace. The review step's
+notes textarea prefills from unconsumed captures, oldest-first and newline-joined.
+Once agenda generation succeeds, every fetched capture is deleted — best-effort
+and non-blocking on failure. Carry-forward topics do not masquerade as captures:
+they live on the next `one_on_ones` occurrence itself.
 
 ## Prep
+
+Preparation is **automatic assembly, deliberate synthesis**. Before calling AI,
+the manager reviews the sources already attached or linked to the next meeting:
+confirmed carry-forwards, captured notes, open commitments, and current at-risk
+goal/development signals. Everything is included by default. Removing a
+commitment excludes it from this agenda only; it does not mutate the live
+accountability record. Recent meeting history remains grounding context rather
+than posing as a removable suggestion.
+
+Only after that review does `/prep` generate and persist the prep guide. This
+keeps the agenda fresh instead of generating it immediately after the prior
+meeting, before later captures and commitment changes exist.
 
 Output shape is `situation_summary` + `agenda_items[]`, not flat Q&A lists. Each
 agenda item renders as a collapsible card: rationale as italic subtext, suggested
@@ -114,9 +131,9 @@ the manager can add or remove rows before saving.
 
 The same review surface includes **Carry into the next 1:1**. AI may suggest
 unresolved topics from the call notes, but they remain editable/removable and
-are not saved until the manager confirms the whole wrap-up. On a recurring
-series they seed `carry_forward_items` on the next occurrence. On an ad-hoc or
-non-recurring call they enter `dr_capture_notes` so they still appear next time.
+are not saved until the manager confirms the whole wrap-up. They seed
+`carry_forward_items` on the next occurrence whether that occurrence is
+scheduled through a recurring series or remains an undated gathering workspace.
 
 Open commitments are never copied into the next occurrence. They remain one
 live accountability record and `/prep` pulls whatever is still open at

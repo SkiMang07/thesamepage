@@ -213,8 +213,8 @@ export default function WrapUpReview({
         </button>
         <p className="mt-2 text-xs text-ink-muted">
           {willRecur
-            ? "Saving completes this meeting and starts the next scheduled 1:1 with these topics ready."
-            : "These topics will be saved for the next time you prepare with this person."}
+            ? "Saving completes this meeting and adds these topics to the next scheduled 1:1."
+            : "Saving completes this meeting and adds these topics to the next 1:1 workspace."}
         </p>
       </div>
 
@@ -278,7 +278,7 @@ export default function WrapUpReview({
         disabled={saving || !summary.trim()}
         className="mt-8 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
       >
-        {saving ? "Saving…" : willRecur ? "Save and start next 1:1" : "Save and finish"}
+        {saving ? "Saving…" : "Save meeting"}
       </button>
     </PageShell>
   );

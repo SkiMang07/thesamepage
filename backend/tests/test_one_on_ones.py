@@ -13,7 +13,17 @@ from routes.one_on_ones import (
 )
 
 
-def test_session_status_is_derived_across_scheduled_prepped_completed():
+def test_session_status_is_derived_across_gathering_scheduled_prepped_completed():
+    gathering = _serialize_session({
+        "id": "gathering",
+        "summary": None,
+        "prep_guide": None,
+        "scheduled_at": None,
+        "carry_forward_items": ["Revisit scope"],
+    })
+    assert gathering["status"] == "gathering"
+    assert gathering["display_summary"] == "Revisit scope"
+
     scheduled = _serialize_session({
         "id": "scheduled",
         "summary": None,
@@ -74,6 +84,20 @@ def test_confirmed_follow_ups_are_explicit_prep_grounding():
     assert "No additional notes were added" in prompt
 
 
+def test_reviewed_workspace_signals_are_explicit_prep_grounding():
+    prompt = _build_prep_prompt(
+        report_name="Maya Chen",
+        raw_notes="",
+        open_commitments=[],
+        recent_summaries=[],
+        days_since_last=14,
+        cadence_days=14,
+        suggested_topics=["Development: explore a product rotation"],
+    )
+    assert "CURRENT SIGNALS SELECTED FOR THIS 1:1" in prompt
+    assert "Development: explore a product rotation" in prompt
+
+
 class _MemoryQuery:
     def __init__(self, client, table):
         self.client = client
@@ -97,6 +121,9 @@ class _MemoryQuery:
 
     def limit(self, count):
         self.limit_count = count
+        return self
+
+    def order(self, *_args, **_kwargs):
         return self
 
     def update(self, values):
@@ -192,3 +219,33 @@ def test_logging_recurring_call_completes_current_and_starts_next_occurrence():
     assert result["next_session"]["scheduled_at"] == "2026-09-08T12:00:00+00:00"
     assert result["next_session"]["carry_forward_items"] == ["Revisit renewal confidence"]
     assert client.rows["commitments"][0]["source_id"] == "current"
+
+
+def test_logging_ad_hoc_call_completes_workspace_and_creates_undated_next_one():
+    client = _MemoryClient()
+    client.rows["one_on_ones"][0].update({
+        "series_id": None,
+        "scheduled_at": None,
+        "prep_guide": None,
+    })
+    client.rows["one_on_one_series"] = []
+
+    result = asyncio.run(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                summary="Talked through the new territory plan.",
+                carry_forward_items=["Check how the territory transition landed"],
+            ),
+            auth=("manager", client),
+        )
+    )
+
+    assert result["meeting"]["id"] == "current"
+    assert result["meeting"]["status"] == "completed"
+    assert result["next_session"]["status"] == "gathering"
+    assert result["next_session"]["scheduled_at"] is None
+    assert result["next_session"]["carry_forward_items"] == [
+        "Check how the territory transition landed"
+    ]
+    assert client.rows["dr_capture_notes"] == []

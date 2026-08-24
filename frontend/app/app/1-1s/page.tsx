@@ -4,7 +4,7 @@
 // 2026-08-16). See docs/ONE_ON_ONES_PAGE_SPEC.md — this page answers one
 // question: who do I owe a conversation, and what's already in flight?
 //
-// Owns the 1:1 loop end to end: due now, scheduled/prepped, and recently
+// Owns the 1:1 loop end to end: due now, scheduled/prepared, and recently
 // wrapped, all sourced from the single GET /api/one-on-ones/overview call
 // (the canonical is_due/cadence computation — see backend/utils.py's
 // resolve_cadence_days()). This page does no staleness math of its own,
@@ -67,7 +67,11 @@ export default function OneOnOnesPage() {
   const dueNow = useMemo(
     () =>
       items
-        .filter((i) => i.is_due && i.planned_session === null)
+        .filter(
+          (i) =>
+            i.is_due &&
+            (i.planned_session === null || i.planned_session.status === "gathering")
+        )
         .sort((a, b) => {
           const aGap = a.days_since_last ?? Number.POSITIVE_INFINITY;
           const bGap = b.days_since_last ?? Number.POSITIVE_INFINITY;
@@ -76,7 +80,13 @@ export default function OneOnOnesPage() {
     [items]
   );
 
-  const inFlight = useMemo(() => items.filter((i) => i.planned_session !== null), [items]);
+  const inFlight = useMemo(
+    () =>
+      items.filter(
+        (i) => i.planned_session !== null && i.planned_session.status !== "gathering"
+      ),
+    [items]
+  );
 
   const recentlyWrapped = useMemo(
     () =>
@@ -138,10 +148,14 @@ export default function OneOnOnesPage() {
                         </div>
                       </div>
                       <Link
-                        href={`/app/reports/${r.direct_report_id}/prep`}
+                        href={
+                          r.planned_session?.status === "planned"
+                            ? `/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session.id}`
+                            : `/app/reports/${r.direct_report_id}/prep`
+                        }
                         className="shrink-0 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand hover:bg-brand-hover"
                       >
-                        Prep →
+                        Review →
                       </Link>
                     </li>
                   );
@@ -162,7 +176,11 @@ export default function OneOnOnesPage() {
                 {inFlight.map((r) => (
                   <li key={r.direct_report_id}>
                     <Link
-                      href={`/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session!.id}`}
+                      href={
+                        r.planned_session!.status === "planned"
+                          ? `/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session!.id}`
+                          : `/app/reports/${r.direct_report_id}/prep`
+                      }
                       className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-canvas"
                     >
                       <div className="min-w-0">
@@ -177,7 +195,7 @@ export default function OneOnOnesPage() {
                         </p>
                       </div>
                       <span className="shrink-0 text-xs text-ink-muted">
-                        {r.planned_session!.status === "planned" ? "Resume →" : "Prep →"}
+                        {r.planned_session!.status === "planned" ? "Start →" : "Review →"}
                       </span>
                     </Link>
                   </li>

@@ -103,14 +103,16 @@ export type RoleExpectations = {
 };
 
 // A session's status is derived server-side from which columns are filled —
-// never set directly. scheduled: date exists but prep has not been generated;
-// planned: prep_guide set, summary null; completed: summary set.
-export type SessionStatus = "scheduled" | "planned" | "completed";
+// never set directly. gathering: the undated next-meeting workspace exists;
+// scheduled: date exists but prep has not been generated; planned: prep_guide
+// set, summary null; completed: summary set.
+export type SessionStatus = "gathering" | "scheduled" | "planned" | "completed";
 
 export type PrepGuide = {
   situation_summary: string;
   agenda_items: AgendaItem[];
-  open_commitments_to_check: Pick<Commitment, "description" | "due_date" | "committed_by">[];
+  open_commitments_to_check: Pick<Commitment, "id" | "description" | "due_date" | "committed_by">[];
+  source_notes?: string;
 };
 
 export type OneOnOne = {
@@ -159,8 +161,8 @@ export type PrepResponse = {
   id: string;
   situation_summary: string;
   agenda_items: AgendaItem[];
-  // The prep endpoint returns only these fields per commitment.
-  open_commitments_to_check: Pick<Commitment, "description" | "due_date" | "committed_by">[];
+  // The id preserves the link to the live commitment; prep never copies it.
+  open_commitments_to_check: Pick<Commitment, "id" | "description" | "due_date" | "committed_by">[];
   scheduled_at: string | null;
   recurrence_weeks: 1 | 2 | 3 | 4 | null;
   carry_forward_items: string[];
@@ -1179,6 +1181,9 @@ export const prepOneOnOne = (body: {
   scheduled_at?: string | null;
   recurrence_weeks?: 1 | 2 | 3 | 4 | null;
   timezone?: string;
+  carry_forward_items?: string[];
+  suggested_topics?: string[];
+  excluded_commitment_ids?: string[];
 }): Promise<PrepResponse> =>
   authedFetch("/api/one-on-ones/prep", { method: "POST", body: JSON.stringify(body) });
 
@@ -1206,10 +1211,10 @@ export const logOneOnOne = (body: {
   notes?: string;
   new_commitments?: WrapUpCommitment[];
   carry_forward_items?: string[];
-  // Set when this meeting was prepped: fills in the existing planned row
-  // instead of creating a second one. Omitted for ad-hoc logs.
+  // Set when this meeting was opened from its workspace. When omitted, the
+  // backend still completes the person's current unfinished occurrence.
   one_on_one_id?: string;
-}): Promise<{ meeting: OneOnOne; next_session: OneOnOne | null }> =>
+}): Promise<{ meeting: OneOnOne; next_session: OneOnOne }> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 
 // ---------------------------------------------------------------------------

@@ -11,18 +11,17 @@
 //
 // Layout, top to bottom:
 //   1. Identity band (indigo) — avatar, name, rating pill, About note, role ·
-//      team subtitle, Log 1:1 / Resume-or-Start prep CTAs, a gear button
+//      team subtitle, Log 1:1 / Review-or-Start 1:1 CTAs, a gear button
 //      that opens the admin-inputs drawer (1:1 cadence, capacity, time off —
 //      moved off the main page per Andrew's scoping call: configured
 //      rarely, doesn't need to compete with the things checked every week).
 //   2. KPI strip — last 1:1 (+ days to next), open commitments (+ overdue),
 //      goals on track, capacity available this week.
 //   3. Three columns:
-//      Col 1 "Conversation" — the Next-1:1 cockpit (derived "Worth raising"
-//        talking points, each with one-click "+ Agenda"; a between-sessions
-//        capture box — both write into the same dr_capture_notes inbox that
-//        /prep's frontend folds into the next raw-notes pass, see
-//        lib/api.ts's Capture notes section) then private Manager Notes.
+//      Col 1 "Conversation" — the Next-1:1 workspace: confirmed carry-forward,
+//        derived goal/development signals, and between-session captures gather
+//        automatically before the manager reviews sources and builds an agenda;
+//        then private Manager Notes.
 //      Col 2 "Work" — Goals, Initiatives (Projects), Recent 1:1 sessions.
 //      Col 3 "Person" — Open commitments, Assessment (ring), Development
 //        (plan/aspiration/opportunities/training — DevelopmentSection's
@@ -110,6 +109,7 @@ import {
   HEX, FEATURE_SURFACE, BTN_PRIMARY, BTN_SECONDARY,
   TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone,
 } from "@/lib/tokens";
+import { deriveOneOnOneSuggestions } from "@/lib/one-on-one-workspace";
 
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
@@ -181,11 +181,6 @@ function addDaysStr(dateStr: string, days: number) {
   return localDateStr(dt);
 }
 
-function snippet(text: string, max = 90) {
-  const trimmed = text.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max).trimEnd()}…` : trimmed;
-}
-
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -219,45 +214,6 @@ function ExpectationChips({ label, items }: { label: string; items: Expectation[
       </div>
     </div>
   );
-}
-
-// "Worth raising" talking points — derived client-side from data the page
-// already fetched, no new backend computation (person_page_redesign
-// project memory note's explicit constraint). Each becomes one line with a
-// one-click "+ Agenda" that saves it into the same capture-notes inbox the
-// manual capture box below writes to.
-type WorthRaisingItem = { key: string; text: string };
-
-function deriveWorthRaising(opts: {
-  openCommitments: Commitment[];
-  goals: Goal[];
-  planText: string | null | undefined;
-  lastCompleted: OneOnOne | undefined;
-}): WorthRaisingItem[] {
-  const items: WorthRaisingItem[] = [];
-
-  opts.openCommitments
-    .filter((c) => isOverdue(c.due_date))
-    .slice(0, 3)
-    .forEach((c) => items.push({ key: `commit-${c.id}`, text: `Overdue: ${c.description}` }));
-
-  opts.goals
-    .filter((g) => g.status === "at_risk")
-    .slice(0, 3)
-    .forEach((g) => items.push({ key: `goal-${g.id}`, text: `${g.title} is at risk` }));
-
-  if (opts.planText && opts.planText.trim()) {
-    items.push({ key: "dev-plan", text: `Development: ${snippet(opts.planText.trim())}` });
-  }
-
-  if (opts.lastCompleted?.summary) {
-    items.push({
-      key: `last-session-${opts.lastCompleted.id}`,
-      text: `Since last 1:1 (${timeAgo(opts.lastCompleted.created_at)}): ${snippet(opts.lastCompleted.summary)}`,
-    });
-  }
-
-  return items;
 }
 
 export default function ReportDetailPage() {
@@ -323,15 +279,13 @@ export default function ReportDetailPage() {
   const [assigningRole, setAssigningRole] = useState(false);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
 
-  // Capture notes (Session 50) — the cockpit's between-sessions inbox. Both
-  // the manual capture box and each "Worth raising" item's "+ Agenda" button
-  // write here; /prep's frontend prefills from and clears this same list.
+  // Capture notes — one source in the next-meeting workspace. /prep prefills
+  // from and clears this list after successful agenda generation; carry-forward
+  // topics live on the unfinished one_on_ones occurrence instead.
   const [captures, setCaptures] = useState<CaptureNote[]>([]);
   const [newCapture, setNewCapture] = useState("");
   const [savingCapture, setSavingCapture] = useState(false);
   const [deletingCaptureId, setDeletingCaptureId] = useState<string | null>(null);
-  const [addingAgendaKey, setAddingAgendaKey] = useState<string | null>(null);
-  const [addedAgendaKeys, setAddedAgendaKeys] = useState<Set<string>>(new Set());
 
   // Clear page context when leaving this page so it doesn't bleed into
   // other pages that don't know which report was being viewed.
@@ -529,21 +483,6 @@ export default function ReportDetailPage() {
     }
   }
 
-  async function addToAgenda(item: WorthRaisingItem) {
-    if (addingAgendaKey) return;
-    setAddingAgendaKey(item.key);
-    try {
-      const created = await createCaptureNote(id, item.text);
-      setCaptures((cs) => [created, ...cs]);
-      setAddedAgendaKeys((s) => new Set(s).add(item.key));
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add to agenda");
-    } finally {
-      setAddingAgendaKey(null);
-    }
-  }
-
   if (loading) return <p className="p-8 text-ink-secondary">Loading...</p>;
   if (error && !report) return <p className="p-8 text-red-700">{error}</p>;
   if (!report) return null;
@@ -554,6 +493,9 @@ export default function ReportDetailPage() {
   // Most-recent unfinished occurrence — scheduled or already prepped.
   const plannedSession = history.find((h) => h.status !== "completed");
   const lastCompleted = history.find((h) => h.status === "completed");
+  // The undated next workspace already owns the conversation card above; it
+  // is not a past session and should not repeat in Recent 1:1 sessions.
+  const visibleHistory = history.filter((session) => session.status !== "gathering");
 
   const roleLevel = roleLevels.find((r) => r.id === report.role_level_id);
   const orgUnit = orgUnits.find((u) => u.id === report.org_unit_id);
@@ -583,11 +525,9 @@ export default function ReportDetailPage() {
 
   const activeProjects = projects.filter((p) => p.status === "active" || p.status === "on_track" || p.status === "at_risk");
 
-  const worthRaising = deriveWorthRaising({
-    openCommitments: open,
+  const worthRaising = deriveOneOnOneSuggestions({
     goals,
     planText: devBundle?.development_plan.plan_text,
-    lastCompleted,
   });
 
   return (
@@ -629,17 +569,15 @@ export default function ReportDetailPage() {
             </Link>
             <Link
               href={
-                plannedSession
+                plannedSession?.status === "planned"
                   ? `/app/reports/${id}/prep?resume=${plannedSession.id}`
                   : `/app/reports/${id}/prep`
               }
               className={`${BTN_PRIMARY} whitespace-nowrap`}
             >
               {plannedSession?.status === "planned"
-                ? "Resume prep sheet →"
-                : plannedSession
-                  ? "Prepare scheduled 1:1 →"
-                  : "Start 1:1 prep →"}
+                ? "Start 1:1 →"
+                : "Review next 1:1 →"}
             </Link>
             <button
               onClick={() => setSettingsOpen(true)}
@@ -705,17 +643,15 @@ export default function ReportDetailPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Next 1:1</p>
               <Link
                 href={
-                  plannedSession
-                    ? `/app/reports/${id}/prep?resume=${plannedSession.id}`
+                  plannedSession?.status === "planned"
+                    ? `/app/reports/${id}/prep?resume=${plannedSession.id}&edit=1`
                     : `/app/reports/${id}/prep`
                 }
                 className="text-xs font-medium text-brand hover:text-brand-hover"
               >
                 {plannedSession?.status === "planned"
-                  ? "Resume prep →"
-                  : plannedSession
-                    ? "Prepare →"
-                    : "Start prep →"}
+                  ? "Edit prep →"
+                  : "Review next 1:1 →"}
               </Link>
             </div>
             {plannedSession?.scheduled_at && (
@@ -725,41 +661,72 @@ export default function ReportDetailPage() {
                   ` · every ${plannedSession.recurrence_weeks} week${plannedSession.recurrence_weeks === 1 ? "" : "s"}`}
               </p>
             )}
-            <p className="mt-1 text-xs text-ink-muted">Worth raising, pulled from what&apos;s on record.</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Context gathers here automatically. Review it before the agenda is built.
+            </p>
 
-            {worthRaising.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-muted">Nothing flagged — you&apos;re in good shape.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {worthRaising.map((item) => {
-                  const added = addedAgendaKeys.has(item.key);
-                  return (
-                    <li
-                      key={item.key}
-                      className="flex items-start justify-between gap-3 rounded-lg border border-divider bg-canvas/60 px-3 py-2"
-                    >
-                      <span className="min-w-0 text-sm text-ink-body">{item.text}</span>
-                      <button
-                        onClick={() => addToAgenda(item)}
-                        disabled={added || addingAgendaKey === item.key}
-                        className="shrink-0 text-xs font-medium text-brand hover:text-brand-hover disabled:text-ink-faint"
-                      >
-                        {added ? "Added ✓" : addingAgendaKey === item.key ? "Adding…" : "+ Agenda"}
-                      </button>
+            {(plannedSession?.carry_forward_items.length ?? 0) > 0 && (
+              <div className="mt-4">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Carried forward</p>
+                <ul className="mt-2 space-y-1.5">
+                  {plannedSession!.carry_forward_items.map((item, index) => (
+                    <li key={index} className="flex gap-2 text-sm text-ink-body">
+                      <span className="text-ink-faint">•</span>
+                      <span>{item}</span>
                     </li>
-                  );
-                })}
-              </ul>
+                  ))}
+                </ul>
+              </div>
             )}
 
-            {/* Between-sessions capture box */}
+            {worthRaising.length > 0 && (
+              <div className="mt-4">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Suggested topics</p>
+                <ul className="mt-2 space-y-2">
+                  {worthRaising.map((item) => (
+                    <li key={item.key} className="rounded-lg border border-divider bg-canvas/60 px-3 py-2 text-sm text-ink-body">
+                      {item.text}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {captures.length > 0 && (
+              <div className="mt-4">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Notes you captured</p>
+                <ul className="mt-2 space-y-1.5">
+                  {captures.map((capture) => (
+                    <li key={capture.id} className="flex items-start justify-between gap-2 text-xs text-ink-secondary">
+                      <span className="min-w-0">
+                        <span className="text-ink-muted">{timeAgo(capture.created_at)} — </span>
+                        {capture.content}
+                      </span>
+                      <button
+                        onClick={() => removeCapture(capture.id)}
+                        disabled={deletingCaptureId === capture.id}
+                        className="shrink-0 text-ink-faint hover:text-red-700"
+                        aria-label="Remove captured note"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {worthRaising.length === 0 && captures.length === 0 && (plannedSession?.carry_forward_items.length ?? 0) === 0 && (
+              <p className="mt-3 text-sm text-ink-muted">Nothing gathered yet.</p>
+            )}
+
             <div className="mt-4 border-t border-divider pt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Capture something</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Add a note</p>
               <textarea
                 value={newCapture}
                 onChange={(e) => setNewCapture(e.target.value)}
                 rows={2}
-                placeholder="Anything worth remembering before the next 1:1..."
+                placeholder="Anything worth remembering for the next 1:1..."
                 className="mt-2 w-full rounded-md border border-control px-3 py-2 text-sm"
               />
               <div className="mt-2 flex justify-end">
@@ -771,28 +738,8 @@ export default function ReportDetailPage() {
                   {savingCapture ? "Saving..." : "Save"}
                 </button>
               </div>
-              {captures.length > 0 && (
-                <ul className="mt-2 space-y-1.5">
-                  {captures.map((c) => (
-                    <li key={c.id} className="flex items-start justify-between gap-2 text-xs text-ink-secondary">
-                      <span className="min-w-0">
-                        <span className="text-ink-muted">{timeAgo(c.created_at)} — </span>
-                        {c.content}
-                      </span>
-                      <button
-                        onClick={() => removeCapture(c.id)}
-                        disabled={deletingCaptureId === c.id}
-                        className="shrink-0 text-ink-faint hover:text-red-700"
-                        aria-label="Remove capture"
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
               <p className="mt-2 text-[11px] text-ink-muted">
-                Saved here lands in the raw notes the next time you prep for {report.name.split(" ")[0]}.
+                Saved notes are included automatically when you review the next 1:1.
               </p>
             </div>
           </div>
@@ -897,13 +844,13 @@ export default function ReportDetailPage() {
 
           <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Recent 1:1 sessions</p>
-            {history.length === 0 ? (
+            {visibleHistory.length === 0 ? (
               <p className="mt-3 text-sm text-ink-muted">
                 No 1:1s yet. Prepping or logging one with {report.name.split(" ")[0]} will show up here.
               </p>
             ) : (
               <ul className="mt-3 divide-y divide-divider">
-                {history.slice(0, 6).map((h) => {
+                {visibleHistory.slice(0, 6).map((h) => {
                   const isOpen = h.status !== "completed";
                   const body = (
                     <>
@@ -916,12 +863,20 @@ export default function ReportDetailPage() {
                               : "rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-secondary"
                           }
                         >
-                          {h.status === "scheduled" ? "Scheduled" : h.status === "planned" ? "Prepped" : "Completed"}
+                          {h.status === "gathering"
+                            ? "Gathering"
+                            : h.status === "scheduled"
+                              ? "Scheduled"
+                              : h.status === "planned"
+                                ? "Prepped"
+                                : "Completed"}
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-ink-body">
                         {h.display_summary ||
-                          (h.status === "scheduled"
+                          (h.status === "gathering"
+                            ? "Next 1:1 workspace — context gathering automatically."
+                            : h.status === "scheduled"
                             ? h.recurrence_weeks
                               ? `Repeats every ${h.recurrence_weeks} week${h.recurrence_weeks === 1 ? "" : "s"}`
                               : "Meeting scheduled — prep not started yet."
@@ -936,7 +891,11 @@ export default function ReportDetailPage() {
                       {isOpen ? (
                         <div className="flex items-start justify-between gap-4">
                           <Link
-                            href={`/app/reports/${id}/prep?resume=${h.id}`}
+                            href={
+                              h.status === "planned"
+                                ? `/app/reports/${id}/prep?resume=${h.id}`
+                                : `/app/reports/${id}/prep`
+                            }
                             className="min-w-0 flex-1 hover:opacity-70"
                           >
                             {body}
@@ -958,8 +917,8 @@ export default function ReportDetailPage() {
                 })}
               </ul>
             )}
-            {history.length > 6 && (
-              <p className="mt-2 text-xs text-ink-muted">+{history.length - 6} more in the full history.</p>
+            {visibleHistory.length > 6 && (
+              <p className="mt-2 text-xs text-ink-muted">+{visibleHistory.length - 6} more in the full history.</p>
             )}
           </div>
         </div>
@@ -970,6 +929,11 @@ export default function ReportDetailPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
               Open commitments{open.length > 0 && ` (${open.length})`}
             </p>
+            {open.length > 0 && (
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Tracked until done or dropped and included in the next 1:1 automatically.
+              </p>
+            )}
             {open.length === 0 ? (
               <p className="mt-3 text-sm text-ink-muted">Nothing outstanding. Commitments you make in 1:1s show up here.</p>
             ) : (
