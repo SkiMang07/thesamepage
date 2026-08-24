@@ -4,13 +4,46 @@
 // the standalone Log a 1:1 page. The AI drafts a summary + commitments from
 // raw call notes; nothing is saved until the manager reviews and hits save.
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 
 type EditableCommitment = WrapUpCommitment & { key: number };
 type EditableFollowUp = { key: number; text: string };
+
+function ExpandingTextArea({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const field = ref.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${field.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      rows={1}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      className="min-h-6 min-w-0 flex-1 resize-none overflow-hidden border-0 p-0 leading-6 text-ink-body placeholder-ink-faint focus:outline-none focus:ring-0"
+    />
+  );
+}
 
 export default function WrapUpReview({
   directReportId,
@@ -144,17 +177,17 @@ export default function WrapUpReview({
         <ul className="mt-3 space-y-2">
           {followUps.map((item) => (
             <li key={item.key} className="flex items-start gap-3 rounded-lg border border-hairline px-4 py-3">
-              <input
+              <ExpandingTextArea
                 value={item.text}
-                onChange={(e) =>
+                onChange={(text) =>
                   setFollowUps((items) =>
                     items.map((current) =>
-                      current.key === item.key ? { ...current, text: e.target.value } : current
+                      current.key === item.key ? { ...current, text } : current
                     )
                   )
                 }
                 placeholder="What should you revisit next time?"
-                className="min-w-0 flex-1 border-0 p-0 text-ink-body placeholder-ink-faint focus:outline-none focus:ring-0"
+                ariaLabel="Follow-up topic"
               />
               <button
                 type="button"
@@ -201,11 +234,11 @@ export default function WrapUpReview({
           {commitments.map((c) => (
             <li key={c.key} className="rounded-lg border border-hairline px-4 py-3">
               <div className="flex items-start gap-3">
-                <input
+                <ExpandingTextArea
                   value={c.description}
-                  onChange={(e) => updateCommitment(c.key, { description: e.target.value })}
+                  onChange={(description) => updateCommitment(c.key, { description })}
                   placeholder="What was agreed?"
-                  className="min-w-0 flex-1 border-0 p-0 text-ink-body placeholder-ink-faint focus:outline-none focus:ring-0"
+                  ariaLabel="Commitment description"
                 />
                 <button
                   type="button"
