@@ -59,7 +59,6 @@ import {
   createTimeOff,
   deleteTimeOff,
   updateCommitment,
-  deleteOneOnOne,
   expectationName,
   getScorecard,
   getProfile,
@@ -226,7 +225,6 @@ export default function ReportDetailPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showResolved, setShowResolved] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -443,18 +441,6 @@ export default function ReportDetailPage() {
     }
   }
 
-  async function dismissSession(sessionId: string) {
-    setDismissingId(sessionId);
-    try {
-      await deleteOneOnOne(sessionId);
-      setHistory((hs) => hs.filter((h) => h.id !== sessionId));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to dismiss session");
-    } finally {
-      setDismissingId(null);
-    }
-  }
-
   async function saveCapture() {
     const content = newCapture.trim();
     if (!content || savingCapture) return;
@@ -493,9 +479,10 @@ export default function ReportDetailPage() {
   // Most-recent unfinished occurrence — scheduled or already prepped.
   const plannedSession = history.find((h) => h.status !== "completed");
   const lastCompleted = history.find((h) => h.status === "completed");
-  // The undated next workspace already owns the conversation card above; it
-  // is not a past session and should not repeat in Recent 1:1 sessions.
-  const visibleHistory = history.filter((session) => session.status !== "gathering");
+  // This is historical evidence, not a second home for the next workspace.
+  // Status is derived server-side from summary being set, so completed is the
+  // canonical definition of a meeting that actually happened and was logged.
+  const completedHistory = history.filter((session) => session.status === "completed");
 
   const roleLevel = roleLevels.find((r) => r.id === report.role_level_id);
   const orgUnit = orgUnits.find((u) => u.id === report.org_unit_id);
@@ -844,81 +831,29 @@ export default function ReportDetailPage() {
 
           <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Recent 1:1 sessions</p>
-            {visibleHistory.length === 0 ? (
+            {completedHistory.length === 0 ? (
               <p className="mt-3 text-sm text-ink-muted">
-                No 1:1s yet. Prepping or logging one with {report.name.split(" ")[0]} will show up here.
+                No completed 1:1s yet. Once you log one with {report.name.split(" ")[0]}, it will show up here.
               </p>
             ) : (
               <ul className="mt-3 divide-y divide-divider">
-                {visibleHistory.slice(0, 6).map((h) => {
-                  const isOpen = h.status !== "completed";
-                  const body = (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs text-ink-muted">{formatDate(h.scheduled_at || h.created_at)}</p>
-                        <span
-                          className={
-                            h.status === "planned"
-                              ? "rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-500"
-                              : "rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-secondary"
-                          }
-                        >
-                          {h.status === "gathering"
-                            ? "Gathering"
-                            : h.status === "scheduled"
-                              ? "Scheduled"
-                              : h.status === "planned"
-                                ? "Prepped"
-                                : "Completed"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-ink-body">
-                        {h.display_summary ||
-                          (h.status === "gathering"
-                            ? "Next 1:1 workspace — context gathering automatically."
-                            : h.status === "scheduled"
-                            ? h.recurrence_weeks
-                              ? `Repeats every ${h.recurrence_weeks} week${h.recurrence_weeks === 1 ? "" : "s"}`
-                              : "Meeting scheduled — prep not started yet."
-                            : h.status === "planned"
-                              ? "Prep sheet generated — no summary yet."
-                              : "")}
+                {completedHistory.slice(0, 6).map((session) => (
+                  <li key={session.id} className="py-2.5">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-ink-muted">
+                        {formatDate(session.scheduled_at || session.created_at)}
                       </p>
-                    </>
-                  );
-                  return (
-                    <li key={h.id} className="py-2.5">
-                      {isOpen ? (
-                        <div className="flex items-start justify-between gap-4">
-                          <Link
-                            href={
-                              h.status === "planned"
-                                ? `/app/reports/${id}/prep?resume=${h.id}`
-                                : `/app/reports/${id}/prep`
-                            }
-                            className="min-w-0 flex-1 hover:opacity-70"
-                          >
-                            {body}
-                          </Link>
-                          <button
-                            onClick={() => dismissSession(h.id)}
-                            disabled={dismissingId === h.id}
-                            className="shrink-0 text-xs text-ink-muted hover:text-ink-secondary"
-                            title="This 1:1 isn't happening — remove the planned session"
-                          >
-                            {dismissingId === h.id ? "Removing…" : "Not happening"}
-                          </button>
-                        </div>
-                      ) : (
-                        body
-                      )}
-                    </li>
-                  );
-                })}
+                      <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
+                        Completed
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-ink-body">{session.display_summary}</p>
+                  </li>
+                ))}
               </ul>
             )}
-            {visibleHistory.length > 6 && (
-              <p className="mt-2 text-xs text-ink-muted">+{visibleHistory.length - 6} more in the full history.</p>
+            {completedHistory.length > 6 && (
+              <p className="mt-2 text-xs text-ink-muted">+{completedHistory.length - 6} more in the full history.</p>
             )}
           </div>
         </div>

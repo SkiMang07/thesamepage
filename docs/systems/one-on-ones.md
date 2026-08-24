@@ -34,7 +34,9 @@ single accumulating object for carry-forwards, captures, live commitments, and
 current goal/development signals. `/app/1-1s` remains a triage surface: an
 undated gathering workspace does not make a not-yet-due person look scheduled.
 Gathering and scheduled occurrences open the source review; a planned occurrence
-resumes the generated sheet.
+resumes the generated sheet. The person page's **Recent 1:1 sessions** card is
+history only and renders completed/logged occurrences; the unfinished next
+occurrence appears only in the dedicated Next 1:1 workspace.
 
 ## Scheduling and recurrence
 
