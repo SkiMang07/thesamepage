@@ -12,7 +12,9 @@ Backend: `routes/team.py`. Frontend: `frontend/app/app/team/page.tsx`.
    days, days until the next meeting. All computed client-side from data the page
    already fetches.
 3. **This week's focus** — Initiatives, Goals, Commitments as three cards.
-4. **Meetings row** — Critical callouts left, Meetings right.
+4. **Meetings row** — Critical callouts left, Meetings right. The meeting card
+   carries the agenda and its own logging action; there is no separate
+   "log a past meeting" box.
 5. **Roster** — a row of cards at the bottom that expand into a shared detail
    panel on click.
 
@@ -28,7 +30,9 @@ card uses. Completed and cancelled work stays off the page; full history lives o
 | `GET ""` | the roster — `direct_reports` merged in Python with each report's active projects, individual-level goals, and latest message |
 | `GET /goals` | goals at `level in ('company','department','team')` |
 | `GET`/`POST /{report_id}/messages` | per-report update log |
-| `GET`/`POST /notes` | team meeting notes |
+| `GET`/`POST /meetings`, `PATCH`/`DELETE /meetings/{id}` | team meetings + agenda items |
+| `POST /meetings/{id}/wrapup` | raw notes → **draft only**, nothing written |
+| `POST /meetings/{id}/log` | the confirmed write, then series rollover |
 | `GET`/`POST /commitments` | team-flagged commitments |
 | `GET`/`PUT /callout` | critical callouts |
 | `GET`/`PUT /dev-focus` | team training focus (see `development.md`) |
@@ -41,7 +45,7 @@ concept. **"All teams" is the default.**
 
 Most filtering is free: roster, initiatives, and commitments key off
 `direct_report_id` → `direct_reports.org_unit_id`; goals and projects carry
-`org_unit_id` directly. Only `team_meeting_notes` and `team_callouts` needed a
+`org_unit_id` directly. Only `team_meetings` and `team_callouts` needed a
 real `org_unit_id` column.
 
 **A null `org_unit_id` means "applies to all teams"** — such a row shows under
@@ -56,27 +60,87 @@ against that set instead of exact equality, and anything inherited is labeled
 "inherited from parent."
 
 **Deliberate scope limit: cascade applies to goals and initiatives only.**
-Commitments, roster, meeting notes, and callouts stay exact-match. And this
+Commitments, roster, meetings, and callouts stay exact-match. And this
 downward cascade is a different concept from `org_unit_projects_rollup()`'s
 upward aggregation — the two do not agree, on purpose. See ENGINEERING.md → Scope
 discipline.
 
-## Meeting notes
+## Meetings
 
-`team_meeting_notes` — standalone and team-wide, deliberately not tied to any
-single 1:1 (`one_on_ones.summary` stays where it is) and distinct from
-`team_messages`. No attendee tagging.
+`team_meetings` — one row per occurrence, the team-side equivalent of
+`one_on_ones`. Renamed from `team_meeting_notes` (2026-08-24), which held one
+row per *note*: planning an agenda wrote a future-dated row, logging what
+happened wrote a second unrelated row, and nothing joined them. The rename
+preserved every row, the RLS policy and the index rather than copy-backfilling
+into a new table.
 
-**Agenda status is derived from `meeting_date`, never stored.** A note dated
-today-or-later is the surfaced "next meeting's agenda" hero card; null or past
-means it's a logged past meeting — same discipline as `one_on_ones`'
-planned/completed split. If more than one note is future-dated, only the soonest
-becomes the hero; an accepted v1 edge case.
+Deliberately standalone: `one_on_ones.summary` stays where it is, and this
+covers anything that isn't a 1:1. No attendee tagging — the org_unit is the
+scope. `org_unit_id` is `ON DELETE SET NULL` here, unlike `team_callouts`.
 
-Past meetings render as a card grid (date + snippet) opening a full-text modal.
-No extra endpoint — same payload, client-side only.
+### Status derives from `summary`, not from the date
 
-`org_unit_id` is `ON DELETE SET NULL` here, unlike `team_callouts` below.
+The date only *orders* meetings; it never decides whether one is still open.
+
+| Status | Rule |
+|---|---|
+| `open` | `summary` null, dated today or later (or undated) |
+| `needs_log` | `summary` null, the date has passed |
+| `logged` | `summary` set, whatever the date says |
+
+Same no-stored-status discipline as `one_on_ones`. It is also the fix for two
+old bugs: a meeting held and written up at 3pm used to sit in the "next
+meeting" slot until midnight, and a second future-dated note used to disappear
+into the past-meetings list. Everything unlogged is now simply a list.
+
+`scheduled_at` is a date encoded at **noon UTC**, exactly like `one_on_ones` —
+stable across timezones, and able to carry a real start time later without
+another migration. `meeting_date` survives as a legacy column for one migration
+of overlap so the backfill stays recoverable; a follow-up migration drops it.
+
+### Agenda items
+
+`team_meeting_agenda_items` — structured rows, not newline-split text (the
+`team_callouts` trick), because carry-forward needs item identity: notes attach
+to the item they belong to, and `carried_from_item_id` is what makes "carried
+twice" answerable at all.
+
+`manager_id` is **denormalized** onto the row so the policy stays a flat
+`manager_id = auth.uid()` instead of a subquery into `team_meetings`.
+
+Agenda edits replace the item set wholesale. That is safe because per-item
+notes only exist after a meeting is logged, and a logged meeting's agenda is
+never editable.
+
+### Series and rollover
+
+`team_meeting_series` owns the repeat rule (1–4 weeks), mirroring
+`one_on_one_series`, with two partial unique indexes for the null-`org_unit_id`
+"all teams" case. Setting a repeat **deactivates then inserts** rather than
+updating, so the partial indexes never see two live series at once.
+
+Logging rolls the next occurrence forward from the prior **scheduled** date
+plus the interval — never from when the manager happened to log it — and skips
+occurrences already in the past instead of creating stale shells. If an open
+meeting for that team already exists, carried items are appended to it rather
+than creating a second one. With no series but items carrying, an **undated**
+meeting is created so nothing carried is silently dropped; the UI shows it as
+needing a date.
+
+No calendar invitation is sent, and the UI says so.
+
+### Wrap-up
+
+`POST /meetings/{id}/wrapup` is a pure AI call — **nothing is written**. It
+returns a draft summary, commitments, and carry-forward items;
+`components/team/MeetingWrapUpReview.tsx` is the confirm step, shared from the
+first pass so the dedicated meeting screen and external-notes ingestion reuse
+it rather than forking. Extraction failure returns an empty draft, never an
+error.
+
+A `direct_report_id` the model returns that isn't on the roster is discarded
+rather than trusted — a hallucinated id would attach a real person's name to a
+commitment they never made.
 
 ## Critical callouts
 
@@ -100,10 +164,19 @@ equality including null = null."
 ## Team commitments
 
 `commitments.is_team_commitment` (boolean) rather than a new table or a real
-multi-assignee model. A commitment stays assigned to exactly one
-`direct_report_id`; the flag only decides whether it also appears on the team-wide
-list. Resolving one reuses `PATCH /api/commitments/{id}` unchanged — the flag
-changes where it's listed, not how it resolves.
+multi-assignee model. The flag only decides whether a commitment also appears on
+the team-wide list. Resolving one reuses `PATCH /api/commitments/{id}` unchanged
+— the flag changes where it's listed, not how it resolves.
+
+**`direct_report_id` is optional (2026-08-24): a null one is the manager's.** A
+team meeting routinely produces work the manager owns, and there is no
+`direct_reports` row for the manager. The column was always nullable and RLS is
+a flat `owner_id = auth.uid()`; only the route and the list rendering assumed a
+person. A manager-owned team commitment has no report to derive a team from, so
+it shows under every team — same convention as a null `org_unit_id` row.
+
+Commitments extracted from a meeting carry `source_type = 'team_meeting'` and
+`source_id` = the meeting, so each traces back to where it was made.
 
 ## Per-report messages
 

@@ -27,8 +27,8 @@
 //      in Sessions 22 and 23 — revived here deliberately small (one
 //      overwritten text block, not a dated log; see lib/api.ts's
 //      TeamCallout comment and team.py's get_team_callout/update_team_callout).
-//      Meetings keeps Session 23's hero-agenda + plan/log forms + detail
-//      modal, restyled from a 2-col grid to a horizontal card carousel.
+//      Meetings keeps a hero card + a carousel of logged meetings, though
+//      what sits behind it was rebuilt on 2026-08-24 — see below.
 //   4. The team roster, now a row of compact cards at the very bottom
 //      (previously a left column) — click a card to expand priorities,
 //      projects, log-update, and invite actions in a detail panel below the
@@ -69,6 +69,27 @@
 // team_project_goal_hierarchy project memory note for the scoping
 // conversation.
 //
+// 2026-08-24 — team meetings (see the team_meetings_scoping project memory
+// note). The old panel showed the agenda you planned and, underneath it, a
+// "Log a past meeting" box that wrote a completely unrelated row: the agenda
+// and the write-up were two team_meeting_notes rows with nothing joining
+// them, so there was no way to log notes against the meeting on screen, one
+// meeting rendered as two cards, and the hero stuck all day after the
+// meeting had been held. Now a meeting is one row plus structured agenda
+// items, on an optional 1-4 week series, and:
+//   - deriveNextMeeting() keys off `status` (derived from summary on the
+//     backend), never off whether the date has passed. Logging is what
+//     closes a meeting.
+//   - Quick log gives each agenda item its own notes box; anything left
+//     unticked is offered as carry-forward into the next meeting.
+//   - "Wrap up & log" runs an AI draft and hands it to
+//     components/team/MeetingWrapUpReview.tsx. NOTHING IS WRITTEN until the
+//     manager confirms there — same locked rule as the 1:1 wrap-up. That
+//     component is shared from this first pass on purpose: the dedicated
+//     meeting screen (/app/team/meetings/[id], pass 2) reuses it.
+//   - Extracted commitments may be the manager's own (null
+//     direct_report_id), which is why the owner picker offers "You".
+//
 // Session 56 white-space audit — widened to PageShell's new `8xl` tier
 // (this is a wide multi-section page, one of the ones the audit flagged as
 // most starved for width on a wide monitor) and the entrance gap (subtitle
@@ -95,9 +116,10 @@ import {
   TeamGoal,
   TeamMember,
   TeamMessage,
-  TeamNote,
+  TeamMeeting,
+  TeamMeetingWrapUpDraft,
   createTeamCommitment,
-  createTeamNote,
+  createTeamMeeting,
   getDirectReports,
   getLedOrgUnits,
   getOrgUnits,
@@ -111,17 +133,20 @@ import {
   getTeamDevFocus,
   getTeamGoals,
   getTeamMessages,
-  getTeamNotes,
+  getTeamMeetings,
   inviteDirectReport,
   sendTeamMessage,
   updateCommitment,
   updateTeamCallout,
   updateTeamDevFocus,
+  updateTeamMeeting,
+  wrapUpTeamMeeting,
 } from "@/lib/api";
+import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWrapUpReview";
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
-import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, HEX, FEATURE_SURFACE, EYEBROW, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone } from "@/lib/tokens";
+import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, HEX, FEATURE_SURFACE, EYEBROW, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, TEXTAREA, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
@@ -241,16 +266,41 @@ function snippet(text: string, max = 110) {
   return trimmed.length > max ? `${trimmed.slice(0, max).trimEnd()}…` : trimmed;
 }
 
-// Soonest note dated today-or-later — the surfaced "next meeting" hero.
-// Shared by the KPI strip and the Meetings panel so both derive the same
-// answer from the same rule (see team_meeting_notes' meeting_date comment
-// in lib/api.ts).
-function deriveNextAgenda(notes: TeamNote[]): TeamNote | null {
-  const today = localDateStr();
-  const upcoming = notes
-    .filter((n) => n.meeting_date && n.meeting_date >= today)
-    .sort((a, b) => (a.meeting_date! < b.meeting_date! ? -1 : 1));
-  return upcoming[0] ?? null;
+// The meeting the page is "on": the soonest one that hasn't been logged.
+// Shared by the KPI strip and the Meetings panel so both answer the question
+// the same way. Note what it does NOT do — it never looks at whether the date
+// has passed. Logging is what closes a meeting, so an unlogged meeting from
+// last Monday stays here (as "needs logging") instead of vanishing, and a
+// meeting logged at 3pm today drops out immediately instead of sitting in the
+// slot until midnight. Undated meetings (carry-forward with no series) sort
+// last, so a real upcoming date always wins the hero.
+function deriveNextMeeting(meetings: TeamMeeting[]): TeamMeeting | null {
+  const open = meetings
+    .filter((m) => m.status !== "logged")
+    .sort((a, b) => {
+      if (!a.scheduled_at) return 1;
+      if (!b.scheduled_at) return -1;
+      return a.scheduled_at < b.scheduled_at ? -1 : 1;
+    });
+  return open[0] ?? null;
+}
+
+// scheduled_at is a timestamp encoded at noon UTC; the local calendar date is
+// what every display helper here expects.
+function isoToDateStr(iso: string) {
+  return localDateStr(new Date(iso));
+}
+
+function repeatLabel(weeks: number) {
+  return weeks === 1 ? "repeats weekly" : `repeats every ${weeks} weeks`;
+}
+
+// One agenda item per line, the way the manager typed it.
+function splitAgenda(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 // Session 46 (team_project_goal_hierarchy project memory note): the set of
@@ -276,7 +326,7 @@ function ancestorChain(orgUnitId: string, orgUnits: OrgUnit[]): Set<string> {
 export default function TeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [goals, setGoals] = useState<TeamGoal[]>([]);
-  const [notes, setNotes] = useState<TeamNote[]>([]);
+  const [meetings, setMeetings] = useState<TeamMeeting[]>([]);
   const [commitments, setCommitments] = useState<TeamCommitment[]>([]);
   const [initiatives, setInitiatives] = useState<Project[]>([]);
   // Session 45: every callout row for this manager (one per led team that's
@@ -311,7 +361,7 @@ export default function TeamPage() {
     Promise.all([
       getTeam(),
       getTeamGoals(),
-      getTeamNotes(),
+      getTeamMeetings(),
       getTeamCommitments(),
       getProjects(),
       getTeamCallout(),
@@ -326,7 +376,7 @@ export default function TeamPage() {
       .then(([m, g, n, c, p, calloutRows, devFocusRows, drs, rls, rfs, ous, status, led]) => {
         setMembers(m);
         setGoals(g);
-        setNotes(n);
+        setMeetings(n);
         setCommitments(c);
         setInitiatives(p.filter((proj) => ACTIVE_STATUSES.has(proj.status)));
         setCallouts(calloutRows);
@@ -384,11 +434,16 @@ export default function TeamPage() {
   const visibleCommitments =
     selectedTeamId === null
       ? commitments
-      : commitments.filter((c) => reportOrgUnitId(c.direct_report_id) === selectedTeamId);
-  const visibleNotes =
+      : commitments.filter(
+          // A manager-owned team commitment (2026-08-24) has no direct report
+          // to derive a team from, so it shows under every team — same
+          // convention as a null org_unit_id callout or meeting.
+          (c) => c.direct_report_id == null || reportOrgUnitId(c.direct_report_id) === selectedTeamId
+        );
+  const visibleMeetings =
     selectedTeamId === null
-      ? notes
-      : notes.filter((n) => n.org_unit_id === null || n.org_unit_id === selectedTeamId);
+      ? meetings
+      : meetings.filter((m) => m.org_unit_id === null || m.org_unit_id === selectedTeamId);
   const activeCallout: TeamCallout =
     callouts.find((c) => c.org_unit_id === selectedTeamId) ?? {
       message: "",
@@ -463,7 +518,7 @@ export default function TeamPage() {
             goals={visibleGoals}
             initiatives={visibleInitiatives}
             commitments={visibleCommitments}
-            notes={visibleNotes}
+            meetings={visibleMeetings}
           />
 
           <div>
@@ -491,7 +546,12 @@ export default function TeamPage() {
                 scopeLabel={selectedTeamName}
                 onSaved={upsertCallout}
               />
-              <MeetingsPanel notes={visibleNotes} setNotes={setNotes} orgUnitId={selectedTeamId} />
+              <MeetingsPanel
+                meetings={visibleMeetings}
+                setMeetings={setMeetings}
+                members={visibleMembers}
+                orgUnitId={selectedTeamId}
+              />
             </div>
           </div>
 
@@ -531,12 +591,12 @@ function KpiStrip({
   goals,
   initiatives,
   commitments,
-  notes,
+  meetings,
 }: {
   goals: TeamGoal[];
   initiatives: Project[];
   commitments: TeamCommitment[];
-  notes: TeamNote[];
+  meetings: TeamMeeting[];
 }) {
   const scoredGoals = goals.filter((g) => g.status !== "cancelled");
   const onTrackGoals = scoredGoals.filter((g) => g.status === "on_track").length;
@@ -558,9 +618,23 @@ function KpiStrip({
     (c) => c.status === "open" && c.due_date && c.due_date >= today && c.due_date <= weekOut
   ).length;
 
-  const nextAgenda = deriveNextAgenda(notes);
-  const meetingLabel = nextAgenda ? `${Math.max(daysBetweenTodayAnd(nextAgenda.meeting_date!), 0)}d` : "—";
-  const meetingSubLabel = nextAgenda ? "Until next meeting" : "No meeting planned";
+  // Reads the same open-meeting rule as the panel. An unlogged meeting whose
+  // date has passed reports as needing a write-up rather than as a negative
+  // countdown.
+  const nextMeeting = deriveNextMeeting(meetings);
+  const meetingDays =
+    nextMeeting?.scheduled_at != null
+      ? daysBetweenTodayAnd(isoToDateStr(nextMeeting.scheduled_at))
+      : null;
+  const needsLog = nextMeeting?.status === "needs_log";
+  const meetingLabel = needsLog ? "—" : meetingDays != null ? `${Math.max(meetingDays, 0)}d` : "—";
+  const meetingSubLabel = needsLog
+    ? "Meeting needs logging"
+    : nextMeeting == null
+      ? "No meeting planned"
+      : meetingDays == null
+        ? "Next meeting needs a date"
+        : "Until next meeting";
 
   const tiles: { value: string; label: string; tone: TileTone }[] = [
     { value: goalsLabel, label: "Goals on track", tone: goalsTileTone },
@@ -569,7 +643,7 @@ function KpiStrip({
     // initiatives and a countdown to a meeting are just numbers.
     { value: String(initiatives.length), label: "Active initiatives", tone: "neutral" },
     { value: String(dueThisWeek), label: "Commitments due this week", tone: dueThisWeek > 0 ? "attention" : "neutral" },
-    { value: meetingLabel, label: meetingSubLabel, tone: "neutral" },
+    { value: meetingLabel, label: meetingSubLabel, tone: needsLog ? "attention" : "neutral" },
   ];
 
   return (
@@ -746,12 +820,12 @@ function CommitmentsCard({
   const open = commitments.filter((c) => c.status === "open");
 
   async function submit() {
-    if (!reportId || !description.trim() || saving) return;
+    if (!description.trim() || saving) return;
     setSaving(true);
     setError(null);
     try {
       const created = await createTeamCommitment({
-        directReportId: reportId,
+        directReportId: reportId || null,
         description: description.trim(),
         dueDate: dueDate || null,
       });
@@ -799,7 +873,9 @@ function CommitmentsCard({
             onChange={(e) => setReportId(e.target.value)}
             className="w-full rounded-md border border-control px-2 py-1.5 text-sm"
           >
-            <option value="">Choose a person...</option>
+            {/* "You" is a real owner, not a missing one — a lot of what a team
+                meeting produces is the manager's own work. */}
+            <option value="">You</option>
             {members.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -824,7 +900,7 @@ function CommitmentsCard({
           <div className="mt-2 flex justify-end">
             <button
               onClick={submit}
-              disabled={saving || !reportId || !description.trim()}
+              disabled={saving || !description.trim()}
               className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
@@ -848,7 +924,7 @@ function CommitmentsCard({
               <div className="min-w-0">
                 <p className="truncate text-sm text-ink-body">{c.description}</p>
                 <p className="text-xs text-ink-muted">
-                  {c.direct_report_name}
+                  {c.direct_report_name ?? "You"}
                   {c.due_date ? ` · Due ${formatDate(c.due_date)}` : ""}
                 </p>
               </div>
@@ -1092,187 +1168,442 @@ function DevFocusPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Meetings — hero agenda + plan/log forms (unchanged from Session 23) with
-// the past-meetings list restyled from a 2-col grid to a horizontal
-// carousel; detail-on-click still opens the same modal.
+// Meetings (2026-08-24 rebuild)
+//
+// The old panel had a "Next meeting" hero and, underneath it, a free-text
+// "Log a past meeting" box that wrote a completely unrelated row. There was
+// no way to log against the meeting you were looking at. Now the meeting IS
+// the surface: the agenda is on the card, and logging happens on it.
+//
+// Three actions, matching the approved option: Open meeting (the dedicated
+// screen — pass 2), Quick log (expands in place), Edit agenda.
 // ---------------------------------------------------------------------------
 
 function MeetingsPanel({
-  notes,
-  setNotes,
+  meetings,
+  setMeetings,
+  members,
   orgUnitId,
 }: {
-  notes: TeamNote[];
-  setNotes: React.Dispatch<React.SetStateAction<TeamNote[]>>;
+  meetings: TeamMeeting[];
+  setMeetings: React.Dispatch<React.SetStateAction<TeamMeeting[]>>;
+  members: TeamMember[];
   orgUnitId: string | null;
 }) {
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useState<"idle" | "plan" | "edit" | "log" | "review">("idle");
+  const [selected, setSelected] = useState<TeamMeeting | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [agendaDraft, setAgendaDraft] = useState("");
-  const [agendaDate, setAgendaDate] = useState("");
-  const [agendaSaving, setAgendaSaving] = useState(false);
-  const [agendaError, setAgendaError] = useState<string | null>(null);
+  // Plan / edit form
+  const [formDate, setFormDate] = useState("");
+  const [formAgenda, setFormAgenda] = useState("");
+  const [formRepeat, setFormRepeat] = useState<number | "">("");
+  const [formSaving, setFormSaving] = useState(false);
 
-  const [selected, setSelected] = useState<TeamNote | null>(null);
+  // Quick log
+  const [outcomes, setOutcomes] = useState<AgendaOutcome[]>([]);
+  const [extraNotes, setExtraNotes] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [draft, setDraft] = useState<TeamMeetingWrapUpDraft | null>(null);
 
-  const today = localDateStr();
-  const nextAgenda = deriveNextAgenda(notes);
-  const past = notes.filter((n) => n.id !== nextAgenda?.id);
+  const next = deriveNextMeeting(meetings);
+  const logged = meetings.filter((m) => m.status === "logged");
 
-  // Decorative only — cycles a color per card position so the carousel
-  // doesn't read as one flat gray strip. Not tied to any data.
-  const CARD_ACCENTS = IDENTITY_BG;
+  function reset() {
+    setMode("idle");
+    setDraft(null);
+    setExtraNotes("");
+    setOutcomes([]);
+    setError(null);
+  }
 
-  async function submitLog() {
-    if (!draft.trim() || saving) return;
-    setSaving(true);
+  function openPlan() {
+    setFormDate("");
+    setFormAgenda("");
+    setFormRepeat("");
+    setMode("plan");
+  }
+
+  function openEdit(meeting: TeamMeeting) {
+    setFormDate(meeting.scheduled_at ? isoToDateStr(meeting.scheduled_at) : "");
+    setFormAgenda(meeting.agenda_items.map((i) => i.item).join("\n"));
+    setFormRepeat(meeting.recurrence_weeks ?? "");
+    setMode("edit");
+  }
+
+  function openLog(meeting: TeamMeeting) {
+    setOutcomes(meeting.agenda_items.map((i) => ({ id: i.id, covered: true, notes: "" })));
+    setExtraNotes("");
+    setDraft(null);
+    setMode("log");
+  }
+
+  async function savePlan() {
+    if (!formDate || formSaving) return;
+    setFormSaving(true);
     setError(null);
     try {
-      const created = await createTeamNote(draft.trim(), null, orgUnitId);
-      setNotes((n) => [created, ...n]);
-      setDraft("");
+      const created = await createTeamMeeting({
+        scheduledAt: formDate,
+        agendaItems: splitAgenda(formAgenda),
+        orgUnitId,
+        recurrenceWeeks: formRepeat === "" ? null : Number(formRepeat),
+      });
+      setMeetings((rows) => [created, ...rows]);
+      reset();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save note");
+      setError(e instanceof Error ? e.message : "Failed to plan meeting");
     } finally {
-      setSaving(false);
+      setFormSaving(false);
     }
   }
 
-  async function submitAgenda() {
-    if (!agendaDraft.trim() || !agendaDate || agendaSaving) return;
-    setAgendaSaving(true);
-    setAgendaError(null);
+  async function saveEdit() {
+    if (!next || formSaving) return;
+    setFormSaving(true);
+    setError(null);
     try {
-      const created = await createTeamNote(agendaDraft.trim(), agendaDate, orgUnitId);
-      setNotes((n) => [created, ...n]);
-      setAgendaDraft("");
-      setAgendaDate("");
+      const updated = await updateTeamMeeting(next.id, {
+        scheduledAt: formDate || null,
+        agendaItems: splitAgenda(formAgenda),
+        recurrenceWeeks: formRepeat === "" ? null : Number(formRepeat),
+        clearRecurrence: formRepeat === "",
+      });
+      setMeetings((rows) => rows.map((m) => (m.id === updated.id ? updated : m)));
+      reset();
     } catch (e) {
-      setAgendaError(e instanceof Error ? e.message : "Failed to save agenda");
+      setError(e instanceof Error ? e.message : "Failed to save agenda");
     } finally {
-      setAgendaSaving(false);
+      setFormSaving(false);
     }
   }
+
+  // The notes the wrap-up actually reads: each agenda item that has notes,
+  // headed by the item so the model knows which topic it belongs to, plus
+  // whatever came up off-agenda.
+  function assembleRawNotes(meeting: TeamMeeting) {
+    const parts = meeting.agenda_items
+      .map((item) => {
+        const outcome = outcomes.find((o) => o.id === item.id);
+        if (!outcome?.notes.trim()) return null;
+        return `${item.item}:\n${outcome.notes.trim()}`;
+      })
+      .filter(Boolean) as string[];
+    if (extraNotes.trim()) parts.push(`Other:\n${extraNotes.trim()}`);
+    return parts.join("\n\n");
+  }
+
+  async function runWrapUp(meeting: TeamMeeting) {
+    const rawNotes = assembleRawNotes(meeting);
+    if (!rawNotes.trim() || extracting) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      const result = await wrapUpTeamMeeting(meeting.id, rawNotes);
+      setDraft(result);
+      setMode("review");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to draft the wrap-up");
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  function onLogged(result: { meeting: TeamMeeting; next_meeting: TeamMeeting | null }) {
+    setMeetings((rows) => {
+      const merged = rows.map((m) => (m.id === result.meeting.id ? result.meeting : m));
+      if (result.next_meeting && !merged.some((m) => m.id === result.next_meeting!.id)) {
+        return [result.next_meeting, ...merged];
+      }
+      return result.next_meeting
+        ? merged.map((m) => (m.id === result.next_meeting!.id ? result.next_meeting! : m))
+        : merged;
+    });
+    reset();
+  }
+
+  const CARD_ACCENTS = IDENTITY_BG;
 
   return (
     <div>
-      {nextAgenda ? (
+      {next ? (
         <div className={`${FEATURE_SURFACE} px-5 py-4`}>
-          <div className="flex items-center justify-between">
-            <p className={EYEBROW}>Next meeting</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className={EYEBROW}>
+              {next.status === "needs_log" ? "Needs logging" : "Next meeting"}
+              {next.recurrence_weeks ? ` · ${repeatLabel(next.recurrence_weeks)}` : ""}
+            </p>
             <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-body">
-              {formatMeetingDate(nextAgenda.meeting_date!)}
+              {next.scheduled_at ? formatMeetingDate(isoToDateStr(next.scheduled_at)) : "No date yet"}
             </span>
           </div>
-          <p className="mt-1 whitespace-pre-wrap text-sm">{nextAgenda.note}</p>
+
+          {next.agenda_items.length > 0 ? (
+            <ul className="mt-2 space-y-1">
+              {next.agenda_items.map((item) => (
+                <li key={item.id} className="flex items-start gap-2 text-sm">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-muted" />
+                  <span>{item.item}</span>
+                  {item.carried_from_item_id && (
+                    <span className="mt-0.5 shrink-0 rounded-full border border-hairline px-1.5 text-[10px] text-ink-muted">
+                      carried
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-ink-muted">No agenda yet.</p>
+          )}
+
+          {mode === "idle" && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {/* Pass 2 turns this into a link to /app/team/meetings/[id] —
+                  the two-column live screen. Until then Quick log is the
+                  whole logging path, so the button is not shown yet. */}
+              <button onClick={() => openLog(next)} className={BTN_PRIMARY_SM}>
+                Log what happened
+              </button>
+              <button onClick={() => openEdit(next)} className={BTN_SECONDARY}>
+                Edit agenda
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-hairline px-4 py-3">
-          <p className="text-xs text-ink-muted">No upcoming meeting planned.</p>
+          <p className="text-xs text-ink-muted">No meeting planned.</p>
         </div>
       )}
 
-      <details className="mt-2">
-        <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
-          Plan next meeting
-        </summary>
-        <div className="mt-2 rounded-xl border border-hairline bg-surface px-4 py-3">
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Meeting date</label>
+      {mode === "idle" && (
+        <div className="mt-2">
+          <button onClick={openPlan} className={BTN_GHOST}>
+            {next ? "Plan another meeting" : "Plan a meeting"}
+          </button>
+        </div>
+      )}
+
+      {(mode === "plan" || mode === "edit") && (
+        <div className="mt-3 rounded-xl border border-hairline bg-surface px-4 py-3">
+          <p className={EYEBROW}>{mode === "plan" ? "Plan a meeting" : "Edit agenda"}</p>
+          <label className={`${LABEL} mt-2`} htmlFor="meeting-date">
+            Meeting date
+          </label>
           <input
+            id="meeting-date"
             type="date"
-            value={agendaDate}
-            onChange={(e) => setAgendaDate(e.target.value)}
-            min={today}
-            className="w-full rounded-md border border-control px-3 py-1.5 text-sm"
+            value={formDate}
+            onChange={(e) => setFormDate(e.target.value)}
+            className={INPUT}
           />
-          <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Agenda</label>
+          <label className={`${LABEL} mt-2`} htmlFor="meeting-agenda">
+            Agenda — one item per line
+          </label>
           <textarea
-            value={agendaDraft}
-            onChange={(e) => setAgendaDraft(e.target.value)}
-            rows={2}
-            className="w-full rounded-md border border-control px-3 py-2 text-sm"
-            placeholder="What you want to cover..."
+            id="meeting-agenda"
+            value={formAgenda}
+            onChange={(e) => setFormAgenda(e.target.value)}
+            rows={4}
+            className={`${TEXTAREA} text-sm`}
+            placeholder={"Update on Max's account\nDiscuss hiring for new CSM"}
           />
-          {agendaError && <p className="mt-1 text-xs text-red-700">{agendaError}</p>}
-          <div className="mt-2 flex justify-end">
+          <label className={`${LABEL} mt-2`} htmlFor="meeting-repeat">
+            Repeat
+          </label>
+          <select
+            id="meeting-repeat"
+            value={formRepeat}
+            onChange={(e) => setFormRepeat(e.target.value === "" ? "" : Number(e.target.value))}
+            className={`${SELECT} w-auto`}
+          >
+            <option value="">Doesn&apos;t repeat</option>
+            <option value={1}>Every week</option>
+            <option value={2}>Every 2 weeks</option>
+            <option value={3}>Every 3 weeks</option>
+            <option value={4}>Every 4 weeks</option>
+          </select>
+          {/* Said plainly so a manager never waits on an invite that isn't
+              coming — same honesty posture as store-only team messages. */}
+          <p className={`${META} mt-1`}>The Same Page doesn&apos;t send calendar invites.</p>
+          {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
+          <div className="mt-3 flex justify-end gap-2">
+            <button onClick={reset} className={BTN_SECONDARY} disabled={formSaving}>
+              Cancel
+            </button>
             <button
-              onClick={submitAgenda}
-              disabled={agendaSaving || !agendaDraft.trim() || !agendaDate}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
+              onClick={mode === "plan" ? savePlan : saveEdit}
+              disabled={formSaving || !formDate}
+              className={BTN_PRIMARY_SM}
             >
-              {agendaSaving ? "Saving..." : "Save agenda"}
+              {formSaving ? "Saving..." : mode === "plan" ? "Plan meeting" : "Save agenda"}
             </button>
           </div>
         </div>
-      </details>
+      )}
 
-      <div className="mt-4 rounded-xl border border-hairline bg-surface px-4 py-3">
-        <label className="mb-1 block text-xs font-medium text-ink-secondary">Log a past meeting</label>
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-control px-3 py-2 text-sm"
-          placeholder="What happened, what to remember..."
-        />
-        {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
-        <div className="mt-2 flex justify-end">
-          <button
-            onClick={submitLog}
-            disabled={saving || !draft.trim()}
-            className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Log note"}
-          </button>
+      {mode === "log" && next && (
+        <div className="mt-3 rounded-xl border border-hairline bg-surface px-4 py-3">
+          <p className={EYEBROW}>
+            Logging ·{" "}
+            {next.scheduled_at ? formatMeetingDate(isoToDateStr(next.scheduled_at)) : "undated"}
+          </p>
+          {next.agenda_items.map((item) => {
+            const outcome = outcomes.find((o) => o.id === item.id);
+            return (
+              <div key={item.id} className="mt-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-ink-body">
+                  <input
+                    type="checkbox"
+                    checked={outcome?.covered ?? false}
+                    onChange={(e) =>
+                      setOutcomes((rows) =>
+                        rows.map((o) => (o.id === item.id ? { ...o, covered: e.target.checked } : o))
+                      )
+                    }
+                    className="h-3.5 w-3.5 rounded border-control"
+                  />
+                  {item.item}
+                  {!outcome?.covered && (
+                    <span className="rounded-full border border-hairline px-1.5 text-[10px] font-normal text-ink-muted">
+                      carries forward
+                    </span>
+                  )}
+                </label>
+                {outcome?.covered && (
+                  <textarea
+                    value={outcome.notes}
+                    onChange={(e) =>
+                      setOutcomes((rows) =>
+                        rows.map((o) => (o.id === item.id ? { ...o, notes: e.target.value } : o))
+                      )
+                    }
+                    rows={2}
+                    className={`${TEXTAREA} mt-1 text-sm`}
+                    placeholder="What happened..."
+                    aria-label={`Notes for ${item.item}`}
+                  />
+                )}
+              </div>
+            );
+          })}
+
+          <label className={`${LABEL} mt-3`} htmlFor="meeting-other">
+            {next.agenda_items.length > 0 ? "Anything else" : "Notes"}
+          </label>
+          <textarea
+            id="meeting-other"
+            value={extraNotes}
+            onChange={(e) => setExtraNotes(e.target.value)}
+            rows={3}
+            className={`${TEXTAREA} text-sm`}
+            placeholder="Off-agenda notes, or paste from a recorder..."
+          />
+          {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
+          <div className="mt-3 flex justify-end gap-2">
+            <button onClick={reset} className={BTN_SECONDARY} disabled={extracting}>
+              Cancel
+            </button>
+            <button
+              onClick={() => runWrapUp(next)}
+              disabled={extracting || !assembleRawNotes(next).trim()}
+              className={BTN_PRIMARY_SM}
+            >
+              {extracting ? "Drafting..." : "Wrap up & log →"}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {past.length === 0 ? (
-        <p className="mt-4 text-sm text-ink-muted">No past meetings logged yet.</p>
+      {mode === "review" && next && draft && (
+        <div className="mt-3">
+          <MeetingWrapUpReview
+            meeting={next}
+            members={members.map((m) => ({ id: m.id, name: m.name }))}
+            rawNotes={assembleRawNotes(next)}
+            draft={draft}
+            outcomes={outcomes}
+            onBack={() => setMode("log")}
+            onSaved={onLogged}
+          />
+        </div>
+      )}
+
+      {logged.length === 0 ? (
+        <p className="mt-4 text-sm text-ink-muted">No meetings logged yet.</p>
       ) : (
         <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-          {past.map((n, i) => (
+          {logged.map((m, i) => (
             <button
-              key={n.id}
-              onClick={() => setSelected(n)}
+              key={m.id}
+              onClick={() => setSelected(m)}
               className="w-56 shrink-0 overflow-hidden rounded-xl border border-hairline bg-surface text-left hover:border-control hover:shadow-sm"
             >
               <div className={`h-1.5 ${CARD_ACCENTS[i % CARD_ACCENTS.length]}`} />
               <div className="px-3 py-2.5">
                 <p className="text-xs text-ink-muted">
-                  {n.meeting_date ? formatMeetingDate(n.meeting_date) : timeAgo(n.created_at)}
+                  {m.scheduled_at ? formatMeetingDate(isoToDateStr(m.scheduled_at)) : timeAgo(m.created_at)}
                 </p>
-                <p className="mt-1 text-sm text-ink-body">{snippet(n.note, 90)}</p>
+                <p className="mt-1 text-sm text-ink-body">{snippet(m.summary ?? "", 90)}</p>
               </div>
             </button>
           ))}
         </div>
       )}
 
-      {selected && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
-          onClick={() => setSelected(null)}
-        >
-          <div className="w-full max-w-lg rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-                {selected.meeting_date ? formatMeetingDate(selected.meeting_date) : timeAgo(selected.created_at)}
-              </p>
-              <button
-                onClick={() => setSelected(null)}
-                aria-label="Close"
-                className="text-ink-muted hover:text-ink-body"
-              >
-                &times;
-              </button>
-            </div>
-            <p className="mt-3 whitespace-pre-wrap text-sm text-ink-body">{selected.note}</p>
-          </div>
+      {selected && <LoggedMeetingModal meeting={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
+}
+
+// One meeting, agenda and outcome together — the thing the old two-row model
+// could not show at all.
+function LoggedMeetingModal({ meeting, onClose }: { meeting: TeamMeeting; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <p className={EYEBROW}>
+            {meeting.scheduled_at
+              ? formatMeetingDate(isoToDateStr(meeting.scheduled_at))
+              : timeAgo(meeting.created_at)}
+          </p>
+          <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink-body">
+            &times;
+          </button>
         </div>
-      )}
+
+        <p className="mt-3 whitespace-pre-wrap text-sm text-ink-body">{meeting.summary}</p>
+
+        {meeting.agenda_items.length > 0 && (
+          <div className="mt-5">
+            <p className={EYEBROW}>Agenda</p>
+            <ul className="mt-2 space-y-2">
+              {meeting.agenda_items.map((item) => (
+                <li key={item.id} className="rounded-lg border border-hairline bg-sunken px-3 py-2">
+                  <p className="text-sm text-ink-body">
+                    {item.item}
+                    {!item.covered && (
+                      <span className="ml-2 rounded-full border border-hairline px-1.5 text-[10px] text-ink-muted">
+                        not covered
+                      </span>
+                    )}
+                  </p>
+                  {item.notes && (
+                    <p className="mt-1 whitespace-pre-wrap text-xs text-ink-secondary">{item.notes}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -919,30 +919,122 @@ export type TeamGoal = {
 
 export const getTeamGoals = (): Promise<TeamGoal[]> => authedFetch("/api/team/goals");
 
-// meeting_date (Session 23) is optional/nullable — set to today-or-later to
-// make this note the surfaced "next meeting's agenda"; null means it's a
-// logged past meeting. Derived client-side, not a stored status field.
-// org_unit_id (Session 45, team dropdown): which led team this note is for;
-// null means "all teams" — shown regardless of which team is selected. See
-// the team_dropdown_scoping project memory note.
-export type TeamNote = {
+// Team meetings (2026-08-24) — replaces the old TeamNote/getTeamNotes pair.
+// A meeting is one row plus its agenda items, not two loose notes; status is
+// derived from `summary` on the backend and arrives as `status` here:
+//   open      — not logged yet, dated today or later (or not dated at all)
+//   needs_log — not logged yet, the date has passed
+//   logged    — written up, whatever the date says
+// org_unit_id null still means "all teams", same convention as callouts.
+export type TeamAgendaItem = {
   id: string;
-  note: string;
-  meeting_date: string | null;
-  org_unit_id: string | null;
-  created_at: string;
+  meeting_id: string;
+  position: number;
+  item: string;
+  covered: boolean;
+  notes: string | null;
+  carried_from_item_id: string | null;
 };
 
-export const getTeamNotes = (): Promise<TeamNote[]> => authedFetch("/api/team/notes");
+export type TeamMeeting = {
+  id: string;
+  scheduled_at: string | null;
+  summary: string | null;
+  raw_notes: string | null;
+  agenda_note: string | null;
+  logged_at: string | null;
+  org_unit_id: string | null;
+  series_id: string | null;
+  created_at: string;
+  status: "open" | "needs_log" | "logged";
+  agenda_items: TeamAgendaItem[];
+  // 1-4 when this meeting belongs to an active series; null for a one-off.
+  recurrence_weeks: number | null;
+};
 
-export const createTeamNote = (
-  note: string,
-  meetingDate?: string | null,
-  orgUnitId?: string | null
-): Promise<TeamNote> =>
-  authedFetch("/api/team/notes", {
+export type TeamMeetingDraftCommitment = {
+  description: string;
+  direct_report_id: string | null; // null = the manager owns it
+  due_date: string | null;
+};
+
+export type TeamMeetingWrapUpDraft = {
+  summary: string;
+  commitments: TeamMeetingDraftCommitment[];
+  carry_forward_items: string[];
+};
+
+export const getTeamMeetings = (): Promise<TeamMeeting[]> => authedFetch("/api/team/meetings");
+
+export const createTeamMeeting = (body: {
+  scheduledAt: string | null;
+  agendaItems: string[];
+  orgUnitId?: string | null;
+  recurrenceWeeks?: number | null;
+}): Promise<TeamMeeting> =>
+  authedFetch("/api/team/meetings", {
     method: "POST",
-    body: JSON.stringify({ note, meeting_date: meetingDate ?? null, org_unit_id: orgUnitId ?? null }),
+    body: JSON.stringify({
+      scheduled_at: body.scheduledAt,
+      agenda_items: body.agendaItems,
+      org_unit_id: body.orgUnitId ?? null,
+      recurrence_weeks: body.recurrenceWeeks ?? null,
+    }),
+  });
+
+// clearRecurrence is explicit because "leave the repeat rule alone" and "stop
+// repeating" are different intentions that null can't tell apart.
+export const updateTeamMeeting = (
+  id: string,
+  body: {
+    scheduledAt?: string | null;
+    agendaItems?: string[];
+    recurrenceWeeks?: number | null;
+    clearRecurrence?: boolean;
+  }
+): Promise<TeamMeeting> =>
+  authedFetch(`/api/team/meetings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      scheduled_at: body.scheduledAt,
+      agenda_items: body.agendaItems,
+      recurrence_weeks: body.recurrenceWeeks ?? null,
+      clear_recurrence: body.clearRecurrence ?? false,
+    }),
+  });
+
+export const deleteTeamMeeting = (id: string): Promise<{ ok: boolean }> =>
+  authedFetch(`/api/team/meetings/${id}`, { method: "DELETE" });
+
+// Draft only — nothing is written until logTeamMeeting confirms it.
+export const wrapUpTeamMeeting = (
+  id: string,
+  rawNotes: string
+): Promise<TeamMeetingWrapUpDraft> =>
+  authedFetch(`/api/team/meetings/${id}/wrapup`, {
+    method: "POST",
+    body: JSON.stringify({ raw_notes: rawNotes }),
+  });
+
+export const logTeamMeeting = (
+  id: string,
+  body: {
+    summary: string;
+    rawNotes?: string | null;
+    agendaOutcomes: { id: string; covered: boolean; notes: string | null }[];
+    commitments: TeamMeetingDraftCommitment[];
+    carryForwardItems: string[];
+  }
+): Promise<{ meeting: TeamMeeting; next_meeting: TeamMeeting | null }> =>
+  authedFetch(`/api/team/meetings/${id}/log`, {
+    method: "POST",
+    body: JSON.stringify({
+      summary: body.summary,
+      raw_notes: body.rawNotes ?? null,
+      agenda_outcomes: body.agendaOutcomes,
+      commitments: body.commitments,
+      carry_forward_items: body.carryForwardItems,
+    }),
   });
 
 // Team-level commitments (Session 23) — same Commitment shape as the
@@ -954,8 +1046,10 @@ export type TeamCommitment = Commitment;
 
 export const getTeamCommitments = (): Promise<TeamCommitment[]> => authedFetch("/api/team/commitments");
 
+// directReportId is nullable (2026-08-24): a team meeting routinely produces
+// work the manager owns, and there's no direct_reports row for the manager.
 export const createTeamCommitment = (body: {
-  directReportId: string;
+  directReportId: string | null;
   description: string;
   dueDate?: string | null;
 }): Promise<TeamCommitment> =>
@@ -971,7 +1065,7 @@ export const createTeamCommitment = (body: {
 // Team callouts (Session 24, 2026-08-09) — the "key updates" concept scoped
 // and deferred twice (Sessions 22/23), revived here in a deliberately small
 // form: one manager-authored text block, overwritten in place rather than a
-// dated history log (unlike team_meeting_notes). Each line the manager
+// dated history log (unlike team_meetings). Each line the manager
 // writes renders as its own bullet on the page. See team.py's
 // get_team_callout/update_team_callout and the team_page_redesign_options
 // project memory note.

@@ -118,7 +118,7 @@ parse error, which reads as an auth bug.
 
 ## Data model
 
-`database/schema.sql` is the source of truth — 47 tables with their indexes and
+`database/schema.sql` is the source of truth — 49 tables with their indexes and
 RLS policies. Don't restate it here; read it.
 
 ```bash
@@ -134,7 +134,7 @@ a query or a policy.
 
 | Model | Predicate | Tables |
 |---|---|---|
-| Manager-scoped | `manager_id = auth.uid()` | direct_reports, one_on_one_series, one_on_ones, commitments, dr_capture_notes, assessments, skill/value_assessments, metric_entries, team_messages, team_meeting_notes, team_callouts, team_dev_focus, direct_report_invites, development_plans + dev_plan_*, assistant_messages, mission_control_events, capacity_profiles, time_off_entries |
+| Manager-scoped | `manager_id = auth.uid()` | direct_reports, one_on_one_series, one_on_ones, commitments, dr_capture_notes, assessments, skill/value_assessments, metric_entries, team_messages, team_meetings, team_meeting_series, team_meeting_agenda_items, team_callouts, team_dev_focus, direct_report_invites, development_plans + dev_plan_*, assistant_messages, mission_control_events, capacity_profiles, time_off_entries |
 | Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins |
 | Org-scoped | `org_id = public.current_org_id()` | organizations, users, org_units, role_families, role_levels, *_configs, *_scale_definitions, assessment_levels, capacity_settings, work_unit_configs, documents, document_series, document_scopes, document_citations |
 
@@ -195,12 +195,12 @@ Postgres treats every NULL as distinct, so `UNIQUE(a, b)` does not prevent
 duplicate rows where `b IS NULL`. Wherever a nullable `org_unit_id` (or similar)
 carries an "applies to everything" meaning, uniqueness needs **two partial unique
 indexes** — one for the non-null case, one `WHERE b IS NULL`. Already done for
-`team_callouts` and `document_scopes`.
+`team_callouts`, `team_meeting_series` and `document_scopes`.
 
 That interacts with the FK delete action: with `ON DELETE SET NULL`, deleting a
 parent row can try to create a second null row and fail the whole DELETE.
 `team_callouts.org_unit_id` uses `ON DELETE CASCADE` for exactly this reason,
-while `team_meeting_notes` uses `SET NULL`. **Check this interaction before
+while `team_meetings` uses `SET NULL`. **Check this interaction before
 defaulting to `SET NULL` on any new `org_unit_id` column.**
 
 ---

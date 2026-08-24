@@ -268,7 +268,7 @@ create table commitments (
   owner_id            uuid references auth.users(id),
   direct_report_id    uuid references direct_reports(id) on delete cascade,
   committed_by        text not null default 'manager' check (committed_by in ('manager', 'direct_report')),
-  source_type         text check (source_type in ('one_on_one', 'goal', 'project', 'manual')),
+  source_type         text check (source_type in ('one_on_one', 'goal', 'project', 'manual', 'team_meeting')),
   source_id           uuid,
   due_date            date,
   status              text not null default 'open' check (status in ('open', 'done', 'dropped')),
@@ -735,40 +735,119 @@ alter table direct_report_invites enable row level security;
 create index direct_report_invites_report_idx on direct_report_invites (direct_report_id);
 
 -- ============================================================
--- TEAM MEETING NOTES
--- Session 22 (2026-08-08) — Team Mission Control's right column. Deliberately
--- standalone: one_on_ones.summary stays exactly where it is (per-report 1:1
--- history); this is a separate running log for anything that isn't a 1:1 —
--- staff meetings, team syncs, general observations — same "Standalone
--- team-wide log" choice as team_messages was scoped as per-report. No
--- attendee tagging in v1 (kept deliberately minimal, see the
--- team_mission_control project memory note).
+-- TEAM MEETING SERIES
+-- Owns the repeat rule; team_meetings stays one row per occurrence through
+-- series_id + scheduled_at. Mirrors one_on_one_series.
 --
--- manager_id = the logged-in manager's auth.uid(), same manager-scoped
--- pattern as team_messages/one_on_ones.
+-- Two partial unique indexes rather than one composite UNIQUE, for the same
+-- reason team_callouts needs them: a plain UNIQUE treats every NULL
+-- org_unit_id as distinct, which would let duplicate all-teams series pile
+-- up for one manager.
 -- ============================================================
+create table team_meeting_series (
+  id             uuid primary key default uuid_generate_v4(),
+  manager_id     uuid not null references auth.users(id),
+  org_unit_id    uuid references org_units(id) on delete cascade,
+  interval_weeks smallint not null check (interval_weeks between 1 and 4),
+  anchor_at      timestamptz not null,
+  timezone       text not null default 'UTC',
+  active         boolean not null default true,
+  created_at     timestamptz not null default now()
+);
+
+alter table team_meeting_series enable row level security;
+
+create unique index team_meeting_series_active_unit_idx
+  on team_meeting_series (manager_id, org_unit_id)
+  where active and org_unit_id is not null;
+
+create unique index team_meeting_series_active_all_teams_idx
+  on team_meeting_series (manager_id)
+  where active and org_unit_id is null;
+
+-- ============================================================
+-- TEAM MEETINGS
+-- One row per team meeting occurrence — the team-side equivalent of
+-- one_on_ones. Deliberately standalone: one_on_ones.summary stays exactly
+-- where it is (per-report 1:1 history); this covers anything that isn't a
+-- 1:1 — staff meetings, team syncs. No attendee tagging; the org_unit is
+-- the scope.
 --
--- meeting_date (Session 23, 2026-08-09): nullable — a note dated today or
--- later is the surfaced "next meeting's agenda"; null or a past date means
--- it's a logged past meeting. Derived, never a stored status column, same
--- pattern as one_on_ones' planned/completed split (see the planned_sessions
--- project memory note).
--- org_unit_id (Session 45, 2026-08-19 — see the team_dropdown_scoping
--- project memory note): which led team this note belongs to. Null means "all
--- teams" — shown under every specific team's filter on /app/team, same
--- treatment as a company-level goal. Lets a manager who leads more than one
--- org_unit keep each team's meeting log separate while still being able to
--- post an org-wide note.
-create table team_meeting_notes (
+-- Renamed from team_meeting_notes (2026-08-24). It used to be one row per
+-- *note*: planning an agenda wrote a future-dated row, logging what
+-- happened wrote a second unrelated row, and nothing joined them. The
+-- rename preserved every row, the RLS policy and the index rather than
+-- copy-backfilling into a new table.
+--
+-- STATUS IS DERIVED FROM summary, NOT FROM THE DATE. The date only orders
+-- meetings. summary null = still open (upcoming, or needs logging if
+-- scheduled_at is past); summary set = logged. Same no-stored-status
+-- discipline as one_on_ones' scheduled/planned/completed split — and it is
+-- what stops a meeting from sitting in the "next meeting" slot all day
+-- after it has been held and written up.
+--
+-- scheduled_at is a date encoded at noon UTC, exactly like one_on_ones'
+-- scheduled_at: the date stays stable across timezones and the column can
+-- carry a real start time later without another migration. No calendar
+-- invitation is sent — copy says "repeats weekly", never "invite".
+--
+-- agenda_note holds legacy free-text agendas only; new agendas are rows in
+-- team_meeting_agenda_items below. raw_notes is what the manager typed or
+-- pasted before extraction, kept so a wrap-up can be re-run.
+--
+-- meeting_date is retained for one migration of overlap so the 2026-08-24
+-- backfill (which infers agenda-vs-recap from it) stays recoverable, and
+-- is dropped in a follow-up migration.
+--
+-- org_unit_id: which led team this meeting belongs to. Null means "all
+-- teams". ON DELETE SET NULL here, unlike team_callouts below.
+-- ============================================================
+create table team_meetings (
   id            uuid primary key default uuid_generate_v4(),
   manager_id    uuid not null references auth.users(id),
-  note          text not null,
-  meeting_date  date,
+  agenda_note   text,          -- legacy free-text agenda; new agendas are item rows
+  summary       text,          -- what happened; NULL = not yet logged
+  raw_notes     text,          -- pre-extraction notes, kept so wrap-up can re-run
+  scheduled_at  timestamptz,   -- date encoded at noon UTC
+  series_id     uuid references team_meeting_series(id) on delete set null,
+  logged_at     timestamptz,
+  meeting_date  date,          -- legacy, dropped in a follow-up migration
   org_unit_id   uuid references org_units(id) on delete set null,
   created_at    timestamptz not null default now()
 );
 
-alter table team_meeting_notes enable row level security;
+alter table team_meetings enable row level security;
+
+create index team_meetings_open_idx
+  on team_meetings (manager_id, scheduled_at)
+  where summary is null;
+
+-- ============================================================
+-- TEAM MEETING AGENDA ITEMS
+-- Structured rows rather than newline-split text (the team_callouts trick)
+-- because carry-forward needs item identity: notes attach to an item, and
+-- carried_from_item_id is what makes "carried twice" answerable at all.
+--
+-- manager_id is denormalized on purpose so the RLS policy stays a flat
+-- manager_id = auth.uid() instead of a subquery into team_meetings — the
+-- same discipline that keeps org-scoped policies out of recursion.
+-- ============================================================
+create table team_meeting_agenda_items (
+  id                   uuid primary key default uuid_generate_v4(),
+  meeting_id           uuid not null references team_meetings(id) on delete cascade,
+  manager_id           uuid not null references auth.users(id),
+  position             smallint not null default 0,
+  item                 text not null,
+  covered              boolean not null default false,
+  notes                text,
+  carried_from_item_id uuid references team_meeting_agenda_items(id) on delete set null,
+  created_at           timestamptz not null default now()
+);
+
+alter table team_meeting_agenda_items enable row level security;
+
+create index team_meeting_agenda_items_meeting_idx
+  on team_meeting_agenda_items (meeting_id, position);
 
 -- ============================================================
 -- TEAM CALLOUTS
@@ -776,7 +855,7 @@ alter table team_meeting_notes enable row level security;
 -- the manager-authored broadcast idea scoped and then explicitly deferred in
 -- Sessions 22 and 23 — revived here deliberately small: ONE text block per
 -- manager (unique on manager_id), overwritten in place on every edit rather
--- than a dated log like team_meeting_notes above. No history, no per-line
+-- than a dated log like team_meetings above. No history, no per-line
 -- CRUD — the frontend splits the message on newlines to render bullets. See
 -- the team_page_redesign_options project memory note for the scoping
 -- conversation (Andrew confirmed this shape via a mockup before it was
@@ -790,7 +869,7 @@ alter table team_meeting_notes enable row level security;
 -- treats every NULL org_unit_id as distinct, which would let duplicate
 -- all-teams rows pile up.
 --
--- org_unit_id is ON DELETE CASCADE here (team_meeting_notes above uses SET
+-- org_unit_id is ON DELETE CASCADE here (team_meetings above uses SET
 -- NULL instead — deliberately different, verified by a local functional
 -- test). SET NULL would let deleting an org_unit collide with the
 -- all-teams partial unique index whenever that manager already has both a
@@ -1354,11 +1433,20 @@ create policy "direct_report_invites_all_own" on direct_report_invites
 create policy "direct_reports_select_own_as_ic" on direct_reports
   for select using (user_id = auth.uid());
 
--- team_meeting_notes — manager-scoped, same pattern as team_messages
-create policy "team_meeting_notes_all_own" on team_meeting_notes
+-- team_meetings — manager-scoped, same pattern as team_messages
+create policy "team_meetings_all_own" on team_meetings
   for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
--- team_callouts — manager-scoped, same pattern as team_messages/team_meeting_notes
+-- team_meeting_series — manager-scoped, same pattern as one_on_one_series
+create policy "team_meeting_series_all_own" on team_meeting_series
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
+-- team_meeting_agenda_items — flat manager_id, never a subquery into
+-- team_meetings; that is why manager_id is denormalized onto the row.
+create policy "team_meeting_agenda_items_all_own" on team_meeting_agenda_items
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
+-- team_callouts — manager-scoped, same pattern as team_messages/team_meetings
 create policy "team_callouts_all_own" on team_callouts
   for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
