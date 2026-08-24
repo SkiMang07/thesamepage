@@ -36,7 +36,7 @@ never all at once:
 
 ```
 one-on-ones.md      scheduling, recurrence, prep, the call, wrap-up, carry-forward
-team.md             /app/team — roster, goals, meeting notes, callouts, IC invites
+team.md             /app/team — roster, goals, meetings, callouts, IC invites
 mission-control.md  /app/dashboard — action brief, ranking, dispositions, rollback
 context-engine.md   document ingest, extraction, retrieval, the Brain
 scribe.md           conversational data entry, the agent loop, eval harness
@@ -48,6 +48,10 @@ capacity.md         supply model, off-days buffer, department rollup
 org-scoping.md      org_units, leader assignment, role-scoped rollups
 brand.md            Current & Carbon — colour roles, ink scale, status vocabulary, logo
 ```
+
+`docs/decisions/` holds one record per durable decision — the cross-subsystem,
+costly-to-reverse choices whose rationale would otherwise be relitigated. Read
+one when you are about to change what it decided.
 
 Pending work that is scoped but not built has its own doc:
 `docs/NOTES_INGESTION_SCOPING.md`. Shipped scoping docs live in

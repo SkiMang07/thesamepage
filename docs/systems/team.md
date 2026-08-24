@@ -188,12 +188,11 @@ multi-assignee model. The flag only decides whether a commitment also appears on
 the team-wide list. Resolving one reuses `PATCH /api/commitments/{id}` unchanged
 — the flag changes where it's listed, not how it resolves.
 
-**`direct_report_id` is optional (2026-08-24): a null one is the manager's.** A
-team meeting routinely produces work the manager owns, and there is no
-`direct_reports` row for the manager. The column was always nullable and RLS is
-a flat `owner_id = auth.uid()`; only the route and the list rendering assumed a
-person. A manager-owned team commitment has no report to derive a team from, so
-it shows under every team — same convention as a null `org_unit_id` row.
+**`direct_report_id` is optional: a null one is the manager's own** — see
+`docs/decisions/nullable-commitment-owner.md`, which any new commitments surface
+should read before joining on `direct_reports`. A manager-owned team commitment
+has no report to derive a team from, so it shows under every team — same
+convention as a null `org_unit_id` row.
 
 Commitments extracted from a meeting carry `source_type = 'team_meeting'` and
 `source_id` = the meeting, so each traces back to where it was made.
