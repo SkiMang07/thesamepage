@@ -5,6 +5,26 @@ deterministic Suggested focus, up to two quieter secondary priorities, and one
 factual progress or all-clear signal. The persistent sidebar owns wayfinding;
 Mission Control no longer duplicates it with a zone map.
 
+## Management runway
+
+The mature brief presents its ranked candidates as a selectable management
+runway: **Now**, **Next**, and **Watch**. The labels expose the existing rank as
+a suggested sequence without turning it into a mandatory task queue; the
+manager can select any candidate and act in a different order. Selection is
+presentation state only — it does not rerank candidates, write a disposition,
+or change an underlying source record.
+
+Only the selected candidate opens into the feature surface. Its deterministic
+evidence is visible before interaction, while `Why this?` expands the complete
+source, freshness, ranking basis, boundaries, and optional AI paraphrase. The
+exact-workflow CTA and Addressed / Snooze / Not relevant controls retain their
+existing event semantics.
+
+Below the runway, a compact conversation runway keeps the current 1:1 rhythm
+visible beside the factual truth signal. Recent recorded changes remain quieter
+supporting context below both. This hierarchy replaces the former peer-card
+composition; it does not change candidate eligibility, ranking, or coverage.
+
 Frontend: `frontend/app/app/dashboard/page.tsx` and
 `frontend/components/mission-control/ActionBrief.tsx`.
 Backend: `backend/routes/dashboard.py` and

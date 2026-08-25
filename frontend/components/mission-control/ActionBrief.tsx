@@ -12,7 +12,7 @@ import {
   reconcileMissionControlOutcomes,
   recordMissionControlEvents,
 } from "@/lib/api";
-import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, CARD, ELEVATED, META } from "@/lib/tokens";
+import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, CARD, ELEVATED, FEATURE_SURFACE, META } from "@/lib/tokens";
 import PageShell from "@/components/PageShell";
 
 type ImpressionMap = Record<string, string>;
@@ -84,13 +84,11 @@ function CandidateControls({
   candidate,
   impressionId,
   onDisposed,
-  compact = false,
 }: {
   brief: MissionControlBrief;
   candidate: MissionControlCandidate;
   impressionId?: string;
   onDisposed: (message: string) => void;
-  compact?: boolean;
 }) {
   const router = useRouter();
   const [whyOpen, setWhyOpen] = useState(false);
@@ -171,7 +169,7 @@ function CandidateControls({
   return (
     <>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={navigate} disabled={busy} className={compact ? BTN_SECONDARY : BTN_PRIMARY}>
+        <button type="button" onClick={navigate} disabled={busy} className={BTN_PRIMARY}>
           {candidate.action.label}
         </button>
         <button type="button" onClick={toggleWhy} aria-expanded={whyOpen} className={BTN_GHOST}>
@@ -231,75 +229,161 @@ function CandidateControls({
   );
 }
 
-function SuggestedFocus({ brief, candidate, impressionId, onDisposed }: { brief: MissionControlBrief; candidate: MissionControlCandidate; impressionId?: string; onDisposed: (message: string) => void }) {
-  return (
-    <section className={`${CARD} border-t-4 border-t-brand p-5`}>
-      <p className="text-xs font-semibold uppercase tracking-wide text-brand">Suggested focus</p>
-      <h2 className="mt-2 text-xl font-medium tracking-tight text-ink">{candidate.title}</h2>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-body">{candidate.explanation}</p>
-      <CandidateControls brief={brief} candidate={candidate} impressionId={impressionId} onDisposed={onDisposed} />
-    </section>
-  );
+const RUNWAY_STEPS = [
+  { label: "Now", detail: "Suggested first move" },
+  { label: "Next", detail: "Worth addressing next" },
+  { label: "Watch", detail: "Keep in view" },
+] as const;
+
+function candidateMeta(candidate: MissionControlCandidate) {
+  const evidence = candidate.evidence[0];
+  if (!evidence) return candidate.action.label;
+  return `${evidence.label} · ${evidence.freshness}`;
 }
 
-function TruthSignal({ brief }: { brief: MissionControlBrief }) {
-  return (
-    <aside className={`${CARD} flex min-h-48 flex-col justify-between p-5`}>
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">This week</p>
-      <div>
-        <h2 className="text-lg font-medium text-ink">{brief.truth_signal.title}</h2>
-        <p className="mt-2 text-sm leading-5 text-ink-secondary">{brief.truth_signal.detail}</p>
-      </div>
-    </aside>
-  );
-}
+function ManagementRunway({
+  brief,
+  candidates,
+  impressions,
+  selectedKey,
+  onSelect,
+  onDisposed,
+}: {
+  brief: MissionControlBrief;
+  candidates: MissionControlCandidate[];
+  impressions: ImpressionMap;
+  selectedKey: string;
+  onSelect: (candidateKey: string) => void;
+  onDisposed: (message: string) => void;
+}) {
+  const selected = candidates.find((candidate) => candidate.candidate_key === selectedKey) ?? candidates[0];
+  if (!selected) return null;
+  const selectedIndex = candidates.findIndex((candidate) => candidate.candidate_key === selected.candidate_key);
+  const selectedStep = RUNWAY_STEPS[selectedIndex] ?? RUNWAY_STEPS[RUNWAY_STEPS.length - 1];
 
-function SecondaryPriorities({ brief, impressions, onDisposed }: { brief: MissionControlBrief; impressions: ImpressionMap; onDisposed: (message: string) => void }) {
-  if (brief.secondary.length === 0) return null;
   return (
-    <section className={`${CARD} mt-5`}>
-      <div className="border-b border-divider px-5 py-4">
-        <h2 className="text-base font-medium text-ink">Also worth attention</h2>
-      </div>
-      <div className="divide-y divide-divider">
-        {brief.secondary.map((candidate) => (
-          <article key={candidate.candidate_key} className="px-5 py-4">
-            <h3 className="text-sm font-medium text-ink">{candidate.title}</h3>
-            <p className="mt-1 text-sm text-ink-secondary">{candidate.explanation}</p>
-            <CandidateControls brief={brief} candidate={candidate} impressionId={impressions[candidate.candidate_key]} onDisposed={onDisposed} compact />
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function Supporting({ brief }: { brief: MissionControlBrief }) {
-  return (
-    <div className="mt-5 grid gap-5 lg:grid-cols-2">
-      <section className={`${CARD} p-5`}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-medium text-ink">1:1 rhythm</h2>
-          <Link href="/app/1-1s" className="text-xs text-brand hover:text-brand-hover">View 1:1s →</Link>
+    <section aria-labelledby="management-runway-heading">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 id="management-runway-heading" className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Management runway</h2>
+          <p className="mt-1 text-xs text-ink-muted">Suggested sequence. You decide the order.</p>
         </div>
-        <div className="mt-3 divide-y divide-divider">
-          {brief.supporting.conversations.length ? brief.supporting.conversations.map((item) => (
-            <Link key={item.id} href={item.href} className="flex items-center justify-between gap-4 py-3 text-sm hover:text-brand">
-              <span className="text-ink-body">{item.title}</span><span className={META}>{item.meta}</span>
-            </Link>
-          )) : <p className="py-3 text-sm text-ink-secondary">No conversation records yet.</p>}
+        <p className="text-xs text-ink-muted">{candidates.length} signal{candidates.length === 1 ? "" : "s"} surfaced</p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(15rem,.68fr)_minmax(0,1.55fr)]">
+        <div className={`${CARD} p-2`} role="group" aria-label="Suggested management sequence">
+          {candidates.map((candidate, index) => {
+            const step = RUNWAY_STEPS[index] ?? RUNWAY_STEPS[RUNWAY_STEPS.length - 1];
+            const active = candidate.candidate_key === selected.candidate_key;
+            return (
+              <button
+                key={candidate.candidate_key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onSelect(candidate.candidate_key)}
+                className={`block w-full rounded-lg px-3 py-3 text-left transition ${
+                  active ? "bg-brand-tint" : "hover:bg-sunken"
+                } ${index > 0 ? "mt-1" : ""}`}
+              >
+                <span className={`flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide ${active ? "text-brand" : "text-ink-muted"}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] ${active ? "border-brand bg-brand text-on-brand" : "border-control bg-sunken text-ink-secondary"}`}>
+                    {index + 1}
+                  </span>
+                  {step.label} · {step.detail}
+                </span>
+                <span className={`mt-2 block text-sm font-medium leading-5 ${active ? "text-ink" : "text-ink-body"}`}>{candidate.title}</span>
+                <span className="mt-1 block text-xs leading-4 text-ink-muted">{candidateMeta(candidate)}</span>
+              </button>
+            );
+          })}
         </div>
-      </section>
-      <section className={`${CARD} p-5`}>
-        <h2 className="text-base font-medium text-ink">What has changed</h2>
-        <div className="mt-3 divide-y divide-divider">
-          {brief.supporting.changes.length ? brief.supporting.changes.map((item) => (
-            <div key={item.id} className="flex items-center justify-between gap-4 py-3 text-sm">
-              <div><p className="text-ink-body">{item.title}</p><p className={META}>{item.meta}</p></div>
-              <span className={META}>{item.freshness}</span>
+
+        <article className={`${FEATURE_SURFACE} p-5`} aria-live="polite">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand">{selectedStep.detail}</p>
+              <h2 className="mt-2 text-xl font-medium tracking-tight text-ink">{selected.title}</h2>
             </div>
-          )) : <p className="py-3 text-sm text-ink-secondary">No recent recorded changes.</p>}
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
+              {selectedIndex + 1}
+            </span>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-body">{selected.explanation}</p>
+
+          {selected.evidence.length > 0 && (
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="Recommendation evidence">
+              {selected.evidence.slice(0, 3).map((item) => (
+                <li key={`${item.code}:${item.observed_at ?? "none"}`} className="rounded-lg bg-sunken px-3 py-3">
+                  <p className="text-xs font-medium leading-5 text-ink">{item.label}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-ink-muted">{item.source} · {item.freshness}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <CandidateControls
+            key={selected.candidate_key}
+            brief={brief}
+            candidate={selected}
+            impressionId={impressions[selected.candidate_key]}
+            onDisposed={onDisposed}
+          />
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function conversationTone(meta: string) {
+  const normalized = meta.toLowerCase();
+  if (normalized.includes("due")) return "border-amber-500";
+  if (normalized.includes("prep") || normalized.includes("ready")) return "border-brand";
+  return "border-hairline";
+}
+
+function RunwaySupporting({ brief }: { brief: MissionControlBrief }) {
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(15rem,.6fr)]">
+        <section className={`${CARD} p-5`}>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-medium text-ink">Conversation runway</h2>
+            <Link href="/app/1-1s" className="text-xs text-brand hover:text-brand-hover">Open 1:1s →</Link>
+          </div>
+          {brief.supporting.conversations.length ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {brief.supporting.conversations.slice(0, 4).map((item) => (
+                <Link key={item.id} href={item.href} className={`border-t-2 pt-2 hover:text-brand ${conversationTone(item.meta)}`}>
+                  <span className="block text-sm font-medium text-ink-body">{item.title}</span>
+                  <span className="mt-1 block text-xs text-ink-muted">{item.meta}</span>
+                </Link>
+              ))}
+            </div>
+          ) : <p className="mt-3 text-sm text-ink-secondary">No conversation records yet.</p>}
+        </section>
+        <aside className={`${CARD} p-5`}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">This week</p>
+          <h2 className="mt-4 text-lg font-medium text-ink">{brief.truth_signal.title}</h2>
+          <p className="mt-2 text-sm leading-5 text-ink-secondary">{brief.truth_signal.detail}</p>
+        </aside>
+      </div>
+
+      <section className={`${CARD} p-5`}>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-medium text-ink">What has changed</h2>
+          <span className={META}>Recorded in TSP</span>
         </div>
+        {brief.supporting.changes.length ? (
+          <div className="mt-4 grid gap-x-5 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">
+            {brief.supporting.changes.slice(0, 4).map((item) => (
+              <div key={item.id} className="border-t border-divider pt-3">
+                <p className="text-sm font-medium text-ink-body">{item.title}</p>
+                <p className="mt-1 text-xs text-ink-muted">{item.meta} · {item.freshness}</p>
+              </div>
+            ))}
+          </div>
+        ) : <p className="mt-3 text-sm text-ink-secondary">No recent recorded changes.</p>}
       </section>
     </div>
   );
@@ -311,6 +395,11 @@ export function ActionBrief({ brief, onRefresh }: { brief: MissionControlBrief; 
   const [toast, setToast] = useState("");
   const [stale, setStale] = useState(() => Date.now() >= new Date(brief.stale_after).getTime());
   const candidates = useMemo(() => [brief.primary, ...brief.secondary].filter((item): item is MissionControlCandidate => !!item), [brief]);
+  const [selectedCandidateKey, setSelectedCandidateKey] = useState(brief.primary?.candidate_key ?? "");
+
+  useEffect(() => {
+    setSelectedCandidateKey(brief.primary?.candidate_key ?? "");
+  }, [brief.brief_id, brief.primary?.candidate_key]);
 
   useEffect(() => {
     const staleAt = new Date(brief.stale_after).getTime();
@@ -355,12 +444,12 @@ export function ActionBrief({ brief, onRefresh }: { brief: MissionControlBrief; 
   }
 
   return (
-    <PageShell maxWidth="7xl">
+    <PageShell maxWidth="8xl">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-ink">Mission Control</h1>
           <p className="mt-1 text-sm text-ink-secondary">
-            {brief.mode === "busy" ? "Several signals are competing. The most actionable one is first." : brief.mode === "early_use" || brief.mode === "empty" ? "Start with one useful management moment." : "Here’s a useful place to start."}
+            {brief.mode === "busy" ? "Your next management moves, sequenced by what is actionable now." : brief.mode === "early_use" || brief.mode === "empty" ? "Start with one useful management moment." : "A suggested sequence for what deserves your attention."}
           </p>
         </div>
         <button type="button" onClick={onRefresh} className="text-xs text-ink-muted hover:text-ink-secondary">Refresh</button>
@@ -384,13 +473,14 @@ export function ActionBrief({ brief, onRefresh }: { brief: MissionControlBrief; 
           <button type="button" onClick={openQuickAdd} className={`mt-4 ${BTN_PRIMARY}`}>Add a direct report</button>
         </section>
       ) : brief.primary ? (
-        <>
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(260px,.7fr)]">
-            <SuggestedFocus brief={brief} candidate={brief.primary} impressionId={impressions[brief.primary.candidate_key]} onDisposed={disposed} />
-            <TruthSignal brief={brief} />
-          </div>
-          <SecondaryPriorities brief={brief} impressions={impressions} onDisposed={disposed} />
-        </>
+        <ManagementRunway
+          brief={brief}
+          candidates={candidates}
+          impressions={impressions}
+          selectedKey={selectedCandidateKey}
+          onSelect={setSelectedCandidateKey}
+          onDisposed={disposed}
+        />
       ) : (
         <div>
           <section className={`${CARD} border-t-4 border-t-brand p-6`}>
@@ -420,18 +510,18 @@ export function ActionBrief({ brief, onRefresh }: { brief: MissionControlBrief; 
           </div>
         </section>
       )}
-      <Supporting brief={brief} />
+      <RunwaySupporting brief={brief} />
     </PageShell>
   );
 }
 
 export function ActionBriefLoading() {
   return (
-    <PageShell maxWidth="7xl" className="animate-pulse">
+    <PageShell maxWidth="8xl" className="animate-pulse">
       <div role="status" aria-label="Loading Mission Control">
         <div className="h-8 w-52 rounded bg-sunken" />
-        <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(260px,.7fr)]">
-          <div className="h-64 rounded-xl bg-surface" /><div className="h-64 rounded-xl bg-surface" />
+        <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(15rem,.68fr)_minmax(0,1.55fr)]">
+          <div className="h-72 rounded-xl bg-surface" /><div className="h-72 rounded-2xl bg-surface" />
         </div>
       </div>
     </PageShell>
