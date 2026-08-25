@@ -8,7 +8,9 @@ Backend: `routes/team.py`. Frontend: `frontend/app/app/team/page.tsx`, plus
 
 ## Page structure, top to bottom
 
-1. **Team dropdown** — which team you're looking at.
+1. **Team context switcher** — a compact header button opens the manager's led
+   teams plus the default All teams scope. The selected scope remains visible
+   without presenting the page like a form.
 2. **Now** — a factual attention brief beside the active team meeting. The
    meeting card makes the Plan → Run → Wrap up lifecycle visible, carries its
    agenda and logging actions, and keeps meeting history behind a disclosure.

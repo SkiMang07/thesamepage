@@ -42,10 +42,10 @@
 // than the rest of the app on purpose, Andrew's explicit call over the
 // safer close-to-today option.
 //
-// Session 45 (2026-08-19) — team dropdown. A manager/director who leads more
+// Session 45 (2026-08-19) — team switcher. A manager/director who leads more
 // than one org_unit had no way to tell which team they were looking at; the
 // page always showed every direct report combined. Now the header carries a
-// team-name + dropdown (options = getLedOrgUnits(), plus "All teams" as the
+// contextual team menu (options = getLedOrgUnits(), plus "All teams" as the
 // default, matching today's combined view). Selecting a team filters
 // everything on the page: roster, initiatives, goals, commitments, meeting
 // notes, and callouts. Roster/initiatives/goals/commitments filter
@@ -106,7 +106,7 @@
 // bare mt-8. The page keeps that shared entrance gap and one `space-y-10`
 // rhythm between its major operating sections.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   DirectReport,
@@ -152,8 +152,8 @@ import {
 import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWrapUpReview";
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
-import { SECTION_GAP } from "@/components/ZoneMap";
-import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, TEXTAREA, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
+import { Icon, SECTION_GAP } from "@/components/ZoneMap";
+import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, ELEVATED, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, TEXTAREA, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
@@ -355,6 +355,8 @@ export default function TeamPage() {
   // combined view, and the default) — see this file's header comment.
   const [ledOrgUnits, setLedOrgUnits] = useState<OrgUnit[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [teamMenuOpen, setTeamMenuOpen] = useState(false);
+  const teamMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     Promise.all([
@@ -390,6 +392,24 @@ export default function TeamPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!teamMenuOpen) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setTeamMenuOpen(false);
+    }
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (teamMenuRef.current && !teamMenuRef.current.contains(event.target as Node)) {
+        setTeamMenuOpen(false);
+      }
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+    };
+  }, [teamMenuOpen]);
 
   // Team-scoping (Session 45): everything below filters off data already on
   // the page — no re-fetch on team switch. direct_reports.org_unit_id is the
@@ -485,21 +505,64 @@ export default function TeamPage() {
   return (
     <PageShell maxWidth="8xl">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">{ledOrgUnits.length > 0 ? selectedTeamName : "Team"}</h1>
+        <h1 className="text-2xl font-semibold">Team</h1>
         {ledOrgUnits.length > 0 && (
-          <select
-            value={selectedTeamId ?? ""}
-            onChange={(e) => setSelectedTeamId(e.target.value || null)}
-            className={`${SELECT} w-44`}
-            aria-label="Select team"
-          >
-            <option value="">All teams</option>
-            {ledOrgUnits.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative" ref={teamMenuRef}>
+            <button
+              type="button"
+              onClick={() => setTeamMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={teamMenuOpen}
+              aria-controls="team-context-menu"
+              className="inline-flex h-9 max-w-64 items-center gap-2 rounded-lg border border-control bg-surface px-3 text-sm font-medium text-ink-body shadow-sm hover:border-ink-muted hover:bg-sunken hover:text-ink"
+            >
+              <Icon name="team" className="h-4 w-4 shrink-0 text-brand" />
+              <span className="truncate">{selectedTeamName}</span>
+              <Icon
+                name="chevron"
+                className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${teamMenuOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {teamMenuOpen && (
+              <div
+                id="team-context-menu"
+                role="menu"
+                aria-label="Switch team"
+                className={`absolute left-0 top-11 z-30 w-64 p-1.5 ${ELEVATED}`}
+              >
+                <p className="px-2.5 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                  Switch team
+                </p>
+                {[{ id: null, name: "All teams" }, ...ledOrgUnits.map((unit) => ({ id: unit.id, name: unit.name }))].map((team) => {
+                  const selected = team.id === selectedTeamId;
+                  return (
+                    <button
+                      key={team.id ?? "all"}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      onClick={() => {
+                        setSelectedTeamId(team.id);
+                        setTeamMenuOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm ${
+                        selected
+                          ? "bg-brand-tint font-medium text-brand"
+                          : "text-ink-body hover:bg-sunken hover:text-ink"
+                      }`}
+                    >
+                      <Icon name={team.id === null ? "map" : "team"} className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{team.name}</span>
+                      <span className={`shrink-0 text-sm ${selected ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
+                        ✓
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <p className="mt-1 text-sm text-ink-secondary">
