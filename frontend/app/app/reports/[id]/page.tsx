@@ -1,44 +1,19 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Person Page "Command Deck" rework (Session 50, 2026-08-21) — replaces the
-// old single-column wall of ~10 form-heavy sections with an identity band +
-// KPI strip + 3-column hub. See docs/SESSION_HISTORY.md and the
-// person_page_redesign project memory note for the full scoping/mockup-
-// review conversation; style vocabulary (KPI tiles, rounded-xl cards, status
-// border accents, avatar palette) borrowed from frontend/app/app/team/
-// page.tsx (Session 24).
+// Person Page "Relationship Desk" — the relationship and its next conversation
+// lead; work records support them instead of competing as dashboard tiles.
 //
 // Layout, top to bottom:
-//   1. Identity band (indigo) — avatar, name, rating pill, About note, role ·
-//      team subtitle, Log 1:1 / Review-or-Start 1:1 CTAs, a gear button
-//      that opens the admin-inputs drawer (1:1 cadence, capacity, time off —
-//      moved off the main page per Andrew's scoping call: configured
-//      rarely, doesn't need to compete with the things checked every week).
-//   2. KPI strip — last 1:1 (+ days to next), open commitments (+ overdue),
-//      goals on track, capacity available this week.
-//   3. Three columns:
-//      Col 1 "Conversation" — the Next-1:1 workspace: confirmed carry-forward,
-//        derived goal/development signals, and between-session captures gather
-//        automatically before the manager reviews sources and builds an agenda;
-//        then private Manager Notes.
-//      Col 2 "Work" — Goals, Initiatives (Projects), Recent 1:1 sessions.
-//      Col 3 "Person" — Open commitments, Assessment (ring), Development
-//        (plan/aspiration/opportunities/training — DevelopmentSection's
-//        non-notes half), Expectations (chips).
+//   1. Identity and relationship rhythm, with the normal Review/Start flow and
+//      a secondary Log a 1:1 path for meetings that happened without prep.
+//   2. Next conversation beside live follow-through, both always visible.
+//   3. Four explicit context modes: Work, Growth (including assessment and
+//      expectations), History, and Private notes.
 //
-// Session 56 white-space audit — this page's own mt-5/mt-6 top-level gaps
-// (already tighter than most other pages, no mt-8 anywhere in the main
-// flow) now use the shared SECTION_GAP token (components/ZoneMap.tsx) for
-// consistency with the rest of the app; column-internal spacing (space-y-5,
-// the various card dividers) is untouched.
-//
-// DevelopmentSection (Session 47-49) is kept as one component with all its
-// original state/handlers, but now takes a `section` prop and renders only
-// half its JSX per mount: "notes" (private manager notes, amber card, Col 1)
-// or "growth" (plan text/aspiration/opportunities/training, Col 3). Splitting
-// the render rather than the component avoids duplicating the bundle-mutate-
-// refetch logic across two components for one shared `bundle` prop.
+// Capture notes are temporary inputs to the next preparation. Private notes are
+// persistent, manager-only records and never flow into prep automatically.
+// Completed summaries and resolved commitments live in History.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState } from "react";
@@ -105,8 +80,7 @@ import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
 import {
-  HEX, FEATURE_SURFACE, BTN_PRIMARY, BTN_SECONDARY,
-  TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone,
+  HEX, FEATURE_SURFACE, BTN_PRIMARY, BTN_SECONDARY, BTN_GHOST,
 } from "@/lib/tokens";
 import { deriveOneOnOneSuggestions } from "@/lib/one-on-one-workspace";
 
@@ -131,7 +105,7 @@ const GOAL_STATUS_STYLES: Record<GoalStatus, string> = {
   active: "bg-sunken text-ink-secondary",
   on_track: "bg-teal-50 text-teal-700",
   at_risk: "bg-amber-50 text-amber-700",
-  completed: "bg-blue-50 text-blue-600",
+  completed: "bg-brand text-on-brand",
   cancelled: "bg-sunken text-ink-muted",
 };
 
@@ -223,7 +197,6 @@ export default function ReportDetailPage() {
   const [commitments, setCommitments] = useState<Commitment[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [showResolved, setShowResolved] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -259,7 +232,7 @@ export default function ReportDetailPage() {
   // Development (Session 47) — full inline CRUD here, same depth as
   // Capacity above, since this feature has no dedicated page of its own
   // (Andrew's scoping call: DR-detail-section-only placement). Session 50
-  // splits its render across Col 1 (manager notes) and Col 3 (growth).
+  // splits its render across the Private notes and Growth context modes.
   const [devBundle, setDevBundle] = useState<DevelopmentBundle | null>(null);
 
   // 1:1 cadence override (nav rework pass 2, Session 38) — same "blank
@@ -284,6 +257,7 @@ export default function ReportDetailPage() {
   const [newCapture, setNewCapture] = useState("");
   const [savingCapture, setSavingCapture] = useState(false);
   const [deletingCaptureId, setDeletingCaptureId] = useState<string | null>(null);
+  const [activeContext, setActiveContext] = useState<"work" | "growth" | "history" | "private">("history");
 
   // Clear page context when leaving this page so it doesn't bleed into
   // other pages that don't know which report was being viewed.
@@ -475,7 +449,6 @@ export default function ReportDetailPage() {
 
   const open = commitments.filter((c) => c.status === "open");
   const resolved = commitments.filter((c) => c.status !== "open");
-  const overdueCommitments = open.filter((c) => isOverdue(c.due_date));
   // Most-recent unfinished occurrence — scheduled or already prepped.
   const plannedSession = history.find((h) => h.status !== "completed");
   const lastCompleted = history.find((h) => h.status === "completed");
@@ -497,17 +470,6 @@ export default function ReportDetailPage() {
   const daysSinceLast = lastCompleted ? daysSince(lastCompleted.created_at) : null;
   const daysUntilNext = daysSinceLast != null ? resolvedCadence - daysSinceLast : null;
 
-  // KPI tile 3 — goals on track, same data-trust-aware tone logic as
-  // /app/team's KpiStrip (zero isn't colored as either success or danger
-  // blindly).
-  const scoredGoals = goals.filter((g) => g.status !== "cancelled");
-  const onTrackGoals = scoredGoals.filter((g) => g.status === "on_track").length;
-  const goalsTileValue = scoredGoals.length > 0 ? `${onTrackGoals}/${scoredGoals.length}` : "—";
-  const goalsTileTone: TileTone =
-    scoredGoals.length === 0 ? "neutral" : onTrackGoals === 0 ? "attention" : "brand";
-
-  // KPI tile 4 — this week's resolved available hours (supply only, same as
-  // /app/capacity).
   const capacityItem = capacityOverview.find((c) => c.direct_report_id === id);
 
   const activeProjects = projects.filter((p) => p.status === "active" || p.status === "on_track" || p.status === "at_risk");
@@ -519,12 +481,9 @@ export default function ReportDetailPage() {
 
   return (
     <PageShell maxWidth="7xl">
-      {/* Identity band */}
-      {/* Identity band — the one place on this page that earns a gradient.
-          It used to be blue-700 -> blue-800 -> carbon-900, which is exactly
-          the blue creep the palette README warns about: blue is Scribe's and
-          this band has nothing to do with AI. FEATURE_SURFACE is the single
-          deep teal-into-carbon gradient the system spends (lib/tokens.ts). */}
+      {/* Relationship header — identity, current rhythm, and the two legitimate
+          ways to record a 1:1. The gradient remains the page's one feature
+          surface; the dashboard-style KPI strip is deliberately gone. */}
       <div className={`${FEATURE_SURFACE} px-6 py-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
@@ -545,9 +504,33 @@ export default function ReportDetailPage() {
                 </p>
               )}
               {report.notes && <p className="mt-1 text-sm text-ink-muted">{report.notes}</p>}
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
+                <span>Last met <strong className="font-medium text-ink-body">{lastCompleted ? timeAgo(lastCompleted.created_at) : "not yet"}</strong></span>
+                <span>
+                  Next {plannedSession?.scheduled_at ? (
+                    <strong className="font-medium text-ink-body">{formatDate(plannedSession.scheduled_at)}</strong>
+                  ) : daysUntilNext != null ? (
+                    <strong className={daysUntilNext < 0 ? "font-medium text-amber-700" : "font-medium text-ink-body"}>
+                      {daysUntilNext > 0 ? `due in ${daysUntilNext}d` : daysUntilNext === 0 ? "due today" : `${Math.abs(daysUntilNext)}d overdue`}
+                    </strong>
+                  ) : (
+                    <strong className="font-medium text-ink-body">not scheduled</strong>
+                  )}
+                </span>
+                <span><strong className="font-medium text-ink-body">{open.length}</strong> open commitment{open.length === 1 ? "" : "s"}</span>
+                <span><strong className="font-medium text-ink-body">{capacityItem ? `${Math.round(capacityItem.available_hours)}h` : "—"}</strong> available this week</span>
+              </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+              title="Cadence, capacity & time off"
+              className={BTN_GHOST}
+            >
+              Settings
+            </button>
             <Link
               href={`/app/reports/${id}/log`}
               className={`${BTN_SECONDARY} px-4 py-2`}
@@ -564,70 +547,28 @@ export default function ReportDetailPage() {
             >
               {plannedSession?.status === "planned"
                 ? "Start 1:1 →"
-                : "Review next 1:1 →"}
+                : "Review & prepare →"}
             </Link>
-            <button
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Settings"
-              title="Cadence, capacity & time off"
-              className={`${BTN_SECONDARY} px-2.5 py-2.5`}
-            >
-              ⚙
-            </button>
           </div>
         </div>
       </div>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
-      {/* KPI strip */}
-      <div className={`${SECTION_GAP} grid grid-cols-2 gap-3 sm:grid-cols-4`}>
-        <div className={TILE}>
-          <p className={`${TILE_VALUE} ${TILE_TONE[daysUntilNext != null && daysUntilNext < 0 ? "attention" : "neutral"]}`}>
-            {daysSinceLast != null ? `${daysSinceLast}d` : "—"}
-          </p>
-          <p className={TILE_LABEL}>
-            {daysSinceLast == null
-              ? "No 1:1 logged yet"
-              : daysUntilNext! > 0
-                ? `Last 1:1 · next due in ${daysUntilNext}d`
-                : daysUntilNext === 0
-                  ? "Last 1:1 · next due today"
-                  : `Last 1:1 · ${Math.abs(daysUntilNext!)}d overdue`}
-          </p>
-        </div>
-        <div className={TILE}>
-          <p
-            className={`${TILE_VALUE} ${
-              TILE_TONE[overdueCommitments.length > 0 ? "attention" : "neutral"]
-            }`}
-          >
-            {open.length}
-          </p>
-          <p className={TILE_LABEL}>
-            Open commitment{open.length === 1 ? "" : "s"}
-            {overdueCommitments.length > 0 && ` · ${overdueCommitments.length} overdue`}
-          </p>
-        </div>
-        <div className={TILE}>
-          <p className={`${TILE_VALUE} ${TILE_TONE[goalsTileTone]}`}>{goalsTileValue}</p>
-          <p className={TILE_LABEL}>Goals on track</p>
-        </div>
-        <div className={TILE}>
-          <p className={`${TILE_VALUE} ${TILE_TONE.neutral}`}>
-            {capacityItem ? `${Math.round(capacityItem.available_hours)}h` : "—"}
-          </p>
-          <p className={TILE_LABEL}>Available this week</p>
-        </div>
-      </div>
-
-      {/* Three columns */}
-      <div className={`${SECTION_GAP} grid grid-cols-1 gap-5 lg:grid-cols-3`}>
-        {/* Col 1 — Conversation */}
-        <div className="space-y-5">
-          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Next 1:1</p>
+      {/* Relationship desk: next conversation + follow-through stay visible;
+          the lower context modes separate work, growth, history and private notes. */}
+      <div className={`${SECTION_GAP} grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,.85fr)]`}>
+        <div className="contents">
+          <section className="order-1 rounded-xl border border-hairline bg-surface px-5 py-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Next conversation</p>
+                <h2 className="mt-1 text-xl font-semibold text-ink">
+                  {plannedSession?.status === "planned"
+                    ? `Ready for ${plannedSession.scheduled_at ? formatDate(plannedSession.scheduled_at) : "the next 1:1"}`
+                    : `What is gathering for ${plannedSession?.scheduled_at ? formatDate(plannedSession.scheduled_at) : "the next 1:1"}`}
+                </h2>
+              </div>
               <Link
                 href={
                   plannedSession?.status === "planned"
@@ -638,7 +579,7 @@ export default function ReportDetailPage() {
               >
                 {plannedSession?.status === "planned"
                   ? "Edit prep →"
-                  : "Review next 1:1 →"}
+                  : "Review sources →"}
               </Link>
             </div>
             {plannedSession?.scheduled_at && (
@@ -651,6 +592,22 @@ export default function ReportDetailPage() {
             <p className="mt-1 text-xs text-ink-muted">
               Context gathers here automatically. Review it before the agenda is built.
             </p>
+            <ol className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-medium" aria-label="1:1 workflow">
+              <li className={`flex items-center gap-1.5 ${plannedSession?.status === "planned" ? "text-ink-muted" : "text-brand"}`}>
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${plannedSession?.status === "planned" ? "border-control bg-sunken" : "border-brand bg-brand-tint"}`}>1</span>
+                Review & prepare
+              </li>
+              <li aria-hidden="true" className="text-ink-faint">→</li>
+              <li className={`flex items-center gap-1.5 ${plannedSession?.status === "planned" ? "text-brand" : "text-ink-muted"}`}>
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${plannedSession?.status === "planned" ? "border-brand bg-brand-tint" : "border-control bg-sunken"}`}>2</span>
+                Start 1:1
+              </li>
+              <li aria-hidden="true" className="text-ink-faint">→</li>
+              <li className="flex items-center gap-1.5 text-ink-muted">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-control bg-sunken">3</span>
+                Wrap up & log
+              </li>
+            </ol>
 
             {(plannedSession?.carry_forward_items.length ?? 0) > 0 && (
               <div className="mt-4">
@@ -708,13 +665,13 @@ export default function ReportDetailPage() {
             )}
 
             <div className="mt-4 border-t border-divider pt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Add a note</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Keep for next time</p>
               <textarea
                 value={newCapture}
                 onChange={(e) => setNewCapture(e.target.value)}
                 rows={2}
                 placeholder="Anything worth remembering for the next 1:1..."
-                className="mt-2 w-full rounded-md border border-control px-3 py-2 text-sm"
+                className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink placeholder-ink-faint"
               />
               <div className="mt-2 flex justify-end">
                 <button
@@ -722,29 +679,30 @@ export default function ReportDetailPage() {
                   disabled={savingCapture || !newCapture.trim()}
                   className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-50"
                 >
-                  {savingCapture ? "Saving..." : "Save"}
+                  {savingCapture ? "Saving..." : "Keep note"}
                 </button>
               </div>
               <p className="mt-2 text-[11px] text-ink-muted">
                 Saved notes are included automatically when you review the next 1:1.
               </p>
             </div>
-          </div>
+          </section>
 
           {devBundle && (
-            <DevelopmentSection
-              section="notes"
-              directReportId={id}
-              reportName={report.name}
-              bundle={devBundle}
-              onRefresh={refreshDevBundle}
-            />
+            <div className={activeContext === "private" ? "order-5 lg:col-span-2" : "hidden"} role="tabpanel" id="context-private">
+              <DevelopmentSection
+                section="notes"
+                directReportId={id}
+                reportName={report.name}
+                bundle={devBundle}
+                onRefresh={refreshDevBundle}
+              />
+            </div>
           )}
         </div>
 
-        {/* Col 2 — Work */}
-        <div className="space-y-5">
-          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
+        <div className="contents">
+          <section className={activeContext === "work" ? "order-5 rounded-xl border border-hairline bg-surface px-4 py-4" : "hidden"} role="tabpanel" id="context-work">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Goals{goals.length > 0 && ` (${goals.length})`}
@@ -776,7 +734,7 @@ export default function ReportDetailPage() {
                       <div className="mt-1 flex items-center gap-2">
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
                           <div
-                            className={`h-full rounded-full ${g.status === "at_risk" ? "bg-amber-500" : g.status === "completed" ? "bg-blue-500" : "bg-brand"}`}
+                            className={`h-full rounded-full ${g.status === "at_risk" ? "bg-amber-500" : g.status === "completed" ? "bg-teal-800" : "bg-brand"}`}
                             style={{ width: `${g.progress}%` }}
                           />
                         </div>
@@ -787,9 +745,9 @@ export default function ReportDetailPage() {
                 ))}
               </ul>
             )}
-          </div>
+          </section>
 
-          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
+          <section className={activeContext === "work" ? "order-6 rounded-xl border border-hairline bg-surface px-4 py-4" : "hidden"}>
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Initiatives{projects.length > 0 && ` (${projects.length})`}
@@ -827,18 +785,21 @@ export default function ReportDetailPage() {
                   ))}
               </ul>
             )}
-          </div>
+          </section>
 
-          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Recent 1:1 sessions</p>
+          <section className={activeContext === "history" ? "order-5 rounded-xl border border-hairline bg-surface px-5 py-5 lg:col-span-2" : "hidden"} role="tabpanel" id="context-history">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">History</p><h2 className="mt-1 text-lg font-semibold text-ink">Past conversations</h2></div>
+              <p className="text-xs text-ink-muted">{completedHistory.length} completed 1:1{completedHistory.length === 1 ? "" : "s"} · {resolved.length} resolved commitment{resolved.length === 1 ? "" : "s"}</p>
+            </div>
             {completedHistory.length === 0 ? (
               <p className="mt-3 text-sm text-ink-muted">
                 No completed 1:1s yet. Once you log one with {report.name.split(" ")[0]}, it will show up here.
               </p>
             ) : (
               <ul className="mt-3 divide-y divide-divider">
-                {completedHistory.slice(0, 6).map((session) => (
-                  <li key={session.id} className="py-2.5">
+                {completedHistory.map((session) => (
+                  <li key={session.id} className="py-3">
                     <div className="flex items-center gap-2">
                       <p className="text-xs text-ink-muted">
                         {formatDate(session.scheduled_at || session.created_at)}
@@ -847,23 +808,33 @@ export default function ReportDetailPage() {
                         Completed
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-ink-body">{session.display_summary}</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink-body">{session.display_summary}</p>
                   </li>
                 ))}
               </ul>
             )}
-            {completedHistory.length > 6 && (
-              <p className="mt-2 text-xs text-ink-muted">+{completedHistory.length - 6} more in the full history.</p>
+            {resolved.length > 0 && (
+              <details className="mt-4 border-t border-divider pt-4">
+                <summary className="cursor-pointer text-sm font-medium text-ink-secondary">Resolved commitments ({resolved.length})</summary>
+                <ul className="mt-3 space-y-2">
+                  {resolved.map((commitment) => (
+                    <li key={commitment.id} className="flex items-start justify-between gap-3 text-sm text-ink-secondary">
+                      <span>{commitment.status === "done" ? "✓" : "—"} {commitment.description}</span>
+                      <button onClick={() => setStatus(commitment.id, "open")} disabled={updatingId === commitment.id} className="shrink-0 text-xs text-ink-muted hover:text-ink-body">Reopen</button>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             )}
-          </div>
+          </section>
         </div>
 
-        {/* Col 3 — Person */}
-        <div className="space-y-5">
-          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Open commitments{open.length > 0 && ` (${open.length})`}
-            </p>
+        <div className="contents">
+          <section className="order-2 rounded-xl border border-hairline bg-surface px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">What matters now</p>
+            <h2 className="mt-1 text-lg font-semibold text-ink">
+              Follow through{open.length > 0 && ` (${open.length})`}
+            </h2>
             {open.length > 0 && (
               <p className="mt-1 text-[11px] text-ink-muted">
                 Tracked until done or dropped and included in the next 1:1 automatically.
@@ -915,89 +886,100 @@ export default function ReportDetailPage() {
                 ))}
               </ul>
             )}
-            {resolved.length > 0 && (
-              <div className="mt-3">
-                <button onClick={() => setShowResolved((s) => !s)} className="text-xs text-ink-muted hover:underline">
-                  {showResolved ? "Hide" : "Show"} resolved ({resolved.length})
-                </button>
-                {showResolved && (
-                  <ul className="mt-2 space-y-1.5">
-                    {resolved.map((c) => (
-                      <li key={c.id} className="flex items-start gap-2 text-xs">
-                        <span className="mt-0.5 text-ink-muted">{c.status === "done" ? "✓" : "—"}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-ink-secondary line-through decoration-ink-faint">{c.description}</p>
-                        </div>
-                        <button
-                          onClick={() => setStatus(c.id, "open")}
-                          disabled={updatingId === c.id}
-                          className="shrink-0 text-ink-muted hover:text-ink-secondary"
-                        >
-                          Reopen
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+            <div className="mt-4 border-t border-divider pt-3">
+              <p className="text-xs font-medium text-ink-secondary">Work</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                {goals.length + activeProjects.length === 0
+                  ? "No goals or initiatives need attention."
+                  : `${goals.length} goal${goals.length === 1 ? "" : "s"} · ${activeProjects.length} active initiative${activeProjects.length === 1 ? "" : "s"}`}
+              </p>
+            </div>
+            <div className="mt-3 border-t border-divider pt-3">
+              <p className="text-xs font-medium text-ink-secondary">Growth direction</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                {devBundle?.development_plan.plan_text?.trim() ? "A development plan is in progress." : "No plan or aspiration has been added yet."}
+              </p>
+            </div>
+          </section>
+
+          <section className={activeContext === "growth" ? "order-5 grid gap-5 lg:col-span-2 lg:grid-cols-2" : "hidden"} role="tabpanel" id="context-growth">
+            <AssessmentCard scorecard={scorecard} reportId={id} hasExpectations={!!report.expectations} />
+
+            {devBundle && (
+              <DevelopmentSection
+                section="growth"
+                directReportId={id}
+                reportName={report.name}
+                bundle={devBundle}
+                onRefresh={refreshDevBundle}
+              />
             )}
-          </div>
 
-          <AssessmentCard scorecard={scorecard} reportId={id} hasExpectations={!!report.expectations} />
-
-          {devBundle && (
-            <DevelopmentSection
-              section="growth"
-              directReportId={id}
-              reportName={report.name}
-              bundle={devBundle}
-              onRefresh={refreshDevBundle}
-            />
-          )}
-
-          <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Expectations</p>
-            {report.expectations ? (
-              <>
-                <p className="mt-1.5 text-xs text-ink-secondary">
-                  {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
-                </p>
-                {report.expectations.metrics.length + report.expectations.skills.length + report.expectations.values.length === 0 ? (
-                  <p className="mt-3 text-sm text-ink-muted">
-                    No expectations configured for this role yet.{" "}
-                    <Link href="/app/settings?section=roles" className="underline hover:text-ink-secondary">
-                      Add them in Settings
-                    </Link>
-                    .
+            <div className="rounded-xl border border-hairline bg-surface px-4 py-4 lg:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Expectations</p>
+              {report.expectations ? (
+                <>
+                  <p className="mt-1.5 text-xs text-ink-secondary">
+                    {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
                   </p>
-                ) : (
-                  <div className="mt-3 space-y-2.5">
-                    <ExpectationChips label="Metrics" items={report.expectations.metrics} />
-                    <ExpectationChips label="Skills" items={report.expectations.skills} />
-                    <ExpectationChips label="Values" items={report.expectations.values} />
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="mt-2">
-                <p className="text-sm text-amber-700">No role assigned.</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <GroupedRoleSelect
-                    roleLevels={roleLevels}
-                    roleFamilies={roleFamilies}
-                    value=""
-                    onChange={assignRole}
-                    className="w-56 rounded-md border border-control px-2.5 py-1.5 text-xs disabled:opacity-50"
-                    placeholder={assigningRole ? "Assigning..." : "Assign a role…"}
-                  />
-                  {report.role_title && (
-                    <span className="text-xs text-ink-muted">was: &quot;{report.role_title}&quot;</span>
+                  {report.expectations.metrics.length + report.expectations.skills.length + report.expectations.values.length === 0 ? (
+                    <p className="mt-3 text-sm text-ink-muted">
+                      No expectations configured for this role yet.{" "}
+                      <Link href="/app/settings?section=roles" className="underline hover:text-ink-secondary">
+                        Add them in Settings
+                      </Link>
+                      .
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-2.5">
+                      <ExpectationChips label="Metrics" items={report.expectations.metrics} />
+                      <ExpectationChips label="Skills" items={report.expectations.skills} />
+                      <ExpectationChips label="Values" items={report.expectations.values} />
+                    </div>
                   )}
+                </>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm text-amber-700">No role assigned.</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <GroupedRoleSelect
+                      roleLevels={roleLevels}
+                      roleFamilies={roleFamilies}
+                      value=""
+                      onChange={assignRole}
+                      className="w-56 rounded-md border border-control px-2.5 py-1.5 text-xs disabled:opacity-50"
+                      placeholder={assigningRole ? "Assigning..." : "Assign a role…"}
+                    />
+                    {report.role_title && (
+                      <span className="text-xs text-ink-muted">was: &quot;{report.role_title}&quot;</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </section>
         </div>
+
+        <nav className="order-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-hairline pt-3 lg:col-span-2" role="tablist" aria-label="Person context">
+          {([
+            ["work", "Work"],
+            ["growth", "Growth"],
+            ["history", "History"],
+            ["private", "Private notes"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={activeContext === value}
+              aria-controls={`context-${value}`}
+              onClick={() => setActiveContext(value)}
+              className={`border-b-2 px-0.5 pb-2 text-sm font-medium transition-colors ${activeContext === value ? "border-brand text-brand" : "border-transparent text-ink-muted hover:text-ink-body"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
       </div>
 
       {settingsOpen && (
@@ -1354,12 +1336,10 @@ function SettingsDrawer({
 // opportunities (some traced back to a low assessment score via
 // source_kind/source_config_id), training, and a private manager-notes log.
 //
-// Session 50: split into two mounts via `section` — "notes" renders just
-// the private Manager Notes card (Col 1, next to the cockpit); "growth"
-// renders everything else (plan text, aspiration, opportunities, training —
-// Col 3). All state/handlers stay in this one component so the bundle-
-// mutate-refetch logic isn't duplicated; each mount simply returns a
-// different slice of the same JSX it always built.
+// Split into two mounts via `section`: "notes" renders the Private notes mode;
+// "growth" renders the plan, aspiration, opportunities, and training inside
+// Growth. State and handlers stay together so bundle mutation/refetch logic
+// is not duplicated.
 // ---------------------------------------------------------------------------
 
 const OPPORTUNITY_TYPE_LABELS: Record<OpportunityType, string> = {
@@ -1645,23 +1625,27 @@ function DevelopmentSection({
   }
 
   // -------------------------------------------------------------------------
-  // "notes" section — private manager notes, amber card, Col 1
+  // "notes" section — persistent manager-only notes. Privacy is a context,
+  // not an attention state, so this stays on the neutral surface vocabulary.
   // -------------------------------------------------------------------------
   if (section === "notes") {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50/40 px-4 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-          Manager notes{bundle.manager_notes.length > 0 && ` (${bundle.manager_notes.length})`}
+      <div className="rounded-xl border border-hairline bg-surface px-5 py-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Private notes{bundle.manager_notes.length > 0 && ` (${bundle.manager_notes.length})`}
         </p>
-        <p className="mt-0.5 text-xs text-amber-700/80">Private — not shared with {reportName.split(" ")[0]}.</p>
+        <h2 className="mt-1 text-lg font-semibold text-ink">Your manager notebook</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Only you can see these. They stay on {reportName.split(" ")[0]}&apos;s page and are not automatically included in the next 1:1.
+        </p>
         {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
 
         {bundle.manager_notes.length === 0 ? (
-          <p className="mt-3 text-sm text-amber-700/70">No notes yet.</p>
+          <p className="mt-4 text-sm text-ink-muted">No private notes yet.</p>
         ) : (
           <ul className="mt-3 space-y-2 max-h-56 overflow-y-auto pr-1">
             {bundle.manager_notes.map((n) => (
-              <li key={n.id} className="rounded-lg border border-amber-200/70 bg-white/60 px-3 py-2">
+              <li key={n.id} className="rounded-lg border border-divider bg-sunken px-3 py-2">
                 <p className="text-sm text-ink-body">{n.content}</p>
                 <p className="mt-0.5 text-xs text-ink-muted">{formatDate(n.created_at)}</p>
               </li>
@@ -1674,8 +1658,8 @@ function DevelopmentSection({
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             rows={2}
-            placeholder="Add a private note about this person's growth..."
-            className="w-full rounded-md border border-amber-200 bg-surface px-3 py-2 text-sm"
+            placeholder="Write a private note..."
+            className="w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink placeholder-ink-faint"
           />
           <div className="mt-2 flex justify-end gap-2">
             <button
@@ -1689,9 +1673,9 @@ function DevelopmentSection({
             <button
               type="submit"
               disabled={addingNote}
-              className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-on-attention hover:bg-amber-400 disabled:opacity-50"
+              className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand hover:bg-brand-hover disabled:opacity-50"
             >
-              {addingNote ? "Adding..." : "Add"}
+              {addingNote ? "Saving..." : "Save private note"}
             </button>
           </div>
         </form>
@@ -1700,7 +1684,7 @@ function DevelopmentSection({
   }
 
   // -------------------------------------------------------------------------
-  // "growth" section — plan text, aspiration, opportunities, training, Col 3
+  // "growth" section — plan text, aspiration, opportunities, and training
   // -------------------------------------------------------------------------
   return (
     <div className="rounded-xl border border-hairline bg-surface px-4 py-4">

@@ -20,6 +20,10 @@ dedicated top-level page.
 **`plan_text` and `dev_plan_manager_notes` are genuinely separate concepts and
 stay on separate fields and surfaces.** Manager notes had been accidentally
 absorbing the AI assist meant for the plan itself; don't merge them back.
+On the person page they live in the explicit **Private notes** context, separate
+from Growth and from the temporary **Keep for next time** capture that feeds the
+next 1:1. Private notes persist on the person, are visible only to the manager,
+and are never included in 1:1 preparation automatically.
 
 ## Two AI operations, deliberately different shapes
 
