@@ -91,19 +91,23 @@
 //   - Extracted commitments may be the manager's own (null
 //     direct_report_id), which is why the owner picker offers "You".
 //
+// 2026-08-24 evolutionary alignment — the KPI-first structure above is now
+// superseded. The page leads with factual attention beside the active meeting,
+// keeps commitments continuously visible, collapses healthy work behind an
+// explicit disclosure, groups callouts + development as Team context, and
+// makes the Relationship Desk the roster's primary person destination. The
+// underlying meeting, commitment, callout, development, update, and invite
+// workflows are unchanged.
+//
 // Session 56 white-space audit — widened to PageShell's new `8xl` tier
 // (this is a wide multi-section page, one of the ones the audit flagged as
 // most starved for width on a wide monitor) and the entrance gap (subtitle
 // -> first section) now uses the shared SECTION_GAP token instead of a
-// bare mt-8. The page's own internal space-y-10 between its 5 major
-// sections (KPI strip / this week's focus / meetings / development /
-// roster) is left as-is — that's already one consistent value, not the
-// per-block drift the audit was about, and wasn't part of the approved
-// comparison canvas.
+// bare mt-8. The page keeps that shared entrance gap and one `space-y-10`
+// rhythm between its major operating sections.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { averageProgress } from "@/components/CheckInPanel";
 import {
   DirectReport,
   OrgUnit,
@@ -149,14 +153,14 @@ import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWra
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
-import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, HEX, FEATURE_SURFACE, EYEBROW, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, TEXTAREA, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
+import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, TEXTAREA, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
 
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-sunken text-ink-secondary",
   on_track: "bg-teal-50 text-teal-700",
   at_risk: "bg-amber-50 text-amber-700",
-  completed: "bg-blue-50 text-blue-600",
+  completed: "bg-brand text-on-brand",
   cancelled: "bg-sunken text-ink-muted",
 };
 
@@ -175,7 +179,7 @@ const STATUS_BORDER: Record<string, string> = {
   active: "border-control",
   on_track: "border-brand",
   at_risk: "border-amber-500",
-  completed: "border-blue-300",
+  completed: "border-teal-800",
   cancelled: "border-hairline",
 };
 
@@ -247,14 +251,6 @@ function addDaysStr(dateStr: string, days: number) {
   return localDateStr(dt);
 }
 
-function daysBetweenTodayAnd(dateStr: string) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const target = new Date(y, m - 1, d);
-  const today = new Date();
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  return Math.round((target.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24));
-}
-
 function formatMeetingDate(dateStr: string) {
   const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", {
@@ -270,8 +266,8 @@ function snippet(text: string, max = 110) {
 }
 
 // The meeting the page is "on": the soonest one that hasn't been logged.
-// Shared by the KPI strip and the Meetings panel so both answer the question
-// the same way. Note what it does NOT do — it never looks at whether the date
+// Shared by the attention brief and the Meetings panel so both answer the
+// question the same way. Note what it does NOT do — it never looks at whether the date
 // has passed. Logging is what closes a meeting, so an unlogged meeting from
 // last Monday stays here (as "needs logging") instead of vanishing, and a
 // meeting logged at 3pm today drops out immediately instead of sitting in the
@@ -494,7 +490,7 @@ export default function TeamPage() {
           <select
             value={selectedTeamId ?? ""}
             onChange={(e) => setSelectedTeamId(e.target.value || null)}
-            className="rounded-md border border-control bg-surface px-2 py-1 text-sm text-ink-body"
+            className={`${SELECT} w-44`}
             aria-label="Select team"
           >
             <option value="">All teams</option>
@@ -507,8 +503,7 @@ export default function TeamPage() {
         )}
       </div>
       <p className="mt-1 text-sm text-ink-secondary">
-        Everything your team is working on, how goals and commitments are tracking, and a shared space
-        for meetings — this week&apos;s must-knows included.
+        What this team is moving, and where you need to help.
       </p>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
@@ -517,59 +512,65 @@ export default function TeamPage() {
         <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <div className={`${SECTION_GAP} space-y-10`}>
-          <KpiStrip
-            goals={visibleGoals}
-            initiatives={visibleInitiatives}
-            commitments={visibleCommitments}
-            meetings={visibleMeetings}
-          />
-
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
-              This week&apos;s focus
+          <section id="team-now" aria-labelledby="team-now-heading">
+            <h2 id="team-now-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              Now
             </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <InitiativesCard initiatives={visibleInitiatives} members={visibleMembers} selectedTeamId={selectedTeamId} />
-              <GoalsCard goals={visibleGoals} selectedTeamId={selectedTeamId} />
-              <CommitmentsCard
-                members={visibleMembers}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(20rem,.85fr)_minmax(0,1.5fr)]">
+              <TeamAttentionBrief
+                goals={visibleGoals}
+                initiatives={visibleInitiatives}
                 commitments={visibleCommitments}
-                setCommitments={setCommitments}
-              />
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
-              Meetings
-            </h2>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.3fr)]">
-              <CalloutsPanel
-                callout={activeCallout}
-                scopeLabel={selectedTeamName}
-                onSaved={upsertCallout}
+                meetings={visibleMeetings}
               />
               <MeetingsPanel
                 meetings={visibleMeetings}
                 setMeetings={setMeetings}
                 members={visibleMembers}
                 orgUnitId={selectedTeamId}
+                orgUnits={orgUnits}
               />
             </div>
-          </div>
+          </section>
 
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
-              Development
+          <section id="team-follow-through" aria-labelledby="team-follow-through-heading">
+            <h2 id="team-follow-through-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              Live follow-through
             </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <CommitmentsCard
+              members={visibleMembers}
+              commitments={visibleCommitments}
+              setCommitments={setCommitments}
+            />
+          </section>
+
+          <section id="team-operating-work" aria-labelledby="team-operating-work-heading">
+            <h2 id="team-operating-work-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              Operating work
+            </h2>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <InitiativesCard initiatives={visibleInitiatives} selectedTeamId={selectedTeamId} />
+              <GoalsCard goals={visibleGoals} selectedTeamId={selectedTeamId} />
+            </div>
+          </section>
+
+          <section id="team-context" aria-labelledby="team-context-heading">
+            <h2 id="team-context-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              Team context
+            </h2>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <CalloutsPanel
+                callout={activeCallout}
+                scopeLabel={selectedTeamName}
+                onSaved={upsertCallout}
+              />
               <DevFocusPanel
                 devFocus={activeDevFocus}
                 scopeLabel={selectedTeamName}
                 onSaved={upsertDevFocus}
               />
             </div>
-          </div>
+          </section>
 
           <RosterRow
             members={visibleMembers}
@@ -587,10 +588,11 @@ export default function TeamPage() {
 }
 
 // ---------------------------------------------------------------------------
-// KPI strip
+// Team attention brief — a factual projection of the current records, not a
+// second Mission Control and never a synthesized team-health score.
 // ---------------------------------------------------------------------------
 
-function KpiStrip({
+function TeamAttentionBrief({
   goals,
   initiatives,
   commitments,
@@ -601,204 +603,221 @@ function KpiStrip({
   commitments: TeamCommitment[];
   meetings: TeamMeeting[];
 }) {
-  const scoredGoals = goals.filter((g) => g.status !== "cancelled");
-  const onTrackGoals = scoredGoals.filter((g) => g.status === "on_track").length;
-  const goalsLabel = scoredGoals.length > 0 ? `${onTrackGoals}/${scoredGoals.length}` : "—";
-  // Data-trust fix (2026-08-12 review, spec section 8 #2): this tile used a
-  // fixed green gradient regardless of value, so "0/5 on track" rendered as
-  // a success color — zero is not success. Amber once there's real signal
-  // and nothing is on track yet; gray when there's nothing to score at all.
-  const goalsTileTone =
-    scoredGoals.length === 0
-      ? "neutral"
-      : onTrackGoals === 0
-        ? "attention"
-        : "brand";
-
   const today = localDateStr();
   const weekOut = addDaysStr(today, 7);
-  const dueThisWeek = commitments.filter(
-    (c) => c.status === "open" && c.due_date && c.due_date >= today && c.due_date <= weekOut
+  const openCommitments = commitments.filter((c) => c.status === "open");
+  const overdue = openCommitments.filter((c) => c.due_date && c.due_date < today).length;
+  const dueThisWeek = openCommitments.filter(
+    (c) => c.due_date && c.due_date >= today && c.due_date <= weekOut
   ).length;
-
-  // Reads the same open-meeting rule as the panel. An unlogged meeting whose
-  // date has passed reports as needing a write-up rather than as a negative
-  // countdown.
   const nextMeeting = deriveNextMeeting(meetings);
-  const meetingDays =
-    nextMeeting?.scheduled_at != null
-      ? daysBetweenTodayAnd(isoToDateStr(nextMeeting.scheduled_at))
-      : null;
-  const needsLog = nextMeeting?.status === "needs_log";
-  const meetingLabel = needsLog ? "—" : meetingDays != null ? `${Math.max(meetingDays, 0)}d` : "—";
-  const meetingSubLabel = needsLog
-    ? "Meeting needs logging"
-    : nextMeeting == null
-      ? "No meeting planned"
-      : meetingDays == null
-        ? "Next meeting needs a date"
-        : "Until next meeting";
+  const atRiskGoals = goals.filter((g) => g.status === "at_risk").length;
+  const atRiskInitiatives = initiatives.filter((p) => p.status === "at_risk").length;
 
-  const tiles: { value: string; label: string; tone: TileTone }[] = [
-    { value: goalsLabel, label: "Goals on track", tone: goalsTileTone },
-    // Both of these were blue purely so the row had four colours in it —
-    // blue is Scribe's and a KPI is not AI. Neither is a status: a count of
-    // initiatives and a countdown to a meeting are just numbers.
-    { value: String(initiatives.length), label: "Active initiatives", tone: "neutral" },
-    { value: String(dueThisWeek), label: "Commitments due this week", tone: dueThisWeek > 0 ? "attention" : "neutral" },
-    { value: meetingLabel, label: meetingSubLabel, tone: needsLog ? "attention" : "neutral" },
-  ];
+  const signals: { key: string; title: string; detail: string; href: string }[] = [];
+
+  if (nextMeeting?.status === "needs_log") {
+    signals.push({
+      key: "meeting-needs-log",
+      title: "Team meeting needs logging",
+      detail: "Review what happened, confirm follow-through, and carry unresolved agenda items forward.",
+      href: "#team-meeting",
+    });
+  } else if (nextMeeting && !nextMeeting.scheduled_at) {
+    signals.push({
+      key: "meeting-needs-date",
+      title: "Next meeting needs a date",
+      detail: "Carried agenda items are safe, but the next occurrence is not scheduled yet.",
+      href: "#team-meeting",
+    });
+  }
+
+  if (overdue > 0 || dueThisWeek > 0) {
+    const dueDetail = [
+      overdue > 0 ? `${overdue} overdue` : null,
+      dueThisWeek > 0 ? `${dueThisWeek} due within 7 days` : null,
+    ].filter(Boolean).join(" · ");
+    signals.push({
+      key: "commitments",
+      title: `${overdue + dueThisWeek} commitment${overdue + dueThisWeek === 1 ? "" : "s"} need follow-through`,
+      detail: dueDetail,
+      href: "#team-follow-through",
+    });
+  }
+
+  if (atRiskGoals > 0 || atRiskInitiatives > 0) {
+    const workDetail = [
+      atRiskInitiatives > 0 ? `${atRiskInitiatives} initiative${atRiskInitiatives === 1 ? "" : "s"}` : null,
+      atRiskGoals > 0 ? `${atRiskGoals} goal${atRiskGoals === 1 ? "" : "s"}` : null,
+    ].filter(Boolean).join(" · ");
+    signals.push({
+      key: "at-risk-work",
+      title: "Work is marked at risk",
+      detail: workDetail,
+      href: "#team-operating-work",
+    });
+  }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {tiles.map((t) => (
-        <div key={t.label} className={TILE}>
-          <p className={`${TILE_VALUE} ${TILE_TONE[t.tone]}`}>{t.value}</p>
-          <p className={TILE_LABEL}>{t.label}</p>
+    <div className={`rounded-xl border px-5 py-4 ${signals.length > 0 ? "border-amber-500/40 bg-amber-50/70" : "border-teal-800/50 bg-brand-tint/50"}`}>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${signals.length > 0 ? "text-amber-700" : "text-brand"}`}>
+        {signals.length > 0 ? "Needs you now" : "Current records"}
+      </p>
+      {signals.length === 0 ? (
+        <div className="mt-3">
+          <p className="text-sm font-medium text-ink-body">Nothing here currently needs intervention.</p>
+          <p className="mt-1 text-xs leading-5 text-ink-muted">
+            This reflects meeting state, dated commitments, and work explicitly marked at risk—not a score for the team.
+          </p>
         </div>
-      ))}
+      ) : (
+        <ul className="mt-2 divide-y divide-amber-500/20">
+          {signals.map((signal) => (
+            <li key={signal.key} className="py-3 first:pt-1 last:pb-0">
+              <a href={signal.href} className="group flex items-start gap-3">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-ink-body group-hover:text-ink">{signal.title}</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-ink-muted">{signal.detail}</span>
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// This week's focus row — Initiatives / Goals / Commitments
+// Operating work — exceptions first, with healthy/neutral inventory available
+// on demand rather than competing with the work that needs intervention.
 // ---------------------------------------------------------------------------
 
 function InitiativesCard({
   initiatives,
-  members,
   selectedTeamId,
 }: {
   initiatives: Project[];
-  members: TeamMember[];
   selectedTeamId: string | null;
 }) {
   const sorted = [...initiatives].sort((a, b) => {
+    if (a.status === "at_risk" && b.status !== "at_risk") return -1;
+    if (b.status === "at_risk" && a.status !== "at_risk") return 1;
+    if (!a.due_date && !b.due_date) return 0;
     if (!a.due_date) return 1;
     if (!b.due_date) return -1;
     return a.due_date < b.due_date ? -1 : 1;
   });
+  const needsAttention = sorted.filter((p) => p.status === "at_risk");
+  const other = sorted.filter((p) => p.status !== "at_risk");
+
+  function renderInitiative(p: Project) {
+    const inherited = selectedTeamId != null && p.org_unit_id !== selectedTeamId && p.org_unit_name;
+    return (
+      <li key={p.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[p.status]}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm text-ink-body">{p.title}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
+            {STATUS_LABELS[p.status]}
+          </span>
+        </div>
+        <p className="text-xs text-ink-muted">
+          {p.direct_report_name ?? "You"}
+          {p.due_date ? ` · Due ${formatDate(p.due_date)}` : ""}
+          {inherited ? ` · From ${p.org_unit_name}` : ""}
+        </p>
+      </li>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Initiatives</p>
-        {initiatives.length > 0 && (
-          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-            {initiatives.length} active
-          </span>
-        )}
+        <Link href="/app/projects" className="text-xs text-ink-muted hover:text-ink-secondary">Manage →</Link>
       </div>
       {sorted.length === 0 ? (
         <p className="text-sm text-ink-muted">No active initiatives.</p>
       ) : (
-        <ul className="space-y-2.5">
-          {sorted.map((p) => {
-            // Session 46: a project whose org_unit_id isn't the exact
-            // selected team is here via hierarchy (inherited from a parent
-            // department) — name the source so it doesn't read as "this
-            // team's own" work.
-            const inherited = selectedTeamId != null && p.org_unit_id !== selectedTeamId && p.org_unit_name;
-            return (
-              <li key={p.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[p.status]}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm text-ink-body">{p.title}</span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
-                    {STATUS_LABELS[p.status]}
-                  </span>
-                </div>
-                <p className="text-xs text-ink-muted">
-                  {p.direct_report_name ?? "You"}
-                  {p.due_date ? ` · Due ${formatDate(p.due_date)}` : ""}
-                  {inherited ? ` · From ${p.org_unit_name}` : ""}
-                </p>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {needsAttention.length > 0 ? (
+            <ul className="space-y-2.5">{needsAttention.map(renderInitiative)}</ul>
+          ) : (
+            <p className="text-sm text-ink-muted">No initiatives are marked at risk.</p>
+          )}
+          {other.length > 0 && (
+            <details className="mt-3 border-t border-divider pt-3">
+              <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
+                Show {other.length} other initiative{other.length === 1 ? "" : "s"}
+              </summary>
+              <ul className="mt-3 space-y-2.5">{other.map(renderInitiative)}</ul>
+            </details>
+          )}
+        </>
       )}
-      <Link href="/app/projects" className="mt-3 inline-block text-xs text-ink-secondary underline hover:text-ink-body">
-        Manage projects
-      </Link>
     </div>
   );
 }
 
 function GoalsCard({ goals, selectedTeamId }: { goals: TeamGoal[]; selectedTeamId: string | null }) {
-  const scored = goals.filter((g) => g.status !== "cancelled");
-  // Data-trust fix (2026-08-12 review, spec section 8 #3): this ring used to
-  // compute "% of goals with status on_track" — a status count, not actual
-  // progress — so it could read 0% while Mission Control showed real
-  // per-goal check-in progress (e.g. 25%/10%) for the very same goals.
-  // averageProgress() reads the same `progress` field both surfaces share
-  // (see CheckInPanel.tsx). null (nobody's checked in yet) renders as an
-  // honest "–" rather than a misleading 0%.
-  const avgProgress = averageProgress(scored);
-  const pct = avgProgress ?? 0;
-  const dash = `${pct}, 100`;
-  const sorted = [...goals].sort((a, b) => (a.level === b.level ? 0 : a.level === "company" ? -1 : 1));
+  const sorted = [...goals].sort((a, b) => {
+    if (a.status === "at_risk" && b.status !== "at_risk") return -1;
+    if (b.status === "at_risk" && a.status !== "at_risk") return 1;
+    return a.level === b.level ? 0 : a.level === "company" ? -1 : 1;
+  });
+  const needsAttention = sorted.filter((g) => g.status === "at_risk");
+  const other = sorted.filter((g) => g.status !== "at_risk");
+
+  function renderGoal(g: TeamGoal) {
+    const sourceLabel =
+      selectedTeamId == null || g.org_unit_id === selectedTeamId
+        ? null
+        : g.level === "company"
+          ? "Company"
+          : g.org_unit_name;
+    return (
+      <li key={g.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[g.status]}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm text-ink-body" title={g.title}>{g.title}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
+            {STATUS_LABELS[g.status]}
+          </span>
+        </div>
+        <p className="text-xs text-ink-muted">
+          {sourceLabel ?? (g.level === "company" ? "Company" : "Team")}
+          {g.due_date ? ` · Due ${formatDate(g.due_date)}` : ""}
+          {g.progress != null ? ` · ${g.progress}%` : ""}
+        </p>
+      </li>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">Goal progress</p>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Goals</p>
+        <Link href="/app/goals" className="text-xs text-ink-muted hover:text-ink-secondary">Manage →</Link>
+      </div>
       {goals.length === 0 ? (
         <p className="text-sm text-ink-muted">No company or team goals yet.</p>
       ) : (
-        <div className="flex items-start gap-4">
-          <svg width="52" height="52" viewBox="0 0 36 36" className="shrink-0">
-            <path
-              d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
-              fill="none"
-              stroke={HEX.track}
-              strokeWidth="3"
-            />
-            {avgProgress != null && (
-              <path
-                d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
-                fill="none"
-                stroke={HEX.brand}
-                strokeWidth="3"
-                strokeDasharray={dash}
-                strokeLinecap="round"
-              />
-            )}
-            <text x="18" y="21" textAnchor="middle" fontSize="9" fill={HEX.ink} fontWeight="600">
-              {avgProgress != null ? `${pct}%` : "–"}
-            </text>
-          </svg>
-          <ul className="min-w-0 flex-1 space-y-1.5">
-            {sorted.map((g) => {
-              // Session 46: name where an inherited goal comes from —
-              // company-wide, or a parent department — so it doesn't read
-              // as this team's own goal when it's really cascading down.
-              const sourceLabel =
-                selectedTeamId == null || g.org_unit_id === selectedTeamId
-                  ? null
-                  : g.level === "company"
-                    ? "Company"
-                    : g.org_unit_name;
-              return (
-                <li key={g.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="min-w-0 truncate text-ink-body" title={g.title}>
-                    {g.title}
-                    {sourceLabel && <span className="text-ink-muted"> · {sourceLabel}</span>}
-                  </span>
-                  <span
-                    className={`shrink-0 h-2 w-2 rounded-full ${
-                      g.status === "on_track" ? "bg-brand" : g.status === "at_risk" ? "bg-amber-500" : "bg-carbon-300"
-                    }`}
-                    title={STATUS_LABELS[g.status]}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <>
+          {needsAttention.length > 0 ? (
+            <ul className="space-y-2.5">{needsAttention.map(renderGoal)}</ul>
+          ) : (
+            <p className="text-sm text-ink-muted">No goals are marked at risk.</p>
+          )}
+          {other.length > 0 && (
+            <details className="mt-3 border-t border-divider pt-3">
+              <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
+                Show {other.length} other goal{other.length === 1 ? "" : "s"}
+              </summary>
+              <ul className="mt-3 space-y-2.5">{other.map(renderGoal)}</ul>
+            </details>
+          )}
+        </>
       )}
-      <Link href="/app/goals" className="mt-3 inline-block text-xs text-ink-secondary underline hover:text-ink-body">
-        Manage goals
-      </Link>
     </div>
   );
 }
@@ -820,7 +839,16 @@ function CommitmentsCard({
   const [error, setError] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
 
-  const open = commitments.filter((c) => c.status === "open");
+  const today = localDateStr();
+  const weekOut = addDaysStr(today, 7);
+  const open = commitments
+    .filter((c) => c.status === "open")
+    .sort((a, b) => {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    });
 
   async function submit() {
     if (!description.trim() || saving) return;
@@ -874,7 +902,7 @@ function CommitmentsCard({
           <select
             value={reportId}
             onChange={(e) => setReportId(e.target.value)}
-            className="w-full rounded-md border border-control px-2 py-1.5 text-sm"
+            className={`${SELECT} w-full`}
           >
             {/* "You" is a real owner, not a missing one — a lot of what a team
                 meeting produces is the manager's own work. */}
@@ -890,14 +918,14 @@ function CommitmentsCard({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-md border border-control px-3 py-2 text-sm"
+            className={`${TEXTAREA} w-full text-sm`}
           />
           <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Due date (optional)</label>
           <input
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full rounded-md border border-control px-3 py-1.5 text-sm"
+            className={`${INPUT} w-full`}
           />
           {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end">
@@ -916,30 +944,34 @@ function CommitmentsCard({
         <p className="mt-3 text-sm text-ink-muted">No open team commitments.</p>
       ) : (
         <ul className="mt-3 space-y-2">
-          {open.map((c) => (
-            <li
-              key={c.id}
-              className={`flex items-center justify-between gap-2 border-l-4 py-1 pl-2.5 ${borderColor(
-                c.direct_report_id,
-                members
-              )}`}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm text-ink-body">{c.description}</p>
-                <p className="text-xs text-ink-muted">
-                  {c.direct_report_name ?? "You"}
-                  {c.due_date ? ` · Due ${formatDate(c.due_date)}` : ""}
-                </p>
-              </div>
-              <button
-                onClick={() => markDone(c.id)}
-                disabled={completingId === c.id}
-                className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:opacity-50"
+          {open.map((c) => {
+            const railColor = c.due_date && c.due_date <= weekOut
+              ? "border-amber-500"
+              : borderColor(c.direct_report_id, members);
+            return (
+              <li
+                key={c.id}
+                className={`flex items-center justify-between gap-2 border-l-4 py-1 pl-2.5 ${railColor}`}
               >
-                {completingId === c.id ? "Saving..." : "Done"}
-              </button>
-            </li>
-          ))}
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-ink-body">{c.description}</p>
+                  <p className="text-xs text-ink-muted">
+                    {c.direct_report_name ?? "You"}
+                    {c.due_date ? ` · Due ${formatDate(c.due_date)}` : ""}
+                    {c.due_date && c.due_date < today ? " · Overdue" : ""}
+                    {c.due_date && c.due_date >= today && c.due_date <= weekOut ? " · Due soon" : ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => markDone(c.id)}
+                  disabled={completingId === c.id}
+                  className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:opacity-50"
+                >
+                  {completingId === c.id ? "Saving..." : "Done"}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -1012,7 +1044,7 @@ function CalloutsPanel({
         )}
       </div>
       <p className="mt-1 text-xs text-ink-muted">
-        This week&apos;s must-knows for {scopeLabel} — written by you, visible to the whole team.
+        Your current must-knows for {scopeLabel}. This view is manager-only.
       </p>
 
       {editing ? (
@@ -1022,7 +1054,7 @@ function CalloutsPanel({
             onChange={(e) => setDraft(e.target.value)}
             rows={6}
             placeholder={"One callout per line, e.g.\nEnterprise tier scope is cut this quarter.\nQ3 roadmap draft due Friday."}
-            className="w-full rounded-md border border-control px-3 py-2 text-sm"
+            className={`${TEXTAREA} w-full text-sm`}
           />
           {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
@@ -1135,7 +1167,7 @@ function DevFocusPanel({
             onChange={(e) => setDraft(e.target.value)}
             rows={4}
             placeholder={"e.g. Q3 focus: leveling up async communication and stakeholder updates."}
-            className="w-full rounded-md border border-control px-3 py-2 text-sm"
+            className={`${TEXTAREA} w-full text-sm`}
           />
           {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
@@ -1191,11 +1223,13 @@ function MeetingsPanel({
   setMeetings,
   members,
   orgUnitId,
+  orgUnits,
 }: {
   meetings: TeamMeeting[];
   setMeetings: React.Dispatch<React.SetStateAction<TeamMeeting[]>>;
   members: TeamMember[];
   orgUnitId: string | null;
+  orgUnits: OrgUnit[];
 }) {
   const [mode, setMode] = useState<"idle" | "plan" | "edit" | "log" | "review">("idle");
   const [selected, setSelected] = useState<TeamMeeting | null>(null);
@@ -1216,6 +1250,12 @@ function MeetingsPanel({
 
   const next = deriveNextMeeting(meetings);
   const logged = meetings.filter((m) => m.status === "logged");
+  const nextScopeName = next
+    ? next.org_unit_id
+      ? (orgUnits.find((unit) => unit.id === next.org_unit_id)?.name ?? "Team")
+      : "All teams"
+    : null;
+  const lifecycleStep = next?.status === "needs_log" ? 3 : (next?.agenda_items.length ?? 0) > 0 ? 2 : 1;
 
   function reset() {
     setMode("idle");
@@ -1340,12 +1380,13 @@ function MeetingsPanel({
   const CARD_ACCENTS = IDENTITY_BG;
 
   return (
-    <div>
+    <div id="team-meeting">
       {next ? (
         <div className={`${FEATURE_SURFACE} px-5 py-4`}>
           <div className="flex items-center justify-between gap-2">
             <p className={EYEBROW}>
               {next.status === "needs_log" ? "Needs logging" : "Next meeting"}
+              {nextScopeName ? ` · ${nextScopeName}` : ""}
               {next.recurrence_weeks ? ` · ${repeatLabel(next.recurrence_weeks)}` : ""}
             </p>
             <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-body">
@@ -1353,11 +1394,30 @@ function MeetingsPanel({
             </span>
           </div>
 
+          <ol className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-medium" aria-label="Team meeting workflow">
+            {["Plan", "Run", "Wrap up"].map((label, index) => {
+              const step = index + 1;
+              const current = lifecycleStep === step;
+              const complete = lifecycleStep > step;
+              return (
+                <li key={label} className="flex items-center gap-2">
+                  {index > 0 && <span className="text-ink-faint" aria-hidden="true">→</span>}
+                  <span className={`flex items-center gap-1.5 ${current ? "text-brand" : "text-ink-muted"}`}>
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${current ? "border-brand bg-brand-tint" : complete ? "border-teal-800 bg-teal-50" : "border-control bg-sunken"}`}>
+                      {complete ? "✓" : step}
+                    </span>
+                    {label}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+
           {next.agenda_items.length > 0 ? (
             <ul className="mt-2 space-y-1">
               {next.agenda_items.map((item) => (
                 <li key={item.id} className="flex items-start gap-2 text-sm">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-muted" />
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-muted" aria-hidden="true" />
                   <span>{item.item}</span>
                   {item.carried_from_item_id && (
                     <span className="mt-0.5 shrink-0 rounded-full border border-hairline px-1.5 text-[10px] text-ink-muted">
@@ -1551,26 +1611,29 @@ function MeetingsPanel({
         </div>
       )}
 
-      {logged.length === 0 ? (
-        <p className="mt-4 text-sm text-ink-muted">No meetings logged yet.</p>
-      ) : (
-        <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-          {logged.map((m, i) => (
-            <button
-              key={m.id}
-              onClick={() => setSelected(m)}
-              className="w-56 shrink-0 overflow-hidden rounded-xl border border-hairline bg-surface text-left hover:border-control hover:shadow-sm"
-            >
-              <div className={`h-1.5 ${CARD_ACCENTS[i % CARD_ACCENTS.length]}`} />
-              <div className="px-3 py-2.5">
-                <p className="text-xs text-ink-muted">
-                  {m.scheduled_at ? formatMeetingDate(isoToDateStr(m.scheduled_at)) : timeAgo(m.created_at)}
-                </p>
-                <p className="mt-1 text-sm text-ink-body">{snippet(m.summary ?? "", 90)}</p>
-              </div>
-            </button>
-          ))}
-        </div>
+      {logged.length > 0 && (
+        <details className="mt-4 border-t border-divider pt-3">
+          <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
+            Meeting history ({logged.length})
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {logged.map((m, i) => (
+              <button
+                key={m.id}
+                onClick={() => setSelected(m)}
+                className="overflow-hidden rounded-xl border border-hairline bg-surface text-left hover:border-control hover:shadow-sm"
+              >
+                <div className={`h-1.5 ${CARD_ACCENTS[i % CARD_ACCENTS.length]}`} />
+                <div className="px-3 py-2.5">
+                  <p className="text-xs text-ink-muted">
+                    {m.scheduled_at ? formatMeetingDate(isoToDateStr(m.scheduled_at)) : timeAgo(m.created_at)}
+                  </p>
+                  <p className="mt-1 text-sm text-ink-body">{snippet(m.summary ?? "", 90)}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </details>
       )}
 
       {selected && (
@@ -1824,8 +1887,8 @@ function RosterRow({
   const setupPersonById = new Map((setupStatus?.people ?? []).map((p) => [p.id, p]));
 
   return (
-    <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">Your team</h2>
+    <section id="team-people" aria-labelledby="team-people-heading">
+      <h2 id="team-people-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">People</h2>
 
       {members.length === 0 ? (
         <p className="text-sm text-ink-secondary">
@@ -1836,7 +1899,7 @@ function RosterRow({
           .
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {members.map((m) => {
             // has_role (Session 3's setup-status) is the source of truth for
             // the amber badge — never recomputed locally. When it's true,
@@ -1851,43 +1914,54 @@ function RosterRow({
             const chipText = rl ? `${roleLabel(rl)}${ou ? ` · ${ou.name}` : ""}` : null;
 
             return (
-              <button
+              <div
                 key={m.id}
-                onClick={() => toggleExpand(m.id)}
                 className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-3 text-left hover:border-control ${
                   expandedId === m.id ? "border-brand" : "border-hairline"
                 }`}
               >
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${IDENTITY_TEXT} ${avatarColor(
-                    m.id,
-                    members
-                  )}`}
+                <Link href={`/app/reports/${m.id}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-md">
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${IDENTITY_TEXT} ${avatarColor(
+                      m.id,
+                      members
+                    )}`}
+                  >
+                    {initials(m.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink">{m.name}</p>
+                    {hasRole ? (
+                      chipText && <p className="truncate text-xs text-ink-secondary">{chipText}</p>
+                    ) : (
+                      <span className="mt-0.5 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                        No role
+                      </span>
+                    )}
+                    <p className="mt-1 text-[11px] text-brand">Open Relationship Desk →</p>
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(m.id)}
+                  aria-expanded={expandedId === m.id}
+                  aria-controls={`team-details-${m.id}`}
+                  className={BTN_GHOST}
                 >
-                  {initials(m.name)}
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{m.name}</p>
-                  {hasRole ? (
-                    chipText && <p className="truncate text-xs text-ink-secondary">{chipText}</p>
-                  ) : (
-                    <span className="mt-0.5 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                      No role
-                    </span>
-                  )}
-                </div>
-              </button>
+                  Details
+                </button>
+              </div>
             );
           })}
         </div>
       )}
 
       {expanded && (
-        <div className="mt-3">
+        <div id={`team-details-${expanded.id}`} className="mt-3">
           <MemberDetailPanel member={expanded} members={members} setMembers={setMembers} />
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -1953,6 +2027,15 @@ function MemberDetailPanel({
 
   return (
     <div className="rounded-xl border border-hairline bg-canvas/60 px-4 py-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Team details</p>
+          <p className="mt-1 text-sm text-ink-secondary">Work context, the team update record, and account access for {member.name}.</p>
+        </div>
+        <Link href={`/app/reports/${member.id}`} className="text-xs font-medium text-brand hover:text-brand-hover">
+          Open Relationship Desk →
+        </Link>
+      </div>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
@@ -1990,24 +2073,21 @@ function MemberDetailPanel({
               ))}
             </ul>
           )}
-          <Link
-            href={`/app/reports/${member.id}`}
-            className="mt-3 inline-block text-xs text-ink-secondary underline hover:text-ink-body"
-          >
-            Open full profile
-          </Link>
         </div>
 
         <div>
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-muted">
-            Log update for {member.name}
+            Team update record
           </label>
+          <p className="mb-2 text-xs leading-5 text-ink-muted">
+            Manager-only and not sent to {member.name}. Use the Relationship Desk for private notes and 1:1 captures.
+          </p>
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-control px-3 py-2 text-sm"
-            placeholder="Not sent anywhere yet — just kept on record here until reports can log in."
+            className={`${TEXTAREA} w-full text-sm`}
+            placeholder="Record a team update..."
           />
           <div className="mt-2">
             <button
@@ -2047,7 +2127,7 @@ function MemberDetailPanel({
                       readOnly
                       value={inviteUrl}
                       onFocus={(e) => e.target.select()}
-                      className="w-full truncate rounded-md border border-hairline bg-surface px-2 py-1 text-xs text-ink-secondary"
+                      className={`${INPUT} w-full truncate text-xs`}
                     />
                     <button
                       onClick={() => navigator.clipboard?.writeText(inviteUrl)}
@@ -2064,7 +2144,7 @@ function MemberDetailPanel({
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     placeholder="their@email.com"
-                    className="w-full rounded-md border border-control px-2 py-1 text-xs"
+                    className={`${INPUT} w-full text-xs`}
                   />
                   <button
                     onClick={submitInvite}

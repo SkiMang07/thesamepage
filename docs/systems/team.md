@@ -1,4 +1,4 @@
-# Team Mission Control (`/app/team`)
+# Team workspace (`/app/team`)
 
 One home for "my team as a unit." Scoped to the caller's **own direct reports**,
 not an org_unit rollup — that's a different concept, see `org-scoping.md`.
@@ -9,21 +9,45 @@ Backend: `routes/team.py`. Frontend: `frontend/app/app/team/page.tsx`, plus
 ## Page structure, top to bottom
 
 1. **Team dropdown** — which team you're looking at.
-2. **KPI strip** — goals on track, active initiatives, commitments due within 7
-   days, days until the next meeting. All computed client-side from data the page
-   already fetches.
-3. **This week's focus** — Initiatives, Goals, Commitments as three cards.
-4. **Meetings row** — Critical callouts left, Meetings right. The meeting card
-   carries the agenda and its own logging action; there is no separate
-   "log a past meeting" box. "Open meeting" leads to the dedicated meeting
-   screen; the inline quick log stays on the card.
-5. **Roster** — a row of cards at the bottom that expand into a shared detail
-   panel on click.
+2. **Now** — a factual attention brief beside the active team meeting. The
+   meeting card makes the Plan → Run → Wrap up lifecycle visible, carries its
+   agenda and logging actions, and keeps meeting history behind a disclosure.
+3. **Live follow-through** — all open team commitments, ordered by due date.
+   Overdue and next-seven-days items receive explicit text and an amber rail.
+4. **Operating work** — Initiatives and Goals, with work explicitly marked at
+   risk shown first. Healthy and neutral work remains available behind a
+   disclosure instead of competing for attention.
+5. **Team context** — manager-only Critical callouts and the current team
+   training focus.
+6. **People** — compact roster cards at the bottom. The person's Relationship
+   Desk is the primary destination; the secondary Team details disclosure keeps
+   work context, the manager-only team update record, and account access.
+
+### The attention brief is not a team score
+
+The brief is a deterministic projection of records already fetched by the page:
+
+- an open meeting that needs logging, or a carried-forward meeting that needs a
+  date;
+- open commitments that are overdue or due within seven days;
+- goals or initiatives explicitly marked `at_risk`.
+
+It shows at most those three grouped signals, in that order, and links each one
+to the section where the manager can act. It does not infer morale, health, or
+performance; it stores no score and introduces no ranking model. When no signal
+is present, the copy is deliberately narrow: the current meeting state, dated
+commitments, and explicitly at-risk work do not require intervention. It is not
+an all-clear for the team, and it does not replace Mission Control's cross-domain
+priority ranking.
 
 Initiatives reuse `getProjects()` filtered client-side to
 `active`/`on_track`/`at_risk` — the same subset Mission Control's Key Initiatives
 card uses. Completed and cancelled work stays off the page; full history lives on
 `/app/goals` and `/app/projects`.
+
+The Team page is exception-first, not exception-only. Every active initiative,
+goal, and open commitment remains reachable on the page; the disclosures only
+control the initial visual hierarchy.
 
 ## Endpoints (`/api/team`)
 
