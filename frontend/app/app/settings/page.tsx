@@ -19,7 +19,7 @@
 
 import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CapacitySettings,
   DirectReport,
@@ -71,6 +71,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { createClient } from "@/lib/supabase";
 import {
   DraftExpectationsReview,
   DraftMetricRow,
@@ -80,7 +81,7 @@ import {
   draftIncludedCount,
 } from "@/components/DraftExpectationRows";
 import RoleImportPanel, { RoleImportResult } from "@/components/RoleImportPanel";
-import { INPUT, LABEL, BTN_PRIMARY } from "@/lib/tokens";
+import { INPUT, LABEL, BTN_PRIMARY, BTN_SECONDARY } from "@/lib/tokens";
 import {
   GroupedRoleSelect,
   OrgUnitSelect,
@@ -99,13 +100,14 @@ import {
 // one role-centric section, "Roles & expectations" — a manager picks a
 // ladder and sees its levels, JD, and expectations coverage together
 // instead of bouncing between two settings tabs. See §6, Plan S4+S5.
-type SectionId = "profile" | "people" | "roles" | "capacity";
+type SectionId = "profile" | "people" | "roles" | "capacity" | "account";
 
 const SECTIONS: { id: SectionId; label: string; blurb: string }[] = [
   { id: "profile", label: "Profile & Company", blurb: "You and your company" },
   { id: "people", label: "People", blurb: "Add your team, wire up roles and teams" },
   { id: "roles", label: "Roles & expectations", blurb: "The jobs on your team, and what good looks like" },
   { id: "capacity", label: "Capacity", blurb: "Baseline hours & utilization" },
+  { id: "account", label: "Account", blurb: "Session and access" },
 ];
 
 const KIND_TABS: { id: ExpectationKind; label: string }[] = [
@@ -132,11 +134,14 @@ export default function SettingsPage() {
 }
 
 function SettingsFlow() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const sectionParam = searchParams.get("section");
   const unitParam = searchParams.get("unit");
   const [section, setSection] = useState<SectionId>(
-    sectionParam === "people" || sectionParam === "roles" || sectionParam === "capacity" ? sectionParam : "profile"
+    sectionParam === "people" || sectionParam === "roles" || sectionParam === "capacity" || sectionParam === "account"
+      ? sectionParam
+      : "profile"
   );
   const [error, setError] = useState<string | null>(null);
   // Set by /app/org's "N people" click-through (Session 42, Plan S4+S5) —
@@ -264,9 +269,53 @@ function SettingsFlow() {
           {section === "capacity" && (
             <CapacitySection roleLevels={roleLevels} roleFamilies={roleFamilies} onError={setError} />
           )}
+          {section === "account" && (
+            <AccountSection
+              onSignedOut={() => {
+                router.replace("/app/login");
+                router.refresh();
+              }}
+            />
+          )}
         </div>
       </div>
     </PageShell>
+  );
+}
+
+function AccountSection({ onSignedOut }: { onSignedOut: () => void }) {
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    setSignOutError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setSignOutError(error.message);
+      setSigningOut(false);
+      return;
+    }
+    onSignedOut();
+  }
+
+  return (
+    <section>
+      <h2 className="text-lg font-semibold">Account</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
+        End your session on this browser. Your team and workspace data will stay exactly as they are.
+      </p>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        disabled={signingOut}
+        className={`${BTN_SECONDARY} mt-5`}
+      >
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button>
+      {signOutError && <p className="mt-3 text-sm text-red-700">{signOutError}</p>}
+    </section>
   );
 }
 

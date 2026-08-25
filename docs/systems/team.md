@@ -298,3 +298,6 @@ Manager login at `/app/login` keeps the magic link as the default and also
 offers an explicit **Use a password instead** path backed by
 `supabase.auth.signInWithPassword()`. The password option is useful for stable
 demo and training accounts without changing the invite/claim flow above.
+Managers can sign out either from the global avatar menu or from the explicit
+**Account** section in `/app/settings`; both clear the Supabase session and
+return to `/app/login` without changing workspace data.

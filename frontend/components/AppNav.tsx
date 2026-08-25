@@ -59,8 +59,8 @@ export default function AppNav() {
   const zone = useZoneData();
   // Andrew flagged (2026-08-17): clicking the avatar badge did nothing — it
   // was a plain <span>, no menu ever built. Wired up here: name/email +
-  // Settings + Sign out, the one place a manager can actually get out of the
-  // app (there was previously no sign-out control anywhere in the UI).
+  // Settings + Sign out for quick access from anywhere. Settings also exposes
+  // an explicit Account section so sign-out remains discoverable there.
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
