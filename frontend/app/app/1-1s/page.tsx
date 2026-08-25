@@ -1,238 +1,456 @@
 "use client";
 
-// /app/1-1s — the front door for the 1:1 loop (nav rework pass 2, Session 38,
-// 2026-08-16). See docs/ONE_ON_ONES_PAGE_SPEC.md — this page answers one
-// question: who do I owe a conversation, and what's already in flight?
+// /app/1-1s is the relationship-oriented launcher for the recurring 1:1
+// loop. It keeps one row per person, enough continuity to choose the right
+// next action, and a direct handoff to the canonical prep or relationship
+// workspace. It deliberately does not duplicate history, commitments,
+// cadence settings, or private notes from the person page.
 //
-// Owns the 1:1 loop end to end: due now, scheduled/prepared, and recently
-// wrapped, all sourced from the single GET /api/one-on-ones/overview call
-// (the canonical is_due/cadence computation — see backend/utils.py's
-// resolve_cadence_days()). This page does no staleness math of its own,
-// only ordering/filtering of fields the API already resolved.
-//
-// Session 56 white-space audit — entrance gap now uses the shared
-// SECTION_GAP token (components/ZoneMap.tsx); the space-y-10 between the
-// 3 sections (Due now / Prepped / Recently wrapped) is left as-is, same
-// reasoning as team/page.tsx.
-//
-// Page actions remain triage + start/resume prep. Scheduling/repeat settings
-// live inside prep; off-platform logging, bulk actions, search, and provider
-// calendar sync do not belong on this overview.
+// Every workflow state on this page comes from GET /api/one-on-ones/overview.
+// The frontend sorts, filters, and presents those fields; it does not compute
+// cadence, due state, or session status independently.
 
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CadenceSource, OneOnOneOverviewItem, getOneOnOnesOverview } from "@/lib/api";
+import { OneOnOneOverviewItem, getOneOnOnesOverview } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import {
+  BTN_GHOST,
+  BTN_PRIMARY,
+  CARD,
+  FEATURE_SURFACE,
+  IDENTITY_BG,
+  IDENTITY_TEXT,
+  INPUT,
+  identityIndex,
+} from "@/lib/tokens";
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatConversationDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function initialsOf(name: string) {
   return name
     .split(" ")
-    .map((p) => p[0])
+    .map((part) => part[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
 }
 
-// Same honesty convention Capacity uses for logged-vs-assumed hours (spec
-// section 3) — say which source resolved this person's cadence. Duplicated
-// locally rather than shared, matching this app's established "minimal
-// local copies" convention for small per-page helpers (see
-// dashboard/page.tsx's period-helper comment).
-function cadenceSourceLabel(days: number, source: CadenceSource) {
-  if (source === "custom") return `every ${days} days (custom)`;
-  if (source === "org") return `every ${days} days (org default)`;
-  return `every ${days} days (default)`;
+function firstName(name: string) {
+  return name.split(" ")[0] || name;
+}
+
+function isUnpreparedDue(item: OneOnOneOverviewItem) {
+  return (
+    item.is_due &&
+    (item.planned_session === null || item.planned_session.status === "gathering")
+  );
+}
+
+function isBadlyOverdue(item: OneOnOneOverviewItem) {
+  return (
+    isUnpreparedDue(item) &&
+    (item.days_since_last === null || item.days_since_last > item.cadence_days * 2)
+  );
+}
+
+function defaultSelection(items: OneOnOneOverviewItem[]) {
+  const prepared = items.find((item) => item.planned_session?.status === "planned");
+  if (prepared) return prepared;
+
+  const due = items.find(isUnpreparedDue);
+  if (due) return due;
+
+  const scheduled = items
+    .filter((item) => item.planned_session?.status === "scheduled")
+    .sort((a, b) =>
+      (a.planned_session?.scheduled_at ?? "").localeCompare(
+        b.planned_session?.scheduled_at ?? ""
+      )
+    )[0];
+  return scheduled ?? items[0] ?? null;
+}
+
+type RelationshipState = {
+  label: string;
+  rowMeta: string;
+  rowClass: string;
+  chipClass: string;
+};
+
+function relationshipState(item: OneOnOneOverviewItem): RelationshipState {
+  if (item.planned_session?.status === "planned") {
+    return {
+      label: "Prep ready",
+      rowMeta: "Prep ready",
+      rowClass: "text-brand",
+      chipClass: "bg-teal-50 text-teal-700",
+    };
+  }
+  if (item.planned_session?.status === "scheduled") {
+    return {
+      label: "Scheduled",
+      rowMeta: "Review prep",
+      rowClass: "text-ink-muted",
+      chipClass: "bg-sunken text-ink-secondary",
+    };
+  }
+  if (isUnpreparedDue(item)) {
+    return {
+      label: item.days_since_last === null ? "First 1:1 due" : "Due now",
+      rowMeta: item.days_since_last === null ? "Never met" : `${item.days_since_last} days since`,
+      rowClass: isBadlyOverdue(item) ? "text-red-700" : "text-amber-700",
+      chipClass: isBadlyOverdue(item)
+        ? "bg-red-50 text-red-700"
+        : "bg-amber-50 text-amber-700",
+    };
+  }
+  return {
+    label: "Gathering context",
+    rowMeta: "Not scheduled",
+    rowClass: "text-ink-muted",
+    chipClass: "bg-sunken text-ink-secondary",
+  };
+}
+
+function nextDateLabel(item: OneOnOneOverviewItem) {
+  const session = item.planned_session;
+  if (session?.scheduled_at) return formatDate(session.scheduled_at);
+  if (session?.status === "planned") return "Prep ready";
+  if (isUnpreparedDue(item)) return "Due now";
+  return "Not scheduled";
+}
+
+function nextConversationLabel(item: OneOnOneOverviewItem) {
+  const session = item.planned_session;
+  if (session?.scheduled_at) return formatConversationDate(session.scheduled_at);
+  if (session?.status === "planned") return "Ready for the next 1:1";
+  if (isUnpreparedDue(item)) return "A 1:1 is due";
+  return "Next date not scheduled";
+}
+
+function relationshipSummary(item: OneOnOneOverviewItem) {
+  const session = item.planned_session;
+  if (session?.status === "planned") {
+    return (
+      session.display_summary ||
+      "The agenda is saved and ready. Open the conversation when you are ready to begin."
+    );
+  }
+  if (session?.status === "scheduled") {
+    return "This conversation is scheduled and waiting for source review. Open the workspace to confirm carry-forwards, current commitments, and goal signals before generating the agenda.";
+  }
+  if (isUnpreparedDue(item)) {
+    return "This conversation is due. Review the context already gathering in the workspace before generating the agenda.";
+  }
+  return "No date is scheduled yet. Context is gathering automatically in the next-conversation workspace.";
+}
+
+function continuityCue(item: OneOnOneOverviewItem) {
+  const confirmedCarryForward = item.planned_session?.carry_forward_items
+    ?.map((value) => value.trim())
+    .find(Boolean);
+  if (confirmedCarryForward) return `Carry forward: ${confirmedCarryForward}`;
+  if (item.last_completed) {
+    return `Last conversation wrapped ${formatDate(item.last_completed.date)}. No carry-forward topic is confirmed.`;
+  }
+  return "No prior 1:1 has been logged yet.";
+}
+
+function prepHref(item: OneOnOneOverviewItem) {
+  return item.planned_session?.status === "planned"
+    ? `/app/reports/${item.direct_report_id}/prep?resume=${item.planned_session.id}`
+    : `/app/reports/${item.direct_report_id}/prep`;
+}
+
+function roleLine(item: OneOnOneOverviewItem) {
+  return [item.role_title, item.org_unit].filter(Boolean).join(" · ") || "Direct report";
+}
+
+function LoadingState() {
+  return (
+    <PageShell maxWidth="6xl">
+      <div className="animate-pulse" role="status" aria-label="Loading 1:1 relationships">
+        <div className="h-7 w-24 rounded bg-sunken" />
+        <div className="mt-3 h-4 w-80 max-w-full rounded bg-sunken" />
+        <div className={`${SECTION_GAP} grid gap-5 lg:grid-cols-[minmax(20rem,.9fr)_minmax(22rem,1.1fr)]`}>
+          <div className="space-y-3">
+            <div className="h-9 rounded-md bg-sunken" />
+            <div className="h-80 rounded-xl bg-surface" />
+          </div>
+          <div className="order-first h-72 rounded-2xl bg-surface lg:order-none" />
+        </div>
+      </div>
+    </PageShell>
+  );
 }
 
 export default function OneOnOnesPage() {
   const [items, setItems] = useState<OneOnOneOverviewItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getOneOnOnesOverview()
       .then(setItems)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .catch((caught) =>
+        setError(caught instanceof Error ? caught.message : "Failed to load")
+      )
       .finally(() => setLoading(false));
   }, []);
 
-  // Due now — worst first (longest gap at top), never-met sorts as the
-  // worst case. Ordering only; is_due/days_since_last are already resolved
-  // server-side.
-  const dueNow = useMemo(
-    () =>
-      items
-        .filter(
-          (i) =>
-            i.is_due &&
-            (i.planned_session === null || i.planned_session.status === "gathering")
-        )
-        .sort((a, b) => {
-          const aGap = a.days_since_last ?? Number.POSITIVE_INFINITY;
-          const bGap = b.days_since_last ?? Number.POSITIVE_INFINITY;
-          return bGap - aGap;
-        }),
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => a.name.localeCompare(b.name)),
     [items]
   );
 
-  const inFlight = useMemo(
-    () =>
-      items.filter(
-        (i) => i.planned_session !== null && i.planned_session.status !== "gathering"
-      ),
-    [items]
+  const fallbackSelection = useMemo(
+    () => defaultSelection(sortedItems),
+    [sortedItems]
   );
+  const effectiveSelectedId =
+    selectedId && sortedItems.some((item) => item.direct_report_id === selectedId)
+      ? selectedId
+      : fallbackSelection?.direct_report_id ?? null;
 
-  const recentlyWrapped = useMemo(
-    () =>
-      items
-        .filter((i) => i.last_completed !== null)
-        .sort((a, b) => (a.last_completed!.date < b.last_completed!.date ? 1 : -1))
-        .slice(0, 5),
-    [items]
-  );
+  const filteredItems = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return sortedItems;
+    return sortedItems.filter((item) => item.name.toLowerCase().includes(normalized));
+  }, [query, sortedItems]);
 
-  if (loading) return <p className="p-8 text-ink-secondary">Loading...</p>;
-  if (error) return <p className="p-8 text-red-700">{error}</p>;
+  const selected =
+    sortedItems.find((item) => item.direct_report_id === effectiveSelectedId) ?? null;
+  const dueCount = items.filter(isUnpreparedDue).length;
+
+  function handleSearch(event: ChangeEvent<HTMLInputElement>) {
+    const nextQuery = event.target.value;
+    setQuery(nextQuery);
+    const normalized = nextQuery.trim().toLowerCase();
+    const matches = sortedItems.filter((item) =>
+      item.name.toLowerCase().includes(normalized)
+    );
+    if (
+      matches.length > 0 &&
+      !matches.some((item) => item.direct_report_id === effectiveSelectedId)
+    ) {
+      setSelectedId(matches[0].direct_report_id);
+    }
+  }
+
+  if (loading) return <LoadingState />;
+  if (error) {
+    return (
+      <PageShell maxWidth="6xl">
+        <p className="text-sm text-red-700" role="alert">{error}</p>
+      </PageShell>
+    );
+  }
 
   return (
-    <PageShell maxWidth="3xl">
-      <h1 className="text-2xl font-semibold">1:1s</h1>
-      <p className="mt-1 text-sm text-ink-secondary">Who you owe a conversation, and what&apos;s already in flight.</p>
+    <PageShell maxWidth="6xl">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink">1:1s</h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Keep the thread with every person. Move into the right conversation.
+          </p>
+        </div>
+        {items.length > 0 && (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+              dueCount > 0
+                ? "bg-amber-50 text-amber-700"
+                : "bg-sunken text-ink-secondary"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                dueCount > 0 ? "bg-amber-500" : "bg-brand"
+              }`}
+            />
+            {dueCount > 0 ? `${dueCount} due now` : "No one due"}
+          </span>
+        )}
+      </div>
 
       {items.length === 0 ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>
+        <p className={`${SECTION_GAP} text-sm text-ink-secondary`}>
           No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="underline hover:text-ink-body">
-            Add your first one from your dashboard
+          <Link href="/app/dashboard" className="text-brand hover:text-brand-hover">
+            Add your first one from Mission Control →
           </Link>
-          .
         </p>
       ) : (
-        <div className={`${SECTION_GAP} space-y-10`}>
-          {/* Due now */}
-          <section>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
-              Due now{dueNow.length > 0 && ` (${dueNow.length})`}
-            </h2>
-            {dueNow.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-secondary">
-                You&apos;re all caught up — nobody&apos;s due for a 1:1 right now. 🎯
-              </p>
-            ) : (
-              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-surface">
-                {dueNow.map((r) => {
-                  const badlyOverdue = r.days_since_last === null || r.days_since_last > r.cadence_days * 2;
+        <div className={`${SECTION_GAP} grid gap-5 lg:grid-cols-[minmax(20rem,.9fr)_minmax(22rem,1.1fr)]`}>
+          <section aria-labelledby="relationship-roster-heading">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 id="relationship-roster-heading" className="text-base font-medium text-ink">
+                Your team
+              </h2>
+              <span className="text-xs text-ink-muted">
+                {filteredItems.length} relationship{filteredItems.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            <label className="sr-only" htmlFor="relationship-search">Find a person</label>
+            <input
+              id="relationship-search"
+              type="search"
+              value={query}
+              onChange={handleSearch}
+              placeholder="Find a person"
+              autoComplete="off"
+              className={`${INPUT} mb-3`}
+            />
+
+            <div className={`${CARD} overflow-hidden`}>
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(6.5rem,.65fr)] gap-3 bg-sunken px-4 py-2.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted sm:grid-cols-[minmax(10rem,1.2fr)_minmax(6rem,.65fr)_minmax(7rem,.85fr)]">
+                <span>Person</span>
+                <span className="hidden sm:block">Last</span>
+                <span>Next</span>
+              </div>
+              <div className="divide-y divide-divider">
+                {filteredItems.map((item) => {
+                  const active = item.direct_report_id === effectiveSelectedId;
+                  const state = relationshipState(item);
                   return (
-                    <li key={r.direct_report_id} className="flex items-center justify-between gap-4 px-5 py-3.5">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                            badlyOverdue ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-700"
+                    <button
+                      key={item.direct_report_id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setSelectedId(item.direct_report_id)}
+                      className={`grid w-full grid-cols-[minmax(0,1fr)_minmax(6.5rem,.65fr)] items-center gap-3 border-l-4 px-4 py-3 text-left sm:grid-cols-[minmax(10rem,1.2fr)_minmax(6rem,.65fr)_minmax(7rem,.85fr)] ${
+                        active
+                          ? "border-l-brand bg-brand-tint"
+                          : "border-l-transparent hover:bg-sunken"
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${IDENTITY_TEXT} ${
+                            IDENTITY_BG[identityIndex(item.direct_report_id)]
                           }`}
                         >
-                          {initialsOf(r.name)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-ink">{r.name}</p>
-                          <p className={`mt-0.5 text-xs ${badlyOverdue ? "text-red-700" : "text-amber-700"}`}>
-                            {r.days_since_last === null ? "Never met" : `${r.days_since_last} days since last 1:1`}
-                            {" · "}
-                            {cadenceSourceLabel(r.cadence_days, r.cadence_source)}
-                          </p>
-                        </div>
-                      </div>
-                      <Link
-                        href={
-                          r.planned_session?.status === "planned"
-                            ? `/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session.id}`
-                            : `/app/reports/${r.direct_report_id}/prep`
-                        }
-                        className="shrink-0 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand hover:bg-brand-hover"
-                      >
-                        Review →
-                      </Link>
-                    </li>
+                          {initialsOf(item.name)}
+                        </span>
+                        <span className="truncate text-sm font-medium text-ink">{item.name}</span>
+                      </span>
+                      <span className="hidden sm:block">
+                        <span className="block text-xs font-medium text-ink-body">
+                          {item.last_completed ? formatDate(item.last_completed.date) : "Not yet"}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-ink-muted">
+                          {item.last_completed ? "Wrapped" : "No session"}
+                        </span>
+                      </span>
+                      <span>
+                        <span className="block text-xs font-medium text-ink-body">
+                          {nextDateLabel(item)}
+                        </span>
+                        <span className={`mt-0.5 block text-[11px] ${state.rowClass}`}>
+                          {state.rowMeta}
+                        </span>
+                      </span>
+                    </button>
                   );
                 })}
-              </ul>
-            )}
+              </div>
+              {filteredItems.length === 0 && (
+                <p className="px-4 py-8 text-center text-sm text-ink-secondary">
+                  No matching person.
+                </p>
+              )}
+            </div>
           </section>
 
-          {/* Scheduled or prepped, not yet run */}
-          <section>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
-              Upcoming 1:1s{inFlight.length > 0 && ` (${inFlight.length})`}
-            </h2>
-            {inFlight.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-secondary">No meetings scheduled or prepped yet.</p>
-            ) : (
-              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-surface">
-                {inFlight.map((r) => (
-                  <li key={r.direct_report_id}>
-                    <Link
-                      href={
-                        r.planned_session!.status === "planned"
-                          ? `/app/reports/${r.direct_report_id}/prep?resume=${r.planned_session!.id}`
-                          : `/app/reports/${r.direct_report_id}/prep`
-                      }
-                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-canvas"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink">{r.name}</p>
-                        <p className="mt-0.5 truncate text-xs text-ink-muted">
-                          {r.planned_session!.scheduled_at && `${formatDate(r.planned_session!.scheduled_at)} · `}
-                          {r.planned_session!.status === "planned"
-                            ? r.planned_session!.display_summary || "Prep sheet ready"
-                            : r.planned_session!.recurrence_weeks
-                              ? `Repeats every ${r.planned_session!.recurrence_weeks} week${r.planned_session!.recurrence_weeks === 1 ? "" : "s"}`
-                              : "Scheduled — prep when you’re ready"}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-xs text-ink-muted">
-                        {r.planned_session!.status === "planned" ? "Start →" : "Review →"}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {selected && (
+            <aside
+              key={selected.direct_report_id}
+              className={`order-first overflow-hidden p-5 lg:order-none ${FEATURE_SURFACE}`}
+              aria-live="polite"
+            >
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${relationshipState(selected).chipClass}`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                {relationshipState(selected).label}
+              </span>
 
-          {/* Recently wrapped */}
-          <section>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">
-              Recently wrapped{recentlyWrapped.length > 0 && ` (${recentlyWrapped.length})`}
-            </h2>
-            {recentlyWrapped.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-secondary">Nothing logged yet.</p>
-            ) : (
-              <ul className="mt-3 divide-y divide-divider rounded-xl border border-hairline bg-surface">
-                {recentlyWrapped.map((r) => (
-                  <li key={r.direct_report_id}>
-                    <Link
-                      href={`/app/reports/${r.direct_report_id}`}
-                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-canvas"
-                    >
-                      <p className="truncate text-sm font-medium text-ink">{r.name}</p>
-                      <p className="shrink-0 text-xs text-ink-muted">
-                        {formatDate(r.last_completed!.date)}
-                        {r.last_completed!.commitment_count > 0 &&
-                          ` · ${r.last_completed!.commitment_count} commitment${
-                            r.last_completed!.commitment_count === 1 ? "" : "s"
-                          }`}
-                      </p>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+              <div className="mt-4 flex items-center gap-3">
+                <span
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${IDENTITY_TEXT} ${
+                    IDENTITY_BG[identityIndex(selected.direct_report_id)]
+                  }`}
+                >
+                  {initialsOf(selected.name)}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-semibold text-ink">{selected.name}</h2>
+                  <p className="mt-0.5 truncate text-xs text-ink-secondary">{roleLine(selected)}</p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-start justify-between gap-4 border-t border-hairline pt-4">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                    Next conversation
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-ink">
+                    {nextConversationLabel(selected)}
+                  </p>
+                </div>
+                <p className="shrink-0 text-right text-xs text-ink-muted">
+                  Last 1:1<br />
+                  <span className="text-ink-body">
+                    {selected.last_completed ? formatDate(selected.last_completed.date) : "Not yet"}
+                  </span>
+                </p>
+              </div>
+
+              <p className="mt-4 text-sm leading-6 text-ink-body">
+                {relationshipSummary(selected)}
+              </p>
+
+              <div className="mt-4 border-l-4 border-brand bg-sunken px-4 py-3">
+                <p className="text-xs font-medium text-ink">Keep the thread</p>
+                <p className="mt-1 text-xs leading-5 text-ink-secondary">
+                  {continuityCue(selected)}
+                </p>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Link href={prepHref(selected)} className={BTN_PRIMARY}>
+                  {selected.planned_session?.status === "planned"
+                    ? "Start 1:1 →"
+                    : "Review & prepare →"}
+                </Link>
+                <Link
+                  href={`/app/reports/${selected.direct_report_id}`}
+                  className={BTN_GHOST}
+                >
+                  Open {firstName(selected.name)}&apos;s relationship →
+                </Link>
+              </div>
+
+              <p className="mt-5 border-t border-divider pt-4 text-xs leading-5 text-ink-muted">
+                History, commitments, cadence settings, and detailed notes stay in the relationship workspace.
+              </p>
+            </aside>
+          )}
         </div>
       )}
     </PageShell>

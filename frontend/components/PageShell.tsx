@@ -41,8 +41,9 @@
 // 190px sidebar on a wide monitor — 165px of dead space on each side, ~21%
 // of the available width doing nothing for a page whose whole point is
 // showing several columns of data side by side. Form-heavy pages (Settings
-// 4xl, Capacity/Org/1:1s 3xl) deliberately keep their narrower widths —
-// this tier is additive, not a replacement for the existing ones.
+// 4xl, Capacity/Org 3xl) deliberately keep their narrower widths. The 1:1s
+// relationship launcher uses 6xl for its roster + orientation preview. This
+// tier is additive, not a replacement for the existing ones.
 
 import { ReactNode } from "react";
 

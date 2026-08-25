@@ -41,6 +41,16 @@ path remains for a conversation that happened without preparation. The
 commitments; the unfinished next occurrence appears only in the dedicated next
 conversation workspace.
 
+The `/app/1-1s` index is a relationship-oriented launcher, not a second person
+workspace. It renders one alphabetized, searchable row per active report with
+the last completed date, the next scheduled/prepared state, and server-derived
+due truth. Selecting a row opens a read-only orientation preview: role, exact
+next-conversation state, the prepared situation summary when one exists, and at
+most one manager-confirmed carry-forward cue. The preview hands off to the exact
+prep sheet or the canonical person page. Full history, commitments, cadence
+settings, and detailed notes stay on that person page so the two surfaces cannot
+drift into competing records.
+
 ## Scheduling and recurrence
 
 `one_on_one_series` owns the repeat rule: manager, report, 1–4 week interval,
