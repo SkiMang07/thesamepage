@@ -293,3 +293,8 @@ is not built (`/app/ic` is a static placeholder).
   is public — deliberately not under `/app`, so `middleware.ts`'s gate doesn't
   apply — and sends the link with `emailRedirectTo` pointing at
   `/auth/callback?next=/app/ic?invite={token}`.
+
+Manager login at `/app/login` keeps the magic link as the default and also
+offers an explicit **Use a password instead** path backed by
+`supabase.auth.signInWithPassword()`. The password option is useful for stable
+demo and training accounts without changing the invite/claim flow above.
