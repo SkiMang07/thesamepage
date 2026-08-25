@@ -177,10 +177,16 @@ Consequences, all deliberate now rather than accidental:
   settings are the brand, not the content.
 - **The font stack is a literal in `css/main.css`**, with a comment saying why.
   When a real typeface is chosen it becomes a proper `font` field.
-- **Nav links, the site name and the tagline are literals in the partials.** They
-  are site chrome, not page content. The proper fix, once the real pages exist, is
-  HubSpot menus (Settings → Website → Navigation) referenced with `{% menu %}` —
-  not theme fields, which cannot hold them.
+- **The site name and the tagline are literals in the partials.** They are site
+  chrome, not page content, and too small a surface to justify a theme field.
+- **Nav links are HubSpot menus, not literals.** Both `header.html` and
+  `footer.html` render the same menu (Settings → Website → Navigation → "The Same
+  Page - Menu") via `{% menu "site_nav", id=<menu id>, max_levels=2,
+  flow="horizontal" %}` — one level of dropdown children is supported in
+  `css/main.css` (`hs-item-has-children` / `hs-menu-children-wrapper`) since the
+  menu has a nested parent item. Menu items pointing at pages that don't exist yet
+  render with HubSpot's "Deleted"/unset-link state until those pages are built and
+  the menu is repointed — that's expected, not a bug to chase.
 
 ### Module field rules that only surface on upload
 
