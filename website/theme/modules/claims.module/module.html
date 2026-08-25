@@ -1,0 +1,14 @@
+<section class="sec against">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rule"></div>
+      <h2 class="h2">{{ module.heading }}</h2>
+      {% if module.lede %}<p class="lede">{{ module.lede }}</p>{% endif %}
+    </div>
+    <div class="claims">
+      {% for c in module.items %}
+      <div class="claim"><h3 class="h3">{{ c.title }}</h3><p>{{ c.copy }}</p></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

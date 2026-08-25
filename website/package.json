@@ -1,0 +1,14 @@
+{
+  "name": "tsp-website",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Marketing site for The Same Page \u2014 HubSpot Content Hub theme",
+  "scripts": {
+    "watch": "hs cms watch theme tsp-theme",
+    "upload": "hs cms upload theme tsp-theme",
+    "accounts": "hs account list"
+  },
+  "devDependencies": {
+    "@hubspot/cli": "^8.13.0"
+  }
+}

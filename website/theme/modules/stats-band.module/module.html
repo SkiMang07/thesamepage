@@ -1,0 +1,18 @@
+<section class="sec band">
+  <div class="wrap">
+    <div class="sec-head">
+      {% if module.eyebrow %}<div class="eyebrow">{{ module.eyebrow }}</div>{% endif %}
+      <h2 class="h2" style="margin-top:1rem">{{ module.heading }}</h2>
+      {% if module.lede %}<p class="lede">{{ module.lede }}</p>{% endif %}
+    </div>
+    <div class="stats">
+      {% for s in module.stats %}
+      <div class="stat"><b>{{ s.value }}</b><span>{{ s.copy }}</span></div>
+      {% endfor %}
+    </div>
+    <div class="stakes">
+      {% for s in module.stakes %}{{ s.line }}{% endfor %}
+    </div>
+    {% if module.source_note %}<p class="srcnote">{{ module.source_note }}</p>{% endif %}
+  </div>
+</section>

@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Same Page — Define the bar. Then see who clears it.</title>
+<style>
+:root{
+  --canvas:#F5F8FA; --surface:#FFFFFF; --sunken:#ECEFF2;
+  --hairline:#DDE0E3; --divider:#ECEFF2; --control:#C9CDD0;
+  --ink:#222B32; --ink-body:#394148; --ink-secondary:#4F575D;
+  --ink-muted:#686E74; --ink-faint:#878D92;
+  --brand:#087E78; --brand-hover:#00635F; --brand-tint:#EEF5F4;
+  --teal-800:#004B47; --teal-900:#00312F; --teal-200:#CAE7E4; --teal-300:#B1D5D1;
+  --carbon-900:#222B32; --carbon-950:#131B22; --carbon-800:#394148; --carbon-700:#4F575D;
+  --amber-500:#B67118; --amber-50:#FFF6ED;
+  --focus:#2878D0;
+  --feature-from:#E9F2F1; --feature-to:#FFFFFF;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--canvas);color:var(--ink-body);
+  font-family:var(--sans);font-size:17px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,p,ul,ol,figure{margin:0}
+ul{padding:0;list-style:none}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:4px}
+
+.wrap{width:100%;max-width:1200px;margin:0 auto;padding:0 32px}
+.narrow{max-width:800px}
+
+/* ---------- type scale ---------- */
+.h1{font-size:clamp(2.2rem,3.5vw,3.05rem);line-height:1.06;letter-spacing:-.034em;
+  font-weight:640;color:var(--ink)}
+.h2{font-size:clamp(1.9rem,3.2vw,2.6rem);line-height:1.14;letter-spacing:-.026em;
+  font-weight:640;color:var(--ink)}
+.h3{font-size:1.2rem;line-height:1.3;letter-spacing:-.014em;font-weight:640;color:var(--ink)}
+.lede{font-size:clamp(1.1rem,1.5vw,1.3rem);line-height:1.55;color:var(--ink-secondary)}
+.eyebrow{font-size:.78rem;font-weight:660;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--brand)}
+.muted{color:var(--ink-muted)}
+
+/* ---------- the bar motif ---------- */
+.rule{height:2px;width:64px;background:var(--brand);border-radius:2px}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  font-family:inherit;font-size:1rem;font-weight:600;letter-spacing:-.01em;
+  padding:.85rem 1.55rem;border-radius:8px;border:1px solid transparent;cursor:pointer;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand-hover)}
+.btn-ghost{background:transparent;color:var(--ink);border-color:var(--control)}
+.btn-ghost:hover{border-color:var(--ink-muted)}
+.btn-on-dark{background:#fff;color:var(--carbon-900)}
+.btn-on-dark:hover{background:var(--brand-tint)}
+
+/* ---------- nav ---------- */
+.nav{position:sticky;top:0;z-index:20;background:rgba(245,248,250,.86);
+  backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--hairline)}
+.nav-in{display:flex;align-items:center;gap:2.5rem;height:68px}
+.brandmark{display:flex;align-items:center;gap:.6rem;color:var(--brand);flex:none}
+.brandmark svg{height:24px;width:auto;display:block}
+.brandmark span{font-size:1.02rem;font-weight:660;letter-spacing:-.02em;color:var(--ink)}
+.nav-links{display:flex;gap:1.9rem;margin-left:.5rem}
+.nav-links a{font-size:.95rem;font-weight:520;color:var(--ink-secondary)}
+.nav-links a:hover{color:var(--brand)}
+.nav-cta{margin-left:auto;display:flex;align-items:center;gap:1rem}
+.nav-cta .btn{padding:.6rem 1.15rem;font-size:.95rem}
+.signin{font-size:.95rem;font-weight:520;color:var(--ink-secondary)}
+.signin:hover{color:var(--brand)}
+
+/* ---------- hero ---------- */
+.hero{background:linear-gradient(180deg,var(--feature-from) 0%,var(--feature-to) 62%,var(--canvas) 100%);
+  padding:clamp(3.2rem,5.5vw,4.6rem) 0 clamp(2.6rem,4vw,3.4rem)}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.16fr) minmax(0,.84fr);
+  gap:clamp(2rem,3.4vw,3.5rem);align-items:center}
+.hero h1{margin-bottom:1.4rem}
+.hero .lede{max-width:40ch;margin-bottom:2rem}
+.hero-actions{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.counter{display:inline-flex;align-items:center;gap:.55rem;margin-top:1.3rem;
+  padding:.4rem .8rem .4rem .6rem;background:var(--surface);border:1px solid var(--teal-200);
+  border-radius:999px;font-size:.86rem;color:var(--ink-secondary)}
+.counter b{color:var(--brand);font-weight:660}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
+
+/* ---------- hero figure: the bar ---------- */
+.figure{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
+  padding:1.45rem 1.5rem 1.25rem;box-shadow:0 1px 2px rgba(34,43,50,.05),0 12px 32px -12px rgba(34,43,50,.14)}
+.fig-head{display:flex;align-items:baseline;justify-content:space-between;
+  padding-bottom:.95rem;border-bottom:1px solid var(--divider);margin-bottom:1.1rem}
+.fig-title{font-size:.95rem;font-weight:640;color:var(--ink)}
+.fig-sub{font-size:.8rem;color:var(--ink-muted)}
+.plot{position:relative;height:196px;margin:0 4px}
+.bar-line{position:absolute;left:0;right:0;top:96px;z-index:2;height:2px;background:var(--brand);border-radius:2px}
+.bar-label{position:absolute;left:0;top:72px;font-size:.7rem;font-weight:660;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--brand);background:var(--surface);
+  padding:0 .5rem 0 0;z-index:3}
+.people{position:absolute;inset:0;z-index:1;display:flex;align-items:flex-end;justify-content:space-between;padding:0 6px}
+.person{width:44px;display:flex;flex-direction:column;align-items:center;position:relative;height:100%}
+.stem{position:absolute;width:1.5px;background:var(--hairline);border-radius:1px}
+.pip{position:absolute;width:15px;height:15px;border-radius:50%;border:2.5px solid var(--surface)}
+.pname{position:absolute;bottom:0;font-size:.7rem;color:var(--ink-muted);letter-spacing:.01em}
+.fig-foot{display:flex;gap:1.3rem;margin-top:1.35rem;padding-top:1.1rem;
+  border-top:1px solid var(--divider);font-size:.78rem;color:var(--ink-muted)}
+.key{display:inline-flex;align-items:center;gap:.4rem}
+.key i{width:9px;height:9px;border-radius:50%;display:block}
+
+/* ---------- generic section ---------- */
+.sec{padding:clamp(3.4rem,5.6vw,5.2rem) 0}
+.sec-head{max-width:60ch;margin-bottom:3rem}
+.sec-head .rule{margin-bottom:1.5rem}
+.sec-head h2{margin-bottom:1rem}
+
+/* ---------- recognition ---------- */
+.recog{display:grid;gap:0;border-top:1px solid var(--hairline)}
+.recog li{display:flex;gap:1.4rem;align-items:flex-start;padding:1.5rem 0;
+  border-bottom:1px solid var(--hairline)}
+.recog .idx{font-size:.8rem;font-weight:660;color:var(--brand);letter-spacing:.05em;
+  padding-top:.25rem;flex:none;width:2rem}
+.recog p{font-size:clamp(1.05rem,1.5vw,1.22rem);line-height:1.45;color:var(--ink);
+  letter-spacing:-.012em;max-width:52ch}
+
+/* ---------- dark stats band ---------- */
+.band{background:var(--carbon-900);color:#fff}
+.band .h2{color:#fff}
+.band .lede{color:#C9CDD0}
+.band .eyebrow{color:var(--teal-300)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.11);
+  border:1px solid rgba(255,255,255,.11);border-radius:12px;overflow:hidden;margin-top:3rem}
+.stat{background:var(--carbon-900);padding:1.75rem 1.5rem}
+.stat b{display:block;font-size:clamp(2rem,3.4vw,2.7rem);font-weight:640;letter-spacing:-.035em;
+  line-height:1;color:#fff;margin-bottom:.7rem}
+.stat span{font-size:.92rem;line-height:1.45;color:#A7ACB0;display:block}
+.stakes{margin-top:2.5rem;padding-top:2.25rem;border-top:1px solid rgba(255,255,255,.13);
+  display:grid;grid-template-columns:1fr 1fr;gap:2.5rem}
+.stakes p{font-size:clamp(1.15rem,1.8vw,1.42rem);line-height:1.35;color:#fff;
+  letter-spacing:-.018em;font-weight:520}
+.stakes p em{font-style:normal;color:var(--teal-300)}
+.srcnote{margin-top:2.5rem;font-size:.8rem;color:#878D92}
+
+/* ---------- three moves ---------- */
+.moves{display:grid;grid-template-columns:repeat(3,1fr);gap:1.75rem}
+.move{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
+  padding:1.9rem 1.7rem;display:flex;flex-direction:column}
+.move .num{width:30px;height:30px;border-radius:8px;background:var(--brand-tint);color:var(--brand);
+  font-size:.85rem;font-weight:680;display:flex;align-items:center;justify-content:center;
+  margin-bottom:1.3rem}
+.move h3{margin-bottom:.65rem}
+.move p{font-size:.98rem;line-height:1.55;color:var(--ink-secondary);margin-bottom:1.6rem}
+.shot{margin-top:auto;border:1px dashed var(--control);border-radius:10px;background:var(--sunken);
+  height:132px;display:flex;align-items:center;justify-content:center;
+  font-size:.78rem;color:var(--ink-faint);text-align:center;padding:0 1rem}
+
+/* ---------- against ---------- */
+.against{background:var(--brand-tint)}
+.claims{display:grid;grid-template-columns:repeat(3,1fr);gap:2.25rem;margin-top:3rem}
+.claim{border-top:2px solid var(--brand);padding-top:1.25rem}
+.claim h3{margin-bottom:.6rem}
+.claim p{font-size:.98rem;line-height:1.55;color:var(--ink-secondary)}
+
+/* ---------- pivot stat ---------- */
+.pivot{background:var(--surface);border-top:1px solid var(--hairline);
+  border-bottom:1px solid var(--hairline);text-align:center;padding:clamp(4rem,7vw,6rem) 0}
+.pivot .big{font-size:clamp(3.2rem,8vw,6rem);font-weight:660;letter-spacing:-.045em;
+  line-height:1;color:var(--brand);margin-bottom:1.5rem}
+.pivot .say{font-size:clamp(1.2rem,2vw,1.55rem);line-height:1.4;color:var(--ink);
+  letter-spacing:-.02em;max-width:26ch;margin:0 auto 1.5rem}
+.pivot .after{font-size:1.02rem;color:var(--ink-muted);max-width:46ch;margin:0 auto}
+
+/* ---------- founder ---------- */
+.founder{display:grid;grid-template-columns:112px minmax(0,1fr);gap:1.75rem;align-items:start;
+  background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
+  padding:2rem;max-width:780px;margin:0 auto}
+.avatar{width:112px;height:112px;border-radius:12px;background:var(--sunken);
+  border:1px dashed var(--control);display:flex;align-items:center;justify-content:center;
+  font-size:.72rem;color:var(--ink-faint);text-align:center;padding:.5rem}
+.founder p{font-size:1.05rem;line-height:1.6;color:var(--ink-body);margin-bottom:1rem}
+.sig{font-size:.9rem;color:var(--ink-muted)}
+.sig b{color:var(--ink);font-weight:640}
+
+/* ---------- close ---------- */
+.close{background:var(--carbon-900);color:#fff;text-align:center;padding:clamp(4.5rem,8vw,7rem) 0}
+.close h2{color:#fff;max-width:26ch;margin:0 auto 1.4rem;
+  font-size:clamp(2rem,3.6vw,2.9rem);line-height:1.14;letter-spacing:-.028em;font-weight:640}
+.close .sub{font-size:1.1rem;color:#C9CDD0;max-width:46ch;margin:0 auto 2.3rem}
+.close .counter{background:transparent;border-color:rgba(255,255,255,.22);color:#C9CDD0}
+.close .counter b{color:var(--teal-300)}
+
+/* ---------- footer ---------- */
+.foot{background:var(--carbon-950);color:#878D92;padding:3rem 0;font-size:.9rem}
+.foot-in{display:flex;gap:2rem;align-items:center;flex-wrap:wrap}
+.foot .brandmark{color:#fff}
+.foot .brandmark span{color:#fff}
+.foot nav{margin-left:auto;display:flex;gap:1.6rem;flex-wrap:wrap}
+.foot a:hover{color:#fff}
+.tagline{font-size:.9rem;color:#686E74}
+
+@media (max-width:900px){
+  .hero-grid{grid-template-columns:1fr;gap:3rem}
+  .hero .lede{max-width:46ch}
+  .stats{grid-template-columns:1fr 1fr}
+  .stakes{grid-template-columns:1fr;gap:1.5rem}
+  .moves,.claims{grid-template-columns:1fr}
+  .nav-links{display:none}
+  .signin{display:none}
+  .founder{grid-template-columns:1fr}
+  .wrap{padding:0 22px}
+}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brandmark" href="#"><svg viewBox="0 0 940.91 1000.00" fill="currentColor" role="img" aria-label="The Same Page"><path d="M 94.94,0.23 C 53.23,3.21 22.51,33.82 7.63,87.18 C 2.04,107.29 -1.5,131.73 0.62,135.53 C 2.48,138.83 4.81,138.56 10.85,134.33 C 25.78,123.85 49.5,112.82 69.08,107.26 C 89.14,101.53 104.91,98.91 126.32,97.68 C 134.14,97.22 358.8,97.22 360.27,97.65 C 362.44,98.33 363.74,99.72 364.2,101.87 C 364.39,102.76 364.46,156.72 364.46,294.6 C 364.46,430.14 364.53,486.68 364.72,487.98 C 365.4,492.8 366.96,494.1 380.3,500.81 C 383.96,502.67 390.71,506.14 395.28,508.52 C 399.86,510.9 406.74,514.42 410.57,516.32 C 414.42,518.25 420.93,521.55 425.02,523.71 C 429.14,525.86 437.81,530.26 444.28,533.49 C 450.78,536.74 458.3,540.55 461.02,541.94 C 463.74,543.36 467.9,545.46 470.29,546.59 C 472.67,547.74 479.78,551.31 486.06,554.49 C 492.35,557.69 498.92,560.96 500.63,561.78 C 502.36,562.6 506.14,564.43 509.06,565.88 C 517.2,569.9 518.78,570.09 520.3,567.2 L 520.86,566.19 L 520.98,534.28 C 521.05,516.73 521.07,412.56 521.05,302.79 C 520.98,123.76 521,103.02 521.34,101.72 C 522.08,98.83 523.46,97.85 527.31,97.49 C 530.46,97.17 796.88,97.17 810.89,97.49 C 816.38,97.61 822.57,97.82 824.62,97.97 C 862.52,100.59 898.32,112.82 925.99,132.64 C 933.26,137.84 935.45,136.13 934.56,125.95 C 930.93,83.54 920.36,51.37 903.02,29.8 C 888.59,11.88 869.5,1.67 847.61,0.21 C 843.3,-0.08 98.99,-0.06 94.94,0.23 M 624.88,218.53 C 615.44,218.6 597.98,219.04 588.28,219.45 C 583.77,219.64 575.76,219.9 570.46,220.05 C 551.03,220.58 552.52,218.72 552.42,242.44 C 552.33,262.33 552.35,262.74 554.28,264.79 C 555.89,266.47 557.53,266.57 574.17,265.8 C 616.11,263.87 637.74,264.45 662.01,268.09 C 727.77,277.98 776.99,314.8 793.05,366.14 C 804.37,402.26 800.42,442.33 782.43,473.82 C 778.22,481.19 771.55,490.97 767.76,495.32 C 757.19,507.46 745.37,517.21 729.86,526.63 C 711.25,537.9 689.36,545.7 659.67,551.62 C 640.7,555.4 610.72,557.71 575.64,558.1 C 556.35,558.32 556.35,558.32 554.69,559.74 C 552.78,561.33 552.47,563.42 552.57,573.68 C 552.69,585.74 551.41,584.88 573.59,588.08 C 585.92,589.86 595.57,591.02 608.87,592.29 C 613.39,592.75 625.21,593.5 631.62,593.76 C 635.06,593.9 639.61,594.12 641.73,594.24 C 660.18,595.35 694.97,595.3 713.73,594.12 C 725.51,593.38 727.34,593.25 732.27,592.77 C 841.09,582.56 908.05,537.44 932.47,457.83 C 951.3,396.5 938.13,332.26 897.84,288.8 C 893.1,283.67 882.24,274.04 876.39,269.72 C 856.4,255.06 834.08,243.65 812.89,237.27 C 810,236.38 806.17,235.2 804.39,234.62 C 787.65,229.2 759.19,223.95 734.56,221.76 C 699.84,218.65 681.3,218.1 624.88,218.53 M 325.02,244.85 C 284.71,250.99 244.18,264.4 215.65,281.02 C 213.72,282.15 210.91,283.74 209.39,284.61 C 200.02,289.83 184.25,301.41 173.15,311.19 C 131.13,348.25 107.75,397.85 110.4,444.28 C 112.52,481.57 125.71,512.76 152.54,543.92 C 159.81,552.37 171.85,563.71 186.27,575.73 C 196.17,583.96 224.8,603.58 236.84,610.38 C 238.09,611.1 241.34,612.98 244.06,614.59 C 251.26,618.88 254.92,620.95 262.6,625.11 C 266.38,627.18 272.28,630.41 275.73,632.34 C 279.17,634.26 286.8,638.21 292.7,641.15 C 298.6,644.09 305.71,647.7 308.48,649.19 C 311.27,650.68 316.61,653.31 320.39,655.07 C 324.18,656.8 332.15,660.65 338.09,663.61 C 344.06,666.58 351.31,670.14 354.23,671.51 C 357.14,672.89 363.59,676.04 368.55,678.5 C 373.51,680.95 380.3,684.2 383.6,685.72 C 386.93,687.24 393.69,690.46 398.65,692.92 C 403.61,695.35 409.63,698.26 412.02,699.35 C 416.28,701.32 421.48,703.83 435.01,710.47 C 438.79,712.33 445.29,715.51 449.46,717.53 C 453.63,719.55 458.95,722.2 461.26,723.43 C 463.57,724.66 470.51,728.27 476.67,731.42 C 483.51,734.94 490.25,738.62 493.96,740.84 C 497.31,742.86 502.1,745.63 504.6,747.03 C 513.41,751.91 530.37,762.85 537.61,768.34 C 556.73,782.81 565.52,790.9 576.72,804.33 C 597.98,829.86 608.41,856.3 608.46,884.76 C 608.5,917.34 594.88,942.57 567.45,960.61 C 559.77,965.67 559.74,966.36 566.68,977.71 C 572.22,986.76 572.89,986.93 583.22,981.68 C 625.12,960.44 661.5,927.55 682.45,891.98 C 697.93,865.69 706.65,833.33 705.54,806.26 C 703.74,761.81 691.17,730.24 661.38,695.38 C 658.16,691.59 644.57,677.8 640.89,674.57 C 639.49,673.34 636.8,671.06 634.87,669.49 C 632.94,667.9 630.08,665.54 628.49,664.24 C 615.05,653.16 587.63,635.25 567.57,624.41 C 548.88,614.32 540.43,609.92 527.6,603.63 C 521.91,600.84 511.99,595.93 505.56,592.7 C 494.66,587.21 485.46,582.68 467.04,573.77 C 452.98,566.96 437.85,559.54 426.58,553.93 C 411.66,546.47 376.57,528.79 375.66,528.26 C 375.27,528.02 368.7,524.56 361.09,520.56 C 331.57,505.03 306.93,490.22 294.85,480.78 C 258.13,452.08 242.79,426.26 241.97,391.86 C 240.93,346.3 272.53,305.72 325.45,284.7 C 334.07,281.28 334.75,280.87 335.97,278.37 L 336.65,277 L 336.72,265.92 C 336.87,242.95 336.91,243.05 325.02,244.85 M 365.66,709.61 C 364.41,709.87 363.35,711.15 363.02,712.86 C 362.77,713.96 362.7,731.81 362.65,792.05 C 362.61,848.45 362.53,870.79 362.32,873.32 C 360.58,894.99 353.77,911.25 338.91,929.07 C 335.35,933.33 323.98,943.3 318.49,946.98 C 298.65,960.27 277.75,967.95 251.31,971.69 C 242.86,972.87 242.38,973.47 242.21,982.64 C 241.92,997.67 242.59,999.38 248.78,999.83 C 252.64,1000.12 547.97,1000 549.51,999.71 C 554.28,998.85 554.06,996.97 548.31,989.5 C 532.29,968.8 523.26,944.67 521.41,917.63 C 521.22,914.64 521.1,896.58 521,855.62 L 520.86,797.83 L 520.28,796.41 C 519.48,794.41 517.68,792.7 511.51,788.18 C 503.37,782.21 483.12,769.52 472.58,763.83 C 470.26,762.58 466.32,760.39 463.79,758.94 C 458.75,756.1 450.04,751.34 444.04,748.16 C 441.92,747.05 437.37,744.64 433.93,742.81 C 430.49,741.01 424.75,738 421.17,736.12 C 413.65,732.24 370.24,710.47 369.16,710.06 C 367.95,709.61 366.55,709.41 365.66,709.61"/></svg><span>The Same Page</span></a>
+    <nav class="nav-links">
+      <a href="#">Product</a><a href="#">Blog</a><a href="#">About</a><a href="#">Contact</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="signin" href="#">Sign in</a>
+      <a class="btn btn-primary" href="#">Start free</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <h1 class="h1">Define the bar.<br>Then see who clears it.</h1>
+      <p class="lede">One place where every person's expectations and evidence live &mdash;
+        so you always know where they stand, and what to say next.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#">Start free</a>
+        <a class="btn btn-ghost" href="#">See how it works</a>
+      </div>
+      <div class="counter"><span class="dot"></span>
+        <span><b>14 of 20</b> founding places left &middot; 3 months free</span></div>
+    </div>
+    <figure class="figure">
+      <div class="fig-head">
+        <span class="fig-title">Customer Success &mdash; Senior</span>
+        <span class="fig-sub">Q3 &middot; 6 people</span>
+      </div>
+      <div class="plot">
+        <span class="bar-line"></span>
+        <span class="bar-label">The bar</span>
+        <div class="people"><div class="person"><span class="stem" style="top:50px;height:118px"></span><span class="pip" style="top:42px;background:var(--brand)"></span><span class="pname">SP</span></div><div class="person"><span class="stem" style="top:66px;height:102px"></span><span class="pip" style="top:58px;background:var(--brand)"></span><span class="pname">AM</span></div><div class="person"><span class="stem" style="top:92px;height:76px"></span><span class="pip" style="top:84px;background:var(--brand)"></span><span class="pname">MC</span></div><div class="person"><span class="stem" style="top:104px;height:64px"></span><span class="pip" style="top:96px;background:var(--brand)"></span><span class="pname">JT</span></div><div class="person"><span class="stem" style="top:82px;height:86px"></span><span class="pip" style="top:74px;background:var(--brand)"></span><span class="pname">RK</span></div><div class="person"><span class="stem" style="top:138px;height:30px"></span><span class="pip" style="top:130px;background:var(--amber-500)"></span><span class="pname">DL</span></div></div>
+      </div>
+      <div class="fig-foot">
+        <span class="key"><i style="background:var(--brand)"></i> Meeting the bar</span>
+        <span class="key"><i style="background:var(--amber-500)"></i> Below, with a plan</span>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rule"></div>
+      <h2 class="h2">You already know this feeling</h2>
+      <p class="lede">None of it is a tooling problem you created. It is what happens
+        when the standard was never written down.</p>
+    </div>
+    <ul class="recog">
+      <li><span class="idx">01</span><p>Three dashboards, a spreadsheet and a notes doc &mdash;
+        and still no answer to &ldquo;how is she doing?&rdquo;</p></li>
+      <li><span class="idx">02</span><p>Review season arrives and you spend a weekend
+        assembling a story you should already have had.</p></li>
+      <li><span class="idx">03</span><p>You know who your strongest person is.
+        You could not prove it.</p></li>
+      <li><span class="idx">04</span><p>Every manager on the floor does this differently,
+        so none of it compares.</p></li>
+      <li><span class="idx">05</span><p>Your energy goes to the bottom of the team,
+        and you call that managing.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec band">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">The record</div>
+      <h2 class="h2" style="margin-top:1rem">The role changed. The support didn't.</h2>
+      <p class="lede">Almost every manager is working without a written standard.
+        The numbers are not close.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>83%</b><span>of founders are first-time founders &mdash; the
+        management culture you inherited was built by someone learning too</span></div>
+      <div class="stat"><b>68%</b><span>of managers report being overwhelmed &mdash; and only
+        14% of their companies did anything about it</span></div>
+      <div class="stat"><b>69%</b><span>of managers are uncomfortable having performance
+        conversations with their team</span></div>
+      <div class="stat"><b>2%</b><span>of companies believe their performance management
+        approach delivers real value</span></div>
+    </div>
+    <div class="stakes">
+      <p>Managers account for at least <em>70% of the variance</em> in employee engagement.</p>
+      <p><em>Half of all employees</em> who leave a company are leaving their manager.</p>
+    </div>
+    <p class="srcnote">Sources: Gallup, Gartner, HBR. Every figure is dated and linked on our
+      research page. &mdash; placeholder, pending verification</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rule"></div>
+      <h2 class="h2">Three moves, and the guessing stops</h2>
+    </div>
+    <div class="moves">
+      <div class="move">
+        <span class="num">1</span>
+        <h3 class="h3">Define what good looks like</h3>
+        <p>Metrics, skills and values, per role and per level. The thing nobody
+          writes down, written down once.</p>
+        <div class="shot">Screenshot &mdash; role expectations</div>
+      </div>
+      <div class="move">
+        <span class="num">2</span>
+        <h3 class="h3">Let the evidence build itself</h3>
+        <p>1:1s, check-ins and commitments land against the person and the
+          expectation as you go &mdash; so the record accumulates instead of being reconstructed.</p>
+        <div class="shot">Screenshot &mdash; the 1:1 loop</div>
+      </div>
+      <div class="move">
+        <span class="num">3</span>
+        <h3 class="h3">See where everyone stands</h3>
+        <p>One surface. Zoom out for the team, click in for the person, and know
+          the facts behind every rating.</p>
+        <div class="shot">Screenshot &mdash; Mission Control</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec against">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rule"></div>
+      <h2 class="h2">Manage with evidence, not instinct</h2>
+      <p class="lede">Every serious tool in this category is sold to HR &mdash; bought by
+        People teams, used by managers as an obligation, and built around the review
+        cycle rather than around Tuesday.</p>
+    </div>
+    <div class="claims">
+      <div class="claim">
+        <h3 class="h3">Built for you as the buyer</h3>
+        <p>Not for the person HR makes comply. You decide it's worth $20, and you're done.</p>
+      </div>
+      <div class="claim">
+        <h3 class="h3">One surface, not four</h3>
+        <p>Metrics, skills and behaviours in the same place, rather than stitched
+          together from tools that were never meant to meet.</p>
+      </div>
+      <div class="claim">
+        <h3 class="h3">Judgment, not dashboards</h3>
+        <p>It tells you what to do about what it shows you &mdash; before the
+          conversation, not after the quarter.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pivot">
+  <div class="wrap narrow">
+    <div class="big">71%</div>
+    <p class="say">of employees who have weekly performance conversations
+      are highly engaged.</p>
+    <p class="after">The thing already works. What managers are missing isn't
+      willingness &mdash; it's the infrastructure to do it consistently.</p>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="founder">
+      <div class="avatar">Photo &mdash; Andrew</div>
+      <div>
+        <p>I built this because I needed it. I was managing a team, doing the work
+          twice, and still walking into reviews assembling the story from memory.
+          Nothing on the market was built for me &mdash; it was all built for the
+          HR team that bought it.</p>
+        <p class="sig"><b>Andrew Godlewski</b> &middot; Founder</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="close">
+  <div class="wrap narrow">
+    <h2>Get on the same page.<br>Stay there.</h2>
+    <p class="sub">The employee and the manager. The manager and the director.
+      The director and the C&#8209;suite.</p>
+    <a class="btn btn-on-dark" href="#">Start free</a>
+    <div style="margin-top:.4rem"><span class="counter"><span class="dot"></span>
+      <span><b>14 of 20</b> founding places left &middot; 3 months free, and your
+      feedback shapes what gets built</span></span></div>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brandmark" href="#"><svg viewBox="0 0 940.91 1000.00" fill="currentColor" role="img" aria-label="The Same Page"><path d="M 94.94,0.23 C 53.23,3.21 22.51,33.82 7.63,87.18 C 2.04,107.29 -1.5,131.73 0.62,135.53 C 2.48,138.83 4.81,138.56 10.85,134.33 C 25.78,123.85 49.5,112.82 69.08,107.26 C 89.14,101.53 104.91,98.91 126.32,97.68 C 134.14,97.22 358.8,97.22 360.27,97.65 C 362.44,98.33 363.74,99.72 364.2,101.87 C 364.39,102.76 364.46,156.72 364.46,294.6 C 364.46,430.14 364.53,486.68 364.72,487.98 C 365.4,492.8 366.96,494.1 380.3,500.81 C 383.96,502.67 390.71,506.14 395.28,508.52 C 399.86,510.9 406.74,514.42 410.57,516.32 C 414.42,518.25 420.93,521.55 425.02,523.71 C 429.14,525.86 437.81,530.26 444.28,533.49 C 450.78,536.74 458.3,540.55 461.02,541.94 C 463.74,543.36 467.9,545.46 470.29,546.59 C 472.67,547.74 479.78,551.31 486.06,554.49 C 492.35,557.69 498.92,560.96 500.63,561.78 C 502.36,562.6 506.14,564.43 509.06,565.88 C 517.2,569.9 518.78,570.09 520.3,567.2 L 520.86,566.19 L 520.98,534.28 C 521.05,516.73 521.07,412.56 521.05,302.79 C 520.98,123.76 521,103.02 521.34,101.72 C 522.08,98.83 523.46,97.85 527.31,97.49 C 530.46,97.17 796.88,97.17 810.89,97.49 C 816.38,97.61 822.57,97.82 824.62,97.97 C 862.52,100.59 898.32,112.82 925.99,132.64 C 933.26,137.84 935.45,136.13 934.56,125.95 C 930.93,83.54 920.36,51.37 903.02,29.8 C 888.59,11.88 869.5,1.67 847.61,0.21 C 843.3,-0.08 98.99,-0.06 94.94,0.23 M 624.88,218.53 C 615.44,218.6 597.98,219.04 588.28,219.45 C 583.77,219.64 575.76,219.9 570.46,220.05 C 551.03,220.58 552.52,218.72 552.42,242.44 C 552.33,262.33 552.35,262.74 554.28,264.79 C 555.89,266.47 557.53,266.57 574.17,265.8 C 616.11,263.87 637.74,264.45 662.01,268.09 C 727.77,277.98 776.99,314.8 793.05,366.14 C 804.37,402.26 800.42,442.33 782.43,473.82 C 778.22,481.19 771.55,490.97 767.76,495.32 C 757.19,507.46 745.37,517.21 729.86,526.63 C 711.25,537.9 689.36,545.7 659.67,551.62 C 640.7,555.4 610.72,557.71 575.64,558.1 C 556.35,558.32 556.35,558.32 554.69,559.74 C 552.78,561.33 552.47,563.42 552.57,573.68 C 552.69,585.74 551.41,584.88 573.59,588.08 C 585.92,589.86 595.57,591.02 608.87,592.29 C 613.39,592.75 625.21,593.5 631.62,593.76 C 635.06,593.9 639.61,594.12 641.73,594.24 C 660.18,595.35 694.97,595.3 713.73,594.12 C 725.51,593.38 727.34,593.25 732.27,592.77 C 841.09,582.56 908.05,537.44 932.47,457.83 C 951.3,396.5 938.13,332.26 897.84,288.8 C 893.1,283.67 882.24,274.04 876.39,269.72 C 856.4,255.06 834.08,243.65 812.89,237.27 C 810,236.38 806.17,235.2 804.39,234.62 C 787.65,229.2 759.19,223.95 734.56,221.76 C 699.84,218.65 681.3,218.1 624.88,218.53 M 325.02,244.85 C 284.71,250.99 244.18,264.4 215.65,281.02 C 213.72,282.15 210.91,283.74 209.39,284.61 C 200.02,289.83 184.25,301.41 173.15,311.19 C 131.13,348.25 107.75,397.85 110.4,444.28 C 112.52,481.57 125.71,512.76 152.54,543.92 C 159.81,552.37 171.85,563.71 186.27,575.73 C 196.17,583.96 224.8,603.58 236.84,610.38 C 238.09,611.1 241.34,612.98 244.06,614.59 C 251.26,618.88 254.92,620.95 262.6,625.11 C 266.38,627.18 272.28,630.41 275.73,632.34 C 279.17,634.26 286.8,638.21 292.7,641.15 C 298.6,644.09 305.71,647.7 308.48,649.19 C 311.27,650.68 316.61,653.31 320.39,655.07 C 324.18,656.8 332.15,660.65 338.09,663.61 C 344.06,666.58 351.31,670.14 354.23,671.51 C 357.14,672.89 363.59,676.04 368.55,678.5 C 373.51,680.95 380.3,684.2 383.6,685.72 C 386.93,687.24 393.69,690.46 398.65,692.92 C 403.61,695.35 409.63,698.26 412.02,699.35 C 416.28,701.32 421.48,703.83 435.01,710.47 C 438.79,712.33 445.29,715.51 449.46,717.53 C 453.63,719.55 458.95,722.2 461.26,723.43 C 463.57,724.66 470.51,728.27 476.67,731.42 C 483.51,734.94 490.25,738.62 493.96,740.84 C 497.31,742.86 502.1,745.63 504.6,747.03 C 513.41,751.91 530.37,762.85 537.61,768.34 C 556.73,782.81 565.52,790.9 576.72,804.33 C 597.98,829.86 608.41,856.3 608.46,884.76 C 608.5,917.34 594.88,942.57 567.45,960.61 C 559.77,965.67 559.74,966.36 566.68,977.71 C 572.22,986.76 572.89,986.93 583.22,981.68 C 625.12,960.44 661.5,927.55 682.45,891.98 C 697.93,865.69 706.65,833.33 705.54,806.26 C 703.74,761.81 691.17,730.24 661.38,695.38 C 658.16,691.59 644.57,677.8 640.89,674.57 C 639.49,673.34 636.8,671.06 634.87,669.49 C 632.94,667.9 630.08,665.54 628.49,664.24 C 615.05,653.16 587.63,635.25 567.57,624.41 C 548.88,614.32 540.43,609.92 527.6,603.63 C 521.91,600.84 511.99,595.93 505.56,592.7 C 494.66,587.21 485.46,582.68 467.04,573.77 C 452.98,566.96 437.85,559.54 426.58,553.93 C 411.66,546.47 376.57,528.79 375.66,528.26 C 375.27,528.02 368.7,524.56 361.09,520.56 C 331.57,505.03 306.93,490.22 294.85,480.78 C 258.13,452.08 242.79,426.26 241.97,391.86 C 240.93,346.3 272.53,305.72 325.45,284.7 C 334.07,281.28 334.75,280.87 335.97,278.37 L 336.65,277 L 336.72,265.92 C 336.87,242.95 336.91,243.05 325.02,244.85 M 365.66,709.61 C 364.41,709.87 363.35,711.15 363.02,712.86 C 362.77,713.96 362.7,731.81 362.65,792.05 C 362.61,848.45 362.53,870.79 362.32,873.32 C 360.58,894.99 353.77,911.25 338.91,929.07 C 335.35,933.33 323.98,943.3 318.49,946.98 C 298.65,960.27 277.75,967.95 251.31,971.69 C 242.86,972.87 242.38,973.47 242.21,982.64 C 241.92,997.67 242.59,999.38 248.78,999.83 C 252.64,1000.12 547.97,1000 549.51,999.71 C 554.28,998.85 554.06,996.97 548.31,989.5 C 532.29,968.8 523.26,944.67 521.41,917.63 C 521.22,914.64 521.1,896.58 521,855.62 L 520.86,797.83 L 520.28,796.41 C 519.48,794.41 517.68,792.7 511.51,788.18 C 503.37,782.21 483.12,769.52 472.58,763.83 C 470.26,762.58 466.32,760.39 463.79,758.94 C 458.75,756.1 450.04,751.34 444.04,748.16 C 441.92,747.05 437.37,744.64 433.93,742.81 C 430.49,741.01 424.75,738 421.17,736.12 C 413.65,732.24 370.24,710.47 369.16,710.06 C 367.95,709.61 366.55,709.41 365.66,709.61"/></svg><span>The Same Page</span></a>
+    <span class="tagline">Space to manage better.</span>
+    <nav>
+      <a href="#">Product</a><a href="#">Blog</a><a href="#">About</a>
+      <a href="#">Contact</a><a href="#">Support</a><a href="#">Privacy</a><a href="#">Terms</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

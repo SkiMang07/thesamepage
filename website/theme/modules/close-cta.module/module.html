@@ -1,0 +1,11 @@
+<section class="close">
+  <div class="wrap narrow">
+    <h2>{{ module.heading_a }}<br>{{ module.heading_b }}</h2>
+    {% if module.subhead %}<p class="sub">{{ module.subhead }}</p>{% endif %}
+    <a class="btn btn-on-dark" href="{{ module.cta_link.url.href }}">{{ module.cta_label }}</a>
+    {% if module.places_total %}
+    <div style="margin-top:.4rem"><span class="counter"><span class="dot"></span>
+      <span><b>{{ module.places_left }} of {{ module.places_total }}</b> founding places left · {{ module.counter_note }}</span></span></div>
+    {% endif %}
+  </div>
+</section>

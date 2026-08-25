@@ -1,0 +1,44 @@
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <h1 class="h1">{{ module.headline_a }}<br>{{ module.headline_b }}</h1>
+      <p class="lede">{{ module.subhead }}</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="{{ module.cta_link.url.href }}"
+   {% if module.cta_link.open_in_new_tab %}target="_blank"{% endif %}>{{ module.cta_label }}</a>
+        {% if module.cta2_label %}
+        <a class="btn btn-ghost" href="{{ module.cta2_link.url.href }}">{{ module.cta2_label }}</a>
+        {% endif %}
+      </div>
+      {% if module.places_total %}
+      <div class="counter"><span class="dot"></span>
+        <span><b>{{ module.places_left }} of {{ module.places_total }}</b> founding places left · {{ module.counter_note }}</span></div>
+      {% endif %}
+    </div>
+    <figure class="figure">
+      <div class="fig-head">
+        <span class="fig-title">{{ module.fig_title }}</span>
+        <span class="fig-sub">{{ module.fig_meta }}</span>
+      </div>
+      <div class="plot">
+        <span class="bar-line"></span>
+        <span class="bar-label">The bar</span>
+        <div class="people">
+          {% for p in module.people %}
+            {% set top = 96 - p.offset %}
+            {% set stem_top = top + 8 %}
+            <div class="person">
+              <span class="stem" style="top:{{ stem_top }}px;height:{{ 168 - stem_top }}px"></span>
+              <span class="pip" style="top:{{ top }}px;background:{% if p.status == 'below' %}var(--amber-500){% else %}var(--brand){% endif %}"></span>
+              <span class="pname">{{ p.initials }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="fig-foot">
+        <span class="key"><i style="background:var(--brand)"></i> {{ module.key_meeting }}</span>
+        <span class="key"><i style="background:var(--amber-500)"></i> {{ module.key_below }}</span>
+      </div>
+    </figure>
+  </div>
+</section>

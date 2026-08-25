@@ -1,0 +1,20 @@
+[
+  {
+    "name": "figure",
+    "label": "Figure",
+    "type": "text",
+    "default": "71%"
+  },
+  {
+    "name": "statement",
+    "label": "Statement",
+    "type": "text",
+    "default": "of employees who have weekly performance conversations are highly engaged."
+  },
+  {
+    "name": "after",
+    "label": "Follow-on",
+    "type": "text",
+    "default": "The thing already works. What managers are missing isn't willingness \u2014 it's the infrastructure to do it consistently."
+  }
+]

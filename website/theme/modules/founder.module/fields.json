@@ -1,0 +1,32 @@
+[
+  {
+    "name": "photo",
+    "label": "Photo",
+    "type": "image",
+    "responsive": true,
+    "default": {
+      "src": "",
+      "alt": "",
+      "width": null,
+      "height": null
+    }
+  },
+  {
+    "name": "quote",
+    "label": "Note",
+    "type": "richtext",
+    "default": "<p>I built this because I needed it. I was managing a team, doing the work twice, and still walking into reviews assembling the story from memory. Nothing on the market was built for me \u2014 it was all built for the HR team that bought it.</p>"
+  },
+  {
+    "name": "person_name",
+    "label": "Name",
+    "type": "text",
+    "default": "Andrew Godlewski"
+  },
+  {
+    "name": "role",
+    "label": "Role",
+    "type": "text",
+    "default": "Founder"
+  }
+]

@@ -1,0 +1,65 @@
+[
+  {
+    "name": "heading_a",
+    "label": "Heading, line 1",
+    "type": "text",
+    "default": "Get on the same page."
+  },
+  {
+    "name": "heading_b",
+    "label": "Heading, line 2",
+    "type": "text",
+    "default": "Stay there."
+  },
+  {
+    "name": "subhead",
+    "label": "Sub-headline",
+    "type": "text",
+    "default": "The employee and the manager. The manager and the director. The director and the C-suite."
+  },
+  {
+    "name": "cta_label",
+    "label": "Button label",
+    "type": "text",
+    "default": "Start free"
+  },
+  {
+    "name": "cta_link",
+    "label": "Button link",
+    "type": "link",
+    "supported_types": [
+      "EXTERNAL",
+      "CONTENT",
+      "EMAIL_ADDRESS",
+      "FILE"
+    ],
+    "default": {
+      "url": {
+        "type": "EXTERNAL",
+        "href": "#"
+      },
+      "open_in_new_tab": false,
+      "no_follow": false
+    }
+  },
+  {
+    "name": "places_left",
+    "label": "Founding places left",
+    "type": "number",
+    "default": 14,
+    "suffix": ""
+  },
+  {
+    "name": "places_total",
+    "label": "Founding places total",
+    "type": "number",
+    "default": 20,
+    "suffix": ""
+  },
+  {
+    "name": "counter_note",
+    "label": "Counter note",
+    "type": "text",
+    "default": "3 months free, and your feedback shapes what gets built"
+  }
+]

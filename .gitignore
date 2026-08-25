@@ -39,3 +39,12 @@ docs/marketing/
 .agents/skills/*
 !.agents/skills/tsp-push/
 !.agents/skills/tsp-push/**
+
+# Marketing site (website/). The HubSpot CLI credential belongs in
+# ~/.hscli/config.yml, outside this repo entirely — see website/docs/security.md.
+# These entries are a backstop for older CLI versions that wrote credentials into
+# the working directory, not the primary control.
+website/node_modules/
+website/**/hubspot.config.yml
+hubspot.config.yml
+.hscli/

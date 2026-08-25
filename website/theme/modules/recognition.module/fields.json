@@ -1,0 +1,49 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "You already know this feeling"
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "None of it is a tooling problem you created. It is what happens when the standard was never written down."
+  },
+  {
+    "name": "items",
+    "label": "Lines",
+    "type": "group",
+    "occurrence": {
+      "min": 1,
+      "max": 8,
+      "default": 5
+    },
+    "children": [
+      {
+        "name": "line",
+        "label": "Line",
+        "type": "text",
+        "default": ""
+      }
+    ],
+    "default": [
+      {
+        "line": "Three dashboards, a spreadsheet and a notes doc \u2014 and still no answer to \u201chow is she doing?\u201d"
+      },
+      {
+        "line": "Review season arrives and you spend a weekend assembling a story you should already have had."
+      },
+      {
+        "line": "You know who your strongest person is. You could not prove it."
+      },
+      {
+        "line": "Every manager on the floor does this differently, so none of it compares."
+      },
+      {
+        "line": "Your energy goes to the bottom of the team, and you call that managing."
+      }
+    ]
+  }
+]

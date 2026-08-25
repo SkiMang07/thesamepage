@@ -69,8 +69,10 @@ first-time managers are actively searching.
 Every problem in `PRODUCT_VISION.md → "Problems to solve"` is close to a
 publishable post title. That list is the content backlog.
 
-**Technical setup:** Blog is MDX in-repo (under `frontend/app/(marketing)/blog/`).
-Simple. No headless CMS until content volume justifies it.
+**Technical setup:** Blog runs on HubSpot Content Hub, as part of the marketing
+site. Superseded the earlier plan of MDX in-repo under
+`frontend/app/(marketing)/blog/`, which is no longer the intent. See
+`website/docs/build-process.md`.
 
 **Conversion path:** Blog post → email capture or free trial → paid. No paywall
 on content. Freemium or free-tier mechanic is the BOFU conversion lever.

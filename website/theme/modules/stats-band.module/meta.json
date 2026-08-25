@@ -1,0 +1,12 @@
+{
+  "label": "Stats band (carbon)",
+  "host_template_types": [
+    "PAGE"
+  ],
+  "is_available_for_new_content": true,
+  "categories": [
+    "design"
+  ],
+  "icon": "",
+  "master_language": "en"
+}

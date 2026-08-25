@@ -1,0 +1,18 @@
+{
+  "label": "The Same Page",
+  "preview_path": "./templates/page.html",
+  "screenshot_path": "./images/screenshot.png",
+  "author": {
+    "name": "Andrew Godlewski"
+  },
+  "version": "1.0.0",
+  "responsive_breakpoints": [
+    {
+      "name": "mobile",
+      "mediaQuery": "@media (max-width: 900px)",
+      "previewWidth": {
+        "value": 390
+      }
+    }
+  ]
+}

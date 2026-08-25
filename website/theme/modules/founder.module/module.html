@@ -1,0 +1,15 @@
+<section class="sec">
+  <div class="wrap">
+    <div class="founder">
+      {% if module.photo.src %}
+        <img class="avatar-img" src="{{ module.photo.src }}" alt="{{ module.photo.alt }}" loading="lazy">
+      {% else %}
+        <div class="avatar">Photo — {{ module.person_name }}</div>
+      {% endif %}
+      <div>
+        {{ module.quote }}
+        <p class="sig"><b>{{ module.person_name }}</b> · {{ module.role }}</p>
+      </div>
+    </div>
+  </div>
+</section>

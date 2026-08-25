@@ -1,0 +1,22 @@
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rule"></div>
+      <h2 class="h2">{{ module.heading }}</h2>
+    </div>
+    <div class="moves">
+      {% for m in module.items %}
+      <div class="move">
+        <span class="num">{{ loop.index }}</span>
+        <h3 class="h3">{{ m.title }}</h3>
+        <p>{{ m.copy }}</p>
+        {% if m.shot.src %}
+          <img class="shot-img" src="{{ m.shot.src }}" alt="{{ m.shot.alt }}" loading="lazy">
+        {% else %}
+          <div class="shot">{{ m.shot_label }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,14 @@
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rule"></div>
+      <h2 class="h2">{{ module.heading }}</h2>
+      {% if module.lede %}<p class="lede">{{ module.lede }}</p>{% endif %}
+    </div>
+    <ul class="recog">
+      {% for i in module.items %}
+      <li><span class="idx">{% if loop.index < 10 %}0{% endif %}{{ loop.index }}</span><p>{{ i.line }}</p></li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>

@@ -1,0 +1,67 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Three moves, and the guessing stops"
+  },
+  {
+    "name": "items",
+    "label": "Moves",
+    "type": "group",
+    "occurrence": {
+      "min": 1,
+      "max": 4,
+      "default": 3
+    },
+    "children": [
+      {
+        "name": "title",
+        "label": "Title",
+        "type": "text",
+        "default": ""
+      },
+      {
+        "name": "copy",
+        "label": "Body",
+        "type": "text",
+        "default": ""
+      },
+      {
+        "name": "shot",
+        "label": "Screenshot",
+        "type": "image",
+        "responsive": true,
+        "default": {
+          "src": "",
+          "alt": "",
+          "width": null,
+          "height": null
+        }
+      },
+      {
+        "name": "shot_label",
+        "label": "Placeholder label",
+        "type": "text",
+        "default": "Screenshot"
+      }
+    ],
+    "default": [
+      {
+        "title": "Define what good looks like",
+        "body": "Metrics, skills and values, per role and per level. The thing nobody writes down, written down once.",
+        "shot_label": "Screenshot \u2014 role expectations"
+      },
+      {
+        "title": "Let the evidence build itself",
+        "body": "1:1s, check-ins and commitments land against the person and the expectation as you go \u2014 so the record accumulates instead of being reconstructed.",
+        "shot_label": "Screenshot \u2014 the 1:1 loop"
+      },
+      {
+        "title": "See where everyone stands",
+        "body": "One surface. Zoom out for the team, click in for the person, and know the facts behind every rating.",
+        "shot_label": "Screenshot \u2014 Mission Control"
+      }
+    ]
+  }
+]

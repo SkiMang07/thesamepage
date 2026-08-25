@@ -1,0 +1,217 @@
+[
+  {
+    "name": "color",
+    "label": "Colour",
+    "type": "group",
+    "help_text": "Current & Carbon. Defaults are the exact values from the product app (frontend/app/globals.css). Change one here and the whole site follows. NOTE: theme fields only accept a restricted set of types \u2014 colour, font, number, choice, boolean, spacing, image, url. Plain `text` is NOT allowed here; it belongs in a module.",
+    "children": [
+      {
+        "name": "brand",
+        "label": "Brand teal",
+        "type": "color",
+        "default": {
+          "color": "#087E78",
+          "opacity": 100
+        },
+        "help_text": "Primary action, the mark, the bar."
+      },
+      {
+        "name": "brand_hover",
+        "label": "Brand teal \u2014 hover",
+        "type": "color",
+        "default": {
+          "color": "#00635F",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "brand_tint",
+        "label": "Brand tint",
+        "type": "color",
+        "default": {
+          "color": "#EEF5F4",
+          "opacity": 100
+        },
+        "help_text": "Pale teal section grounds."
+      },
+      {
+        "name": "canvas",
+        "label": "Page ground",
+        "type": "color",
+        "default": {
+          "color": "#F5F8FA",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "surface",
+        "label": "Card",
+        "type": "color",
+        "default": {
+          "color": "#FFFFFF",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "sunken",
+        "label": "Recessed panel",
+        "type": "color",
+        "default": {
+          "color": "#ECEFF2",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "hairline",
+        "label": "Card edge",
+        "type": "color",
+        "default": {
+          "color": "#DDE0E3",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "control",
+        "label": "Input / secondary border",
+        "type": "color",
+        "default": {
+          "color": "#C9CDD0",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "ink",
+        "label": "Ink \u2014 headings",
+        "type": "color",
+        "default": {
+          "color": "#222B32",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "ink_body",
+        "label": "Ink \u2014 body",
+        "type": "color",
+        "default": {
+          "color": "#394148",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "ink_secondary",
+        "label": "Ink \u2014 secondary",
+        "type": "color",
+        "default": {
+          "color": "#4F575D",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "ink_muted",
+        "label": "Ink \u2014 muted",
+        "type": "color",
+        "default": {
+          "color": "#686E74",
+          "opacity": 100
+        },
+        "help_text": "Floor for real text. Do not go lighter."
+      },
+      {
+        "name": "ink_faint",
+        "label": "Ink \u2014 faint",
+        "type": "color",
+        "default": {
+          "color": "#878D92",
+          "opacity": 100
+        },
+        "help_text": "Decoration and disabled only. Never body copy."
+      },
+      {
+        "name": "carbon",
+        "label": "Carbon band",
+        "type": "color",
+        "default": {
+          "color": "#222B32",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "carbon_deep",
+        "label": "Carbon \u2014 footer",
+        "type": "color",
+        "default": {
+          "color": "#131B22",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "teal_300",
+        "label": "Teal on carbon",
+        "type": "color",
+        "default": {
+          "color": "#B1D5D1",
+          "opacity": 100
+        },
+        "help_text": "Emphasis inside dark bands."
+      },
+      {
+        "name": "amber",
+        "label": "Attention",
+        "type": "color",
+        "default": {
+          "color": "#B67118",
+          "opacity": 100
+        },
+        "help_text": "Below the bar. Never used for anything else."
+      },
+      {
+        "name": "focus",
+        "label": "Focus ring",
+        "type": "color",
+        "default": {
+          "color": "#2878D0",
+          "opacity": 100
+        },
+        "help_text": "Reserved for focus and AI. Never a status."
+      },
+      {
+        "name": "feature_from",
+        "label": "Hero gradient \u2014 from",
+        "type": "color",
+        "default": {
+          "color": "#E9F2F1",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "feature_to",
+        "label": "Hero gradient \u2014 to",
+        "type": "color",
+        "default": {
+          "color": "#FFFFFF",
+          "opacity": 100
+        }
+      },
+      {
+        "name": "ink_on_carbon",
+        "label": "Ink \u2014 on carbon",
+        "type": "color",
+        "default": {
+          "color": "#A7ACB0",
+          "opacity": 100
+        },
+        "help_text": "Body copy inside dark bands."
+      },
+      {
+        "name": "on_dark",
+        "label": "White",
+        "type": "color",
+        "default": {
+          "color": "#FFFFFF",
+          "opacity": 100
+        },
+        "help_text": "Text and buttons on carbon. Kept a field so nothing is hard-coded."
+      }
+    ]
+  }
+]

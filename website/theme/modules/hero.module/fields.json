@@ -1,0 +1,190 @@
+[
+  {
+    "name": "headline_a",
+    "label": "Headline, line 1",
+    "type": "text",
+    "default": "Define the bar."
+  },
+  {
+    "name": "headline_b",
+    "label": "Headline, line 2",
+    "type": "text",
+    "default": "Then see who clears it."
+  },
+  {
+    "name": "subhead",
+    "label": "Sub-headline",
+    "type": "text",
+    "default": "One place where every person's expectations and evidence live \u2014 so you always know where they stand, and what to say next."
+  },
+  {
+    "name": "cta_label",
+    "label": "Button label",
+    "type": "text",
+    "default": "Start free"
+  },
+  {
+    "name": "cta_link",
+    "label": "Button link",
+    "type": "link",
+    "supported_types": [
+      "EXTERNAL",
+      "CONTENT",
+      "EMAIL_ADDRESS",
+      "FILE"
+    ],
+    "default": {
+      "url": {
+        "type": "EXTERNAL",
+        "href": "#"
+      },
+      "open_in_new_tab": false,
+      "no_follow": false
+    }
+  },
+  {
+    "name": "cta2_label",
+    "label": "Secondary label",
+    "type": "text",
+    "default": "See how it works"
+  },
+  {
+    "name": "cta2_link",
+    "label": "Secondary link",
+    "type": "link",
+    "supported_types": [
+      "EXTERNAL",
+      "CONTENT",
+      "EMAIL_ADDRESS",
+      "FILE"
+    ],
+    "default": {
+      "url": {
+        "type": "EXTERNAL",
+        "href": "#"
+      },
+      "open_in_new_tab": false,
+      "no_follow": false
+    }
+  },
+  {
+    "name": "places_left",
+    "label": "Founding places left",
+    "type": "number",
+    "default": 14,
+    "suffix": "",
+    "help_text": "The counter must be true. Update it, or delete the note."
+  },
+  {
+    "name": "places_total",
+    "label": "Founding places total",
+    "type": "number",
+    "default": 20,
+    "suffix": ""
+  },
+  {
+    "name": "counter_note",
+    "label": "Counter note",
+    "type": "text",
+    "default": "3 months free"
+  },
+  {
+    "name": "fig_title",
+    "label": "Chart \u2014 role",
+    "type": "text",
+    "default": "Customer Success \u2014 Senior"
+  },
+  {
+    "name": "fig_meta",
+    "label": "Chart \u2014 meta",
+    "type": "text",
+    "default": "Q3 \u00b7 6 people"
+  },
+  {
+    "name": "people",
+    "label": "Chart \u2014 people",
+    "type": "group",
+    "occurrence": {
+      "min": 2,
+      "max": 10,
+      "default": 6
+    },
+    "children": [
+      {
+        "name": "initials",
+        "label": "Initials",
+        "type": "text",
+        "default": "AM"
+      },
+      {
+        "name": "offset",
+        "label": "Distance from the bar",
+        "type": "number",
+        "default": 20,
+        "suffix": "",
+        "help_text": "Pixels above the bar. Negative sits below it. Range roughly -60 to 60."
+      },
+      {
+        "name": "status",
+        "label": "Status",
+        "type": "choice",
+        "display": "select",
+        "choices": [
+          [
+            "meeting",
+            "Meeting the bar"
+          ],
+          [
+            "below",
+            "Below, with a plan"
+          ]
+        ],
+        "default": "meeting"
+      }
+    ],
+    "default": [
+      {
+        "initials": "SP",
+        "offset": 54,
+        "status": "meeting"
+      },
+      {
+        "initials": "AM",
+        "offset": 38,
+        "status": "meeting"
+      },
+      {
+        "initials": "MC",
+        "offset": 12,
+        "status": "meeting"
+      },
+      {
+        "initials": "JT",
+        "offset": 0,
+        "status": "meeting"
+      },
+      {
+        "initials": "RK",
+        "offset": 22,
+        "status": "meeting"
+      },
+      {
+        "initials": "DL",
+        "offset": -34,
+        "status": "below"
+      }
+    ]
+  },
+  {
+    "name": "key_meeting",
+    "label": "Legend \u2014 meeting",
+    "type": "text",
+    "default": "Meeting the bar"
+  },
+  {
+    "name": "key_below",
+    "label": "Legend \u2014 below",
+    "type": "text",
+    "default": "Below, with a plan"
+  }
+]
