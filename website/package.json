@@ -4,8 +4,9 @@
   "private": true,
   "description": "Marketing site for The Same Page \u2014 HubSpot Content Hub theme",
   "scripts": {
+    "verify": "python3 scripts/verify-theme.py",
     "watch": "hs cms watch theme tsp-theme",
-    "upload": "hs cms upload theme tsp-theme",
+    "upload": "python3 scripts/verify-theme.py && hs cms upload theme tsp-theme",
     "accounts": "hs account list"
   },
   "devDependencies": {

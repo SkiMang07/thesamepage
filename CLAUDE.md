@@ -30,6 +30,7 @@ you're actually touching:
 | Product scope, feature priority, roadmap | `PRODUCT_VISION.md` |
 | Pricing, GTM, content, ICP | `docs/GTM.md` |
 | One specific feature area | `docs/systems/<area>.md` (see below) |
+| Marketing website (HubSpot) | `website/docs/build-process.md` |
 
 `docs/systems/` holds one current-state doc per subsystem — read on demand,
 never all at once:

@@ -51,12 +51,35 @@ name are kept distinct on purpose so the upload command reads unambiguously.
 syntax is involved, and it stays in the repo afterwards as the reference for what
 the modules were cut from.
 
+## Verification
+
+```
+npm run verify
+```
+
+`scripts/verify-theme.py` runs before every upload — `npm run upload` chains them
+and refuses to push if a check fails. Every check in it corresponds to something
+that actually broke once. Add to it; do not trim it.
+
+It checks: no zero-byte files, all JSON parses, theme fields are colours only with
+no reserved names, every `theme.x.y` reference resolves, every `{{ module.x }}` has
+a field, no reserved module field names, every repeatable group has an
+`occurrence.default` at least its minimum, no literal colour below the token block,
+the template annotation and standard includes are present, and every `include` and
+`dnd_module path=` resolves on disk.
+
+**Why the empty-file check is first.** Both partials once shipped as zero bytes, so
+the site had no nav and no footer — and nothing reported an error, because an empty
+partial resolves fine and renders nothing. The cause was a patch script doing
+`open(p,"w").write(open(p).read()...)`: the write handle truncates the file before
+the read runs. Never read and write the same path in one expression.
+
 ## First upload
 
 ```
 cd website
 npm install
-npx hs cms upload theme tsp-theme
+npm run upload
 ```
 
 Then in HubSpot: Content → Design Manager to see the theme, and Content →
