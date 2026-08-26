@@ -44,6 +44,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { CARD, EYEBROW, FEATURE_SURFACE } from "@/lib/tokens";
 
 type PeriodKind = "week" | "month" | "quarter";
 
@@ -138,6 +139,15 @@ function formatHours(h: number): string {
   return `${h.toFixed(1)} hr${h.toFixed(1) === "1.0" ? "" : "s"}`;
 }
 
+function formatHoursCompact(h: number): string {
+  return `${h.toFixed(1)}h`;
+}
+
+function formatWorkUnits(hours: number, config: WorkUnitConfig): string {
+  const count = Math.round(hours / config.hours_per_unit);
+  return `${count} ${config.unit_name}${count === 1 ? "" : "s"}`;
+}
+
 export default function CapacityPage() {
   const [periodKind, setPeriodKind] = useState<PeriodKind>("week");
   const [anchor, setAnchor] = useState<Date | null>(null);
@@ -188,51 +198,95 @@ export default function CapacityPage() {
   const workUnitByRole = useMemo(() => new Map(workUnits.map((w) => [w.role_level_id, w])), [workUnits]);
 
   const teamTotalHours = overview.reduce((sum, o) => sum + o.available_hours, 0);
+  const teamTotalOffHours = overview.reduce((sum, o) => sum + o.off_hours, 0);
+  const loggedSourceCount = overview.filter((o) => o.off_hours_source === "logged").length;
+  const assumedSourceCount = overview.length - loggedSourceCount;
 
   return (
-    <PageShell maxWidth="3xl">
-      <h1 className="text-2xl font-semibold">Capacity</h1>
-      <p className="mt-1 text-sm text-ink-secondary">
-        How much bandwidth your team has right now — not what&apos;s using it up yet.
-      </p>
+    <PageShell maxWidth="4xl">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Capacity</h1>
+          <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
+            The working time your team has available in this period, before any allocation or demand planning.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex rounded-md border border-hairline p-0.5">
+            {(Object.keys(PERIOD_LABEL) as PeriodKind[]).map((k) => (
+              <button
+                key={k}
+                onClick={() => setPeriodKind(k)}
+                aria-pressed={periodKind === k}
+                className={`flex-1 rounded px-3 py-1.5 text-sm sm:flex-none ${
+                  periodKind === k ? "bg-brand font-medium text-on-brand" : "text-ink-secondary hover:text-ink"
+                }`}
+              >
+                {PERIOD_LABEL[k]}
+              </button>
+            ))}
+          </div>
+          {range && (
+            <div className="flex items-center justify-between gap-2 text-sm text-ink-secondary sm:justify-start">
+              <button
+                onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, -1) : a))}
+                aria-label={`Previous ${periodKind}`}
+                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken hover:text-ink"
+              >
+                &larr;
+              </button>
+              <span className="min-w-28 text-center">{formatRange(range.start, range.end)}</span>
+              <button
+                onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, 1) : a))}
+                aria-label={`Next ${periodKind}`}
+                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sunken hover:text-ink"
+              >
+                &rarr;
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
-
-      {/* Period selector */}
-      <div className={`${SECTION_GAP} flex items-center justify-between gap-4`}>
-        <div className="flex rounded-md border border-hairline p-0.5">
-          {(Object.keys(PERIOD_LABEL) as PeriodKind[]).map((k) => (
-            <button
-              key={k}
-              onClick={() => setPeriodKind(k)}
-              className={`rounded px-3 py-1.5 text-sm ${periodKind === k ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`}
-            >
-              {PERIOD_LABEL[k]}
-            </button>
-          ))}
-        </div>
-        {range && (
-          <div className="flex items-center gap-3 text-sm text-ink-secondary">
-            <button onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, -1) : a))} className="hover:text-ink">
-              &larr;
-            </button>
-            <span>{formatRange(range.start, range.end)}</span>
-            <button onClick={() => setAnchor((a) => (a ? shiftAnchor(periodKind, a, 1) : a))} className="hover:text-ink">
-              &rarr;
-            </button>
-          </div>
-        )}
-      </div>
 
       {loading ? (
         <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <>
+          {overview.length > 0 && (
+            <section className={`${FEATURE_SURFACE} ${SECTION_GAP} grid gap-6 p-6 md:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.8fr)]`}>
+              <div>
+                <p className={`${EYEBROW} text-brand`}>Available working time</p>
+                <p className="mt-2 text-4xl font-semibold tracking-tight text-ink">
+                  {formatHoursCompact(teamTotalHours)}
+                </p>
+                <p className="mt-2 max-w-xl text-sm text-ink-secondary">
+                  Across {overview.length} direct {overview.length === 1 ? "report" : "reports"}. This is supply only: it does not subtract projects,
+                  goals, assignments, or other demand.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 border-t border-divider pt-5 md:grid-cols-1 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+                <div>
+                  <p className="text-lg font-semibold text-ink">{formatHoursCompact(teamTotalOffHours)}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">Time off deducted</p>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-ink">
+                    {loggedSourceCount} logged <span className="text-ink-muted">&middot;</span> {assumedSourceCount} assumed
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-muted">Source coverage</p>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Your team */}
           <div className={SECTION_GAP}>
             <div className="flex items-baseline justify-between">
-              <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">Your team</h2>
-              {overview.length > 0 && <span className="text-xs text-ink-muted">{formatHours(teamTotalHours)} total</span>}
+              <h2 className={EYEBROW}>Your team</h2>
+              {overview.length > 0 && <span className="text-xs text-ink-muted">Hours are the shared currency</span>}
             </div>
 
             {overview.length === 0 ? (
@@ -244,63 +298,71 @@ export default function CapacityPage() {
                 .
               </p>
             ) : (
-              <ul className="mt-4 space-y-2">
-                {overview.map((o) => {
-                  const workUnit = o.role_level_id ? workUnitByRole.get(o.role_level_id) : undefined;
-                  return (
-                    <li key={o.direct_report_id} className="rounded-lg border border-hairline px-4 py-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-ink">{o.name}</p>
-                          {o.role_title && <p className="text-xs text-ink-secondary">{o.role_title}</p>}
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-sm font-medium text-ink">{formatHours(o.available_hours)}</p>
-                          {workUnit && (
-                            <p className="text-xs text-ink-muted">
-                              &asymp; {Math.round(o.available_hours / workUnit.hours_per_unit)} {workUnit.unit_name}
-                              {Math.round(o.available_hours / workUnit.hours_per_unit) === 1 ? "" : "s"}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <p className="mt-1.5 text-xs text-ink-muted">
-                        {o.contracted_hours_per_week}h/wk contracted &middot; {o.target_utilization_pct}% target
-                        {o.off_hours > 0 &&
-                          ` · ${formatHours(o.off_hours)} ${
-                            o.off_hours_source === "logged" ? "logged time off" : "assumed time off"
-                          } this period`}
-                      </p>
-                      {o.off_hours_source === "assumed" && o.off_hours > 0 && (
-                        <p className="text-xs text-ink-faint">
-                          No time off logged for this period — assuming a share of {o.off_days_per_year} default days/year.
-                        </p>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className={`${CARD} mt-4 overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] border-collapse text-left">
+                    <thead className="bg-sunken">
+                      <tr className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                        <th className="px-4 py-3">Person</th>
+                        <th className="px-4 py-3 text-right">Available</th>
+                        <th className="px-4 py-3 text-right">Contracted</th>
+                        <th className="px-4 py-3 text-right">Target</th>
+                        <th className="px-4 py-3">Time off used</th>
+                        <th className="px-4 py-3 text-right">Native unit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-divider">
+                      {overview.map((o) => {
+                        const workUnit = o.role_level_id ? workUnitByRole.get(o.role_level_id) : undefined;
+                        return (
+                          <tr key={o.direct_report_id} className="hover:bg-sunken/60">
+                            <td className="px-4 py-3">
+                              <Link href={`/app/reports/${o.direct_report_id}`} className="text-sm font-medium text-ink hover:text-brand">
+                                {o.name}
+                              </Link>
+                              {o.role_title && <p className="mt-0.5 max-w-52 truncate text-xs text-ink-muted">{o.role_title}</p>}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-ink">
+                              {formatHoursCompact(o.available_hours)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-ink-secondary">
+                              {o.contracted_hours_per_week}h/wk
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-ink-secondary">
+                              {o.target_utilization_pct}%
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-secondary">
+                              {formatHoursCompact(o.off_hours)} &middot; {o.off_hours_source === "logged" ? "logged" : "assumed"}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-ink-secondary">
+                              {workUnit ? formatWorkUnits(o.available_hours, workUnit) : <span className="text-ink-faint">&mdash;</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="border-t border-divider bg-sunken px-4 py-3 text-xs leading-relaxed text-ink-secondary">
+                  When time off is logged for a period, those dates replace the prorated annual allowance. Available hours never include demand or assigned
+                  work.
+                </div>
+              </div>
             )}
             <p className="mt-3 text-xs text-ink-muted">
-              Adjust someone&apos;s hours, target, or unit conversion in{" "}
-              <Link href="/app/settings" className="underline hover:text-ink-secondary">
-                Settings
-              </Link>{" "}
-              or on their{" "}
-              <Link href="/app/dashboard" className="underline hover:text-ink-secondary">
-                report page
-              </Link>
-              .
+              Open a person from{" "}
+              <Link href="/app/team" className="underline hover:text-ink-secondary">Team</Link>{" "}
+              to adjust their hours, target, or time off. Company defaults and native work units live in{" "}
+              <Link href="/app/settings" className="underline hover:text-ink-secondary">Capacity settings</Link>.
             </p>
           </div>
 
           {/* By department */}
           <div className={SECTION_GAP}>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">By department</h2>
-            <p className="mt-1 text-xs text-ink-muted">
-              Rolled up across every unit you lead in {companyName}&apos;s org chart, regardless of who manages
-              them — aggregate numbers only, never a named individual outside your own team.
-            </p>
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className={EYEBROW}>By department</h2>
+              <span className="text-xs text-ink-muted">Aggregate-only beyond your direct reports</span>
+            </div>
             {orgUnits.length === 0 ? (
               <p className="mt-4 text-ink-secondary">
                 No departments or teams yet.{" "}
@@ -326,6 +388,10 @@ export default function CapacityPage() {
                 })}
               </ul>
             )}
+            <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+              Rolled up through {companyName}&apos;s org chart across every unit you lead, regardless of who manages them. Names appear only for people who
+              report directly to you.
+            </p>
           </div>
         </>
       )}
@@ -345,7 +411,7 @@ function RollupNode({
   const totals = subtreeTotals(node, rollupByUnit);
   return (
     <li style={{ marginLeft: depth * 24 }}>
-      <div className="flex items-center justify-between gap-4 rounded-lg border border-hairline px-4 py-2.5">
+      <div className={`${CARD} flex items-center justify-between gap-4 px-4 py-3`}>
         <p className="min-w-0 text-sm font-medium text-ink">
           {node.name}
           <span className="ml-2 rounded-full bg-sunken px-2 py-0.5 text-xs font-normal text-ink-secondary">
