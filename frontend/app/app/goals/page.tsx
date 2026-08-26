@@ -329,19 +329,22 @@ export default function GoalsPage() {
           )}
 
           {level === "individual" ? (
-            <div className={`${SECTION_GAP} space-y-8`}>
-              {(groupedIndividual ?? []).map((group) => (
-                <div key={group.name}>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
-                    {group.name}
-                  </h2>
-                  <GoalGrid goals={group.goals} {...goalListProps} />
-                </div>
-              ))}
-              {levelGoals.length === 0 && (
+            <div className={SECTION_GAP}>
+              {levelGoals.length === 0 ? (
                 <p className="text-ink-secondary">
                   No individual goals yet. Add one above and link it to a direct report.
                 </p>
+              ) : (
+                <div className="grid grid-cols-1 items-start gap-x-3 gap-y-8 lg:grid-cols-2 xl:grid-cols-3">
+                  {(groupedIndividual ?? []).map((group) => (
+                    <div key={group.name} className="min-w-0">
+                      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                        {group.name}
+                      </h2>
+                      <GoalGrid goals={group.goals} stacked {...goalListProps} />
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           ) : (
@@ -460,6 +463,7 @@ function GoalGrid({
   orgUnits,
   allGoals,
   projects,
+  stacked = false,
 }: {
   goals: Goal[];
   onSetStatus: (id: string, status: GoalStatus) => void;
@@ -473,12 +477,13 @@ function GoalGrid({
   orgUnits: OrgUnit[];
   allGoals: Goal[];
   projects: Project[];
+  stacked?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className={stacked ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"}>
       {goals.map((g) =>
         g.id === editingGoalId ? (
-          <div key={g.id} className="md:col-span-2 xl:col-span-3">
+          <div key={g.id} className={stacked ? undefined : "md:col-span-2 xl:col-span-3"}>
             <GoalForm
               defaultLevel={g.level}
               initialGoal={g}

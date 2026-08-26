@@ -18,6 +18,7 @@
 
 import { useState } from "react";
 import { CheckIn, CheckInIn, CheckInTrend, GoalStatus } from "@/lib/api";
+import { STATUS_BAR, STATUS_DOT } from "@/lib/tokens";
 
 // Past this many days without a check-in, the freshness label turns amber.
 // Matches the weekly-ish cadence a check-in is designed for (two missed
@@ -32,14 +33,6 @@ const STATUS_OPTIONS: { id: GoalStatus; label: string }[] = [
   { id: "completed", label: "Completed" },
   { id: "cancelled", label: "Cancelled" },
 ];
-
-const DOT_STYLES: Record<GoalStatus, string> = {
-  active: "bg-ink-muted",
-  on_track: "bg-brand",
-  at_risk: "bg-amber-500",
-  completed: "bg-blue-500",
-  cancelled: "bg-carbon-300",
-};
 
 export function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
@@ -83,12 +76,10 @@ export function averageProgress(items: { progress?: number | null }[]): number |
 
 export function ProgressBar({ progress, status }: { progress: number | null | undefined; status: GoalStatus }) {
   if (progress == null) return null;
-  const barColor =
-    status === "at_risk" ? "bg-amber-500" : status === "completed" ? "bg-blue-500" : "bg-brand";
   return (
     <div className="flex flex-1 items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
-        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${progress}%` }} />
+        <div className={`h-full rounded-full ${STATUS_BAR[status]}`} style={{ width: `${progress}%` }} />
       </div>
       <span className="shrink-0 text-xs font-medium text-ink-secondary">{progress}%</span>
     </div>
@@ -107,6 +98,10 @@ export default function CheckInPanel({
   fetchHistory,
   submitCheckIn,
   onCheckedIn,
+  actionLabel = "Check in",
+  formHeading,
+  notePlaceholder = "One line on where this stands",
+  submitLabel = "Log check-in",
 }: {
   status: GoalStatus;
   progress: number | null | undefined;
@@ -115,6 +110,10 @@ export default function CheckInPanel({
   fetchHistory: () => Promise<CheckIn[]>;
   submitCheckIn: (body: CheckInIn) => Promise<CheckIn>;
   onCheckedIn: (checkIn: CheckIn) => void;
+  actionLabel?: string;
+  formHeading?: string;
+  notePlaceholder?: string;
+  submitLabel?: string;
 }) {
   const [formOpen, setFormOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -194,7 +193,7 @@ export default function CheckInPanel({
               onClick={openForm}
               className="rounded-md border border-control px-2.5 py-1 text-xs font-medium text-ink-body hover:bg-canvas"
             >
-              Check in
+              {actionLabel}
             </button>
           )}
         </div>
@@ -203,6 +202,7 @@ export default function CheckInPanel({
       {/* Quick check-in form */}
       {formOpen && (
         <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-dashed border-control p-3">
+          {formHeading && <p className="mb-3 text-sm font-semibold text-ink">{formHeading}</p>}
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-ink-secondary">Status</label>
@@ -236,7 +236,7 @@ export default function CheckInPanel({
                 value={formNote}
                 onChange={(e) => setFormNote(e.target.value)}
                 className="w-full rounded-md border border-control px-2 py-1.5 text-sm"
-                placeholder="One line on where this stands"
+                placeholder={notePlaceholder}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -245,7 +245,7 @@ export default function CheckInPanel({
                 disabled={saving}
                 className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-on-brand disabled:opacity-50"
               >
-                {saving ? "Logging..." : "Log check-in"}
+                {saving ? "Saving..." : submitLabel}
               </button>
               <button type="button" onClick={() => setFormOpen(false)} className="text-xs text-ink-secondary hover:text-ink">
                 Cancel
@@ -266,7 +266,7 @@ export default function CheckInPanel({
           ) : (
             history.map((ci) => (
               <li key={ci.id} className="flex items-baseline gap-2 text-xs text-ink-secondary">
-                <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 self-center rounded-full ${DOT_STYLES[ci.status]}`} />
+                <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 self-center rounded-full ${STATUS_DOT[ci.status]}`} />
                 <span className="shrink-0 text-ink-muted">{formatDateTime(ci.created_at)}</span>
                 <span className="shrink-0 font-medium text-ink-secondary">
                   {STATUS_OPTIONS.find((s) => s.id === ci.status)?.label}

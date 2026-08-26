@@ -101,6 +101,20 @@ Free tier scope: not yet defined — nail the paid product first.
 
 ---
 
+## Product boundary: management, not project management
+
+> If it coordinates how contributors execute the work, it belongs in a project-management tool. If it helps the manager understand, intervene, and follow through, it belongs here.
+
+This is the line between The Same Page and task-management software. Initiatives
+belong in the product as manager context: what matters, who owns it, what outcome
+it supports, what changed, and where the manager may need to step in. Tasks,
+dependencies, workflow stages, delivery scheduling, and contributor coordination
+do not. Use this distinction in positioning, sales conversations, and product
+copy whenever the initiative surface could otherwise be mistaken for a project
+management tool.
+
+---
+
 ## Messaging principles
 
 - Lead with the manager's pain, not the product's features.

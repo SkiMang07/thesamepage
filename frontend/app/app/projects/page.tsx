@@ -1,33 +1,18 @@
 "use client";
 
-// Projects — its own top-level page, same reasoning as Goals (Session 10):
-// projects get created and status-updated regularly, unlike Settings'
-// "configure once" sections. Per PRODUCT_VISION.md, "goals = what, projects
-// = how" — a project can stand alone, hang off a goal, and/or be assigned to
-// a direct report. See docs/SESSION_HISTORY.md Session 13.
-//
-// Session 46 (team_project_goal_hierarchy project memory note): projects
-// gain org_unit_id — a direct team/department attachment, the same picker
-// pattern Goals already had (Session 11). Unlike Goals, there's no level
-// enum here, so the picker offers every org_unit regardless of unit_type.
-//
-// Session 52 (2026-08-22) — visual rebuild to match Team (Session 24) and
-// the Person page (Session 50): Option A from the published "Goals and
-// Projects Redesign Options" design canvas. Widened to max-w-7xl, added a
-// KpiStrip (same ported tokens as goals/page.tsx — gradient tiles, the
-// STATUS_BORDER/STATUS_STYLES hex values, the inline-SVG donut ring shape),
-// and replaced the plain bordered-list cards with a responsive grid of
-// border-l-4 accented cards each carrying their own progress ring. Projects
-// has no level tabs (flat list, grouped by assignee same as before) — same
-// card treatment otherwise. Add/edit forms are untouched, just refit.
-//
-// Session 56 white-space audit — same fix as goals/page.tsx (its ported
-// twin): widened to max-w-[1600px] (PageShell's new `8xl` tier) and its
-// section gaps now use the shared SECTION_GAP token instead of ad hoc
-// mt-8's; the card grid's own gap tightened gap-4 -> gap-3 to match.
+// This page is an Initiative Desk, not a project-management surface. Its job
+// is to help a manager scan consequential work, focus on one initiative with
+// its owner/outcome context intact, and record meaningful changes. Execution
+// coordination — tasks, dependencies, workflow stages, comments, files, and
+// scheduling machinery — remains deliberately out of scope.
 
 import { useEffect, useMemo, useState } from "react";
-import CheckInPanel from "@/components/CheckInPanel";
+import CheckInPanel, {
+  ProgressBar,
+  TrendArrow,
+  freshnessLabel,
+  isStale,
+} from "@/components/CheckInPanel";
 import {
   CheckIn,
   DirectReport,
@@ -48,7 +33,20 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
-import { INPUT, LABEL, BTN_PRIMARY, HEX, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone } from "@/lib/tokens";
+import { useDrawer } from "@/lib/drawer-context";
+import {
+  BADGE,
+  BTN_GHOST,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  FEATURE_SURFACE,
+  INPUT,
+  LABEL,
+  META,
+  STATUS_BORDER,
+  STATUS_GLYPH,
+  STATUS_STYLES,
+} from "@/lib/tokens";
 
 const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
   { id: "active", label: "Active" },
@@ -57,27 +55,6 @@ const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
   { id: "completed", label: "Completed" },
   { id: "cancelled", label: "Cancelled" },
 ];
-
-// Ported verbatim from frontend/app/app/team/page.tsx — same hex values as
-// Goals/Team. Do not reinvent.
-const STATUS_STYLES: Record<ProjectStatus, string> = {
-  active: "bg-sunken text-ink-secondary",
-  on_track: "bg-teal-50 text-teal-700",
-  at_risk: "bg-amber-50 text-amber-700",
-  completed: "bg-blue-50 text-blue-600",
-  cancelled: "bg-sunken text-ink-muted",
-};
-
-// Left-border accent per status — same map/technique as Team and Goals: a
-// border-l-4 with no competing all-sides border class, so only the left
-// edge picks up a visible color.
-const STATUS_BORDER: Record<ProjectStatus, string> = {
-  active: "border-control",
-  on_track: "border-brand",
-  at_risk: "border-amber-500",
-  completed: "border-blue-300",
-  cancelled: "border-hairline",
-};
 
 // Local aliases so this file's existing call sites keep working; the value
 // itself is the shared token, so restyling happens in one place.
@@ -103,8 +80,8 @@ function formatDate(iso: string) {
   });
 }
 
-// Local (not UTC) YYYY-MM-DD date helpers — same as goals/page.tsx and
-// team/page.tsx, needed for the "due this week" KPI tile.
+// Local (not UTC) YYYY-MM-DD keeps overdue grouping aligned with the date the
+// manager sees rather than letting UTC move an initiative a day early.
 function localDateStr(d: Date = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -112,11 +89,27 @@ function localDateStr(d: Date = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
-function addDaysStr(dateStr: string, days: number) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + days);
-  return localDateStr(dt);
+function isOverdue(project: Project) {
+  return !!project.due_date && project.due_date < localDateStr();
+}
+
+function compareProjects(a: Project, b: Project) {
+  if (a.due_date && b.due_date && a.due_date !== b.due_date) return a.due_date.localeCompare(b.due_date);
+  if (a.due_date && !b.due_date) return -1;
+  if (!a.due_date && b.due_date) return 1;
+  return a.title.localeCompare(b.title);
+}
+
+function projectOwner(project: Project) {
+  return project.direct_report_name ?? "You";
+}
+
+function attentionReasons(project: Project) {
+  const reasons: string[] = [];
+  if (project.status === "at_risk") reasons.push("At risk");
+  if (isOverdue(project)) reasons.push(`Due ${formatDate(project.due_date!)}`);
+  if (isStale(project.last_check_in_at)) reasons.push(freshnessLabel(project.last_check_in_at));
+  return reasons;
 }
 
 function toProjectPayload(input: ProjectFormValues) {
@@ -140,6 +133,8 @@ export default function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const { isOpen: scribeOpen, setPageContext } = useDrawer();
 
   useEffect(() => {
     Promise.all([getProjects(), getDirectReports(), getGoals(), getOrgUnits()])
@@ -158,6 +153,7 @@ export default function ProjectsPage() {
     setProjects((ps) => [created, ...ps]);
     setError(null);
     setShowForm(false);
+    setSelectedProjectId(created.id);
   }
 
   async function saveEdit(projectId: string, input: ProjectFormValues) {
@@ -176,8 +172,7 @@ export default function ProjectsPage() {
     }
   }
 
-  // Session 26: mirror a logged check-in's server-side write-through in list
-  // state (status + derived progress/trend/freshness), same as Goals.
+  // Mirror a logged check-in's server-side write-through in portfolio state.
   function applyCheckIn(projectId: string, ci: CheckIn) {
     setProjects((ps) =>
       ps.map((p) => {
@@ -198,46 +193,75 @@ export default function ProjectsPage() {
       await deleteProject(projectId);
       setProjects((ps) => ps.filter((p) => p.id !== projectId));
       setEditingProjectId((id) => (id === projectId ? null : id));
+      setSelectedProjectId((id) => (id === projectId ? null : id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete project");
     }
   }
 
-  // Grouped by assignee so the list reads like Goals' individual grouping —
-  // "Your initiatives" first, then one group per direct report that has any.
-  const grouped = useMemo(() => {
-    const groups = new Map<string, { name: string; projects: Project[] }>();
-    groups.set("unassigned", { name: "Your initiatives", projects: [] });
-    for (const p of projects) {
-      const key = p.direct_report_id ?? "unassigned";
-      const name = p.direct_report_name ?? "Your initiatives";
-      if (!groups.has(key)) groups.set(key, { name, projects: [] });
-      groups.get(key)!.projects.push(p);
-    }
-    return Array.from(groups.values())
-      .filter((g) => g.projects.length > 0)
-      .sort((a, b) => (a.name === "Your initiatives" ? -1 : b.name === "Your initiatives" ? 1 : a.name.localeCompare(b.name)));
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId]
+  );
+
+  const portfolio = useMemo(() => {
+    const open = projects.filter((project) => project.status !== "completed" && project.status !== "cancelled");
+    const closed = projects
+      .filter((project) => project.status === "completed" || project.status === "cancelled")
+      .sort(compareProjects);
+    const needsDecision = open
+      .filter((project) => project.status === "at_risk" || isOverdue(project))
+      .sort(compareProjects);
+    const decisionIds = new Set(needsDecision.map((project) => project.id));
+    const needsUpdate = open
+      .filter((project) => !decisionIds.has(project.id) && isStale(project.last_check_in_at))
+      .sort(compareProjects);
+    const updateIds = new Set(needsUpdate.map((project) => project.id));
+    const moving = open
+      .filter((project) => !decisionIds.has(project.id) && !updateIds.has(project.id))
+      .sort(compareProjects);
+    return { needsDecision, needsUpdate, moving, closed };
   }, [projects]);
 
-  const listProps = {
-    onSetStatus: setStatus,
-    onDelete: removeProject,
-    editingProjectId,
-    onStartEdit: (id: string) => setEditingProjectId(id),
-    onCancelEdit: () => setEditingProjectId(null),
-    onSaveEdit: saveEdit,
-    onCheckedIn: applyCheckIn,
-    reports,
-    goals,
-    orgUnits,
-  };
+  useEffect(() => {
+    setPageContext(
+      selectedProject
+        ? `Projects page — selected initiative: ${selectedProject.title}`
+        : "Projects page — initiative portfolio"
+    );
+    return () => setPageContext(null);
+  }, [selectedProject, setPageContext]);
+
+  const deskGrid = scribeOpen
+    ? "grid-cols-1 2xl:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.55fr)]"
+    : "grid-cols-1 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.55fr)]";
+  const portfolioVisibility = selectedProject
+    ? scribeOpen
+      ? "hidden 2xl:block"
+      : "hidden xl:block"
+    : "block";
+  const detailEmptyVisibility = scribeOpen ? "hidden 2xl:flex" : "hidden xl:flex";
+  const backVisibility = scribeOpen ? "2xl:hidden" : "xl:hidden";
 
   return (
     <PageShell maxWidth="8xl">
-      <h1 className="text-2xl font-semibold">Projects</h1>
-      <p className="mt-1 text-sm text-ink-secondary">
-        How your goals get done — standalone or linked to a goal, yours or a direct report&apos;s.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Projects</h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Keep the initiative portfolio in view while you focus, intervene, and follow through.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            setEditingProjectId(null);
+            setShowForm((shown) => !shown);
+          }}
+          className={primaryBtnCls}
+        >
+          {showForm ? "Cancel" : "+ New project"}
+        </button>
+      </div>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
@@ -245,20 +269,6 @@ export default function ProjectsPage() {
         <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
       ) : (
         <div className={SECTION_GAP}>
-          <KpiStrip projects={projects} />
-
-          <div className={`${SECTION_GAP} flex items-center justify-end`}>
-            <button
-              onClick={() => {
-                setEditingProjectId(null);
-                setShowForm((s) => !s);
-              }}
-              className={primaryBtnCls}
-            >
-              {showForm ? "Cancel" : "+ New project"}
-            </button>
-          </div>
-
           {showForm && (
             <ProjectForm
               reports={reports}
@@ -272,17 +282,67 @@ export default function ProjectsPage() {
           )}
 
           {projects.length === 0 ? (
-            <p className={`${SECTION_GAP} text-ink-secondary`}>No projects yet. Add the first one above.</p>
+            <div className={`${FEATURE_SURFACE} ${SECTION_GAP} p-8 text-center`}>
+              <p className="font-semibold text-ink">No initiatives yet</p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Add the first consequential piece of work you want to keep in view.
+              </p>
+            </div>
           ) : (
-            <div className={`${SECTION_GAP} space-y-8`}>
-              {grouped.map((group) => (
-                <div key={group.name}>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-3">
-                    {group.name}
-                  </h2>
-                  <ProjectGrid projects={group.projects} {...listProps} />
+            <div className={`grid items-start gap-5 ${showForm ? SECTION_GAP : ""} ${deskGrid}`}>
+              <PortfolioIndex
+                portfolio={portfolio}
+                selectedProjectId={selectedProjectId}
+                onSelect={(projectId) => {
+                  setEditingProjectId(null);
+                  setSelectedProjectId(projectId);
+                }}
+                className={portfolioVisibility}
+              />
+
+              {selectedProject ? (
+                editingProjectId === selectedProject.id ? (
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditingProjectId(null)}
+                      className={`${backVisibility} ${BTN_GHOST} mb-3`}
+                    >
+                      ← Back to initiative
+                    </button>
+                    <ProjectForm
+                      initialProject={selectedProject}
+                      reports={reports}
+                      goals={goals}
+                      orgUnits={orgUnits}
+                      onCancel={() => setEditingProjectId(null)}
+                      onSubmit={(input) => saveEdit(selectedProject.id, input)}
+                      submitLabel="Save changes"
+                      savingLabel="Saving..."
+                      flush
+                    />
+                  </div>
+                ) : (
+                  <ProjectWorkspace
+                    project={selectedProject}
+                    backVisibility={backVisibility}
+                    onBack={() => setSelectedProjectId(null)}
+                    onSetStatus={setStatus}
+                    onEdit={() => setEditingProjectId(selectedProject.id)}
+                    onDelete={() => removeProject(selectedProject.id)}
+                    onCheckedIn={(checkIn) => applyCheckIn(selectedProject.id, checkIn)}
+                  />
+                )
+              ) : (
+                <div className={`${FEATURE_SURFACE} ${detailEmptyVisibility} min-h-[30rem] items-center justify-center p-10 text-center`}>
+                  <div className="max-w-sm">
+                    <p className="text-sm font-semibold text-ink">Choose an initiative to focus</p>
+                    <p className="mt-2 text-sm text-ink-secondary">
+                      Its owner, outcome, latest change, and check-in history will stay together here.
+                    </p>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -291,191 +351,231 @@ export default function ProjectsPage() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// KPI strip — same gradient-tile markup/structure as Team's/Goals' KpiStrip.
-// The 4th tile mirrors Goals' "no initiative attached" from the other
-// direction: how many of your own projects support no goal at all.
-// ---------------------------------------------------------------------------
+type Portfolio = {
+  needsDecision: Project[];
+  needsUpdate: Project[];
+  moving: Project[];
+  closed: Project[];
+};
 
-function KpiStrip({ projects }: { projects: Project[] }) {
-  const scored = projects.filter((p) => p.status !== "cancelled");
-  const onTrack = scored.filter((p) => p.status === "on_track").length;
-  const onTrackLabel = scored.length > 0 ? `${onTrack}/${scored.length}` : "—";
-  // Same data-trust rule as Goals' KpiStrip: never a fixed "success" color
-  // for a fraction tile — "0/N on track" is not success.
-  const onTrackTone =
-    scored.length === 0
-      ? "neutral"
-      : onTrack === 0
-        ? "attention"
-        : "brand";
-
-  const atRisk = scored.filter((p) => p.status === "at_risk").length;
-
-  const today = localDateStr();
-  const weekOut = addDaysStr(today, 7);
-  const dueThisWeek = scored.filter(
-    (p) => p.due_date && p.due_date >= today && p.due_date <= weekOut
-  ).length;
-
-  const noGoal = scored.filter((p) => p.goal_id == null).length;
-
-  const tiles: { value: string; label: string; tone: TileTone }[] = [
-    { value: onTrackLabel, label: "Projects on track", tone: onTrackTone },
-    { value: String(atRisk), label: "At risk", tone: atRisk > 0 ? "attention" : "neutral" },
-    { value: String(dueThisWeek), label: "Due this week", tone: "neutral" },
-    { value: String(noGoal), label: "No goal attached", tone: noGoal > 0 ? "critical" : "neutral" },
+function PortfolioIndex({
+  portfolio,
+  selectedProjectId,
+  onSelect,
+  className,
+}: {
+  portfolio: Portfolio;
+  selectedProjectId: string | null;
+  onSelect: (projectId: string) => void;
+  className: string;
+}) {
+  const sections = [
+    { id: "decision", label: "Needs a decision", projects: portfolio.needsDecision },
+    { id: "update", label: "Needs an update", projects: portfolio.needsUpdate },
+    { id: "moving", label: "Moving", projects: portfolio.moving },
+    { id: "closed", label: "Closed", projects: portfolio.closed },
   ];
+  const total = sections.reduce((count, section) => count + section.projects.length, 0);
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {tiles.map((t) => (
-        <div key={t.label} className={TILE}>
-          <p className={`${TILE_VALUE} ${TILE_TONE[t.tone]}`}>{t.value}</p>
-          <p className={TILE_LABEL}>{t.label}</p>
+    <aside className={`${FEATURE_SURFACE} overflow-hidden ${className}`}>
+      <div className="border-b border-divider px-4 py-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold text-ink">Initiative portfolio</h2>
+          <span className={META}>{total} total</span>
         </div>
-      ))}
+        <p className="mt-1 text-xs text-ink-secondary">Grouped by the managerial response each initiative needs.</p>
+      </div>
+
+      <div className="divide-y divide-divider">
+        {sections.map((section) =>
+          section.projects.length > 0 ? (
+            <section key={section.id} className="py-3">
+              <div className="flex items-center justify-between px-4 pb-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{section.label}</h3>
+                <span className="text-xs text-ink-muted">{section.projects.length}</span>
+              </div>
+              <div className="space-y-1 px-2">
+                {section.projects.map((project) => {
+                  const reasons = section.id === "moving" || section.id === "closed" ? [] : attentionReasons(project);
+                  const selected = project.id === selectedProjectId;
+                  return (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => onSelect(project.id)}
+                      className={`w-full rounded-lg border-l-4 px-3 py-3 text-left transition-colors ${STATUS_BORDER[project.status]} ${
+                        selected ? "bg-brand-tint" : "hover:bg-canvas"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 text-sm font-medium text-ink">{project.title}</p>
+                        <span className="shrink-0 text-xs text-ink-muted">{STATUS_GLYPH[project.status]}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-ink-secondary">
+                        {projectOwner(project)}
+                        {project.org_unit_name ? ` · ${project.org_unit_name}` : ""}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-ink-muted">
+                        {project.goal_title ? `Goal: ${project.goal_title}` : "Standalone initiative"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {project.progress != null && (
+                          <span className={`${BADGE} bg-sunken text-ink-secondary`}>{project.progress}%</span>
+                        )}
+                        <TrendArrow trend={project.trend} />
+                        {reasons.map((reason) => (
+                          <span key={reason} className={`${BADGE} bg-amber-50 text-amber-800`}>
+                            {reason}
+                          </span>
+                        ))}
+                        {reasons.length === 0 && project.due_date && (
+                          <span className="text-xs text-ink-muted">Due {formatDate(project.due_date)}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function ProjectWorkspace({
+  project,
+  backVisibility,
+  onBack,
+  onSetStatus,
+  onEdit,
+  onDelete,
+  onCheckedIn,
+}: {
+  project: Project;
+  backVisibility: string;
+  onBack: () => void;
+  onSetStatus: (id: string, status: ProjectStatus) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onCheckedIn: (checkIn: CheckIn) => void;
+}) {
+  const stale = isStale(project.last_check_in_at);
+
+  return (
+    <div className="min-w-0">
+      <button type="button" onClick={onBack} className={`${backVisibility} ${BTN_GHOST} mb-3`}>
+        ← Portfolio
+      </button>
+
+      <article className={`${FEATURE_SURFACE} overflow-hidden`}>
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className={META}>Focused initiative</p>
+              <h2 className="mt-1 text-xl font-semibold text-ink sm:text-2xl">{project.title}</h2>
+            </div>
+            <select
+              value={project.status}
+              onChange={(event) => onSetStatus(project.id, event.target.value as ProjectStatus)}
+              className={`${BADGE} border-0 ${STATUS_STYLES[project.status]}`}
+              aria-label="Initiative status"
+            >
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status.id} value={status.id}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <ContextField label="Owner" value={projectOwner(project)} />
+            <ContextField label="Team" value={project.org_unit_name ?? "No team assigned"} />
+            <ContextField label="Due" value={project.due_date ? formatDate(project.due_date) : "No due date"} />
+            <ContextField
+              label="Freshness"
+              value={freshnessLabel(project.last_check_in_at)}
+              attention={stale}
+            />
+          </div>
+        </div>
+
+        <div className="border-t border-divider bg-surface p-5 sm:p-6">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(230px,0.72fr)]">
+            <div>
+              <p className={META}>Purpose</p>
+              <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                {project.description || "No purpose statement has been added yet."}
+              </p>
+            </div>
+            <div className={`rounded-lg border-l-4 p-4 ${project.goal_title ? "border-brand bg-brand-tint" : "border-control bg-sunken"}`}>
+              <p className={META}>{project.goal_title ? "Supports goal" : "Goal connection"}</p>
+              <p className="mt-1 text-sm font-medium text-ink">
+                {project.goal_title ?? "Standalone initiative"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-xl border border-divider bg-canvas p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm font-semibold text-ink">Current signal</p>
+              <span className={`${BADGE} ${STATUS_STYLES[project.status]}`}>
+                {STATUS_GLYPH[project.status]} {STATUS_OPTIONS.find((status) => status.id === project.status)?.label}
+              </span>
+              {project.progress == null && <span className="text-xs text-ink-muted">No progress asserted yet</span>}
+            </div>
+            {project.progress != null && (
+              <div className="mt-3 flex items-center gap-3">
+                <ProgressBar progress={project.progress} status={project.status} />
+                <TrendArrow trend={project.trend} />
+              </div>
+            )}
+            {project.last_check_in_note && (
+              <div className="mt-4 rounded-lg bg-sunken px-4 py-3">
+                <p className={META}>Latest change</p>
+                <p className="mt-1 text-sm text-ink-secondary">{project.last_check_in_note}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5">
+            <CheckInPanel
+              status={project.status}
+              progress={project.progress}
+              trend={project.trend}
+              lastCheckInAt={project.last_check_in_at}
+              fetchHistory={() => getProjectCheckIns(project.id)}
+              submitCheckIn={(body) => createProjectCheckIn(project.id, body)}
+              onCheckedIn={onCheckedIn}
+              actionLabel="Record what changed"
+              formHeading="Record what changed"
+              notePlaceholder="What changed, what is blocked, or what needs a decision?"
+              submitLabel="Record change"
+            />
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-divider pt-4">
+            <button type="button" onClick={onEdit} className={BTN_SECONDARY}>
+              Edit initiative
+            </button>
+            <button type="button" onClick={onDelete} className={`${BTN_GHOST} text-red-700 hover:text-red-700`}>
+              Delete
+            </button>
+          </div>
+        </div>
+      </article>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Progress ring — same inline-SVG donut shape as Goals'/Team's ring. Only
-// draws the colored arc when a real check-in exists; otherwise an honest
-// em-dash — no fabricated progress.
-// ---------------------------------------------------------------------------
-
-function ProgressRing({ progress }: { progress: number | null | undefined }) {
-  const pct = progress ?? 0;
-  const dash = `${pct}, 100`;
+function ContextField({ label, value, attention = false }: { label: string; value: string; attention?: boolean }) {
   return (
-    <svg width="48" height="48" viewBox="0 0 36 36" className="shrink-0">
-      <path
-        d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
-        fill="none"
-        stroke={HEX.track}
-        strokeWidth="3"
-      />
-      {progress != null && (
-        <path
-          d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831 15.9155 15.9155 0 0 1 0-31.831"
-          fill="none"
-          stroke={HEX.brand}
-          strokeWidth="3"
-          strokeDasharray={dash}
-          strokeLinecap="round"
-        />
-      )}
-      <text x="18" y="21" textAnchor="middle" fontSize="9" fill={HEX.ink} fontWeight="600">
-        {progress != null ? `${pct}%` : "–"}
-      </text>
-    </svg>
-  );
-}
-
-function ProjectGrid({
-  projects,
-  onSetStatus,
-  onDelete,
-  editingProjectId,
-  onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
-  onCheckedIn,
-  reports,
-  goals,
-  orgUnits,
-}: {
-  projects: Project[];
-  onSetStatus: (id: string, status: ProjectStatus) => void;
-  onDelete: (id: string) => void;
-  editingProjectId: string | null;
-  onStartEdit: (id: string) => void;
-  onCancelEdit: () => void;
-  onSaveEdit: (id: string, input: ProjectFormValues) => Promise<void>;
-  onCheckedIn: (projectId: string, ci: CheckIn) => void;
-  reports: DirectReport[];
-  goals: Goal[];
-  orgUnits: OrgUnit[];
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {projects.map((p) =>
-        p.id === editingProjectId ? (
-          <div key={p.id} className="md:col-span-2 xl:col-span-3">
-            <ProjectForm
-              initialProject={p}
-              reports={reports}
-              goals={goals}
-              orgUnits={orgUnits}
-              onCancel={onCancelEdit}
-              onSubmit={(input) => onSaveEdit(p.id, input)}
-              submitLabel="Save changes"
-              savingLabel="Saving..."
-            />
-          </div>
-        ) : (
-          <div
-            key={p.id}
-            className={`rounded-lg border-l-4 bg-surface px-4 py-4 shadow-sm ${STATUS_BORDER[p.status]}`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-3">
-                <ProgressRing progress={p.progress} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{p.title}</p>
-                  {p.org_unit_name && (
-                    <p className="mt-0.5 text-xs text-ink-muted">Team: {p.org_unit_name}</p>
-                  )}
-                  {p.goal_title && (
-                    <p className="mt-0.5 text-xs text-ink-muted">Supports goal: {p.goal_title}</p>
-                  )}
-                  {p.due_date && <p className="mt-0.5 text-xs text-ink-muted">Due {formatDate(p.due_date)}</p>}
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <select
-                  value={p.status}
-                  onChange={(e) => onSetStatus(p.id, e.target.value as ProjectStatus)}
-                  className={`rounded-full border-0 px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[p.status]}`}
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => onStartEdit(p.id)}
-                  className="text-xs text-ink-muted hover:text-ink-body"
-                  title="Edit project"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => onDelete(p.id)}
-                  className="text-xs text-ink-muted hover:text-red-700"
-                  title="Delete project"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-
-            {p.description && <p className="mt-2 text-sm text-ink-secondary">{p.description}</p>}
-
-            <CheckInPanel
-              status={p.status}
-              progress={p.progress}
-              trend={p.trend}
-              lastCheckInAt={p.last_check_in_at}
-              fetchHistory={() => getProjectCheckIns(p.id)}
-              submitCheckIn={(body) => createProjectCheckIn(p.id, body)}
-              onCheckedIn={(ci) => onCheckedIn(p.id, ci)}
-            />
-          </div>
-        )
-      )}
+    <div>
+      <p className={META}>{label}</p>
+      <p className={`mt-1 text-sm font-medium ${attention ? "text-amber-800" : "text-ink"}`}>{value}</p>
     </div>
   );
 }
@@ -489,6 +589,7 @@ function ProjectForm({
   onSubmit,
   submitLabel,
   savingLabel,
+  flush = false,
 }: {
   initialProject?: Project | null;
   reports: DirectReport[];
@@ -498,6 +599,7 @@ function ProjectForm({
   onSubmit: (input: ProjectFormValues) => Promise<void>;
   submitLabel: string;
   savingLabel: string;
+  flush?: boolean;
 }) {
   const [title, setTitle] = useState(initialProject?.title ?? "");
   const [description, setDescription] = useState(initialProject?.description ?? "");
@@ -531,13 +633,16 @@ function ProjectForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-lg border border-dashed border-control p-4">
-      <div className="flex gap-3">
-        <div className="flex-1">
+    <form
+      onSubmit={handleSubmit}
+      className={`${flush ? "" : "mt-4"} space-y-3 rounded-lg border border-dashed border-control p-4`}
+    >
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_9rem_10rem]">
+        <div className="min-w-0">
           <label className={labelCls}>Title</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} placeholder="e.g. Migrate onboarding to new flow" />
         </div>
-        <div className="w-36">
+        <div className="min-w-0">
           <label className={labelCls}>Status</label>
           <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)} className={inputCls}>
             {STATUS_OPTIONS.map((s) => (
@@ -547,14 +652,14 @@ function ProjectForm({
             ))}
           </select>
         </div>
-        <div className="w-40">
+        <div className="min-w-0">
           <label className={labelCls}>Due date (optional)</label>
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <div className="flex-1">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="min-w-0">
           <label className={labelCls}>Assigned to (optional)</label>
           <select value={directReportId} onChange={(e) => setDirectReportId(e.target.value)} className={inputCls}>
             <option value="">Your initiative</option>
@@ -565,7 +670,7 @@ function ProjectForm({
             ))}
           </select>
         </div>
-        <div className="flex-1">
+        <div className="min-w-0">
           <label className={labelCls}>Supports goal (optional)</label>
           <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className={inputCls}>
             <option value="">Standalone — no goal</option>
