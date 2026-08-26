@@ -3,7 +3,7 @@ Org units — team/department entities with parent/child relationships
 (Session 11 scoping conversation with Andrew, 2026-08-02; see
 docs/SESSION_HISTORY.md and the org_hierarchy_scoping project memory note).
 
-Decisions locked before this file was written:
+Core model:
   - One self-referencing table (org_units), not separate department/team
     tables — mirrors goals.parent_goal_id and users.manager_id, patterns
     already in this schema.
@@ -14,13 +14,9 @@ Decisions locked before this file was written:
     not manager-scoped like direct_reports/goals — team/department structure
     belongs to the org, not to one manager's private view of it. Uses the
     same ensure_org() bootstrap-on-write pattern as settings.py.
-  - Builder UI is a hybrid: a tree to build/edit, a read-only chart to view.
-    Own top-level nav page (/app/org), not folded into Settings.
-
-Known limitation: update_org_unit only guards against a unit being its own
-direct parent. It does not walk the tree to reject a deeper cycle (A's
-parent set to B when B's parent is already A). Acceptable for a solo
-manager building a small tree by hand; revisit if this becomes multi-editor.
+  - /app/org is an organization overview with an inspectable hierarchy.
+    Structure management is a secondary mode on that page rather than a
+    separate chart/build workflow.
 
 Role-scoped views (Session 15, 2026-08-03 — see docs/SESSION_HISTORY.md and
 the role_scoped_views project memory note): leader_user_id on OrgUnitIn is
@@ -53,6 +49,53 @@ class OrgUnitIn(BaseModel):
 def _validate_unit_type(unit_type: str):
     if unit_type not in _UNIT_TYPES:
         raise HTTPException(status_code=422, detail=f"unit_type must be one of {_UNIT_TYPES}")
+
+
+def _clean_name(name: str) -> str:
+    cleaned = name.strip()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="name cannot be empty")
+    return cleaned
+
+
+def _validate_parent_assignment(supabase, unit_id: str | None, parent_unit_id: str | None):
+    """Reject missing parents and every depth of cycle before writing.
+
+    The frontend also removes descendants from the parent picker, but the API
+    remains the source of truth because a crafted request must not be able to
+    make the hierarchy disappear or make recursive rollups loop forever.
+    """
+    if not parent_unit_id:
+        return
+    rows = supabase.table("org_units").select("id,parent_unit_id").execute().data
+    parent_by_id = {row["id"]: row.get("parent_unit_id") for row in rows}
+    if parent_unit_id not in parent_by_id:
+        raise HTTPException(status_code=422, detail="Parent unit not found")
+
+    seen: set[str] = set()
+    current: str | None = parent_unit_id
+    while current:
+        if unit_id and current == unit_id:
+            raise HTTPException(status_code=422, detail="A unit cannot report into one of its descendants")
+        if current in seen:
+            raise HTTPException(status_code=422, detail="The organization hierarchy contains a cycle")
+        seen.add(current)
+        current = parent_by_id.get(current)
+
+
+def _validate_leader_assignment(supabase, leader_user_id: str | None):
+    if not leader_user_id:
+        return
+    member = (
+        supabase.table("users")
+        .select("id")
+        .eq("id", leader_user_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not member:
+        raise HTTPException(status_code=422, detail="Leader must be a member of this organization")
 
 
 @router.get("")
@@ -111,10 +154,13 @@ async def create_org_unit(
 ):
     user_id, supabase = auth
     _validate_unit_type(body.unit_type)
+    _validate_parent_assignment(supabase, None, body.parent_unit_id)
+    _validate_leader_assignment(supabase, body.leader_user_id)
     org_id = ensure_org(user_id, supabase, get_email_from_token(authorization))
+    payload = {**body.model_dump(), "name": _clean_name(body.name), "org_id": org_id}
     result = (
         supabase.table("org_units")
-        .insert({**body.model_dump(), "org_id": org_id})
+        .insert(payload)
         .execute()
     )
     return result.data[0]
@@ -124,11 +170,12 @@ async def create_org_unit(
 async def update_org_unit(unit_id: str, body: OrgUnitIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_unit_type(body.unit_type)
-    if body.parent_unit_id == unit_id:
-        raise HTTPException(status_code=422, detail="A unit cannot be its own parent")
+    _validate_parent_assignment(supabase, unit_id, body.parent_unit_id)
+    _validate_leader_assignment(supabase, body.leader_user_id)
+    payload = {**body.model_dump(), "name": _clean_name(body.name)}
     result = (
         supabase.table("org_units")
-        .update(body.model_dump())
+        .update(payload)
         .eq("id", unit_id)
         .execute()
     )
@@ -140,9 +187,20 @@ async def update_org_unit(unit_id: str, body: OrgUnitIn, auth=Depends(get_authen
 @router.delete("/{unit_id}")
 async def delete_org_unit(unit_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
-    # parent_unit_id, direct_reports.org_unit_id, and goals.org_unit_id all
-    # use ON DELETE SET NULL — children and references clear automatically,
-    # no manual unparenting needed (unlike goals.delete_goal's parent_goal_id,
-    # which has no ON DELETE clause).
+    children = (
+        supabase.table("org_units")
+        .select("id")
+        .eq("parent_unit_id", unit_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if children:
+        raise HTTPException(
+            status_code=409,
+            detail="Move or remove child teams and departments before deleting this unit",
+        )
+    # Leaf deletion still requires an explicit review step in the UI because
+    # foreign keys intentionally clear or cascade linked org-scoped records.
     supabase.table("org_units").delete().eq("id", unit_id).execute()
     return {"deleted": True}

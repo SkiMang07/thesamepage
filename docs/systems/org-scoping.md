@@ -3,7 +3,8 @@
 How "who sees what" works as the org grows past one manager. Distinct from
 `team.md`, which is about one manager's own reports.
 
-Backend: `routes/org_units.py`. Surface: `/app/org` (Build / Chart / Rollup tabs).
+Backend: `routes/org_units.py`. Surface: `/app/org` (overview + selected-unit
+inspector, with secondary structure-management mode).
 
 ## The tree
 
@@ -18,8 +19,15 @@ would just duplicate what `organizations` already represents.
 "which team." That column still exists; the UI stopped writing and showing it, and
 existing free-text values were never backfilled.
 
-Cycle prevention only blocks a unit becoming its own direct parent, not a deeper
-cycle (A→B when B→A). Fine for one person hand-building a small tree.
+Create/update validates the entire parent chain. A unit cannot report into
+itself or any descendant, and a missing/cyclic parent chain is rejected before
+the write. The client also removes the selected unit and its descendants from
+the parent picker, but the API remains authoritative.
+
+Deleting is deliberately two-stage in the UI. Units with children cannot be
+deleted until those children are moved or removed; the API enforces the same
+rule. Leaf deletion still warns that linked records may be cleared or removed
+by their foreign-key behavior.
 
 ## Scoping mechanism: an explicit leader per unit
 
@@ -69,12 +77,22 @@ Plus `GET /api/goals/rollup`, `/api/projects/rollup`,
 
 ## Frontend
 
-The Org page has three tabs. **Build** is a nested tree to add/edit/delete units
-and set parents, with a leader picker and "Led by X" badge per unit. **Chart** is
-a read-only visual rendered from the same data, using styled-jsx for a pure-CSS
-nested-list chart — chosen over a drag-and-drop canvas specifically to avoid
-adding the app's first diagramming dependency. **Rollup** shows, per unit the
-signed-in user leads, a subtree-aggregated summary with "at risk" called out.
+`/app/org` is an organization overview, not three parallel Build / Chart /
+Rollup tools. The full hierarchy stays visible as shared context. Selecting a
+team or department opens an inspector with the leader, subtree people/role
+breakdown, goal/project counts, and exception-first at-risk links when the unit
+falls within the caller's led scope. Outside that scope the structure remains
+visible, but details say they are unavailable — the page never substitutes the
+caller's private direct-report count and calls it the team's headcount.
 
-Capacity hours stay on the Capacity page rather than being duplicated into the
-Rollup tab.
+The scope control switches between emphasizing **Units I lead** and browsing the
+**Entire organization**. It does not broaden data access; `led_org_unit_ids()`
+still determines whether the inspector may show aggregate detail.
+
+**Manage structure** is a secondary mode on the same page. Its tree selects one
+unit into a single add/edit form, removes descendants from the parent options,
+and puts deletion behind a consequence review. The old duplicate read-only
+chart and disconnected Rollup tab no longer exist.
+
+Capacity hours stay on the Capacity page and are linked from the inspector
+rather than duplicated here.
