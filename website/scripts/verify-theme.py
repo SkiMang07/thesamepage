@@ -72,18 +72,25 @@ after=css.split("--sans:",1)[-1].split("\n",1)[-1]
 for h in sorted(set(re.findall(r"#[0-9A-Fa-f]{3,8}\b", after))):
     bad("literal colour outside the token block: "+h)
 
-# --- 6. template essentials
-tpl=io.open(os.path.join(T,"templates","page.html"),encoding="utf-8").read()
-for needle,msg in [("templateType: page","missing templateType annotation"),
-                   ("standard_header_includes","missing standard_header_includes"),
-                   ("standard_footer_includes","missing standard_footer_includes"),
-                   ("dnd_area","missing dnd_area")]:
-    if needle not in tpl: bad(msg)
-for inc in re.findall(r'include "([^"]+)"', tpl):
-    p=os.path.normpath(os.path.join(T,"templates",inc))
-    if not os.path.exists(p): bad("include does not resolve: "+inc)
-for p in re.findall(r'dnd_module path="\.\./modules/([a-z\-]+)"', tpl):
-    if not os.path.isdir(os.path.join(md,p+".module")): bad("dnd_module path missing: "+p)
+# --- 6. template essentials — every top-level template file, not just page.html.
+#     (Originally checked page.html alone; generalised when about.html/contact.html
+#     were added as their own templates instead of composing through page.html.)
+tpl_dir=os.path.join(T,"templates")
+for tf_name in sorted(os.listdir(tpl_dir)):
+    tp=os.path.join(tpl_dir,tf_name)
+    if not (os.path.isfile(tp) and tf_name.endswith(".html")): continue
+    tpl=io.open(tp,encoding="utf-8").read()
+    for needle,msg in [("templateType: page","missing templateType annotation"),
+                       ("standard_header_includes","missing standard_header_includes"),
+                       ("standard_footer_includes","missing standard_footer_includes"),
+                       ("dnd_area","missing dnd_area")]:
+        if needle not in tpl: bad("%s: %s"%(tf_name,msg))
+    for inc in re.findall(r'include "([^"]+)"', tpl):
+        p=os.path.normpath(os.path.join(tpl_dir,inc))
+        if not os.path.exists(p): bad("%s: include does not resolve: %s"%(tf_name,inc))
+    for p in re.findall(r'dnd_module path="\.\./modules/([a-z\-]+)"', tpl):
+        if not os.path.isdir(os.path.join(md,p+".module")):
+            bad("%s: dnd_module path missing: %s"%(tf_name,p))
 
 if fail:
     print("FAIL (%d)"%len(fail))

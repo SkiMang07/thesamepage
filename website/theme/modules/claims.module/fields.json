@@ -9,7 +9,7 @@
     "name": "lede",
     "label": "Lede",
     "type": "text",
-    "default": "Every serious tool in this category is sold to HR \u2014 bought by People teams, used by managers as an obligation, and built around the review cycle rather than around Tuesday."
+    "default": "Every serious tool in this category is sold to HR — bought by People teams, used by managers as an obligation, and built around the review cycle rather than around Tuesday."
   },
   {
     "name": "items",
@@ -37,15 +37,15 @@
     "default": [
       {
         "title": "Built for you as the buyer",
-        "body": "Not for the person HR makes comply. You decide it's worth it, and you're done."
+        "copy": "Not for the person HR makes comply. You decide it's worth it, and you're done."
       },
       {
         "title": "One surface, not four",
-        "body": "Metrics, skills and behaviours in the same place, rather than stitched together from tools that were never meant to meet."
+        "copy": "Metrics, skills and behaviours in the same place, rather than stitched together from tools that were never meant to meet."
       },
       {
         "title": "Judgment, not dashboards",
-        "body": "It tells you what to do about what it shows you \u2014 before the conversation, not after the quarter."
+        "copy": "It tells you what to do about what it shows you — before the conversation, not after the quarter."
       }
     ]
   }

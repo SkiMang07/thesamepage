@@ -1,0 +1,20 @@
+[
+  {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "About"
+  },
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Built by someone who needed it."
+  },
+  {
+    "name": "lede",
+    "label": "Sub-headline",
+    "type": "text",
+    "default": "The Same Page exists because managing a team without a written standard is guesswork — and guesswork is what we're here to end."
+  }
+]

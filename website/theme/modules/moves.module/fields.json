@@ -28,8 +28,30 @@
         "default": ""
       },
       {
+        "name": "preview_style",
+        "label": "Preview illustration",
+        "type": "choice",
+        "display": "select",
+        "choices": [
+          [
+            "progress",
+            "Progress bar"
+          ],
+          [
+            "capture",
+            "Capture (three swatches)"
+          ],
+          [
+            "connect",
+            "Connected line"
+          ]
+        ],
+        "default": "progress",
+        "help_text": "Used until a real screenshot is uploaded below."
+      },
+      {
         "name": "shot",
-        "label": "Screenshot",
+        "label": "Screenshot (overrides the illustration once set)",
         "type": "image",
         "responsive": true,
         "default": {
@@ -38,29 +60,23 @@
           "width": null,
           "height": null
         }
-      },
-      {
-        "name": "shot_label",
-        "label": "Placeholder label",
-        "type": "text",
-        "default": "Screenshot"
       }
     ],
     "default": [
       {
         "title": "Define what good looks like",
-        "body": "Metrics, skills and values, per role and per level. The thing nobody writes down, written down once.",
-        "shot_label": "Screenshot \u2014 role expectations"
+        "copy": "Metrics, skills and values, per role and per level. The thing nobody writes down, written down once.",
+        "preview_style": "progress"
       },
       {
         "title": "Let the evidence build itself",
-        "body": "1:1s, check-ins and commitments land against the person and the expectation as you go \u2014 so the record accumulates instead of being reconstructed.",
-        "shot_label": "Screenshot \u2014 the 1:1 loop"
+        "copy": "1:1s, check-ins and commitments land against the person and the expectation as you go — so the record accumulates instead of being reconstructed.",
+        "preview_style": "capture"
       },
       {
         "title": "See where everyone stands",
-        "body": "One surface. Zoom out for the team, click in for the person, and know the facts behind every rating.",
-        "shot_label": "Screenshot \u2014 Mission Control"
+        "copy": "One surface. Zoom out for the team, click in for the person, and know the facts behind every rating.",
+        "preview_style": "connect"
       }
     ]
   }

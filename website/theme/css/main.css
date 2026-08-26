@@ -13,6 +13,7 @@
   --hairline:{{ theme.color.hairline.color }};
   --divider:{{ theme.color.sunken.color }};
   --control:{{ theme.color.control.color }};
+  --pill:{{ theme.color.pill.color }};
   --ink:{{ theme.color.ink.color }};
   --ink-body:{{ theme.color.ink_body.color }};
   --ink-secondary:{{ theme.color.ink_secondary.color }};
@@ -26,6 +27,7 @@
   --carbon-900:{{ theme.color.carbon.color }};
   --carbon-950:{{ theme.color.carbon_deep.color }};
   --amber-500:{{ theme.color.amber.color }};
+  --amber-tint:{{ theme.color.amber_tint.color }};
   --focus:{{ theme.color.focus.color }};
   --feature-from:{{ theme.color.feature_from.color }};
   --feature-to:{{ theme.color.feature_to.color }};
@@ -35,6 +37,12 @@
      and the real typeface is still an open brand decision. When one is chosen,
      this becomes a proper `font` theme field. */
   --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  /* Data/UI accent face, deliberately literal like --sans above (theme fields can't
+     hold text). Scoped in practice to stat numerals, status tags and section
+     indices — loaded via Google Fonts in page.html's <head>, same mechanism as
+     the walkthrough page's display face. Promote to a real theme font field if
+     it ever needs to apply beyond the homepage modules. */
+  --mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
 }
 
 /* HubSpot's drag-and-drop wrappers must not introduce their own spacing —
@@ -116,7 +124,7 @@ a{color:inherit;text-decoration:none}
 /* ---------- hero ---------- */
 .hero{background:linear-gradient(180deg,var(--feature-from) 0%,var(--feature-to) 62%,var(--canvas) 100%);
   padding:clamp(3.2rem,5.5vw,4.6rem) 0 clamp(2.6rem,4vw,3.4rem)}
-.hero-grid{display:grid;grid-template-columns:minmax(0,1.16fr) minmax(0,.84fr);
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);
   gap:clamp(2rem,3.4vw,3.5rem);align-items:center}
 .hero h1{margin-bottom:1.4rem}
 .hero .lede{max-width:40ch;margin-bottom:2rem}
@@ -127,27 +135,34 @@ a{color:inherit;text-decoration:none}
 .counter b{color:var(--brand);font-weight:660}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
 
-/* ---------- hero figure: the bar ---------- */
+/* ---------- hero figure: product mockup ---------- */
 .figure{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
-  padding:1.45rem 1.5rem 1.25rem;box-shadow:0 1px 2px rgba(34,43,50,.05),0 12px 32px -12px rgba(34,43,50,.14)}
-.fig-head{display:flex;align-items:baseline;justify-content:space-between;
-  padding-bottom:.95rem;border-bottom:1px solid var(--divider);margin-bottom:1.1rem}
-.fig-title{font-size:.95rem;font-weight:640;color:var(--ink)}
-.fig-sub{font-size:.8rem;color:var(--ink-muted)}
-.plot{position:relative;height:196px;margin:0 4px}
-.bar-line{position:absolute;left:0;right:0;top:96px;z-index:2;height:2px;background:var(--brand);border-radius:2px}
-.bar-label{position:absolute;left:0;top:72px;font-size:.7rem;font-weight:660;
-  letter-spacing:.08em;text-transform:uppercase;color:var(--brand);background:var(--surface);
-  padding:0 .5rem 0 0;z-index:3}
-.people{position:absolute;inset:0;z-index:1;display:flex;align-items:flex-end;justify-content:space-between;padding:0 6px}
-.person{width:44px;display:flex;flex-direction:column;align-items:center;position:relative;height:100%}
-.stem{position:absolute;width:1.5px;background:var(--hairline);border-radius:1px}
-.pip{position:absolute;width:15px;height:15px;border-radius:50%;border:2.5px solid var(--surface)}
-.pname{position:absolute;bottom:0;font-size:.7rem;color:var(--ink-muted);letter-spacing:.01em}
-.fig-foot{display:flex;gap:1.3rem;margin-top:1.35rem;padding-top:1.1rem;
-  border-top:1px solid var(--divider);font-size:.78rem;color:var(--ink-muted)}
-.key{display:inline-flex;align-items:center;gap:.4rem}
-.key i{width:9px;height:9px;border-radius:50%;display:block}
+  overflow:hidden;box-shadow:0 1px 2px rgba(34,43,50,.05),0 16px 36px -16px rgba(34,43,50,.16)}
+.fig-chrome{display:flex;align-items:center;gap:.7rem;padding:.85rem 1.1rem;
+  background:var(--sunken);border-bottom:1px solid var(--hairline)}
+.fig-dots{display:flex;gap:.35rem}
+.fig-dots i{width:8px;height:8px;border-radius:50%;background:var(--control);display:block}
+.fig-chrome span{font-size:.78rem;font-weight:640;color:var(--ink-secondary)}
+.fig-body{padding:1.3rem 1.3rem 1.5rem}
+.fig-filters{display:flex;gap:.5rem;margin-bottom:1.1rem}
+.fchip{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.02em;
+  padding:.32rem .65rem;border-radius:999px}
+.fchip.now{background:var(--brand-tint);color:var(--brand)}
+.fchip.next{background:var(--sunken);color:var(--ink-muted)}
+.fchip.risk{background:var(--sunken);color:var(--amber-500)}
+.rows{display:flex;flex-direction:column;gap:.65rem}
+.prow{display:flex;align-items:center;justify-content:space-between;padding:.8rem .95rem;
+  background:var(--canvas);border:1px solid var(--hairline);border-radius:9px}
+.prow-l{display:flex;align-items:center;gap:.7rem}
+.pdot{width:26px;height:26px;border-radius:50%;flex:none}
+.prow-l div b{display:block;font-size:.88rem;font-weight:640;color:var(--ink)}
+.prow-l div span{font-size:.74rem;color:var(--ink-muted)}
+.pstatus{font-family:var(--mono);font-size:.76rem;font-weight:600}
+
+/* ---------- hero proof strip ---------- */
+.hero-proof{display:flex;gap:2rem;margin-top:2.4rem;padding-top:1.5rem;border-top:1px solid var(--hairline)}
+.hero-proof div b{display:block;font-family:var(--mono);font-size:1.4rem;font-weight:600;color:var(--ink)}
+.hero-proof div span{font-size:.78rem;color:var(--ink-muted);display:block;margin-top:.15rem;max-width:20ch}
 
 /* ---------- generic section ---------- */
 .sec{padding:clamp(3.4rem,5.6vw,5.2rem) 0}
@@ -159,8 +174,8 @@ a{color:inherit;text-decoration:none}
 .recog{display:grid;gap:0;border-top:1px solid var(--hairline)}
 .recog li{display:flex;gap:1.4rem;align-items:flex-start;padding:1.5rem 0;
   border-bottom:1px solid var(--hairline)}
-.recog .idx{font-size:.8rem;font-weight:660;color:var(--brand);letter-spacing:.05em;
-  padding-top:.25rem;flex:none;width:2rem}
+.recog .idx{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--brand);
+  padding-top:.3rem;flex:none;width:2rem}
 .recog p{font-size:clamp(1.05rem,1.5vw,1.22rem);line-height:1.45;color:var(--ink);
   letter-spacing:-.012em;max-width:52ch}
 
@@ -172,8 +187,8 @@ a{color:inherit;text-decoration:none}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.11);
   border:1px solid rgba(255,255,255,.11);border-radius:12px;overflow:hidden;margin-top:3rem}
 .stat{background:var(--carbon-900);padding:1.75rem 1.5rem}
-.stat b{display:block;font-size:clamp(2rem,3.4vw,2.7rem);font-weight:640;letter-spacing:-.035em;
-  line-height:1;color:var(--on-dark);margin-bottom:.7rem}
+.stat b{display:block;font-family:var(--mono);font-size:clamp(1.8rem,3vw,2.4rem);font-weight:600;
+  letter-spacing:-.01em;line-height:1;color:var(--on-dark);margin-bottom:.7rem}
 .stat span{font-size:.92rem;line-height:1.45;color:var(--ink-on-carbon);display:block}
 .stakes{margin-top:2.5rem;padding-top:2.25rem;border-top:1px solid rgba(255,255,255,.13);
   display:grid;grid-template-columns:1fr 1fr;gap:2.5rem}
@@ -187,13 +202,23 @@ a{color:inherit;text-decoration:none}
 .move{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
   padding:1.9rem 1.7rem;display:flex;flex-direction:column}
 .move .num{width:30px;height:30px;border-radius:8px;background:var(--brand-tint);color:var(--brand);
-  font-size:.85rem;font-weight:680;display:flex;align-items:center;justify-content:center;
-  margin-bottom:1.3rem}
+  font-family:var(--mono);font-size:.85rem;font-weight:600;display:flex;align-items:center;
+  justify-content:center;margin-bottom:1.3rem}
 .move h3{margin-bottom:.65rem}
 .move p{font-size:.98rem;line-height:1.55;color:var(--ink-secondary);margin-bottom:1.6rem}
-.shot{margin-top:auto;border:1px dashed var(--control);border-radius:10px;background:var(--sunken);
-  height:132px;display:flex;align-items:center;justify-content:center;
-  font-size:.78rem;color:var(--ink-faint);text-align:center;padding:0 1rem}
+.prev{margin-top:auto;height:104px;border-radius:10px;background:var(--sunken);
+  border:1px solid var(--hairline);position:relative;overflow:hidden}
+.prev-define{display:flex;align-items:center;gap:.4rem;height:100%;padding:0 1.1rem}
+.prev-define i{flex:1;height:8px;border-radius:4px;background:var(--control);display:block}
+.prev-define i.fill{flex:none;width:38%;background:var(--brand)}
+.prev-capture{display:flex;align-items:center;justify-content:center;gap:.5rem;height:100%}
+.prev-capture i{width:32px;height:32px;border-radius:7px;background:var(--surface);
+  border:1px solid var(--hairline);display:block}
+.prev-capture i.mid{background:var(--brand-tint);border-color:var(--brand)}
+.prev-see{position:relative;height:100%}
+.prev-see .line{position:absolute;left:14px;right:14px;top:50%;height:2px;background:var(--brand)}
+.prev-see .node{position:absolute;top:50%;width:9px;height:9px;margin-top:-4.5px;margin-left:-4.5px;
+  border-radius:50%;background:var(--ink)}
 
 /* ---------- against ---------- */
 .against{background:var(--brand-tint)}
@@ -205,8 +230,8 @@ a{color:inherit;text-decoration:none}
 /* ---------- pivot stat ---------- */
 .pivot{background:var(--surface);border-top:1px solid var(--hairline);
   border-bottom:1px solid var(--hairline);text-align:center;padding:clamp(4rem,7vw,6rem) 0}
-.pivot .big{font-size:clamp(3.2rem,8vw,6rem);font-weight:660;letter-spacing:-.045em;
-  line-height:1;color:var(--brand);margin-bottom:1.5rem}
+.pivot .big{font-family:var(--mono);font-size:clamp(3rem,7.5vw,5.4rem);font-weight:600;
+  letter-spacing:-.01em;line-height:1;color:var(--brand);margin-bottom:1.5rem}
 .pivot .say{font-size:clamp(1.2rem,2vw,1.55rem);line-height:1.4;color:var(--ink);
   letter-spacing:-.02em;max-width:26ch;margin:0 auto 1.5rem}
 .pivot .after{font-size:1.02rem;color:var(--ink-muted);max-width:46ch;margin:0 auto}
@@ -215,7 +240,7 @@ a{color:inherit;text-decoration:none}
 .founder{display:grid;grid-template-columns:112px minmax(0,1fr);gap:1.75rem;align-items:start;
   background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
   padding:2rem;max-width:780px;margin:0 auto}
-.avatar{width:112px;height:112px;border-radius:12px;background:var(--sunken);
+.avatar{width:112px;height:112px;border-radius:50%;background:linear-gradient(135deg,var(--brand-tint),var(--sunken));
   border:1px dashed var(--control);display:flex;align-items:center;justify-content:center;
   font-size:.72rem;color:var(--ink-faint);text-align:center;padding:.5rem}
 .founder p{font-size:1.05rem;line-height:1.6;color:var(--ink-body);margin-bottom:1rem}
@@ -260,10 +285,316 @@ a{color:inherit;text-decoration:none}
   .nav-links{display:none}
   .signin{display:none}
   .founder{grid-template-columns:1fr}
+  .hero-proof{gap:1.4rem;flex-wrap:wrap}
   .wrap{padding:0 22px}
 }
 
 /* module additions: real images replacing the placeholders */
 .shot-img{margin-top:auto;width:100%;border-radius:10px;border:1px solid var(--hairline);display:block}
-.avatar-img{width:112px;height:112px;border-radius:12px;object-fit:cover;display:block}
+.avatar-img{width:112px;height:112px;border-radius:50%;object-fit:cover;display:block}
 @media (max-width:900px){.avatar-img{width:88px;height:88px}}
+
+/* ---------- page frame (About/Contact intro — frame.module) ---------- */
+.frame{padding:clamp(3.6rem,6vw,5.2rem) 0 clamp(2.2rem,3.5vw,3rem);text-align:center}
+.frame .eyebrow{display:block;margin-bottom:1.1rem}
+.frame .h1{margin:0 auto 1.1rem;max-width:20ch}
+.frame .lede{max-width:52ch;margin:0 auto}
+
+/* ---------- contact form (contact-form.module) ----------
+   Targets HubSpot's own generated form markup (.hs-form-field, .hs-input,
+   .hs-button, .hs-error-msgs) so an embedded native form matches the site
+   without any custom form HTML of our own. Field labels and the submit
+   button's own text come from the HubSpot form itself, not from here. */
+.form-card{max-width:560px;margin:0 auto;background:var(--surface);
+  border:1px solid var(--hairline);border-radius:14px;
+  padding:clamp(1.8rem,3vw,2.5rem);
+  box-shadow:0 1px 2px rgba(34,43,50,.05),0 12px 32px -12px rgba(34,43,50,.14)}
+.form-card .hs-form-field{margin-bottom:1.3rem}
+.form-card .hs-form-field>label{display:block;font-size:.86rem;font-weight:620;
+  color:var(--ink);margin-bottom:.45rem}
+.form-card input[type="text"],
+.form-card input[type="email"],
+.form-card input[type="tel"],
+.form-card select,
+.form-card textarea{width:100%;font-family:inherit;font-size:1rem;
+  color:var(--ink-body);background:var(--surface);border:1px solid var(--control);
+  border-radius:8px;padding:.7rem .85rem;transition:border-color .15s ease}
+.form-card input:focus,.form-card select:focus,.form-card textarea:focus{
+  border-color:var(--brand);outline:none}
+.form-card textarea{resize:vertical;min-height:132px;line-height:1.5}
+.form-card .hs-button{display:inline-flex;align-items:center;justify-content:center;
+  gap:.5rem;font-family:inherit;font-size:1rem;font-weight:600;letter-spacing:-.01em;
+  padding:.85rem 1.55rem;border-radius:8px;border:1px solid transparent;cursor:pointer;
+  background:var(--brand);color:var(--on-dark);transition:background-color .15s ease}
+.form-card .hs-button:hover{background:var(--brand-hover)}
+.form-card .hs-error-msgs{list-style:none;padding:0;margin:.4rem 0 0;
+  color:var(--amber-500);font-size:.85rem}
+.form-card .hs-error-msgs li{margin-top:.2rem}
+.form-note{font-size:.84rem;color:var(--ink-muted);line-height:1.5;margin-top:.9rem}
+.consent-copy{font-size:.84rem;color:var(--ink-muted);line-height:1.5;margin-top:.5rem}
+.consent-copy a,.form-note a{color:var(--ink-secondary);text-decoration:underline;
+  text-decoration-color:var(--control)}
+.consent-copy a:hover,.form-note a:hover{color:var(--brand)}
+
+/* ---------- legal body (legal-body.module) ---------- */
+.legal-sec{padding:0 0 clamp(4rem,6.5vw,6rem)}
+.legal-meta{display:block;width:max-content;margin:0 auto 2.6rem;padding:.4rem .95rem;
+  background:var(--surface);border:1px solid var(--teal-200);border-radius:999px;
+  font-size:.84rem;color:var(--ink-secondary)}
+.legal-body{max-width:760px;margin:0 auto;counter-reset:legalsec}
+.legal-body h2{counter-increment:legalsec;display:flex;align-items:baseline;gap:.9rem;
+  font-size:1.32rem;line-height:1.3;letter-spacing:-.016em;font-weight:640;color:var(--ink);
+  margin:2.9rem 0 1.1rem;padding-top:2.1rem;border-top:1px solid var(--hairline)}
+.legal-body h2:first-of-type{margin-top:0;padding-top:0;border-top:0}
+.legal-body h2::before{content:counter(legalsec,decimal-leading-zero);flex:none;
+  font-size:.72rem;font-weight:680;letter-spacing:.03em;color:var(--brand);
+  background:var(--brand-tint);border-radius:6px;padding:.3rem .5rem;line-height:1}
+.legal-body h3{font-size:1.05rem;font-weight:640;color:var(--ink);margin:1.6rem 0 .6rem}
+.legal-body p{font-size:1rem;line-height:1.72;color:var(--ink-body);margin:0 0 1.1rem}
+.legal-body ul{list-style:disc;margin:0 0 1.1rem;padding-left:1.3rem}
+.legal-body li{font-size:1rem;line-height:1.65;color:var(--ink-body);margin-bottom:.4rem}
+.legal-body a{color:var(--ink-secondary);text-decoration:underline;text-decoration-color:var(--control)}
+.legal-body a:hover{color:var(--brand)}
+.legal-body strong{color:var(--ink);font-weight:640}
+.legal-body blockquote{margin:1.6rem 0 2rem;padding:1.5rem 1.75rem;background:var(--brand-tint);
+  border-left:3px solid var(--brand);border-radius:0 10px 10px 0}
+.legal-body blockquote p{font-size:1.1rem;line-height:1.55;color:var(--ink);letter-spacing:-.01em;
+  font-weight:560;margin:0}
+.legal-body .table-wrap{overflow-x:auto;margin:0 0 1.4rem}
+.legal-body table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:480px}
+.legal-body th,.legal-body td{text-align:left;padding:.75rem .9rem;border-bottom:1px solid var(--hairline);vertical-align:top}
+.legal-body th{font-weight:640;color:var(--ink);background:var(--sunken)}
+.legal-body .draft-note{border:1px dashed var(--control);border-radius:10px;background:var(--sunken);
+  padding:1.1rem 1.4rem;margin:0 0 1.4rem;font-size:.92rem;color:var(--ink-secondary);line-height:1.6}
+.legal-body .draft-note b{color:var(--ink)}
+.doc-links{text-align:center;padding:2.5rem 0 0;font-size:.9rem;color:var(--ink-muted);
+  max-width:760px;margin:0 auto}
+.doc-links a{color:var(--brand);text-decoration:underline;text-decoration-color:var(--teal-200)}
+.doc-links .sep{margin:0 .6rem;color:var(--control)}
+
+@media (max-width:900px){
+  .legal-body h2{gap:.6rem}
+}
+
+/* ======================================================================
+   NEW: the hero drawing. Everything below this line is the stage-1 work.
+   ====================================================================== */
+.dfig{margin:0;isolation:isolate}
+.dfig svg{display:block;width:100%;height:auto}
+.dwrap{border-radius:14px;cursor:default}
+.dwrap:focus-visible{outline:2px solid var(--focus);outline-offset:6px}
+.dcap{margin-top:.9rem;font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);
+  display:none;align-items:center;gap:.5rem}
+.dcap::before{content:"";width:16px;height:1px;background:var(--control);flex:none}
+
+/* Resting state is the finished picture: registered, resolved, everything
+   visible. Only where a pointer can hover, and only where motion is welcome,
+   do the sheets start apart. So reduced motion and touch both get the
+   finished frame and nothing is hidden behind an interaction. */
+.pA{transform:none;transform-box:view-box}
+.pB{transform:translate(var(--bx),var(--by));transform-box:view-box}
+.res{opacity:1}
+.onion{fill-opacity:1}
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  .dwrap{cursor:pointer}
+  .dwrap .pA{transform:translate(var(--dx),var(--dy)) rotate(var(--ra));
+    transition:transform .85s cubic-bezier(.34,.72,.22,1)}
+  .dwrap .pB{transform:translate(var(--ex),var(--ey)) rotate(var(--rb));
+    transition:transform .85s cubic-bezier(.34,.72,.22,1)}
+  .dwrap .res{opacity:0;transition:opacity .3s ease}
+  .dwrap .onion{fill-opacity:var(--onion,.38);transition:fill-opacity .85s cubic-bezier(.34,.72,.22,1)}
+  .dwrap:hover .pA,.dwrap:focus-within .pA{transform:none}
+  .dwrap:hover .pB,.dwrap:focus-within .pB{transform:translate(var(--bx),var(--by))}
+  .dwrap:hover .res,.dwrap:focus-within .res{opacity:1;transition-delay:.45s}
+  .dwrap:hover .onion,.dwrap:focus-within .onion{fill-opacity:1}
+  /* the hint only exists where the interaction it names exists */
+  .dcap{display:flex}
+}
+
+/* ======================================================================
+   NEW: the product film. Stage 2.
+
+   Three stops, hidden radios plus labels, no JavaScript at all. A
+   continuous scrub bar would need JS and a hover-scrub would do nothing on
+   a phone, so the film is stepped rather than scrubbed. Every stop is a
+   finished picture, clicking works on touch, and arrow keys move between
+   stops natively because it is a real radio group.
+
+   THE RESTING STOP IS MONDAY. A visitor who never touches it still sees
+   the payoff, which is the sentence coming back with its reason attached.
+   ====================================================================== */
+.film{position:relative}
+.film-radio{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;margin:0}
+.film-plate{background:var(--surface);border:1px solid var(--hairline);border-radius:16px;
+  box-shadow:0 14px 16px -10px rgba(34,43,50,.10),0 1px 1px rgba(34,43,50,.05);overflow:hidden}
+.film-steps{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;
+  padding:1.05rem clamp(1.1rem,2.2vw,1.8rem);border-bottom:1px solid var(--hairline)}
+.film-steps label{display:inline-flex;align-items:center;gap:.55rem;cursor:pointer;
+  font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-muted);border-radius:5px;
+  transition:color .15s ease}
+.film-steps label:hover{color:var(--brand)}
+.film-steps .fs-dot{width:9px;height:9px;border-radius:50%;background:var(--control);
+  flex:none;transition:background-color .15s ease}
+.film-steps .fs-line{flex:1;min-width:14px;height:1px;background:var(--hairline)}
+.film-stage{padding:clamp(.7rem,1.6vw,1.2rem)}
+.film-stage svg{display:block;width:100%;height:auto}
+.film-stage text{font-family:var(--sans)}
+.film-stage .mono{font-family:var(--mono)}
+.film-cap{margin-top:1rem;font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted);
+  display:flex;align-items:center;gap:.5rem}
+.film-cap::before{content:"";width:16px;height:1px;background:var(--control);flex:none}
+.fr{opacity:0;visibility:hidden;transition:opacity .34s ease}
+.film-radio.f1:checked ~ .film-plate .fr1,
+.film-radio.f2:checked ~ .film-plate .fr2,
+.film-radio.f3:checked ~ .film-plate .fr3{opacity:1;visibility:visible}
+.film-radio.f1:checked ~ .film-plate label.f1,
+.film-radio.f2:checked ~ .film-plate label.f2,
+.film-radio.f3:checked ~ .film-plate label.f3{color:var(--brand)}
+.film-radio.f1:checked ~ .film-plate label.f1 .fs-dot,
+.film-radio.f2:checked ~ .film-plate label.f2 .fs-dot,
+.film-radio.f3:checked ~ .film-plate label.f3 .fs-dot{background:var(--brand)}
+.film-radio.f1:focus-visible ~ .film-plate label.f1,
+.film-radio.f2:focus-visible ~ .film-plate label.f2,
+.film-radio.f3:focus-visible ~ .film-plate label.f3{outline:2px solid var(--focus);outline-offset:4px}
+
+
+/* ======================================================================
+   NEW: the desk. Stage 3.
+
+   Beat two names three objects, so beat two draws them. The RESTING STATE
+   IS THE MESS, which is the picture this beat needs: touch, keyboard and
+   reduced motion all get the scattered desk and nothing is withheld. Where
+   a fine pointer and motion are both available, hovering sweeps the scraps
+   off and leaves the one clean record that was underneath them the whole
+   time. The teal dot on that record shows at rest, so there is colour in
+   the picture before anything is touched and the reveal is foreshadowed.
+   ====================================================================== */
+.recog-grid{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);
+  gap:clamp(2rem,4vw,3.6rem);align-items:center}
+.desk-col{min-width:0}
+.scrap{transform-box:view-box}
+.s1{transform:rotate(-7deg);transform-origin:210px 215px}
+.s2{transform:rotate(5.5deg);transform-origin:355px 292px}
+.s3{transform:rotate(-4.5deg);transform-origin:242px 392px}
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  .scrap{transition:transform .8s cubic-bezier(.34,.72,.22,1),opacity .5s ease}
+  .desk:hover .s1,.desk:focus-within .s1{transform:translate(-96px,-84px) rotate(-17deg);opacity:0}
+  .desk:hover .s2,.desk:focus-within .s2{transform:translate(118px,-46px) rotate(15deg);opacity:0;transition-delay:.06s}
+  .desk:hover .s3,.desk:focus-within .s3{transform:translate(-46px,128px) rotate(-15deg);opacity:0;transition-delay:.12s}
+}
+
+/* ---------------------------------------------------------------------------
+   NEW: the bar. Stage 4, concept 05.
+
+   The concept was "drag the line, the count changes". A count that changes under
+   a dragged finger has no CSS-only form, and a dragged threshold is also a
+   picture of moving the goalposts, which is the behaviour the product replaces.
+   So the line is SET rather than dragged: the stops are levels of a role ladder,
+   the bar record grows as the level asks for more, and the same evidence on the
+   right re-scores against it. Same radio-group mechanism as the film, so touch
+   works and arrow keys work natively.
+
+   TWO SVGS, ONE RADIO GROUP. One wide drawing made a phone scroll sideways past
+   the whole bar card before reaching the line and the count, so the phone's
+   resting state was the setup with the payoff cropped off. Split, they sit side
+   by side above 980px and stack below it. The count chip sits at the LEFT end of
+   the line for the same reason.
+
+   MARK STATES. The register gives a mark three states. Here they read as clears
+   it (teal), evidence on file and it does not (grey), and nothing on file yet
+   (amber outline). Teal therefore does a second job inside this drawing.
+
+   MOTION. Mid is checked by default, so the resting state is a finished picture
+   with visible room in both directions. Nothing is hidden behind an interaction.
+
+   CONTRAST. Marks are held to 3:1 on the card: teal 4.92, grey 3.36, amber 3.91.
+   Every piece of type in the section clears 4.5 except .ladder-cap, which copies
+   .film-cap's --ink-faint at 3.15 on canvas. That is the film's existing choice
+   and both captions are left consistent rather than one of them fixed alone.
+--------------------------------------------------------------------------- */
+.ladder{position:relative}
+.ladder-radio{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;margin:0}
+.ladder-plate{background:var(--surface);border:1px solid var(--hairline);border-radius:16px;
+  box-shadow:0 14px 16px -10px rgba(34,43,50,.10),0 1px 1px rgba(34,43,50,.05);overflow:hidden}
+.ladder-steps{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;
+  padding:1.05rem clamp(1.1rem,2.2vw,1.8rem);border-bottom:1px solid var(--hairline)}
+.ladder-steps label{display:inline-flex;align-items:center;gap:.55rem;cursor:pointer;
+  font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-muted);border-radius:5px;
+  transition:color .15s ease}
+.ladder-steps label:hover{color:var(--brand)}
+.ladder-steps .ls-dot{width:9px;height:9px;border-radius:50%;background:var(--control);
+  flex:none;transition:background-color .15s ease}
+.ladder-steps .ls-line{flex:1;min-width:14px;height:1px;background:var(--hairline)}
+.ladder-stage{padding:clamp(.7rem,1.6vw,1.2rem);display:grid;
+  grid-template-columns:minmax(0,320fr) minmax(0,610fr);
+  gap:clamp(.8rem,1.8vw,1.6rem);align-items:start}
+.ladder-stage > div{min-width:0}
+.ladder-stage svg{display:block;width:100%;height:auto}
+.ladder-stage text{font-family:var(--sans)}
+.ladder-stage .mono{font-family:var(--mono)}
+.ladder-cap{margin-top:1rem;font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted);
+  display:flex;align-items:center;gap:.6rem}
+.ladder-cap::before{content:"";width:16px;height:1px;background:var(--control);flex:none}
+.lr{opacity:0;visibility:hidden;transition:opacity .4s ease}
+.ladder-radio.l1:checked ~ .ladder-plate .lr1,
+.ladder-radio.l2:checked ~ .ladder-plate .lr2,
+.ladder-radio.l3:checked ~ .ladder-plate .lr3{opacity:1;visibility:visible}
+.ladder-radio.l1:checked ~ .ladder-plate label.l1,
+.ladder-radio.l2:checked ~ .ladder-plate label.l2,
+.ladder-radio.l3:checked ~ .ladder-plate label.l3{color:var(--brand)}
+.ladder-radio.l1:checked ~ .ladder-plate label.l1 .ls-dot,
+.ladder-radio.l2:checked ~ .ladder-plate label.l2 .ls-dot,
+.ladder-radio.l3:checked ~ .ladder-plate label.l3 .ls-dot{background:var(--brand)}
+.ladder-radio.l1:focus-visible ~ .ladder-plate label.l1,
+.ladder-radio.l2:focus-visible ~ .ladder-plate label.l2,
+.ladder-radio.l3:focus-visible ~ .ladder-plate label.l3{outline:2px solid var(--focus);outline-offset:4px}
+.ladder-key{display:flex;gap:1.6rem;flex-wrap:wrap;margin-top:1.6rem;
+  font-size:.82rem;color:var(--ink-muted)}
+.ladder-key span{display:inline-flex;align-items:center;gap:.5rem}
+.ladder-key i{width:13px;height:13px;border-radius:4.5px;flex:none;display:block}
+.ladder-key .k-clear{background:var(--brand)}
+.ladder-key .k-short{background:var(--ink-faint)}
+.ladder-key .k-open{background:var(--amber-tint);box-shadow:inset 0 0 0 2.5px var(--amber-500)}
+
+/* ---------- the drawings: every fill and stroke comes from a token ----------
+   The four illustrations carry no colour of their own. Each shape names its
+   role from the register (a surface, a pill, a mark, a dot) and takes its
+   value from here, so changing --brand repaints all four at once and no hex
+   is ever written into a module. */
+.dfig .d-surface,.film .d-surface,.ladder .d-surface{fill:var(--surface)}
+.dfig .d-canvas,.film .d-canvas,.ladder .d-canvas{fill:var(--canvas)}
+.dfig .d-control,.film .d-control,.ladder .d-control{fill:var(--control)}
+.dfig .d-pill,.film .d-pill,.ladder .d-pill{fill:var(--pill)}
+.dfig .d-recorded,.film .d-recorded,.ladder .d-recorded{fill:var(--ink-faint)}
+.dfig .d-heading,.film .d-heading,.ladder .d-heading{fill:var(--ink-muted)}
+.dfig .d-label,.film .d-label,.ladder .d-label{fill:var(--ink-secondary)}
+.dfig .d-ink,.film .d-ink,.ladder .d-ink{fill:var(--ink)}
+.dfig .d-brand,.film .d-brand,.ladder .d-brand{fill:var(--brand)}
+.dfig .d-brand-deep,.film .d-brand-deep,.ladder .d-brand-deep{fill:var(--brand-hover)}
+.dfig .d-tint,.film .d-tint,.ladder .d-tint{fill:var(--brand-tint)}
+/* an open mark is the one shape whose fill and stroke are a pair */
+.dfig .d-open,.film .d-open,.ladder .d-open{fill:var(--amber-tint);stroke:var(--amber-500)}
+.dfig .s-control,.film .s-control,.ladder .s-control{stroke:var(--control)}
+.dfig .s-hairline,.film .s-hairline,.ladder .s-hairline{stroke:var(--hairline)}
+.dfig .s-brand,.film .s-brand,.ladder .s-brand{stroke:var(--brand)}
+/* the two-part shadow every record carries */
+.dfig feDropShadow,.film feDropShadow,.ladder feDropShadow{flood-color:var(--carbon-900)}
+
+/* the drawings stack earlier than the rest of the page: each of these is
+   two records side by side, and two records need more room than three cards */
+@media (max-width:980px){
+  .recog-grid{grid-template-columns:1fr;gap:2.6rem}
+  /* the drawing scrolls inside its own box rather than shrinking its own
+     type past legibility */
+  .film-stage{overflow-x:auto}
+  .film-stage svg{min-width:720px}
+  /* the two records stack, and only the wider one scrolls inside its own box */
+  .ladder-stage{grid-template-columns:1fr;gap:1.6rem}
+  .ladder-team{overflow-x:auto}
+  .ladder-team svg{min-width:520px}
+}

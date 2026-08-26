@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The Same Page — define the bar, then see who clears it.">
+  <title>The Same Page — visual homepage concept</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #f5f5ef;
+      --paper-2: #e9efeb;
+      --surface: #ffffff;
+      --carbon: #182026;
+      --carbon-2: #222b32;
+      --ink: #222b32;
+      --body: #4f575d;
+      --muted: #68727a;
+      --line: #ced5d2;
+      --teal: #087e78;
+      --teal-dark: #075d59;
+      --teal-soft: #a8d8d2;
+      --blue: #2878d0;
+      --amber: #b67118;
+      --serif: "Instrument Serif", Georgia, serif;
+      --sans: "DM Sans", system-ui, sans-serif;
+      --max: 1440px;
+      --gutter: clamp(20px, 4vw, 64px);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input { font: inherit; }
+    img { display: block; max-width: 100%; }
+    h1, h2, h3, p, figure { margin: 0; }
+    :focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+
+    .shell { width: min(100%, var(--max)); margin: 0 auto; padding-inline: var(--gutter); }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--teal-dark);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before { width: 22px; height: 2px; background: currentColor; content: ""; }
+    .display {
+      font-family: var(--serif);
+      font-weight: 400;
+      letter-spacing: -.055em;
+      line-height: .88;
+    }
+    .button {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border: 1px solid var(--carbon);
+      border-radius: 999px;
+      padding: 0 22px;
+      background: var(--carbon);
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      transition: transform .2s ease, background .2s ease;
+    }
+    .button:hover { transform: translateY(-2px); background: var(--teal-dark); }
+    .button--ghost { background: transparent; color: var(--carbon); }
+    .button--ghost:hover { background: white; }
+    .button--light { border-color: white; background: white; color: var(--carbon); }
+
+    /* nav */
+    .nav {
+      position: fixed;
+      z-index: 50;
+      top: 0;
+      left: 0;
+      width: 100%;
+      border-bottom: 1px solid rgba(34,43,50,.12);
+      background: rgba(245,245,239,.84);
+      backdrop-filter: blur(16px);
+    }
+    .nav__inner { height: 74px; display: flex; align-items: center; gap: 34px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; white-space: nowrap; }
+    .brand img { width: 26px; height: 26px; }
+    .nav__links { display: flex; gap: 28px; color: var(--body); font-size: 14px; }
+    .nav__links a:hover { color: var(--teal); }
+    .nav__actions { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: 14px; }
+    .nav__actions .button { min-height: 42px; padding-inline: 18px; }
+    .concept-tag {
+      position: fixed;
+      z-index: 45;
+      right: 18px;
+      bottom: 18px;
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(24,32,38,.88);
+      color: white;
+      font-size: 10px;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      backdrop-filter: blur(10px);
+    }
+
+    /* hero */
+    .hero {
+      position: relative;
+      min-height: 980px;
+      padding: 150px 0 90px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 74% 23%, rgba(8,126,120,.14), transparent 27%),
+        linear-gradient(180deg, var(--paper) 0 76%, #edf1ee 100%);
+    }
+    .hero::after {
+      position: absolute;
+      right: -15vw;
+      top: -36vw;
+      width: 70vw;
+      aspect-ratio: 1;
+      border: 1px solid rgba(8,126,120,.14);
+      border-radius: 50%;
+      content: "";
+    }
+    .hero__grid { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(460px, .96fr); gap: 54px; align-items: center; }
+    .hero__copy { position: relative; z-index: 3; padding-top: 20px; }
+    .hero h1 { max-width: 820px; margin: 30px 0 28px; font-size: clamp(78px, 8vw, 132px); }
+    .hero h1 em { display: block; color: var(--teal); font-weight: 400; }
+    .hero__lede { max-width: 620px; color: var(--body); font-size: clamp(18px, 1.45vw, 22px); line-height: 1.55; }
+    .hero__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+    .founding {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .founding i { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 5px rgba(8,126,120,.12); }
+
+    .hero__visual { position: relative; z-index: 2; min-height: 650px; perspective: 1400px; }
+    .chart-card {
+      position: absolute;
+      inset: 56px 0 auto auto;
+      width: min(650px, 50vw);
+      min-height: 510px;
+      border: 1px solid rgba(34,43,50,.16);
+      border-radius: 28px;
+      padding: clamp(28px, 3vw, 46px);
+      background: rgba(255,255,255,.9);
+      box-shadow: 0 36px 100px rgba(34,43,50,.16);
+      transform: rotateY(-7deg) rotateX(2deg);
+      animation: cardFloat 7s ease-in-out infinite;
+      backdrop-filter: blur(14px);
+    }
+    .chart-card__head { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+    .chart-card__head h2 { font-size: clamp(20px, 2vw, 28px); letter-spacing: -.03em; }
+    .chart-card__head span { color: var(--muted); font-size: 12px; }
+    .plot { position: relative; height: 270px; margin-top: 44px; border-bottom: 1px solid var(--line); }
+    .plot::before {
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(to bottom, rgba(34,43,50,.08) 1px, transparent 1px);
+      background-size: 100% 25%;
+      content: "";
+    }
+    .threshold {
+      position: absolute;
+      z-index: 3;
+      top: 45%;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: var(--teal);
+      box-shadow: 0 0 0 5px rgba(8,126,120,.05);
+    }
+    .threshold span {
+      position: absolute;
+      left: 0;
+      bottom: 12px;
+      border-radius: 999px;
+      padding: 7px 10px;
+      background: var(--teal);
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .person {
+      --score: 50%;
+      position: absolute;
+      z-index: 2;
+      bottom: 0;
+      left: var(--x);
+      width: 2px;
+      height: var(--score);
+      background: var(--line);
+      transform: translateX(-50%);
+    }
+    .person::before {
+      position: absolute;
+      top: -7px;
+      left: -6px;
+      width: 14px;
+      height: 14px;
+      border: 3px solid white;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 3px 12px rgba(34,43,50,.2);
+      content: "";
+    }
+    .person[data-low]::before { background: var(--amber); }
+    .person b { position: absolute; top: calc(100% + 15px); left: 50%; color: var(--muted); font-size: 11px; font-weight: 500; transform: translateX(-50%); }
+    .bar-control { margin-top: 47px; }
+    .bar-control__readout { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 10px; }
+    .bar-control__readout span { color: var(--muted); font-size: 12px; }
+    .bar-control__readout strong { color: var(--teal-dark); font-family: var(--serif); font-size: 25px; font-weight: 400; }
+    .bar-control input { width: 100%; accent-color: var(--teal); cursor: grab; }
+    .bar-control input:active { cursor: grabbing; }
+    .floating-note {
+      position: absolute;
+      z-index: 5;
+      right: -22px;
+      bottom: 28px;
+      width: 230px;
+      border-radius: 16px;
+      padding: 18px;
+      background: var(--carbon);
+      color: white;
+      box-shadow: 0 24px 70px rgba(24,32,38,.22);
+      animation: noteFloat 6s 1s ease-in-out infinite;
+    }
+    .floating-note small { display: block; margin-bottom: 7px; color: var(--teal-soft); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .floating-note p { font-size: 14px; line-height: 1.45; }
+    .scroll-cue { position: absolute; z-index: 4; left: var(--gutter); bottom: 38px; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .scroll-cue i { width: 42px; height: 1px; overflow: hidden; background: var(--line); }
+    .scroll-cue i::after { display: block; width: 50%; height: 100%; background: var(--teal); content: ""; animation: scan 2s ease-in-out infinite; }
+
+    /* recognition: the messy desk */
+    .mess { position: relative; min-height: 1040px; padding: 140px 0; background: var(--carbon); color: white; overflow: hidden; }
+    .mess::before { position: absolute; inset: 0; opacity: .15; background-image: radial-gradient(circle, white 1px, transparent 1px); background-size: 28px 28px; content: ""; }
+    .mess__grid { position: relative; display: grid; grid-template-columns: .72fr 1.28fr; gap: 80px; align-items: start; }
+    .mess__copy { position: sticky; top: 130px; padding-top: 16px; }
+    .mess .eyebrow { color: var(--teal-soft); }
+    .mess h2 { max-width: 570px; margin-top: 28px; font-size: clamp(62px, 6.5vw, 108px); }
+    .mess__copy > p:not(.eyebrow) { max-width: 430px; margin-top: 30px; color: #b6c0c5; font-size: 18px; line-height: 1.6; }
+    .mess__pile { position: relative; min-height: 760px; margin-top: 40px; }
+    .window {
+      position: absolute;
+      width: min(540px, 78%);
+      min-height: 260px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 14px;
+      background: #f8faf9;
+      color: var(--ink);
+      box-shadow: 0 28px 80px rgba(0,0,0,.3);
+      transition: transform .8s cubic-bezier(.2,.75,.25,1), opacity .8s ease;
+    }
+    .window:nth-child(1) { z-index: 1; top: 10px; left: 16%; transform: rotate(8deg); }
+    .window:nth-child(2) { z-index: 2; top: 220px; left: 0; transform: rotate(-7deg); }
+    .window:nth-child(3) { z-index: 3; top: 420px; left: 25%; transform: rotate(4deg); }
+    .window.reveal:not(.visible) { opacity: 0; transform: translateY(70px) rotate(0); }
+    .window__bar { height: 38px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #dde2df; padding: 0 14px; background: white; }
+    .window__bar i { width: 8px; height: 8px; border-radius: 50%; background: #cbd1ce; }
+    .window__bar b { margin-left: 9px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+    .window__body { padding: 22px; }
+    .sheet-grid { display: grid; grid-template-columns: 1.25fr repeat(3, 1fr); border-top: 1px solid #dfe4e2; border-left: 1px solid #dfe4e2; }
+    .sheet-grid span { min-height: 38px; border-right: 1px solid #dfe4e2; border-bottom: 1px solid #dfe4e2; padding: 11px; color: var(--muted); font-size: 9px; }
+    .sheet-grid span:nth-child(-n+4) { background: #e9eeeb; color: var(--ink); font-weight: 600; }
+    .slack-row { display: grid; grid-template-columns: 34px 1fr; gap: 12px; margin-bottom: 18px; }
+    .avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: var(--teal); color: white; font-size: 10px; }
+    .slack-row p { color: var(--body); font-size: 11px; line-height: 1.5; }
+    .slack-row p b { display: block; margin-bottom: 3px; color: var(--ink); font-size: 11px; }
+    .note-title { margin-bottom: 14px; font-family: var(--serif); font-size: 31px; font-weight: 400; }
+    .note-line { height: 10px; margin-top: 12px; border-radius: 999px; background: #dfe4e2; }
+    .note-line:nth-child(3) { width: 74%; }
+    .note-line:nth-child(4) { width: 89%; }
+    .mess__answer {
+      position: absolute;
+      z-index: 5;
+      right: 0;
+      bottom: -60px;
+      max-width: 560px;
+      border-top: 1px solid rgba(255,255,255,.3);
+      padding: 28px 0 0 80px;
+      color: white;
+      font-family: var(--serif);
+      font-size: clamp(38px, 4vw, 60px);
+      line-height: 1;
+      letter-spacing: -.035em;
+    }
+    .mess__answer em { color: var(--teal-soft); font-style: normal; }
+
+    /* proof numbers */
+    .stakes { background: var(--teal); color: white; }
+    .stakes__row { display: grid; grid-template-columns: 1fr 1fr; min-height: 620px; }
+    .stake { position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(58px, 7vw, 110px); overflow: hidden; }
+    .stake + .stake { border-left: 1px solid rgba(255,255,255,.26); }
+    .stake b { font-family: var(--serif); font-size: clamp(150px, 20vw, 310px); font-weight: 400; line-height: .7; letter-spacing: -.08em; }
+    .stake p { max-width: 450px; margin-top: 70px; font-size: clamp(19px, 2vw, 27px); line-height: 1.25; }
+    .stake small { margin-top: 22px; color: rgba(255,255,255,.72); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+
+    /* product scrollytelling */
+    .system { padding: 150px 0 180px; background: var(--paper); }
+    .system__intro { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: end; margin-bottom: 100px; }
+    .system h2 { max-width: 850px; margin-top: 24px; font-size: clamp(70px, 8vw, 126px); }
+    .system__intro > p { max-width: 480px; padding-bottom: 10px; color: var(--body); font-size: 19px; line-height: 1.55; }
+    .system__grid { display: grid; grid-template-columns: .72fr 1.28fr; gap: clamp(50px, 8vw, 130px); align-items: start; }
+    .moves { padding-bottom: 30vh; }
+    .move { min-height: 72vh; display: flex; flex-direction: column; justify-content: center; border-top: 1px solid var(--line); padding: 72px 0; opacity: .36; transition: opacity .35s ease; }
+    .move.is-active { opacity: 1; }
+    .move__num { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; color: var(--teal); font-size: 11px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; }
+    .move__num b { font-family: var(--serif); font-size: 58px; font-weight: 400; letter-spacing: -.05em; }
+    .move h3 { margin-bottom: 20px; font-family: var(--serif); font-size: clamp(48px, 5vw, 74px); font-weight: 400; letter-spacing: -.045em; line-height: .95; }
+    .move p { max-width: 480px; color: var(--body); font-size: 18px; line-height: 1.6; }
+    .product-stage { position: sticky; top: 110px; min-height: 720px; overflow: hidden; border: 1px solid rgba(34,43,50,.12); border-radius: 26px; background: var(--carbon); box-shadow: 0 32px 100px rgba(34,43,50,.18); }
+    .product-top { height: 62px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.08); padding: 0 22px; color: white; }
+    .product-top .brand img { filter: brightness(0) invert(1); }
+    .product-top span { color: #96a3aa; font-size: 11px; }
+    .product-body { display: grid; grid-template-columns: 150px 1fr; min-height: 658px; }
+    .product-nav { border-right: 1px solid rgba(255,255,255,.08); padding: 22px 12px; }
+    .product-nav p { margin: 17px 10px 7px; color: #6e7b83; font-size: 9px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+    .product-nav span { display: block; border-radius: 7px; padding: 9px 10px; color: #96a3aa; font-size: 11px; }
+    .product-nav span:first-of-type { background: #173d3b; color: #c0e7e2; }
+    .product-canvas { position: relative; padding: 36px; color: white; }
+    .product-title { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
+    .product-title h3 { font-size: 24px; letter-spacing: -.03em; }
+    .product-title p { margin-top: 6px; color: #96a3aa; font-size: 12px; }
+    .product-title span { color: #96a3aa; font-size: 10px; }
+    .scene { position: absolute; inset: 116px 36px 36px; opacity: 0; transform: translateY(25px); pointer-events: none; transition: opacity .45s ease, transform .45s ease; }
+    .product-stage[data-scene="1"] .scene--1,
+    .product-stage[data-scene="2"] .scene--2,
+    .product-stage[data-scene="3"] .scene--3 { opacity: 1; transform: none; pointer-events: auto; }
+    .ui-card { border: 1px solid #3d4950; border-radius: 13px; background: var(--carbon-2); }
+    .expectation { display: grid; grid-template-columns: 1fr auto; gap: 16px; padding: 22px; }
+    .expectation + .expectation { margin-top: 13px; }
+    .expectation small, .evidence small { color: #96a3aa; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+    .expectation h4, .evidence h4 { margin: 8px 0 6px; font-size: 15px; }
+    .expectation p, .evidence p { color: #b6c0c5; font-size: 11px; line-height: 1.5; }
+    .level { min-width: 70px; text-align: right; }
+    .level b { display: block; color: #50b7b0; font-family: var(--serif); font-size: 28px; font-weight: 400; }
+    .evidence { padding: 20px; }
+    .timeline { margin-top: 18px; border-left: 2px solid #3d4950; padding-left: 20px; }
+    .event { position: relative; margin-bottom: 22px; }
+    .event::before { position: absolute; top: 3px; left: -27px; width: 10px; height: 10px; border: 2px solid var(--carbon-2); border-radius: 50%; background: #50b7b0; content: ""; }
+    .event b { display: block; margin-bottom: 5px; font-size: 12px; }
+    .event p { color: #96a3aa; font-size: 10px; line-height: 1.45; }
+    .action-card { border-top: 3px solid #50b7b0; padding: 25px; }
+    .action-card small { color: #50b7b0; font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+    .action-card h4 { max-width: 410px; margin: 10px 0 8px; font-size: 22px; line-height: 1.25; }
+    .action-card > p { max-width: 510px; color: #b6c0c5; font-size: 12px; line-height: 1.55; }
+    .reason { margin-top: 22px; border-radius: 9px; padding: 15px; background: #173d3b; color: #c0e7e2; font-size: 11px; line-height: 1.5; }
+    .mini-button { display: inline-flex; margin-top: 18px; border-radius: 7px; padding: 10px 13px; background: #50b7b0; color: #08191b; font-size: 11px; font-weight: 600; }
+
+    /* market position */
+    .position { padding: 150px 0; background: #e5ece8; }
+    .position__head { display: grid; grid-template-columns: 1.2fr .8fr; gap: 70px; align-items: end; margin-bottom: 80px; }
+    .position h2 { margin-top: 24px; font-size: clamp(68px, 8vw, 120px); }
+    .position__head > p { max-width: 450px; color: var(--body); font-size: 18px; line-height: 1.55; }
+    .position__list { border-top: 1px solid #aebbb5; }
+    .position__item { display: grid; grid-template-columns: 100px 1fr 1fr; gap: 40px; align-items: start; border-bottom: 1px solid #aebbb5; padding: 50px 0; transition: padding .3s ease; }
+    .position__item:hover { padding-left: 20px; }
+    .position__item > span { color: var(--teal); font-family: var(--serif); font-size: 42px; }
+    .position__item h3 { font-family: var(--serif); font-size: clamp(34px, 3.5vw, 54px); font-weight: 400; letter-spacing: -.035em; line-height: 1; }
+    .position__item p { max-width: 460px; color: var(--body); font-size: 16px; line-height: 1.6; }
+
+    /* founder */
+    .founder { position: relative; min-height: 850px; display: grid; grid-template-columns: 1fr 1fr; background: var(--paper); }
+    .founder__image { position: relative; min-height: 850px; overflow: hidden; background: #a8bcb6; }
+    .founder__image img { width: 100%; height: 100%; object-fit: cover; object-position: center; filter: grayscale(1) contrast(1.03); transform: scale(1.01); }
+    .founder__image::after { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(24,32,38,.5)); content: ""; }
+    .founder__caption { position: absolute; z-index: 2; left: 38px; bottom: 30px; color: white; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .founder__copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(60px, 8vw, 130px); }
+    .founder__copy h2 { max-width: 650px; margin: 26px 0 32px; font-size: clamp(62px, 6.4vw, 102px); }
+    .founder__copy > p:not(.eyebrow) { max-width: 590px; color: var(--body); font-family: var(--serif); font-size: clamp(24px, 2.4vw, 34px); line-height: 1.3; letter-spacing: -.02em; }
+    .founder__sig { margin-top: 34px; color: var(--teal-dark); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+
+    /* close */
+    .close { position: relative; min-height: 760px; display: grid; place-items: center; overflow: hidden; background: var(--carbon); color: white; text-align: center; }
+    .close::before, .close::after { position: absolute; top: 0; width: 50%; height: 100%; background: rgba(255,255,255,.025); content: ""; transition: transform 1s ease; }
+    .close::before { left: 0; border-right: 1px solid rgba(255,255,255,.12); transform: translateX(-12%); }
+    .close::after { right: 0; transform: translateX(12%); }
+    .close.visible::before, .close.visible::after { transform: none; }
+    .close__inner { position: relative; z-index: 2; padding: 90px var(--gutter); }
+    .close .eyebrow { justify-content: center; color: var(--teal-soft); }
+    .close h2 { max-width: 1100px; margin: 34px auto 24px; font-size: clamp(78px, 10vw, 160px); }
+    .close h2 em { color: var(--teal-soft); font-weight: 400; }
+    .close p { margin-bottom: 34px; color: #b6c0c5; font-size: 19px; }
+    .footer { border-top: 1px solid rgba(255,255,255,.1); background: var(--carbon); color: #96a3aa; }
+    .footer__inner { min-height: 130px; display: flex; align-items: center; gap: 34px; font-size: 12px; }
+    .footer .brand { color: white; }
+    .footer .brand img { filter: brightness(0) invert(1); }
+    .footer nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 24px; }
+
+    /* reveal system */
+    .reveal { opacity: 0; transform: translateY(34px); }
+    .reveal.visible { opacity: 1; transform: none; transition: opacity .75s ease, transform .75s cubic-bezier(.2,.75,.25,1); }
+
+    @keyframes cardFloat { 0%,100% { transform: rotateY(-7deg) rotateX(2deg) translateY(0); } 50% { transform: rotateY(-5deg) rotateX(1deg) translateY(-12px); } }
+    @keyframes noteFloat { 0%,100% { transform: translateY(0) rotate(2deg); } 50% { transform: translateY(-10px) rotate(0); } }
+    @keyframes scan { 0% { transform: translateX(-100%); } 50%,100% { transform: translateX(200%); } }
+
+    @media (max-width: 1050px) {
+      .hero { min-height: auto; }
+      .hero__grid { grid-template-columns: 1fr; }
+      .hero__visual { min-height: 650px; }
+      .chart-card { left: 2%; right: auto; width: 90%; }
+      .mess__grid, .system__grid { grid-template-columns: 1fr; }
+      .mess__copy { position: relative; top: auto; }
+      .mess__pile { min-height: 820px; }
+      .product-stage { top: 92px; grid-row: 1; }
+      .moves { grid-row: 2; padding-bottom: 0; }
+      .move { min-height: auto; opacity: 1; }
+      .system__intro, .position__head { grid-template-columns: 1fr; }
+      .position__item { grid-template-columns: 70px 1fr; }
+      .position__item p { grid-column: 2; }
+      .founder { grid-template-columns: .9fr 1.1fr; }
+    }
+    @media (max-width: 760px) {
+      .nav__links, .nav__actions > a:first-child { display: none; }
+      .hero { padding-top: 120px; }
+      .hero h1 { font-size: clamp(65px, 20vw, 92px); }
+      .hero__visual { min-height: 580px; }
+      .chart-card { inset: 50px auto auto 0; width: 100%; min-height: 480px; padding: 24px; transform: none; animation: none; }
+      .plot { height: 235px; }
+      .floating-note { right: -8px; bottom: 2px; }
+      .mess { padding: 100px 0; }
+      .mess__pile { min-height: 720px; }
+      .window { width: 90%; }
+      .window:nth-child(1) { left: 8%; }
+      .window:nth-child(2) { left: 0; }
+      .window:nth-child(3) { left: 10%; }
+      .mess__answer { right: auto; left: 0; max-width: 90%; padding-left: 0; }
+      .stakes__row { grid-template-columns: 1fr; }
+      .stake { min-height: 520px; }
+      .stake + .stake { border-top: 1px solid rgba(255,255,255,.26); border-left: 0; }
+      .system { padding-block: 100px; }
+      .product-stage { min-height: 600px; }
+      .product-body { grid-template-columns: 1fr; min-height: 538px; }
+      .product-nav { display: none; }
+      .product-canvas { padding: 22px; }
+      .scene { inset: 100px 22px 22px; }
+      .position { padding-block: 100px; }
+      .position__item { grid-template-columns: 48px 1fr; gap: 18px; }
+      .founder { grid-template-columns: 1fr; }
+      .founder__image { min-height: 600px; }
+      .founder__copy { padding: 80px var(--gutter); }
+      .footer__inner { padding-block: 34px; align-items: flex-start; flex-direction: column; }
+      .footer nav { margin-left: 0; }
+      .concept-tag { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="shell nav__inner">
+      <a class="brand" href="#top" aria-label="The Same Page home">
+        <img src="../../frontend/public/tsp-mark.svg" alt="">
+        <span>The Same Page</span>
+      </a>
+      <nav class="nav__links" aria-label="Main navigation">
+        <a href="#product">Product</a>
+        <a href="#difference">Why us</a>
+        <a href="#founder">About</a>
+      </nav>
+      <div class="nav__actions">
+        <a href="#">Sign in</a>
+        <a class="button" href="#close">Start free <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </header>
+  <div class="concept-tag">Concept prototype · motion is live</div>
+
+  <main id="top">
+    <section class="hero">
+      <div class="shell hero__grid">
+        <div class="hero__copy reveal">
+          <p class="eyebrow">Space to manage better</p>
+          <h1 class="display">Define the bar. <em>Then see who clears it.</em></h1>
+          <p class="hero__lede">One place where expectations, metrics, skills and behaviours live for every person you manage — so you always know where someone stands, and what to say next.</p>
+          <div class="hero__actions">
+            <a class="button" href="#close">Start free <span aria-hidden="true">↗</span></a>
+            <a class="button button--ghost" href="#product">See how it works <span aria-hidden="true">↓</span></a>
+          </div>
+          <p class="founding"><i aria-hidden="true"></i> First 20 members get an extended trial.</p>
+        </div>
+
+        <div class="hero__visual reveal" aria-label="Interactive illustration of a team measured against a defined standard">
+          <div class="chart-card">
+            <div class="chart-card__head">
+              <div><h2>Customer Success — Senior</h2><span>Q3 · 6 people</span></div>
+              <span>Role expectations</span>
+            </div>
+            <div class="plot" id="plot">
+              <div class="threshold" id="threshold"><span>The bar</span></div>
+              <div class="person" style="--x:8%;--score:68%"><b>SP</b></div>
+              <div class="person" style="--x:25%;--score:60%"><b>AM</b></div>
+              <div class="person" style="--x:42%;--score:48%"><b>MC</b></div>
+              <div class="person" style="--x:59%;--score:43%"><b>JT</b></div>
+              <div class="person" style="--x:76%;--score:55%"><b>RK</b></div>
+              <div class="person" data-low style="--x:93%;--score:24%"><b>DL</b></div>
+            </div>
+            <div class="bar-control">
+              <div class="bar-control__readout"><span>Drag to define the standard</span><strong id="bar-count">4 of 6 clear it</strong></div>
+              <input id="bar-range" type="range" min="18" max="72" value="45" aria-label="Set the bar">
+            </div>
+          </div>
+          <div class="floating-note">
+            <small>What to say next</small>
+            <p>Daniel is below the agreed bar in one area. The evidence—and a plan—are one click away.</p>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-cue"><i aria-hidden="true"></i> Scroll into the problem</div>
+    </section>
+
+    <section class="mess" id="problem">
+      <div class="shell mess__grid">
+        <div class="mess__copy">
+          <p class="eyebrow">You already know this feeling</p>
+          <h2 class="display">Your team is in five places.</h2>
+          <p>Three dashboards, a spreadsheet and a notes doc — and still no answer to “how is she doing?”</p>
+        </div>
+        <div class="mess__pile" aria-label="A visual pile of disconnected management tools">
+          <article class="window reveal">
+            <div class="window__bar"><i></i><i></i><i></i><b>Team performance — final v3.xlsx</b></div>
+            <div class="window__body sheet-grid">
+              <span>Name</span><span>Jan</span><span>Jun</span><span>Now</span>
+              <span>Priya S.</span><span>Good</span><span>—</span><span>?</span>
+              <span>Alex M.</span><span>OK</span><span>Good</span><span>?</span>
+              <span>Daniel L.</span><span>—</span><span>?</span><span>?</span>
+            </div>
+          </article>
+          <article class="window reveal">
+            <div class="window__bar"><i></i><i></i><i></i><b># manager-notes · search “Priya”</b></div>
+            <div class="window__body">
+              <div class="slack-row"><span class="avatar">PS</span><p><b>Priya · June 14</b>Shipped the customer handoff early. Great response from Sales.</p></div>
+              <div class="slack-row"><span class="avatar">AG</span><p><b>You · August 02</b>Need to come back to the onboarding issue before the next 1:1.</p></div>
+              <div class="slack-row"><span class="avatar">PS</span><p><b>Priya · Yesterday</b>Do we have a final answer on what Senior means?</p></div>
+            </div>
+          </article>
+          <article class="window reveal">
+            <div class="window__bar"><i></i><i></i><i></i><b>Notes · recurring 1:1s</b></div>
+            <div class="window__body">
+              <p class="note-title">Priya — things to remember</p>
+              <div class="note-line"></div><div class="note-line"></div><div class="note-line"></div>
+            </div>
+          </article>
+          <p class="mess__answer reveal">You know who your top performer is. <em>You just can’t prove it.</em></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="stakes" aria-label="The stakes for managers">
+      <div class="stakes__row">
+        <article class="stake reveal">
+          <b>70%</b>
+          <div><p>of the variance in employee engagement comes down to the manager.</p><small>Research proof · source to be re-verified before publish</small></div>
+        </article>
+        <article class="stake reveal">
+          <b>50%</b>
+          <div><p>of employees have left a company because of their manager.</p><small>Research proof · source to be re-verified before publish</small></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="system" id="product">
+      <div class="shell">
+        <div class="system__intro reveal">
+          <div><p class="eyebrow">The system</p><h2 class="display">Three moves. One clear view.</h2></div>
+          <p>No new management theory to learn. The Same Page turns the work you already do into a record you can actually use.</p>
+        </div>
+
+        <div class="system__grid">
+          <div class="moves">
+            <article class="move is-active" data-scene="1">
+              <div class="move__num"><span>Define what good looks like</span><b>01</b></div>
+              <h3>Write the bar once.</h3>
+              <p>Metrics, skills and values, per role and level. The thing nobody writes down, written down once — and shared with the person expected to clear it.</p>
+            </article>
+            <article class="move" data-scene="2">
+              <div class="move__num"><span>Capture evidence as you go</span><b>02</b></div>
+              <h3>Work normally.</h3>
+              <p>1:1s, check-ins, notes and commitments land against the person and the expectation. The record builds itself instead of being reconstructed.</p>
+            </article>
+            <article class="move" data-scene="3">
+              <div class="move__num"><span>See where everyone stands</span><b>03</b></div>
+              <h3>Open Monday to one thing.</h3>
+              <p>One surface. Zoom out for the team, click in for the person, and know the facts behind the rating — plus what to say next.</p>
+            </article>
+          </div>
+
+          <figure class="product-stage" data-scene="1" aria-label="Animated product illustration that changes with each step">
+            <div class="product-top">
+              <div class="brand"><img src="../../frontend/public/tsp-mark-white.svg" alt=""><strong>The Same Page</strong></div>
+              <span>Mission Control · Live product direction</span>
+            </div>
+            <div class="product-body">
+              <aside class="product-nav">
+                <span>Mission Control</span><p>People</p><span>Team</span><span>1:1s</span><span>Assessments</span><p>Work</p><span>Goals</span><span>Projects</span><span>Capacity</span>
+              </aside>
+              <div class="product-canvas">
+                <div class="product-title"><div><h3>Good morning, Andrew.</h3><p>Your team, with the next useful action first.</p></div><span>Week of Aug 24</span></div>
+
+                <div class="scene scene--1">
+                  <article class="ui-card expectation"><div><small>Senior · Customer Success</small><h4>Own the customer handoff</h4><p>Creates a clear transition from Sales, confirms success criteria and closes ownership gaps before kickoff.</p></div><div class="level"><small>Level</small><b>04</b></div></article>
+                  <article class="ui-card expectation"><div><small>Behaviour · company value</small><h4>Make the invisible visible</h4><p>Raises risks early and records the decision where the team can find it.</p></div><div class="level"><small>Level</small><b>04</b></div></article>
+                  <article class="ui-card expectation"><div><small>Metric · quarterly</small><h4>90-day retention</h4><p>Target agreed by manager and employee.</p></div><div class="level"><small>Bar</small><b>94%</b></div></article>
+                </div>
+
+                <div class="scene scene--2">
+                  <article class="ui-card evidence"><small>Priya Singh · evidence timeline</small><h4>The year assembles while the work happens.</h4><div class="timeline"><div class="event"><b>1:1 · Today</b><p>Agreed a new owner for onboarding. Commitment added and linked to the role expectation.</p></div><div class="event"><b>Check-in · Aug 18</b><p>Retention confidence moved from at risk to on track.</p></div><div class="event"><b>Note · Aug 02</b><p>Customer handoff shipped early. Sales feedback attached.</p></div><div class="event"><b>Goal · Jul 28</b><p>Quarterly metric updated to 95.2%.</p></div></div></article>
+                </div>
+
+                <div class="scene scene--3">
+                  <article class="ui-card action-card"><small>Suggested focus</small><h4>Finish Leah’s 1:1 preparation.</h4><p>Her 1:1 is tomorrow and the prep sheet is already started. Two commitments from the last conversation are still open.</p><div class="reason"><strong>Why this is first:</strong><br>1:1 due tomorrow · prep already saved · two open commitments</div><span class="mini-button">Resume Leah’s prep →</span></article>
+                </div>
+              </div>
+            </div>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="position" id="difference">
+      <div class="shell">
+        <div class="position__head reveal">
+          <div><p class="eyebrow">Why nothing else does this</p><h2 class="display">Manage with evidence, not instinct.</h2></div>
+          <p>Every serious tool in this category is sold to HR. The Same Page is designed around the manager’s Tuesday, not the company’s review cycle.</p>
+        </div>
+        <div class="position__list">
+          <article class="position__item reveal"><span>01</span><h3>Built for the manager as the buyer.</h3><p>Not as the person HR makes comply. You can start on your own, without a rollout, a demo or anybody’s permission.</p></article>
+          <article class="position__item reveal"><span>02</span><h3>One surface instead of four stitched tools.</h3><p>Metrics, skills and behaviours sit beside the conversations and commitments that prove them.</p></article>
+          <article class="position__item reveal"><span>03</span><h3>Judgment, not another dashboard.</h3><p>It does not stop at showing you the data. It helps you decide what to do about what it shows you.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="founder" id="founder">
+      <div class="founder__image reveal">
+        <img src="images/andrew-headshot.png" alt="Andrew Godlewski, founder of The Same Page">
+        <p class="founder__caption">Andrew Godlewski · Founder</p>
+      </div>
+      <div class="founder__copy reveal">
+        <p class="eyebrow">Built by a manager who needed it</p>
+        <h2 class="display">“I was tired of rebuilding the story from memory.”</h2>
+        <p>I built this because I needed it. Every tool I found was built for the HR team that bought it. So I’m building the other one: the tool I wanted ten minutes before a 1:1.</p>
+        <p class="founder__sig">Andrew · Founder</p>
+      </div>
+    </section>
+
+    <section class="close reveal" id="close">
+      <div class="close__inner">
+        <p class="eyebrow">The first 20 members get an extended trial</p>
+        <h2 class="display">Get on the same page. <em>Stay there.</em></h2>
+        <p>You and the person you manage.</p>
+        <a class="button button--light" href="#">Start free <span aria-hidden="true">↗</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__inner">
+      <a class="brand" href="#top"><img src="../../frontend/public/tsp-mark-white.svg" alt=""><span>The Same Page</span></a>
+      <span>Space to manage better.</span>
+      <nav aria-label="Footer navigation"><a href="#product">Product</a><a href="#difference">Why us</a><a href="#founder">About</a><a href="#">Privacy</a><a href="#">Terms</a></nav>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const range = document.getElementById('bar-range');
+      const threshold = document.getElementById('threshold');
+      const count = document.getElementById('bar-count');
+      const scores = [68, 60, 48, 43, 55, 24];
+      const updateBar = () => {
+        const value = Number(range.value);
+        threshold.style.top = `${100 - value}%`;
+        const clears = scores.filter(score => score >= value).length;
+        count.textContent = `${clears} of 6 clear it`;
+      };
+      range.addEventListener('input', updateBar);
+      updateBar();
+
+      const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) entry.target.classList.add('visible');
+        });
+      }, { threshold: .13 });
+      document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+      const stage = document.querySelector('.product-stage');
+      const moves = document.querySelectorAll('.move');
+      const sceneObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return;
+          const scene = entry.target.dataset.scene;
+          stage.dataset.scene = scene;
+          moves.forEach(move => move.classList.toggle('is-active', move.dataset.scene === scene));
+        });
+      }, { rootMargin: '-32% 0px -45% 0px', threshold: 0 });
+      moves.forEach(move => sceneObserver.observe(move));
+    })();
+  </script>
+</body>
+</html>

@@ -132,8 +132,16 @@ npx hs fetch theme tsp-theme       pull remote state down, for reconciling drift
 
 ## Architecture
 
-**Three templates.** One flexible page template carries home, product walkthrough,
-about, contact, support, legal and offers. The blog needs its own two.
+**Six templates, so far.** `page.html` is the flexible one: it's the homepage,
+and doubles as the fallback for anything without its own template yet (product
+walkthrough, support, offers — none of those are designed yet). About, Contact,
+and now Legal turned out common and simple enough to earn dedicated templates
+instead of being hand-assembled from the flexible one each time — each seeds
+its own module set directly, so HubSpot's page-creation screen shows a distinct
+card for it and a brand-new page lands pre-composed, no drag-and-drop cleanup
+required. Legal (`legal.html`) is reused for all three legal documents —
+Privacy, Terms, Security — since a policy document's shape doesn't change page
+to page, only its content does. The blog needs its own two, not built yet.
 
 ```
 theme/
@@ -141,7 +149,10 @@ theme/
   fields.json                   every colour and the font stack — theme settings
   css/main.css                  THE stylesheet. Tokens at the top, everything else below.
   templates/
-    page.html                   HTML + HubL, one {% dnd_area %}, seeded with the 8 modules
+    page.html                   the flexible/home template — seeded with the 8 homepage modules
+    about.html                  seeded with frame + founder + close-cta
+    contact.html                seeded with frame + contact-form
+    legal.html                  seeded with frame + legal-body; reused for Privacy/Terms/Security
     partials/header.html        logo + site_nav menu + Start free
     partials/footer.html        logo + tagline + footer_nav menu
   modules/
@@ -153,7 +164,23 @@ theme/
     pivot-stat.module           the standalone figure
     founder.module              photo, note, name, role
     close-cta.module            closing heading, CTA, counter
+    frame.module                eyebrow + H1 + lede — the intro block for About/Contact/Legal
+    contact-form.module         native HubSpot form (type: "form" field + {% form %} tag)
+    legal-body.module           one richtext field for a whole policy doc; auto-numbered
+                                 headings via CSS counters, a blockquote callout, a
+                                 draft-note style for flagged/unresolved clauses
 ```
+
+About and Contact still draw from the same module library rather than getting
+one-off modules — `frame.module` carries the intro on both, `founder.module`
+and `close-cta.module` are reused unchanged on About — the difference is just
+that each now has its own template file instead of being reassembled by hand
+in the page editor every time. One manual step remains: `contact.html` seeds
+`frame.module` with its default, About-flavoured copy, rather than overriding
+it at the template level — an untested HubL param-override risked breaking the
+whole upload batch for a cosmetic win. Swap the three Page frame fields
+(eyebrow/heading/lede) to the Contact copy once, in the page editor, the first
+time that page is built.
 
 Blog templates (`blog-index.html`, `blog-post.html`) are not built yet.
 
@@ -207,6 +234,27 @@ Before uploading after any field edit, re-run the checks in the
 resolves, every `theme.x.y` exists, no reserved names, every occurrence default
 at least the minimum, and no literal colours below the token block.
 
+### Two rules the illustrated modules added
+
+Learned cutting the four homepage drawings in, and binding on any module that
+carries inline SVG.
+
+- **A drawing declares no colour of its own.** Every `fill=` and `stroke=` in an
+  SVG is a class naming what the shape *is* in the illustration register (a
+  surface, a pill, a recorded mark, an open mark), and `css/main.css` resolves
+  that class from a token. The first pass had 353 literal hexes across 7 SVGs;
+  none of them survived. This is the same rule as "no literal colour below the
+  token block", extended to the only place that could have dodged it, since the
+  verify script reads `main.css` and not `module.html`. If a drawing needs a
+  colour the theme has no token for, add the field: that is how `color.pill` and
+  `color.amber_tint` got there.
+- **Any id inside a module is namespaced with `{{ name }}`.** A module can be
+  dropped on a page twice. The CSS-only steppers key off `:checked`, and the SVG
+  shadows off filter ids, so a duplicate instance would cross-wire the radio
+  groups and break the shadows. Ids carry `{{ name }}`; the CSS never selects on
+  an id, it selects on a class (`.film-radio.f3:checked ~ .film-plate .fr3`).
+  Those two go together: the CSS had to stop using ids before the ids could move.
+
 Module `fields.json` is a different, much richer schema — `text`, `richtext`,
 `link`, `image`, repeatable `group`, and the rest all work there. **Page content
 belongs in modules; brand belongs in theme fields.** The type system enforces the
@@ -219,7 +267,8 @@ into a module, the answer is a new theme field.
 
 **Modules, one per repeated block.** Each is a folder with `module.html`,
 `module.css`, `fields.json` and `meta.json`. Planned set: hero, problem-trio,
-feature-row, walkthrough-step, quote, cta-band, faq, offer-card, legal-body.
+feature-row, walkthrough-step, quote, cta-band, faq, offer-card. (`legal-body`
+was in this list and is now built — see Architecture above.)
 
 Add a module only when the design calls for it. A module that exists "in case we
 need it" is how a theme grows into an unmaintainable one.
@@ -281,10 +330,47 @@ access key stored as a repository secret and never in a workflow file.
 Home (the problems, and how the product solves them) · product walkthrough · blog ·
 contact · support · legal · about · offers.
 
+**About and Contact: theme code done, pages not yet live.** Argument docs and
+standalone prototypes live in `prototype/` (`about-argument.md`/`about.html`,
+`contact-argument.md`/`contact.html`), reviewed and approved. `about.html` and
+`contact.html` are real templates now (see Architecture above), each seeded
+with the right modules already — `npm run verify` passes. What's left is
+manual, in HubSpot itself, not code: create the two pages by picking the
+"Page — About" and "Page — Contact" cards (each lands pre-composed — no
+module drag-and-drop needed), swap the Contact page's Page frame copy from
+About's default to the Contact lines (one-time, see Architecture), create the
+actual HubSpot form under Marketing → Forms (Name/Email/Message, "Send
+message" button) and pick it in the contact form module's field, upload the
+real founder photo (`prototype/images/andrew-headshot.png`) via the page
+editor, and — once both pages are live — repoint the nav's "About
+Us"/"Support" menu items away from
+their current "Deleted" state.
+
+**Legal: all three pages live in HubSpot** (`/legal/privacy`,
+`/legal/terms`, `/legal/security`), built by Andrew directly from the
+`legal-body.module` + `legal.html` template. `prototype/legal-argument.md`
+plus the three prototypes remain as the reference the module was cut from.
+One real gap surfaced doing this by hand: pasting the Terms/Security content
+from a rendered browser tab strips real `<h2>`/`<blockquote>` tags down to
+plain bold text, so the CSS auto-numbering and callout styling don't fully
+render on those two — HubSpot's rich-text paste sanitizer, not a theme bug.
+The fix (paste via the field's Advanced &gt; source-code editor instead of
+pasting rendered text) is documented, but Andrew reviewed the result and
+called it good enough to ship as-is rather than re-pasting for pixel-perfect
+numbering. Worth doing properly next time a module needs long pasted HTML.
+
 ## Open items
 
-- Positioning and copy — not started. This gates the design.
+- Positioning and copy — done for the homepage and About/Contact. Still
+  needed for the product walkthrough, blog and offers pages.
 - Support routing: HubSpot Knowledge Base requires Service Hub Professional, so
-  support will be a form or a routed inbox rather than a KB.
-- Legal page set, following the Prism Tree structure.
+  support will be a form or a routed inbox rather than a KB. The Contact page
+  folds support in rather than splitting it out — one form, one inbox.
+- Legal page set is live (see Architecture/Pages planned above) but not
+  finished: four things still sit as visible draft-notes inside the content
+  itself, editable in the page editor with no developer needed once Andrew
+  has an answer — the AI/model-training clause (left open on purpose), the
+  employee-data section (new language, no Prism Tree precedent), Supabase's
+  AWS region, and the governing-law state. None of these block the pages
+  being live; they block calling the legal docs actually reviewed and final.
 - Whether to add the GitHub Action, or keep deploying from the watched folder.

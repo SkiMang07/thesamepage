@@ -43,19 +43,19 @@
     "default": [
       {
         "value": "83%",
-        "body": "of founders are first-time founders \u2014 the management culture you inherited was built by someone learning too"
+        "copy": "of founders are first-time founders — the management culture you inherited was built by someone learning too"
       },
       {
         "value": "68%",
-        "body": "of managers report being overwhelmed \u2014 and only 14% of their companies did anything about it"
+        "copy": "of managers report being overwhelmed — and only 14% of their companies did anything about it"
       },
       {
         "value": "69%",
-        "body": "of managers are uncomfortable having performance conversations with their team"
+        "copy": "of managers are uncomfortable having performance conversations with their team"
       },
       {
         "value": "2%",
-        "body": "of companies believe their performance management approach delivers real value"
+        "copy": "of companies believe their performance management approach delivers real value"
       }
     ]
   },

@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Same Page homepage prototype, stages 1 to 4</title>
+<!--
+  website/prototype/homepage-live.html
+
+  WHAT THIS IS
+  The homepage in the SHIPPED HubSpot theme's look and feel, with the stage 1
+  hero illustration in place of the product roster mockup. Every colour, radius,
+  shadow and type size below is copied out of theme/css/main.css and
+  theme/fields.json with the token values resolved, so this file can be diffed
+  against the theme rather than trusted. The copy is the live module copy,
+  unchanged.
+
+  This supersedes homepage-v2.html as the homepage prototype. That file is the
+  warm-paper direction, which was never shipped and is not the target.
+
+  WHAT IS NEW HERE
+  Four drawings, one per stage of the visual rollout. Everything around them is
+  theme CSS and theme copy reproduced verbatim.
+
+  THE DRAWINGS
+  1. The hero. Two records of the same week. Rows 2 and 4 are on both and settle
+     to teal. Row 1 is only on yours, row 5 only on theirs, and both survive into
+     the joined record. Row 3 was on neither, which is what the amber square is.
+  2. The film, between the three moves and the argument. Tuesday's sentence, the
+     week burying it, Monday's brief handing it back. Three CSS-only stops.
+  3. The desk, in the recognition section's right column. The spreadsheet, the
+     dead Notion page and the Notes file, over the one clean record underneath.
+  4. The bar, between the argument and the close. The expectations one level of a
+     role ladder asks for, and the team scored against exactly those rows.
+
+  There is NO JAVASCRIPT. The whole thing is CSS transitions over an SVG, which
+  is what makes it portable into a HubSpot module as-is.
+
+  MOTION
+  The resting state is the finished picture: registered, resolved, everything
+  visible. The un-registered start state is applied only inside a media query
+  that requires a fine pointer that can hover AND no reduced-motion preference.
+  So touch, keyboard and reduced motion all get the whole drawing and nothing is
+  hidden behind an interaction that cannot happen. The card takes keyboard
+  focus, so tabbing to it does what hovering does.
+
+  CONTRAST
+  Marks carry the meaning of the picture and are held to 3:1 against the card
+  behind them: teal 4.92, grey 3.36, amber 3.91. The grey pills stand in for
+  handwriting and carry nothing on their own, so they are allowed to be light.
+  On the carbon band --brand measures 2.92 and cannot be used; --teal-300 does
+  that job at 7.35, and amber needs a lifted value that is not in fields.json
+  yet. No drawing on this page sits on carbon, so that is a stage 2 problem.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  /* the live theme's own tokens, taken from theme/fields.json defaults */
+  --canvas:#F5F8FA; --surface:#FFFFFF; --sunken:#ECEFF2; --hairline:#DDE0E3;
+  --control:#C9CDD0; --ink:#222B32; --ink-body:#394148; --ink-secondary:#4F575D;
+  --ink-muted:#686E74; --ink-faint:#878D92;
+  --brand:#087E78; --brand-hover:#00635F; --brand-tint:#EEF5F4; --teal-200:#EEF5F4;
+  --teal-300:#B1D5D1; --carbon-900:#222B32; --carbon-950:#131B22;
+  --amber-500:#B67118; --focus:#2878D0; --feature-from:#E9F2F1; --feature-to:#FFFFFF;
+  --ink-on-carbon:#A7ACB0; --on-dark:#FFFFFF;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--canvas);color:var(--ink-body);
+  font-family:var(--sans);font-size:17px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,h4,p,ul,ol,figure,figcaption{margin:0}
+ul{padding:0;list-style:none}
+a{color:inherit;text-decoration:none}
+button{font:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:4px}
+
+/* ======================================================================
+   BELOW: the live theme's own CSS, copied from website/theme/css/main.css
+   with the token values resolved. Nothing here is invented.
+   ====================================================================== */
+.body-wrapper{background:var(--canvas)}
+.wrap{width:100%;max-width:1200px;margin:0 auto;padding:0 32px}
+.narrow{max-width:800px}
+.h1{font-size:clamp(2.2rem,3.5vw,3.05rem);line-height:1.06;letter-spacing:-.034em;
+  font-weight:640;color:var(--ink)}
+.h2{font-size:clamp(1.9rem,3.2vw,2.6rem);line-height:1.14;letter-spacing:-.026em;
+  font-weight:640;color:var(--ink)}
+.h3{font-size:1.2rem;line-height:1.3;letter-spacing:-.014em;font-weight:640;color:var(--ink)}
+.lede{font-size:clamp(1.1rem,1.5vw,1.3rem);line-height:1.55;color:var(--ink-secondary)}
+.eyebrow{font-size:.78rem;font-weight:660;letter-spacing:.11em;text-transform:uppercase;color:var(--brand)}
+.rule{height:2px;width:64px;background:var(--brand);border-radius:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  font-family:inherit;font-size:1rem;font-weight:600;letter-spacing:-.01em;
+  padding:.85rem 1.55rem;border-radius:8px;border:1px solid transparent;cursor:pointer;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.btn-primary{background:var(--brand);color:var(--on-dark)}
+.btn-primary:hover{background:var(--brand-hover)}
+.btn-ghost{background:transparent;color:var(--ink);border-color:var(--control)}
+.btn-ghost:hover{border-color:var(--ink-muted)}
+.btn-on-dark{background:var(--on-dark);color:var(--carbon-900)}
+.btn-on-dark:hover{background:var(--brand-tint)}
+.nav{position:relative;z-index:20;background:rgba(245,248,250,.86);
+  backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--hairline)}
+.nav-in{display:flex;align-items:center;gap:2.5rem;height:68px}
+.brandmark{display:flex;align-items:center;gap:.6rem;color:var(--brand);flex:none}
+.brandmark svg{height:24px;width:auto;display:block}
+.brandmark span{font-size:1.02rem;font-weight:660;letter-spacing:-.02em;color:var(--ink)}
+.nav-links ul{display:flex;align-items:center;gap:1.9rem}
+.nav-links a{font-size:.95rem;font-weight:520;color:var(--ink-secondary)}
+.nav-links a:hover{color:var(--brand)}
+.nav-cta{margin-left:auto;display:flex;align-items:center;gap:1rem}
+.nav-cta .btn{padding:.6rem 1.15rem;font-size:.95rem}
+.signin{font-size:.95rem;font-weight:520;color:var(--ink-secondary)}
+.hero{background:linear-gradient(180deg,var(--feature-from) 0%,var(--feature-to) 62%,var(--canvas) 100%);
+  padding:clamp(3.2rem,5.5vw,4.6rem) 0 clamp(2.6rem,4vw,3.4rem)}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);
+  gap:clamp(2rem,3.4vw,3.5rem);align-items:center}
+.hero h1{margin-bottom:1.4rem}
+.hero .lede{max-width:40ch;margin-bottom:2rem}
+.hero-actions{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.counter{display:inline-flex;align-items:center;gap:.55rem;margin-top:1.3rem;
+  padding:.4rem .8rem .4rem .6rem;background:var(--surface);border:1px solid var(--teal-200);
+  border-radius:999px;font-size:.86rem;color:var(--ink-secondary)}
+.counter b{color:var(--brand);font-weight:660}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
+.hero-proof{display:flex;gap:2rem;margin-top:2.4rem;padding-top:1.5rem;border-top:1px solid var(--hairline)}
+.hero-proof div b{display:block;font-family:var(--mono);font-size:1.4rem;font-weight:600;color:var(--ink)}
+.hero-proof div span{font-size:.78rem;color:var(--ink-muted);display:block;margin-top:.15rem;max-width:20ch}
+.sec{padding:clamp(3.4rem,5.6vw,5.2rem) 0}
+.sec-head{max-width:60ch;margin-bottom:3rem}
+.sec-head .rule{margin-bottom:1.5rem}
+.sec-head h2{margin-bottom:1rem}
+.recog{display:grid;gap:0;border-top:1px solid var(--hairline)}
+.recog li{display:flex;gap:1.4rem;align-items:flex-start;padding:1.5rem 0;
+  border-bottom:1px solid var(--hairline)}
+.recog .idx{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--brand);
+  padding-top:.3rem;flex:none;width:2rem}
+.recog p{font-size:clamp(1.05rem,1.5vw,1.22rem);line-height:1.45;color:var(--ink);
+  letter-spacing:-.012em;max-width:52ch}
+.band{background:var(--carbon-900);color:var(--on-dark)}
+.band .h2{color:var(--on-dark)}
+.band .lede{color:var(--control)}
+.band .eyebrow{color:var(--teal-300)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.11);
+  border:1px solid rgba(255,255,255,.11);border-radius:12px;overflow:hidden;margin-top:3rem}
+.stat{background:var(--carbon-900);padding:1.75rem 1.5rem}
+.stat b{display:block;font-family:var(--mono);font-size:clamp(1.8rem,3vw,2.4rem);font-weight:600;
+  letter-spacing:-.01em;line-height:1;color:var(--on-dark);margin-bottom:.7rem}
+.stat span{font-size:.92rem;line-height:1.45;color:var(--ink-on-carbon);display:block}
+.stakes{margin-top:2.5rem;padding-top:2.25rem;border-top:1px solid rgba(255,255,255,.13);
+  display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;align-items:center}
+.stakes p{font-size:clamp(1.15rem,1.8vw,1.42rem);line-height:1.35;color:var(--on-dark);
+  letter-spacing:-.018em;font-weight:520}
+.stakes p em{font-style:normal;color:var(--teal-300)}
+.close{background:var(--carbon-900);color:var(--on-dark);text-align:center;padding:clamp(4.5rem,8vw,7rem) 0}
+.close h2{color:var(--on-dark);max-width:26ch;margin:0 auto 1.4rem;
+  font-size:clamp(2rem,3.6vw,2.9rem);line-height:1.14;letter-spacing:-.028em;font-weight:640}
+.close .sub{font-size:1.1rem;color:var(--control);max-width:46ch;margin:0 auto 2.3rem}
+.close .counter{background:transparent;border-color:rgba(255,255,255,.22);color:var(--control)}
+.close .counter b{color:var(--teal-300)}
+.foot{background:var(--carbon-950);color:var(--ink-faint);padding:3rem 0;font-size:.9rem}
+.foot-in{display:flex;gap:2rem;align-items:center;flex-wrap:wrap}
+.foot .brandmark,.foot .brandmark span{color:var(--on-dark)}
+.foot nav ul{display:flex;gap:1.6rem;flex-wrap:wrap}
+.tagline{font-size:.9rem;color:var(--ink-muted)}
+
+
+/* ---------- three moves ---------- */
+.moves{display:grid;grid-template-columns:repeat(3,1fr);gap:1.75rem}
+.move{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
+  padding:1.9rem 1.7rem;display:flex;flex-direction:column}
+.move .num{width:30px;height:30px;border-radius:8px;background:var(--brand-tint);color:var(--brand);
+  font-family:var(--mono);font-size:.85rem;font-weight:600;display:flex;align-items:center;
+  justify-content:center;margin-bottom:1.3rem}
+.move h3{margin-bottom:.65rem}
+.move p{font-size:.98rem;line-height:1.55;color:var(--ink-secondary);margin-bottom:1.6rem}
+.prev{margin-top:auto;height:104px;border-radius:10px;background:var(--sunken);
+  border:1px solid var(--hairline);position:relative;overflow:hidden}
+.prev-define{display:flex;align-items:center;gap:.4rem;height:100%;padding:0 1.1rem}
+.prev-define i{flex:1;height:8px;border-radius:4px;background:var(--control);display:block}
+.prev-define i.fill{flex:none;width:38%;background:var(--brand)}
+.prev-capture{display:flex;align-items:center;justify-content:center;gap:.5rem;height:100%}
+.prev-capture i{width:32px;height:32px;border-radius:7px;background:var(--surface);
+  border:1px solid var(--hairline);display:block}
+.prev-capture i.mid{background:var(--brand-tint);border-color:var(--brand)}
+.prev-see{position:relative;height:100%}
+.prev-see .line{position:absolute;left:14px;right:14px;top:50%;height:2px;background:var(--brand)}
+.prev-see .node{position:absolute;top:50%;width:9px;height:9px;margin-top:-4.5px;margin-left:-4.5px;
+  border-radius:50%;background:var(--ink)}
+
+/* ---------- against ---------- */
+.against{background:var(--brand-tint)}
+.claims{display:grid;grid-template-columns:repeat(3,1fr);gap:2.25rem;margin-top:3rem}
+.claim{border-top:2px solid var(--brand);padding-top:1.25rem}
+.claim h3{margin-bottom:.6rem}
+.claim p{font-size:.98rem;line-height:1.55;color:var(--ink-secondary)}
+
+/* ======================================================================
+   NEW: the hero drawing. Everything below this line is the stage-1 work.
+   ====================================================================== */
+.dfig{margin:0;isolation:isolate}
+.dfig svg{display:block;width:100%;height:auto}
+.dwrap{border-radius:14px;cursor:default}
+.dwrap:focus-visible{outline:2px solid var(--focus);outline-offset:6px}
+.dcap{margin-top:.9rem;font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);
+  display:none;align-items:center;gap:.5rem}
+.dcap::before{content:"";width:16px;height:1px;background:var(--control);flex:none}
+
+/* Resting state is the finished picture: registered, resolved, everything
+   visible. Only where a pointer can hover, and only where motion is welcome,
+   do the sheets start apart. So reduced motion and touch both get the
+   finished frame and nothing is hidden behind an interaction. */
+.pA{transform:none;transform-box:view-box}
+.pB{transform:translate(var(--bx),var(--by));transform-box:view-box}
+.res{opacity:1}
+.onion{fill-opacity:1}
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  .dwrap{cursor:pointer}
+  .dwrap .pA{transform:translate(var(--dx),var(--dy)) rotate(var(--ra));
+    transition:transform .85s cubic-bezier(.34,.72,.22,1)}
+  .dwrap .pB{transform:translate(var(--ex),var(--ey)) rotate(var(--rb));
+    transition:transform .85s cubic-bezier(.34,.72,.22,1)}
+  .dwrap .res{opacity:0;transition:opacity .3s ease}
+  .dwrap .onion{fill-opacity:var(--onion,.38);transition:fill-opacity .85s cubic-bezier(.34,.72,.22,1)}
+  .dwrap:hover .pA,.dwrap:focus-within .pA{transform:none}
+  .dwrap:hover .pB,.dwrap:focus-within .pB{transform:translate(var(--bx),var(--by))}
+  .dwrap:hover .res,.dwrap:focus-within .res{opacity:1;transition-delay:.45s}
+  .dwrap:hover .onion,.dwrap:focus-within .onion{fill-opacity:1}
+  /* the hint only exists where the interaction it names exists */
+  .dcap{display:flex}
+}
+
+/* ======================================================================
+   NEW: the product film. Stage 2.
+
+   Three stops, hidden radios plus labels, no JavaScript at all. A
+   continuous scrub bar would need JS and a hover-scrub would do nothing on
+   a phone, so the film is stepped rather than scrubbed. Every stop is a
+   finished picture, clicking works on touch, and arrow keys move between
+   stops natively because it is a real radio group.
+
+   THE RESTING STOP IS MONDAY. A visitor who never touches it still sees
+   the payoff, which is the sentence coming back with its reason attached.
+   ====================================================================== */
+.film{position:relative}
+.film-radio{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;margin:0}
+.film-plate{background:var(--surface);border:1px solid var(--hairline);border-radius:16px;
+  box-shadow:0 14px 16px -10px rgba(34,43,50,.10),0 1px 1px rgba(34,43,50,.05);overflow:hidden}
+.film-steps{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;
+  padding:1.05rem clamp(1.1rem,2.2vw,1.8rem);border-bottom:1px solid var(--hairline)}
+.film-steps label{display:inline-flex;align-items:center;gap:.55rem;cursor:pointer;
+  font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-muted);border-radius:5px;
+  transition:color .15s ease}
+.film-steps label:hover{color:var(--brand)}
+.film-steps .fs-dot{width:9px;height:9px;border-radius:50%;background:var(--control);
+  flex:none;transition:background-color .15s ease}
+.film-steps .fs-line{flex:1;min-width:14px;height:1px;background:var(--hairline)}
+.film-stage{padding:clamp(.7rem,1.6vw,1.2rem)}
+.film-stage svg{display:block;width:100%;height:auto}
+.film-stage text{font-family:var(--sans)}
+.film-stage .mono{font-family:var(--mono)}
+.film-cap{margin-top:1rem;font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted);
+  display:flex;align-items:center;gap:.5rem}
+.film-cap::before{content:"";width:16px;height:1px;background:var(--control);flex:none}
+.fr{opacity:0;visibility:hidden;transition:opacity .34s ease}
+#fs1:checked ~ .film-plate .fr1,
+#fs2:checked ~ .film-plate .fr2,
+#fs3:checked ~ .film-plate .fr3{opacity:1;visibility:visible}
+#fs1:checked ~ .film-plate label[for="fs1"],
+#fs2:checked ~ .film-plate label[for="fs2"],
+#fs3:checked ~ .film-plate label[for="fs3"]{color:var(--brand)}
+#fs1:checked ~ .film-plate label[for="fs1"] .fs-dot,
+#fs2:checked ~ .film-plate label[for="fs2"] .fs-dot,
+#fs3:checked ~ .film-plate label[for="fs3"] .fs-dot{background:var(--brand)}
+#fs1:focus-visible ~ .film-plate label[for="fs1"],
+#fs2:focus-visible ~ .film-plate label[for="fs2"],
+#fs3:focus-visible ~ .film-plate label[for="fs3"]{outline:2px solid var(--focus);outline-offset:4px}
+
+
+/* ======================================================================
+   NEW: the desk. Stage 3.
+
+   Beat two names three objects, so beat two draws them. The RESTING STATE
+   IS THE MESS, which is the picture this beat needs: touch, keyboard and
+   reduced motion all get the scattered desk and nothing is withheld. Where
+   a fine pointer and motion are both available, hovering sweeps the scraps
+   off and leaves the one clean record that was underneath them the whole
+   time. The teal dot on that record shows at rest, so there is colour in
+   the picture before anything is touched and the reveal is foreshadowed.
+   ====================================================================== */
+.recog-grid{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);
+  gap:clamp(2rem,4vw,3.6rem);align-items:center}
+.desk-col{min-width:0}
+.scrap{transform-box:view-box}
+.s1{transform:rotate(-7deg);transform-origin:210px 215px}
+.s2{transform:rotate(5.5deg);transform-origin:355px 292px}
+.s3{transform:rotate(-4.5deg);transform-origin:242px 392px}
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){
+  .scrap{transition:transform .8s cubic-bezier(.34,.72,.22,1),opacity .5s ease}
+  .desk:hover .s1,.desk:focus-within .s1{transform:translate(-96px,-84px) rotate(-17deg);opacity:0}
+  .desk:hover .s2,.desk:focus-within .s2{transform:translate(118px,-46px) rotate(15deg);opacity:0;transition-delay:.06s}
+  .desk:hover .s3,.desk:focus-within .s3{transform:translate(-46px,128px) rotate(-15deg);opacity:0;transition-delay:.12s}
+}
+
+/* ---------------------------------------------------------------------------
+   NEW: the bar. Stage 4, concept 05.
+
+   The concept was "drag the line, the count changes". A count that changes under
+   a dragged finger has no CSS-only form, and a dragged threshold is also a
+   picture of moving the goalposts, which is the behaviour the product replaces.
+   So the line is SET rather than dragged: the stops are levels of a role ladder,
+   the bar record grows as the level asks for more, and the same evidence on the
+   right re-scores against it. Same radio-group mechanism as the film, so touch
+   works and arrow keys work natively.
+
+   TWO SVGS, ONE RADIO GROUP. One wide drawing made a phone scroll sideways past
+   the whole bar card before reaching the line and the count, so the phone's
+   resting state was the setup with the payoff cropped off. Split, they sit side
+   by side above 980px and stack below it. The count chip sits at the LEFT end of
+   the line for the same reason.
+
+   MARK STATES. The register gives a mark three states. Here they read as clears
+   it (teal), evidence on file and it does not (grey), and nothing on file yet
+   (amber outline). Teal therefore does a second job inside this drawing.
+
+   MOTION. Mid is checked by default, so the resting state is a finished picture
+   with visible room in both directions. Nothing is hidden behind an interaction.
+
+   CONTRAST. Marks are held to 3:1 on the card: teal 4.92, grey 3.36, amber 3.91.
+   Every piece of type in the section clears 4.5 except .ladder-cap, which copies
+   .film-cap's --ink-faint at 3.15 on canvas. That is the film's existing choice
+   and both captions are left consistent rather than one of them fixed alone.
+--------------------------------------------------------------------------- */
+.ladder{position:relative}
+.ladder-radio{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;margin:0}
+.ladder-plate{background:var(--surface);border:1px solid var(--hairline);border-radius:16px;
+  box-shadow:0 14px 16px -10px rgba(34,43,50,.10),0 1px 1px rgba(34,43,50,.05);overflow:hidden}
+.ladder-steps{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;
+  padding:1.05rem clamp(1.1rem,2.2vw,1.8rem);border-bottom:1px solid var(--hairline)}
+.ladder-steps label{display:inline-flex;align-items:center;gap:.55rem;cursor:pointer;
+  font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-muted);border-radius:5px;
+  transition:color .15s ease}
+.ladder-steps label:hover{color:var(--brand)}
+.ladder-steps .ls-dot{width:9px;height:9px;border-radius:50%;background:var(--control);
+  flex:none;transition:background-color .15s ease}
+.ladder-steps .ls-line{flex:1;min-width:14px;height:1px;background:var(--hairline)}
+.ladder-stage{padding:clamp(.7rem,1.6vw,1.2rem);display:grid;
+  grid-template-columns:minmax(0,320fr) minmax(0,610fr);
+  gap:clamp(.8rem,1.8vw,1.6rem);align-items:start}
+.ladder-stage > div{min-width:0}
+.ladder-stage svg{display:block;width:100%;height:auto}
+.ladder-stage text{font-family:var(--sans)}
+.ladder-stage .mono{font-family:var(--mono)}
+.ladder-cap{margin-top:1rem;font-family:var(--mono);font-size:10px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted);
+  display:flex;align-items:center;gap:.6rem}
+.ladder-cap::before{content:"";width:16px;height:1px;background:var(--control);flex:none}
+.lr{opacity:0;visibility:hidden;transition:opacity .4s ease}
+#lv1:checked ~ .ladder-plate .lr1,
+#lv2:checked ~ .ladder-plate .lr2,
+#lv3:checked ~ .ladder-plate .lr3{opacity:1;visibility:visible}
+#lv1:checked ~ .ladder-plate label[for="lv1"],
+#lv2:checked ~ .ladder-plate label[for="lv2"],
+#lv3:checked ~ .ladder-plate label[for="lv3"]{color:var(--brand)}
+#lv1:checked ~ .ladder-plate label[for="lv1"] .ls-dot,
+#lv2:checked ~ .ladder-plate label[for="lv2"] .ls-dot,
+#lv3:checked ~ .ladder-plate label[for="lv3"] .ls-dot{background:var(--brand)}
+#lv1:focus-visible ~ .ladder-plate label[for="lv1"],
+#lv2:focus-visible ~ .ladder-plate label[for="lv2"],
+#lv3:focus-visible ~ .ladder-plate label[for="lv3"]{outline:2px solid var(--focus);outline-offset:4px}
+.ladder-key{display:flex;gap:1.6rem;flex-wrap:wrap;margin-top:1.6rem;
+  font-size:.82rem;color:var(--ink-muted)}
+.ladder-key span{display:inline-flex;align-items:center;gap:.5rem}
+.ladder-key i{width:13px;height:13px;border-radius:4.5px;flex:none;display:block}
+.ladder-key .k-clear{background:var(--brand)}
+.ladder-key .k-short{background:var(--ink-faint)}
+.ladder-key .k-open{background:#FBF1E0;box-shadow:inset 0 0 0 2.5px var(--amber-500)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+
+/* ---------- pivot stat (reproduced from theme/css/main.css) ---------- */
+.pivot{background:var(--surface);border-top:1px solid var(--hairline);
+  border-bottom:1px solid var(--hairline);text-align:center;padding:clamp(4rem,7vw,6rem) 0}
+.pivot .big{font-family:var(--mono);font-size:clamp(3rem,7.5vw,5.4rem);font-weight:600;
+  letter-spacing:-.01em;line-height:1;color:var(--brand);margin-bottom:1.5rem}
+.pivot .say{font-size:clamp(1.2rem,2vw,1.55rem);line-height:1.4;color:var(--ink);
+  letter-spacing:-.02em;max-width:26ch;margin:0 auto 1.5rem}
+.pivot .after{font-size:1.02rem;color:var(--ink-muted);max-width:46ch;margin:0 auto}
+
+/* ---------- founder (reproduced from theme/css/main.css) ---------- */
+.founder{display:grid;grid-template-columns:112px minmax(0,1fr);gap:1.75rem;align-items:start;
+  background:var(--surface);border:1px solid var(--hairline);border-radius:14px;
+  padding:2rem;max-width:780px;margin:0 auto}
+.avatar{width:112px;height:112px;border-radius:50%;background:linear-gradient(135deg,var(--brand-tint),var(--sunken));
+  border:1px dashed var(--control);display:flex;align-items:center;justify-content:center;
+  font-size:.72rem;color:var(--ink-faint);text-align:center;padding:.5rem}
+.founder p{font-size:1.05rem;line-height:1.6;color:var(--ink-body);margin-bottom:1rem}
+.sig{font-size:.9rem;color:var(--ink-muted)}
+.sig b{color:var(--ink);font-weight:640}
+@media (max-width:900px){.founder{grid-template-columns:1fr}}
+
+
+@media (max-width:980px){
+  .hero-grid{grid-template-columns:1fr;gap:3rem}
+  .moves,.claims{grid-template-columns:1fr}
+  .recog-grid{grid-template-columns:1fr;gap:2.6rem}
+  .stats{grid-template-columns:1fr 1fr}
+  .stakes{grid-template-columns:1fr;gap:1.5rem}
+  .nav-links,.signin{display:none}
+  .wrap{padding:0 22px}
+  /* the drawing scrolls inside its own box rather than shrinking its own
+     type past legibility */
+  .film-stage{overflow-x:auto}
+  .film-stage svg{min-width:720px}
+  /* the two records stack, and only the wider one scrolls inside its own box */
+  .ladder-stage{grid-template-columns:1fr;gap:1.6rem}
+  .ladder-team{overflow-x:auto}
+  .ladder-team svg{min-width:520px}
+}
+
+</style>
+</head>
+<body>
+<div class="body-wrapper">
+<header class="nav"><div class="wrap nav-in"><a class="brandmark" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 8h18M3 16h12"></path></svg><span>The Same Page</span></a><nav class="nav-links"><ul><li><a href="#">Product</a></li><li><a href="#">Pricing</a></li><li><a href="#">Research</a></li><li><a href="#">Company</a></li></ul></nav><div class="nav-cta"><a class="signin" href="#">Sign in</a><a class="btn btn-primary" href="#">Start free</a></div></div></header><section class="hero"><div class="wrap hero-grid"><div><h1 class="h1">Define the bar.<br>Then see who clears it.</h1><p class="lede">One place where every person’s expectations and evidence live, so you always know where they stand, and what to say next.</p><div class="hero-actions"><a class="btn btn-primary" href="#">Start free</a><a class="btn btn-ghost" href="#">See how it works</a></div><div class="counter"><span class="dot"></span><span><b>14 of 20</b> founding places left · 3 months free</span></div><div class="hero-proof"><div><b>70%</b><span>of engagement variance traces to the manager</span></div><div><b>71%</b><span>engaged, with weekly conversations</span></div></div></div><div style="--dx:48px;--dy:24px;--ra:1.9deg;--bx:18px;--by:18px;--ex:-86px;--ey:-22px;--rb:-2.2deg;--onion:1"><figure class="dfig"><div class="dwrap" tabindex="0" role="img" aria-label="Two records of the same week, each with its marks in different places. They come together into one record, and the rows both of them had settle to a filled teal square."><svg viewBox="0 0 580 600" style="overflow:visible"><defs><filter id="sh12" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#222B32" flood-opacity="0.17"></feDropShadow><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#222B32" flood-opacity="0.09"></feDropShadow></filter><filter id="sh22" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#222B32" flood-opacity="0.1"></feDropShadow></filter></defs><g class="pB" style="transform-origin:290px 285px"><rect x="120" y="60" width="340" height="450" rx="16" fill="#F5F8FA" stroke="#C9CDD0" stroke-width="1" filter="url(#sh22)"></rect><circle cx="157.7" cy="96.9" r="8.8" fill="#C9CDD0"></circle><rect x="177.5" y="91.9" width="83.6" height="10" rx="4.5" fill="#686E74"></rect><rect x="148.9" y="116.7" width="64.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="148.9" y="165.3" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="148.9" y="230.5" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="247.5" y="230.5" width="170" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="216.9" y="226.7" width="17.7" height="17.7" rx="6" fill="#878D92"></rect><rect x="148.9" y="295.8" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="148.9" y="361" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="247.5" y="361" width="142.8" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="216.9" y="357.2" width="17.7" height="17.7" rx="6" fill="#878D92"></rect><rect x="148.9" y="426.3" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="247.5" y="426.3" width="159.8" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="216.9" y="422.4" width="17.7" height="17.7" rx="6" fill="#878D92"></rect></g><g class="pA" style="transform-origin:290px 285px"><rect x="120" y="60" width="340" height="450" rx="16" fill="#FFFFFF" filter="url(#sh12)"></rect><circle cx="157.7" cy="96.9" r="8.8" fill="#087E78"></circle><rect x="177.5" y="91.9" width="83.6" height="10" rx="4.5" fill="#686E74"></rect><rect x="148.9" y="116.7" width="64.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="148.9" y="165.3" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="247.5" y="165.3" width="153" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="216.9" y="161.4" width="17.7" height="17.7" rx="6" fill="#878D92"></rect><rect x="148.9" y="230.5" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="247.5" y="230.5" width="176.8" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="216.9" y="226.7" width="17.7" height="17.7" rx="6" fill="#878D92"></rect><rect x="148.9" y="295.8" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="148.9" y="361" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="247.5" y="361" width="136" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="216.9" y="357.2" width="17.7" height="17.7" rx="6" fill="#878D92"></rect><rect x="148.9" y="426.3" width="47.6" height="10" rx="4.5" fill="#C9CDD0"></rect></g><g class="res"><rect x="216.9" y="226.7" width="17.7" height="17.7" rx="6" fill="#087E78"></rect><rect x="216.9" y="357.2" width="17.7" height="17.7" rx="6" fill="#087E78"></rect><rect x="247.5" y="426.3" width="159.8" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="216.9" y="422.4" width="17.7" height="17.7" rx="6" fill="#878D92"></rect><rect x="216.9" y="291.9" width="17.7" height="17.7" rx="6" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"></rect><path d="M 111.2 81.1 L 111.2 59.2 Q 111.2 51.2 119.2 51.2 L 141.1 51.2" fill="none" stroke="#087E78" stroke-width="3.5" stroke-linecap="round"></path><path d="M 438.9 518.8 L 460.8 518.8 Q 468.8 518.8 468.8 510.8 L 468.8 488.9" fill="none" stroke="#087E78" stroke-width="3.5" stroke-linecap="round"></path></g></svg></div><figcaption class="dcap">Hover to bring them together</figcaption></figure></div></div></section><section class="sec"><div class="wrap"><div class="sec-head"><div class="rule"></div><h2 class="h2">You already know this feeling</h2><p class="lede">None of it is a tooling problem you created. It is what happens when the standard was never written down.</p></div><div class="recog-grid"><ul class="recog"><li><span class="idx">01</span><p>A spreadsheet HR sent in January, a Notion page you gave up on by April, a Notes file, and still no answer to “how is she doing?”</p></li><li><span class="idx">02</span><p>Review season arrives and you spend a weekend assembling a story you should already have had.</p></li><li><span class="idx">03</span><p>You know who your strongest person is. You could not prove it.</p></li><li><span class="idx">04</span><p>Every manager on the floor does this differently, so none of it compares.</p></li><li><span class="idx">05</span><p>Your energy goes to the bottom of the team, and you call that managing.</p></li></ul><div class="desk-col"><figure class="dfig"><div class="dwrap desk" tabindex="0" role="img" aria-label="A spreadsheet from January, a Notion page abandoned in April and a Notes file, scattered over one clean record of the same week that was underneath them the whole time."><svg viewBox="0 0 560 520" style="overflow:visible"><defs><filter id="dsh1" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#222B32" flood-opacity="0.17"></feDropShadow><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#222B32" flood-opacity="0.09"></feDropShadow></filter></defs><g class="cleanrec"><rect x="120" y="64" width="330" height="350" rx="16" fill="#FFFFFF" filter="url(#dsh1)"></rect><circle cx="154" cy="100" r="8" fill="#087E78"></circle><rect x="174" y="95" width="92" height="10" rx="4.5" fill="#686E74"></rect><rect x="150" y="142" width="16" height="16" rx="5.5" fill="#878D92"></rect><rect x="178" y="146" width="150" height="9" rx="4" fill="#D5DADE"></rect><rect x="150" y="188" width="16" height="16" rx="5.5" fill="#087E78"></rect><rect x="178" y="192" width="190" height="9" rx="4" fill="#D5DADE"></rect><rect x="150" y="234" width="16" height="16" rx="5.5" fill="#878D92"></rect><rect x="178" y="238" width="130" height="9" rx="4" fill="#D5DADE"></rect><rect x="150" y="280" width="16" height="16" rx="5.5" fill="#087E78"></rect><rect x="178" y="284" width="170" height="9" rx="4" fill="#D5DADE"></rect><rect x="150" y="326" width="16" height="16" rx="5.5" fill="#878D92"></rect><rect x="178" y="330" width="145" height="9" rx="4" fill="#D5DADE"></rect></g><g class="scrap s1"><rect x="60" y="120" width="300" height="190" rx="14" fill="#FFFFFF" filter="url(#dsh1)"></rect><text class="dmono" x="84" y="148" font-size="9.5" letter-spacing="1.1" fill="#686E74">SPREADSHEET &#183; JANUARY</text><rect x="84" y="164" width="56" height="9" rx="3" fill="#C9CDD0"></rect><rect x="150" y="164" width="56" height="9" rx="3" fill="#C9CDD0"></rect><rect x="216" y="164" width="56" height="9" rx="3" fill="#C9CDD0"></rect><rect x="282" y="164" width="56" height="9" rx="3" fill="#C9CDD0"></rect><rect x="84" y="188" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="150" y="188" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="216" y="188" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="282" y="188" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="84" y="212" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="150" y="212" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="216" y="212" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="282" y="212" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="84" y="236" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="150" y="236" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="216" y="236" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="282" y="236" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="84" y="260" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="150" y="260" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="216" y="260" width="56" height="9" rx="3" fill="#D5DADE"></rect><rect x="282" y="260" width="56" height="9" rx="3" fill="#D5DADE"></rect></g><g class="scrap s2"><rect x="210" y="200" width="290" height="185" rx="14" fill="#FFFFFF" filter="url(#dsh1)"></rect><text class="dmono" x="234" y="228" font-size="9.5" letter-spacing="1.1" fill="#686E74">NOTION &#183; ABANDONED APRIL</text><rect x="234" y="244" width="140" height="11" rx="5" fill="#686E74"></rect><rect x="234" y="270" width="230" height="9" rx="4" fill="#D5DADE"></rect><rect x="234" y="290" width="188" height="9" rx="4" fill="#D5DADE"></rect></g><g class="scrap s3"><rect x="110" y="310" width="265" height="165" rx="14" fill="#FFFFFF" filter="url(#dsh1)"></rect><text class="dmono" x="134" y="338" font-size="9.5" letter-spacing="1.1" fill="#686E74">NOTES</text><rect x="134" y="352" width="16" height="16" rx="5.5" fill="#FBF1E0" stroke="#B67118" stroke-width="2.2"></rect><rect x="162" y="356" width="150" height="9" rx="4" fill="#D5DADE"></rect><rect x="134" y="386" width="190" height="9" rx="4" fill="#D5DADE"></rect><rect x="134" y="408" width="118" height="9" rx="4" fill="#D5DADE"></rect><rect x="134" y="430" width="162" height="9" rx="4" fill="#D5DADE"></rect></g></svg></div><figcaption class="dcap">Hover to clear the desk</figcaption></figure></div></div></div></section><section class="sec band"><div class="wrap"><div class="sec-head"><div class="eyebrow">The record</div><h2 class="h2" style="margin-top:1rem">The role changed. The support didn’t.</h2><p class="lede">Almost every manager is working without a written standard. The numbers are not close.</p></div><div class="stats"><div class="stat"><b>83%</b><span>of founders are first-time founders, so the management culture you inherited was built by someone learning too</span></div><div class="stat"><b>68%</b><span>of managers report being overwhelmed, and only 14% of their companies did anything about it</span></div><div class="stat"><b>69%</b><span>of managers are uncomfortable having performance conversations with their team</span></div><div class="stat"><b>2%</b><span>of companies believe their performance management approach delivers real value</span></div></div><div class="stakes"><p>Managers account for at least <em>70% of the variance</em> in employee engagement.</p><p><em>Half of all employees</em> who leave a company are leaving their manager.</p></div></div></section><section class="sec"><div class="wrap"><div class="sec-head"><div class="rule"></div><h2 class="h2">Three moves, and the guessing stops</h2></div><div class="moves"><div class="move"><span class="num">1</span><h3 class="h3">Define what good looks like</h3><p>Metrics, skills and values, per role and per level. The thing nobody writes down, written down once.</p><div class="prev"><div class="prev-define"><i></i><i class="fill"></i></div></div></div><div class="move"><span class="num">2</span><h3 class="h3">Let the evidence build itself</h3><p>1:1s, check-ins and commitments land against the person and the expectation as you go &#8212; so the record accumulates instead of being reconstructed.</p><div class="prev"><div class="prev-capture"><i></i><i class="mid"></i><i></i></div></div></div><div class="move"><span class="num">3</span><h3 class="h3">See where everyone stands</h3><p>One surface. Zoom out for the team, click in for the person, and know the facts behind every rating.</p><div class="prev"><div class="prev-see"><span class="line"></span><span class="node" style="left:32%"></span><span class="node" style="left:68%"></span></div></div></div></div></div></section><!-- STAGE 2: the product film. Placement A, a section of its own between the three moves and the argument, filling the spine beat that had no module. The heading and lede here are PLACEHOLDER copy written to hold the slot. --><section class="sec"><div class="wrap"><div class="sec-head"><div class="rule"></div><h2 class="h2">What you said on Tuesday, waiting on Monday</h2><p class="lede">The record builds itself in the 1:1. It briefs you before the next one.</p></div><div class="film"><input class="film-radio" type="radio" name="film" id="fs1" aria-label="Tuesday, the 1:1"><input class="film-radio" type="radio" name="film" id="fs2" aria-label="Wednesday to Friday, the week fills up"><input class="film-radio" type="radio" name="film" id="fs3" aria-label="Monday, the brief" checked><div class="film-plate"><div class="film-steps" role="group" aria-label="Choose a day"><label for="fs1"><span class="fs-dot"></span>Tuesday</label><span class="fs-line"></span><label for="fs2"><span class="fs-dot"></span>Wed to Fri</label><span class="fs-line"></span><label for="fs3"><span class="fs-dot"></span>Monday</label></div><div class="film-stage"><svg viewBox="0 0 900 440" role="img" aria-label="A sentence typed into Tuesday&#8217;s 1:1 record, the week of records that stacks over it, and Monday&#8217;s brief, where the same sentence comes back with the day it came from attached."><defs><filter id="fsh1" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#222B32" flood-opacity="0.17"></feDropShadow><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#222B32" flood-opacity="0.09"></feDropShadow></filter><filter id="fsh2" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#222B32" flood-opacity="0.1"></feDropShadow></filter></defs><g class="fr fr1"><text class="mono" x="230" y="34" font-size="11" letter-spacing="1.4" fill="#4F575D">TUESDAY &#183; THE 1:1</text><rect x="230" y="56" width="440" height="340" rx="16" fill="#FFFFFF" filter="url(#fsh1)"></rect>
+<circle cx="266" cy="94" r="8" fill="#087E78"></circle>
+<rect x="286" y="89" width="104" height="10" rx="4.5" fill="#686E74"></rect>
+<rect x="258" y="118" width="78" height="10" rx="4.5" fill="#C9CDD0"></rect>
+<rect x="258" y="166" width="18" height="18" rx="6" fill="#878D92"></rect>
+<rect x="290" y="170" width="192" height="10" rx="4.5" fill="#D5DADE"></rect>
+<rect x="258" y="218" width="18" height="18" rx="6" fill="#878D92"></rect>
+<rect x="290" y="222" width="228" height="10" rx="4.5" fill="#D5DADE"></rect>
+<rect x="246" y="260" width="408" height="36" rx="9" fill="#EEF5F4"></rect>
+<rect x="258" y="269" width="18" height="18" rx="6" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"></rect>
+<text x="290" y="284" font-size="13" fill="#222B32">You own the vendor review, draft by the 12th.</text>
+<rect x="258" y="322" width="18" height="18" rx="6" fill="#878D92"></rect>
+<rect x="290" y="326" width="170" height="10" rx="4.5" fill="#D5DADE"></rect></g><g class="fr fr2"><text class="mono" x="230" y="34" font-size="11" letter-spacing="1.4" fill="#4F575D">WEDNESDAY TO FRIDAY &#183; THE WEEK FILLS UP</text><rect x="230" y="56" width="440" height="340" rx="16" fill="#FFFFFF" filter="url(#fsh1)"></rect>
+<circle cx="266" cy="94" r="8" fill="#087E78"></circle>
+<rect x="286" y="89" width="104" height="10" rx="4.5" fill="#686E74"></rect>
+<rect x="258" y="118" width="78" height="10" rx="4.5" fill="#C9CDD0"></rect>
+<rect x="258" y="166" width="18" height="18" rx="6" fill="#878D92"></rect>
+<rect x="290" y="170" width="192" height="10" rx="4.5" fill="#D5DADE"></rect>
+<rect x="258" y="218" width="18" height="18" rx="6" fill="#878D92"></rect>
+<rect x="290" y="222" width="228" height="10" rx="4.5" fill="#D5DADE"></rect>
+<rect x="246" y="260" width="408" height="36" rx="9" fill="#EEF5F4"></rect>
+<rect x="258" y="269" width="18" height="18" rx="6" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"></rect>
+<text x="290" y="284" font-size="13" fill="#222B32">You own the vendor review, draft by the 12th.</text>
+<rect x="258" y="322" width="18" height="18" rx="6" fill="#878D92"></rect>
+<rect x="290" y="326" width="170" height="10" rx="4.5" fill="#D5DADE"></rect><g transform="rotate(1.6 510 201)"><rect x="320" y="126" width="380" height="150" rx="16" fill="#FFFFFF" filter="url(#fsh1)"></rect><text class="mono" x="348" y="160" font-size="10.5" letter-spacing="1.2" fill="#686E74">WED</text><rect x="348" y="178" width="150" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="348" y="202" width="212" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="348" y="226" width="18" height="18" rx="6" fill="#878D92"></rect><rect x="380" y="230" width="184" height="10" rx="4.5" fill="#D5DADE"></rect></g><g transform="rotate(-1.3 562 261)"><rect x="372" y="186" width="380" height="150" rx="16" fill="#FFFFFF" filter="url(#fsh1)"></rect><text class="mono" x="400" y="220" font-size="10.5" letter-spacing="1.2" fill="#686E74">THU</text><rect x="400" y="238" width="150" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="400" y="262" width="212" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="400" y="286" width="18" height="18" rx="6" fill="#878D92"></rect><rect x="432" y="290" width="184" height="10" rx="4.5" fill="#D5DADE"></rect></g><g transform="rotate(2.1 614 321)"><rect x="424" y="246" width="380" height="150" rx="16" fill="#FFFFFF" filter="url(#fsh1)"></rect><text class="mono" x="452" y="280" font-size="10.5" letter-spacing="1.2" fill="#686E74">FRI</text><rect x="452" y="298" width="150" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="452" y="322" width="212" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="452" y="346" width="18" height="18" rx="6" fill="#878D92"></rect><rect x="484" y="350" width="184" height="10" rx="4.5" fill="#D5DADE"></rect></g></g><g class="fr fr3"><text class="mono" x="150" y="34" font-size="11" letter-spacing="1.4" fill="#4F575D">MONDAY &#183; THE BRIEF</text><g transform="rotate(-2.4 350 230)"><rect x="150" y="80" width="400" height="300" rx="16" fill="#F5F8FA" stroke="#C9CDD0" stroke-width="1" filter="url(#fsh2)"></rect><circle cx="184" cy="114" r="7" fill="#C9CDD0"></circle><rect x="202" y="110" width="86" height="9" rx="4" fill="#686E74"></rect><rect x="180" y="146" width="16" height="16" rx="5.5" fill="#878D92"></rect><rect x="208" y="150" width="150" height="9" rx="4" fill="#D5DADE"></rect><rect x="180" y="195" width="16" height="16" rx="5.5" fill="#FBF1E0" stroke="#B67118" stroke-width="2.2"></rect><text x="208" y="208" font-size="11.5" fill="#686E74">You own the vendor review, draft by the 12th.</text><rect x="180" y="246" width="16" height="16" rx="5.5" fill="#878D92"></rect><rect x="208" y="250" width="120" height="9" rx="4" fill="#D5DADE"></rect></g><rect x="360" y="52" width="450" height="350" rx="16" fill="#FFFFFF" filter="url(#fsh1)"></rect><circle cx="396" cy="90" r="8" fill="#087E78"></circle><rect x="416" y="85" width="110" height="10" rx="4.5" fill="#686E74"></rect><rect x="388" y="114" width="84" height="10" rx="4.5" fill="#C9CDD0"></rect><rect x="388" y="144" width="394" height="96" rx="12" fill="#EEF5F4"></rect><rect x="410" y="170" width="18" height="18" rx="6" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"></rect><text x="442" y="184" font-size="13" fill="#222B32">You own the vendor review, draft by the 12th.</text><text class="mono" x="442" y="212" font-size="10.5" letter-spacing="1.1" fill="#00635F">FROM TUESDAY&#8217;S 1:1</text><rect x="388" y="272" width="18" height="18" rx="6" fill="#878D92"></rect><rect x="420" y="276" width="240" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="388" y="318" width="18" height="18" rx="6" fill="#878D92"></rect><rect x="420" y="322" width="196" height="10" rx="4.5" fill="#D5DADE"></rect><rect x="388" y="364" width="18" height="18" rx="6" fill="#878D92"></rect><rect x="420" y="368" width="164" height="10" rx="4.5" fill="#D5DADE"></rect></g></svg></div></div><p class="film-cap">Choose a day</p></div></div></section><section class="sec against"><div class="wrap"><div class="sec-head"><div class="rule"></div><h2 class="h2">Manage with evidence, not instinct</h2><p class="lede">Every serious tool in this category is sold to HR &#8212; bought by People teams, used by managers as an obligation, and built around the review cycle rather than around Tuesday.</p></div><div class="claims"><div class="claim"><h3 class="h3">Built for you as the buyer</h3><p>Not for the person HR makes comply. You decide it&#8217;s worth it, and you&#8217;re done.</p></div><div class="claim"><h3 class="h3">One surface, not four</h3><p>Metrics, skills and behaviours in the same place, rather than stitched together from tools that were never meant to meet.</p></div><div class="claim"><h3 class="h3">Judgment, not dashboards</h3><p>It tells you what to do about what it shows you &#8212; before the conversation, not after the quarter.</p></div></div></div></section><!-- STAGE 4: the bar. Concept 05, route A. Its own section between the argument and the close, which is the last beat before the ask and the only picture on the page of what having a standard looks like. The heading and lede here are PLACEHOLDER copy written to hold the slot. --><section class="sec"><div class="wrap"><div class="sec-head"><div class="rule"></div><h2 class="h2">Move the level. See who still clears it.</h2><p class="lede">Expectations live per role and per level. The evidence underneath stays the same, so the level is the only thing that changes who clears it.</p></div><div class="ladder"><input class="ladder-radio" type="radio" name="ladder" id="lv1" aria-label="Associate"><input class="ladder-radio" type="radio" name="ladder" id="lv2" aria-label="Mid" checked><input class="ladder-radio" type="radio" name="ladder" id="lv3" aria-label="Senior"><div class="ladder-plate"><div class="ladder-steps" role="group" aria-label="Choose a level"><label for="lv1"><span class="ls-dot"></span>Associate</label><span class="ls-line"></span><label for="lv2"><span class="ls-dot"></span>Mid</label><span class="ls-line"></span><label for="lv3"><span class="ls-dot"></span>Senior</label></div><div class="ladder-stage"><div class="ladder-bar"><svg viewBox="0 0 320 430" role="img" aria-label="The expectations one level of a role ladder asks for. A higher level asks for more, so the list gets longer."><defs><filter id="lshA" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#222B32" flood-opacity="0.17"/><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#222B32" flood-opacity="0.09"/></filter></defs><g class="lr lr1"><rect x="10" y="42" width="300" height="220" rx="16" fill="#FFFFFF" filter="url(#lshA)"/><text class="mono" x="10" y="26" font-size="11" letter-spacing="1.4" fill="#4F575D">THE BAR</text><circle cx="42" cy="80" r="8" fill="#087E78"/><text class="mono" x="62" y="85" font-size="12.5" letter-spacing="1.3" font-weight="500" fill="#222B32">ASSOCIATE</text><line x1="30" y1="108" x2="290" y2="108" stroke="#DDE0E3" stroke-width="1"/><rect x="42" y="134" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="134" width="164" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="168" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="168" width="128" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="202" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="202" width="176" height="10" rx="5.0" fill="#D5DADE"/></g><g class="lr lr2"><rect x="10" y="42" width="300" height="288" rx="16" fill="#FFFFFF" filter="url(#lshA)"/><text class="mono" x="10" y="26" font-size="11" letter-spacing="1.4" fill="#4F575D">THE BAR</text><circle cx="42" cy="80" r="8" fill="#087E78"/><text class="mono" x="62" y="85" font-size="12.5" letter-spacing="1.3" font-weight="500" fill="#222B32">MID</text><line x1="30" y1="108" x2="290" y2="108" stroke="#DDE0E3" stroke-width="1"/><rect x="42" y="134" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="134" width="164" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="168" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="168" width="128" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="202" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="202" width="176" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="236" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="236" width="144" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="270" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="270" width="168" height="10" rx="5.0" fill="#D5DADE"/></g><g class="lr lr3"><rect x="10" y="42" width="300" height="356" rx="16" fill="#FFFFFF" filter="url(#lshA)"/><text class="mono" x="10" y="26" font-size="11" letter-spacing="1.4" fill="#4F575D">THE BAR</text><circle cx="42" cy="80" r="8" fill="#087E78"/><text class="mono" x="62" y="85" font-size="12.5" letter-spacing="1.3" font-weight="500" fill="#222B32">SENIOR</text><line x1="30" y1="108" x2="290" y2="108" stroke="#DDE0E3" stroke-width="1"/><rect x="42" y="134" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="134" width="164" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="168" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="168" width="128" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="202" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="202" width="176" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="236" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="236" width="144" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="270" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="270" width="168" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="304" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="304" width="124" height="10" rx="5.0" fill="#D5DADE"/><rect x="42" y="338" width="48" height="10" rx="5.0" fill="#C9CDD0"/><rect x="102" y="338" width="154" height="10" rx="5.0" fill="#D5DADE"/></g></svg></div><div class="ladder-team"><svg viewBox="0 0 610 430" role="img" aria-label="The team&#8217;s record against exactly those expectations, with a line drawn under the last person who clears every one of them, and the count riding on the line."><defs><filter id="lshB" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#222B32" flood-opacity="0.17"/><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#222B32" flood-opacity="0.09"/></filter></defs><g class="lr lr1"><rect x="10" y="42" width="580" height="350" rx="16" fill="#FFFFFF" filter="url(#lshB)"/><text class="mono" x="10" y="26" font-size="11" letter-spacing="1.4" fill="#4F575D">THE TEAM</text><circle cx="42" cy="80" r="8" fill="#087E78"/><rect x="62" y="75" width="104" height="10" rx="5.0" fill="#686E74"/><line x1="30" y1="108" x2="570" y2="108" stroke="#DDE0E3" stroke-width="1"/><circle cx="44" cy="142" r="7" fill="#C9CDD0"/><rect x="62" y="137" width="82" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><circle cx="44" cy="194" r="7" fill="#C9CDD0"/><rect x="62" y="189" width="66" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><circle cx="44" cy="246" r="7" fill="#C9CDD0"/><rect x="62" y="241" width="90" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><circle cx="44" cy="298" r="7" fill="#C9CDD0"/><rect x="62" y="293" width="72" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><circle cx="44" cy="350" r="7" fill="#C9CDD0"/><rect x="62" y="345" width="76" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="341.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="341.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="341.0" width="18" height="18" rx="6.1" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"/><line x1="30" y1="324.0" x2="570" y2="324.0" stroke="#087E78" stroke-width="3" stroke-linecap="round"/><rect x="40" y="309.0" width="132" height="30" rx="15" fill="#EEF5F4"/><text class="mono" x="106.0" y="328.0" font-size="11" font-weight="500" letter-spacing="1.1" text-anchor="middle" fill="#00635F">4 OF 5 CLEAR</text></g><g class="lr lr2"><rect x="10" y="42" width="580" height="350" rx="16" fill="#FFFFFF" filter="url(#lshB)"/><text class="mono" x="10" y="26" font-size="11" letter-spacing="1.4" fill="#4F575D">THE TEAM</text><circle cx="42" cy="80" r="8" fill="#087E78"/><rect x="62" y="75" width="104" height="10" rx="5.0" fill="#686E74"/><line x1="30" y1="108" x2="570" y2="108" stroke="#DDE0E3" stroke-width="1"/><circle cx="44" cy="142" r="7" fill="#C9CDD0"/><rect x="62" y="137" width="82" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="334" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><circle cx="44" cy="194" r="7" fill="#C9CDD0"/><rect x="62" y="189" width="66" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="334" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><circle cx="44" cy="246" r="7" fill="#C9CDD0"/><rect x="62" y="241" width="90" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="334" y="237.0" width="18" height="18" rx="6.1" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"/><circle cx="44" cy="298" r="7" fill="#C9CDD0"/><rect x="62" y="293" width="72" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="289.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="334" y="289.0" width="18" height="18" rx="6.1" fill="#878D92"/><circle cx="44" cy="350" r="7" fill="#C9CDD0"/><rect x="62" y="345" width="76" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="341.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="341.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="341.0" width="18" height="18" rx="6.1" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"/><rect x="302" y="341.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="334" y="341.0" width="18" height="18" rx="6.1" fill="#878D92"/><line x1="30" y1="220.0" x2="570" y2="220.0" stroke="#087E78" stroke-width="3" stroke-linecap="round"/><rect x="40" y="205.0" width="132" height="30" rx="15" fill="#EEF5F4"/><text class="mono" x="106.0" y="224.0" font-size="11" font-weight="500" letter-spacing="1.1" text-anchor="middle" fill="#00635F">2 OF 5 CLEAR</text></g><g class="lr lr3"><rect x="10" y="42" width="580" height="350" rx="16" fill="#FFFFFF" filter="url(#lshB)"/><text class="mono" x="10" y="26" font-size="11" letter-spacing="1.4" fill="#4F575D">THE TEAM</text><circle cx="42" cy="80" r="8" fill="#087E78"/><rect x="62" y="75" width="104" height="10" rx="5.0" fill="#686E74"/><line x1="30" y1="108" x2="570" y2="108" stroke="#DDE0E3" stroke-width="1"/><circle cx="44" cy="142" r="7" fill="#C9CDD0"/><rect x="62" y="137" width="82" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="334" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="366" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="398" y="133.0" width="18" height="18" rx="6.1" fill="#087E78"/><circle cx="44" cy="194" r="7" fill="#C9CDD0"/><rect x="62" y="189" width="66" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="334" y="185.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="366" y="185.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="398" y="185.0" width="18" height="18" rx="6.1" fill="#878D92"/><circle cx="44" cy="246" r="7" fill="#C9CDD0"/><rect x="62" y="241" width="90" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="237.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="334" y="237.0" width="18" height="18" rx="6.1" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"/><rect x="366" y="237.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="398" y="237.0" width="18" height="18" rx="6.1" fill="#878D92"/><circle cx="44" cy="298" r="7" fill="#C9CDD0"/><rect x="62" y="293" width="72" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="289.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="302" y="289.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="334" y="289.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="366" y="289.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="398" y="289.0" width="18" height="18" rx="6.1" fill="#878D92"/><circle cx="44" cy="350" r="7" fill="#C9CDD0"/><rect x="62" y="345" width="76" height="10" rx="5.0" fill="#686E74"/><rect x="206" y="341.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="238" y="341.0" width="18" height="18" rx="6.1" fill="#087E78"/><rect x="270" y="341.0" width="18" height="18" rx="6.1" fill="#FBF1E0" stroke="#B67118" stroke-width="2.5"/><rect x="302" y="341.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="334" y="341.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="366" y="341.0" width="18" height="18" rx="6.1" fill="#878D92"/><rect x="398" y="341.0" width="18" height="18" rx="6.1" fill="#878D92"/><line x1="30" y1="168.0" x2="570" y2="168.0" stroke="#087E78" stroke-width="3" stroke-linecap="round"/><rect x="40" y="153.0" width="132" height="30" rx="15" fill="#EEF5F4"/><text class="mono" x="106.0" y="172.0" font-size="11" font-weight="500" letter-spacing="1.1" text-anchor="middle" fill="#00635F">1 OF 5 CLEAR</text></g></svg></div></div></div><p class="ladder-cap">Choose a level</p><div class="ladder-key"><span><i class="k-clear"></i>Clears it</span><span><i class="k-short"></i>Evidence on file, and it doesn&#8217;t</span><span><i class="k-open"></i>Nothing on file yet</span></div></div></div></section><!-- PORTED FROM theme/: pivot-stat.module and founder.module, reproduced with their
+     shipped field defaults so the whole page can be signed off. No design change. -->
+<section class="pivot"><div class="wrap narrow"><div class="big">71%</div><p class="say">of employees who have weekly performance conversations are highly engaged.</p><p class="after">The thing already works. What managers are missing isn't willingness &#8212; it's the infrastructure to do it consistently.</p></div></section><section class="sec"><div class="wrap"><div class="founder"><div class="avatar">Photo &#8212; Andrew Godlewski</div><div><p>I built this because I needed it. I was managing a team, doing the work twice, and still walking into reviews assembling the story from memory. Nothing on the market was built for me &#8212; it was all built for the HR team that bought it.</p><p class="sig"><b>Andrew Godlewski</b> &#183; Founder</p></div></div></div></section><section class="close"><div class="wrap narrow"><h2>Get on the same page.<br>Stay there.</h2><p class="sub">The employee and the manager. The manager and the director. The director and the C-suite.</p><a class="btn btn-on-dark" href="#">Start free</a><div style="margin-top:.9rem"><span class="counter"><span class="dot"></span><span><b>14 of 20</b> founding places left · 3 months free</span></span></div></div></section><footer class="foot"><div class="wrap foot-in"><a class="brandmark" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 8h18M3 16h12"></path></svg><span>The Same Page</span></a><span class="tagline">Space to manage better</span><nav><ul><li><a href="#">Product</a></li><li><a href="#">Pricing</a></li><li><a href="#">Research</a></li><li><a href="#">Privacy</a></li><li><a href="#">Terms</a></li></ul></nav></div></footer>
+</div>
+</body>
+</html>

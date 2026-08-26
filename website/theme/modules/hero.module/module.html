@@ -14,31 +14,16 @@
       <div class="counter"><span class="dot"></span>
         <span><b>{{ module.places_left }} of {{ module.places_total }}</b> founding places left · {{ module.counter_note }}</span></div>
       {% endif %}
+      {% if module.proof_stats %}
+      <div class="hero-proof">
+        {% for s in module.proof_stats %}
+        <div><b>{{ s.value }}</b><span>{{ s.copy }}</span></div>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
-    <figure class="figure">
-      <div class="fig-head">
-        <span class="fig-title">{{ module.fig_title }}</span>
-        <span class="fig-sub">{{ module.fig_meta }}</span>
-      </div>
-      <div class="plot">
-        <span class="bar-line"></span>
-        <span class="bar-label">The bar</span>
-        <div class="people">
-          {% for p in module.people %}
-            {% set top = 96 - p.offset %}
-            {% set stem_top = top + 8 %}
-            <div class="person">
-              <span class="stem" style="top:{{ stem_top }}px;height:{{ 168 - stem_top }}px"></span>
-              <span class="pip" style="top:{{ top }}px;background:{% if p.status == 'below' %}var(--amber-500){% else %}var(--brand){% endif %}"></span>
-              <span class="pname">{{ p.initials }}</span>
-            </div>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="fig-foot">
-        <span class="key"><i style="background:var(--brand)"></i> {{ module.key_meeting }}</span>
-        <span class="key"><i style="background:var(--amber-500)"></i> {{ module.key_below }}</span>
-      </div>
-    </figure>
+
+    <div style="--dx:48px;--dy:24px;--ra:1.9deg;--bx:18px;--by:18px;--ex:-86px;--ey:-22px;--rb:-2.2deg;--onion:1"><figure class="dfig"><div class="dwrap" tabindex="0" role="img" aria-label="Two records of the same week, each with its marks in different places. They come together into one record, and the rows both of them had settle to a filled teal square."><svg viewBox="0 0 580 600" style="overflow:visible"><defs><filter id="sh12-{{ name }}" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-opacity="0.17"></feDropShadow><feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity="0.09"></feDropShadow></filter><filter id="sh22-{{ name }}" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="8" stdDeviation="11" flood-opacity="0.1"></feDropShadow></filter></defs><g class="pB" style="transform-origin:290px 285px"><rect class="d-canvas s-control" x="120" y="60" width="340" height="450" rx="16" stroke-width="1" filter="url(#sh22-{{ name }})"></rect><circle class="d-control" cx="157.7" cy="96.9" r="8.8"></circle><rect class="d-heading" x="177.5" y="91.9" width="83.6" height="10" rx="4.5"></rect><rect class="d-control" x="148.9" y="116.7" width="64.6" height="10" rx="4.5"></rect><rect class="d-control" x="148.9" y="165.3" width="47.6" height="10" rx="4.5"></rect><rect class="d-control" x="148.9" y="230.5" width="47.6" height="10" rx="4.5"></rect><rect class="d-pill" x="247.5" y="230.5" width="170" height="10" rx="4.5"></rect><rect class="d-recorded" x="216.9" y="226.7" width="17.7" height="17.7" rx="6"></rect><rect class="d-control" x="148.9" y="295.8" width="47.6" height="10" rx="4.5"></rect><rect class="d-control" x="148.9" y="361" width="47.6" height="10" rx="4.5"></rect><rect class="d-pill" x="247.5" y="361" width="142.8" height="10" rx="4.5"></rect><rect class="d-recorded" x="216.9" y="357.2" width="17.7" height="17.7" rx="6"></rect><rect class="d-control" x="148.9" y="426.3" width="47.6" height="10" rx="4.5"></rect><rect class="d-pill" x="247.5" y="426.3" width="159.8" height="10" rx="4.5"></rect><rect class="d-recorded" x="216.9" y="422.4" width="17.7" height="17.7" rx="6"></rect></g><g class="pA" style="transform-origin:290px 285px"><rect class="d-surface" x="120" y="60" width="340" height="450" rx="16" filter="url(#sh12-{{ name }})"></rect><circle class="d-brand" cx="157.7" cy="96.9" r="8.8"></circle><rect class="d-heading" x="177.5" y="91.9" width="83.6" height="10" rx="4.5"></rect><rect class="d-control" x="148.9" y="116.7" width="64.6" height="10" rx="4.5"></rect><rect class="d-control" x="148.9" y="165.3" width="47.6" height="10" rx="4.5"></rect><rect class="d-pill" x="247.5" y="165.3" width="153" height="10" rx="4.5"></rect><rect class="d-recorded" x="216.9" y="161.4" width="17.7" height="17.7" rx="6"></rect><rect class="d-control" x="148.9" y="230.5" width="47.6" height="10" rx="4.5"></rect><rect class="d-pill" x="247.5" y="230.5" width="176.8" height="10" rx="4.5"></rect><rect class="d-recorded" x="216.9" y="226.7" width="17.7" height="17.7" rx="6"></rect><rect class="d-control" x="148.9" y="295.8" width="47.6" height="10" rx="4.5"></rect><rect class="d-control" x="148.9" y="361" width="47.6" height="10" rx="4.5"></rect><rect class="d-pill" x="247.5" y="361" width="136" height="10" rx="4.5"></rect><rect class="d-recorded" x="216.9" y="357.2" width="17.7" height="17.7" rx="6"></rect><rect class="d-control" x="148.9" y="426.3" width="47.6" height="10" rx="4.5"></rect></g><g class="res"><rect class="d-brand" x="216.9" y="226.7" width="17.7" height="17.7" rx="6"></rect><rect class="d-brand" x="216.9" y="357.2" width="17.7" height="17.7" rx="6"></rect><rect class="d-pill" x="247.5" y="426.3" width="159.8" height="10" rx="4.5"></rect><rect class="d-recorded" x="216.9" y="422.4" width="17.7" height="17.7" rx="6"></rect><rect class="d-open" x="216.9" y="291.9" width="17.7" height="17.7" rx="6" stroke-width="2.5"></rect><path class="s-brand" d="M 111.2 81.1 L 111.2 59.2 Q 111.2 51.2 119.2 51.2 L 141.1 51.2" fill="none" stroke-width="3.5" stroke-linecap="round"></path><path class="s-brand" d="M 438.9 518.8 L 460.8 518.8 Q 468.8 518.8 468.8 510.8 L 468.8 488.9" fill="none" stroke-width="3.5" stroke-linecap="round"></path></g></svg></div><figcaption class="dcap">Hover to bring them together</figcaption></figure></div>
+
   </div>
 </section>

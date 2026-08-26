@@ -1,0 +1,27 @@
+<p>Your organization is storing its performance record, its team&rsquo;s development history, and honest notes about real people in The Same Page. Here&rsquo;s exactly how we protect it.</p>
+<blockquote><p>The short version: your organization&rsquo;s data is isolated at the database level, encrypted in transit, and never used to build ad profiles or sold to anyone.</p></blockquote>
+<h2>Data Storage</h2>
+<p>All data is stored in a PostgreSQL database hosted by <a href="https://supabase.com">Supabase</a> on Amazon Web Services infrastructure.</p>
+<div class="draft-note"><b>Draft &mdash; confirm before publishing:</b> Prism Tree&rsquo;s statement names an exact AWS region (US-West-2, Oregon). Confirm your Supabase project&rsquo;s region and this can state it the same way, or drop the claim if it varies.</div>
+<h2>Encryption in Transit</h2>
+<p>All communication between your browser and The Same Page &mdash; both the frontend and the backend API &mdash; is encrypted using HTTPS/TLS. Unencrypted HTTP connections are not accepted.</p>
+<h2>Encryption at Rest</h2>
+<p>Standard encryption at rest is provided by our infrastructure (Supabase on AWS). Unlike some tools in this space, The Same Page does not store OAuth tokens or user-supplied API keys today, so there&rsquo;s no separate secrets-encryption layer to describe &mdash; there&rsquo;s nothing beyond the database itself that needs one.</p>
+<h2>Per-Organization Data Isolation</h2>
+<p>The Same Page uses Row-Level Security (RLS) enforced at the database layer by Supabase. Every query against your data includes a database-level policy check &mdash; your organization&rsquo;s data is isolated from every other organization&rsquo;s regardless of application-level logic, and what an individual account can see within your own organization is scoped the same way. This is a database-enforced constraint, not just a software guard.</p>
+<h2>Authentication</h2>
+<p>User authentication is handled by Supabase Auth, which verifies tokens on every authenticated API request &mdash; tokens are never trusted client-side only. Passwords are never stored in plaintext.</p>
+<h2>Rate Limiting</h2>
+<p>API endpoints are rate-limited to protect against abuse and runaway automation.</p>
+<h2>No Ads, No Tracking, No Data Selling</h2>
+<p>The Same Page contains no advertising SDKs, no third-party analytics trackers, and no ad pixels. We do not sell or share your data with data brokers, advertisers, or recruiters.</p>
+<h2>What We Don&rsquo;t Do</h2>
+<ul>
+<li>We do not store credit card numbers (billing, if added in the future, will be handled by a PCI-compliant processor)</li>
+<li>We do not use your organization&rsquo;s data to train AI models beyond what&rsquo;s described in our <a href="/legal/privacy">Privacy Policy</a></li>
+<li>We do not sell or share data with recruiters, advertisers, or data brokers</li>
+</ul>
+<h2>Responsible Disclosure</h2>
+<p>If you discover a security vulnerability in The Same Page, please report it to us at <strong>andrewgodlew@gmail.com</strong> before disclosing it publicly. We will investigate and respond promptly.</p>
+<h2>Questions</h2>
+<p>For security-related questions, contact us at andrewgodlew@gmail.com.</p>

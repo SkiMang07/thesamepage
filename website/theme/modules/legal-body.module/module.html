@@ -1,0 +1,13 @@
+<section class="legal-sec">
+  <div class="wrap">
+    {% if module.effective_date %}
+    <p class="legal-meta">Effective {{ module.effective_date }}{% if module.updated_date %} &middot; Last updated {{ module.updated_date }}{% endif %}</p>
+    {% endif %}
+    <div class="legal-body">
+      {{ module.copy }}
+    </div>
+    <div class="doc-links">
+      <a href="/legal/privacy">Privacy Policy</a><span class="sep">&middot;</span><a href="/legal/terms">Terms of Service</a><span class="sep">&middot;</span><a href="/legal/security">Security Statement</a>
+    </div>
+  </div>
+</section>

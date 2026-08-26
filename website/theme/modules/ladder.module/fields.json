@@ -1,0 +1,59 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Move the level. See who still clears it."
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "Expectations live per role and per level. The evidence underneath stays the same, so the level is the only thing that changes who clears it."
+  },
+  {
+    "name": "level_1",
+    "label": "Level 1",
+    "type": "text",
+    "default": "Associate",
+    "help_text": "The drawing's geometry is fixed: level 1 asks for three expectations and four of five clear it. Renaming a level changes the word, not the picture."
+  },
+  {
+    "name": "level_2",
+    "label": "Level 2",
+    "type": "text",
+    "default": "Mid",
+    "help_text": "The resting level. Five expectations, two of five clear it."
+  },
+  {
+    "name": "level_3",
+    "label": "Level 3",
+    "type": "text",
+    "default": "Senior",
+    "help_text": "Seven expectations, one of five clears it."
+  },
+  {
+    "name": "caption",
+    "label": "Control caption",
+    "type": "text",
+    "default": "Choose a level"
+  },
+  {
+    "name": "key_clear",
+    "label": "Key \u2014 clears it",
+    "type": "text",
+    "default": "Clears it"
+  },
+  {
+    "name": "key_short",
+    "label": "Key \u2014 falls short",
+    "type": "text",
+    "default": "Evidence on file, and it doesn\u2019t"
+  },
+  {
+    "name": "key_open",
+    "label": "Key \u2014 nothing on file",
+    "type": "text",
+    "default": "Nothing on file yet"
+  }
+]

@@ -12,8 +12,12 @@
         <p>{{ m.copy }}</p>
         {% if m.shot.src %}
           <img class="shot-img" src="{{ m.shot.src }}" alt="{{ m.shot.alt }}" loading="lazy">
+        {% elif m.preview_style == 'capture' %}
+          <div class="prev"><div class="prev-capture"><i></i><i class="mid"></i><i></i></div></div>
+        {% elif m.preview_style == 'connect' %}
+          <div class="prev"><div class="prev-see"><span class="line"></span><span class="node" style="left:32%"></span><span class="node" style="left:68%"></span></div></div>
         {% else %}
-          <div class="shot">{{ m.shot_label }}</div>
+          <div class="prev"><div class="prev-define"><i></i><i class="fill"></i></div></div>
         {% endif %}
       </div>
       {% endfor %}

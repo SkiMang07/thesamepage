@@ -1,0 +1,13 @@
+<section class="sec">
+  <div class="wrap">
+    <div class="form-card">
+      {% form
+        form_to_use="{{ module.form.form_id }}"
+        response_response_type="{{ module.form.response_type }}"
+        response_message="{{ module.form.message }}"
+      %}
+      {% if module.response_note %}<p class="form-note">{{ module.response_note }}</p>{% endif %}
+      <div class="consent-copy">{{ module.consent_copy }}</div>
+    </div>
+  </div>
+</section>

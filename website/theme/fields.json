@@ -3,7 +3,7 @@
     "name": "color",
     "label": "Colour",
     "type": "group",
-    "help_text": "Current & Carbon. Defaults are the exact values from the product app (frontend/app/globals.css). Change one here and the whole site follows. NOTE: theme fields only accept a restricted set of types \u2014 colour, font, number, choice, boolean, spacing, image, url. Plain `text` is NOT allowed here; it belongs in a module.",
+    "help_text": "Current & Carbon. Defaults are the exact values from the product app (frontend/app/globals.css). Change one here and the whole site follows. NOTE: theme fields only accept a restricted set of types — colour, font, number, choice, boolean, spacing, image, url. Plain `text` is NOT allowed here; it belongs in a module.",
     "children": [
       {
         "name": "brand",
@@ -17,7 +17,7 @@
       },
       {
         "name": "brand_hover",
-        "label": "Brand teal \u2014 hover",
+        "label": "Brand teal — hover",
         "type": "color",
         "default": {
           "color": "#00635F",
@@ -80,8 +80,18 @@
         }
       },
       {
+        "name": "pill",
+        "label": "Pill",
+        "type": "color",
+        "default": {
+          "color": "#D5DADE",
+          "opacity": 100
+        },
+        "help_text": "The grey a line of handwriting is drawn as inside the illustrations. It stands in for words rather than carrying meaning, so it sits below the contrast floor the marks are held to."
+      },
+      {
         "name": "ink",
-        "label": "Ink \u2014 headings",
+        "label": "Ink — headings",
         "type": "color",
         "default": {
           "color": "#222B32",
@@ -90,7 +100,7 @@
       },
       {
         "name": "ink_body",
-        "label": "Ink \u2014 body",
+        "label": "Ink — body",
         "type": "color",
         "default": {
           "color": "#394148",
@@ -99,7 +109,7 @@
       },
       {
         "name": "ink_secondary",
-        "label": "Ink \u2014 secondary",
+        "label": "Ink — secondary",
         "type": "color",
         "default": {
           "color": "#4F575D",
@@ -108,7 +118,7 @@
       },
       {
         "name": "ink_muted",
-        "label": "Ink \u2014 muted",
+        "label": "Ink — muted",
         "type": "color",
         "default": {
           "color": "#686E74",
@@ -118,7 +128,7 @@
       },
       {
         "name": "ink_faint",
-        "label": "Ink \u2014 faint",
+        "label": "Ink — faint",
         "type": "color",
         "default": {
           "color": "#878D92",
@@ -137,7 +147,7 @@
       },
       {
         "name": "carbon_deep",
-        "label": "Carbon \u2014 footer",
+        "label": "Carbon — footer",
         "type": "color",
         "default": {
           "color": "#131B22",
@@ -165,6 +175,16 @@
         "help_text": "Below the bar. Never used for anything else."
       },
       {
+        "name": "amber_tint",
+        "label": "Amber tint",
+        "type": "color",
+        "default": {
+          "color": "#FBF1E0",
+          "opacity": 100
+        },
+        "help_text": "The fill behind an open mark in the illustrations. Always paired with Amber as the stroke."
+      },
+      {
         "name": "focus",
         "label": "Focus ring",
         "type": "color",
@@ -176,7 +196,7 @@
       },
       {
         "name": "feature_from",
-        "label": "Hero gradient \u2014 from",
+        "label": "Hero gradient — from",
         "type": "color",
         "default": {
           "color": "#E9F2F1",
@@ -185,7 +205,7 @@
       },
       {
         "name": "feature_to",
-        "label": "Hero gradient \u2014 to",
+        "label": "Hero gradient — to",
         "type": "color",
         "default": {
           "color": "#FFFFFF",
@@ -194,7 +214,7 @@
       },
       {
         "name": "ink_on_carbon",
-        "label": "Ink \u2014 on carbon",
+        "label": "Ink — on carbon",
         "type": "color",
         "default": {
           "color": "#A7ACB0",

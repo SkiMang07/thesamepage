@@ -89,102 +89,37 @@
     "default": "3 months free"
   },
   {
-    "name": "fig_title",
-    "label": "Chart \u2014 role",
-    "type": "text",
-    "default": "Customer Success \u2014 Senior"
-  },
-  {
-    "name": "fig_meta",
-    "label": "Chart \u2014 meta",
-    "type": "text",
-    "default": "Q3 \u00b7 6 people"
-  },
-  {
-    "name": "people",
-    "label": "Chart \u2014 people",
+    "name": "proof_stats",
+    "label": "Trust stats (under the counter)",
     "type": "group",
     "occurrence": {
-      "min": 2,
-      "max": 10,
-      "default": 6
+      "min": 1,
+      "max": 3,
+      "default": 2
     },
     "children": [
       {
-        "name": "initials",
-        "label": "Initials",
+        "name": "value",
+        "label": "Figure",
         "type": "text",
-        "default": "AM"
+        "default": "70%"
       },
       {
-        "name": "offset",
-        "label": "Distance from the bar",
-        "type": "number",
-        "default": 20,
-        "suffix": "",
-        "help_text": "Pixels above the bar. Negative sits below it. Range roughly -60 to 60."
-      },
-      {
-        "name": "status",
-        "label": "Status",
-        "type": "choice",
-        "display": "select",
-        "choices": [
-          [
-            "meeting",
-            "Meeting the bar"
-          ],
-          [
-            "below",
-            "Below, with a plan"
-          ]
-        ],
-        "default": "meeting"
+        "name": "copy",
+        "label": "Body",
+        "type": "text",
+        "default": ""
       }
     ],
     "default": [
       {
-        "initials": "SP",
-        "offset": 54,
-        "status": "meeting"
+        "value": "70%",
+        "copy": "of engagement variance traces to the manager"
       },
       {
-        "initials": "AM",
-        "offset": 38,
-        "status": "meeting"
-      },
-      {
-        "initials": "MC",
-        "offset": 12,
-        "status": "meeting"
-      },
-      {
-        "initials": "JT",
-        "offset": 0,
-        "status": "meeting"
-      },
-      {
-        "initials": "RK",
-        "offset": 22,
-        "status": "meeting"
-      },
-      {
-        "initials": "DL",
-        "offset": -34,
-        "status": "below"
+        "value": "71%",
+        "copy": "engaged, with weekly conversations"
       }
     ]
-  },
-  {
-    "name": "key_meeting",
-    "label": "Legend \u2014 meeting",
-    "type": "text",
-    "default": "Meeting the bar"
-  },
-  {
-    "name": "key_below",
-    "label": "Legend \u2014 below",
-    "type": "text",
-    "default": "Below, with a plan"
   }
 ]

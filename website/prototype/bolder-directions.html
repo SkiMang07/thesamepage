@@ -1,0 +1,385 @@
+<title>Four Ways Out of the Wall of Text</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Archivo:wght@400;500;600;800&display=swap">
+<style>
+:root{
+  --paper:#F4F3EF; --box:#E2E1DB; --box-2:#D3D2CB; --line:#B9B8B1;
+  --ink:#262623; --ink-2:#5E5E58; --ink-3:#8C8C85;
+  --accent:#0A6B65; --accent-soft:#CFE3E0; --warn:#A24B22;
+  --sans:'Archivo',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#191A18; --box:#262724; --box-2:#31322E; --line:#44453F;
+  --ink:#EDEDE7; --ink-2:#AFAFA7; --ink-3:#7C7C74;
+  --accent:#6FC2BA; --accent-soft:#1E332F; --warn:#D4885F;
+}}
+:root[data-theme="dark"]{
+  --paper:#191A18; --box:#262724; --box-2:#31322E; --line:#44453F;
+  --ink:#EDEDE7; --ink-2:#AFAFA7; --ink-3:#7C7C74;
+  --accent:#6FC2BA; --accent-soft:#1E332F; --warn:#D4885F;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink-2);font-family:var(--sans);
+  font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,figure{margin:0} ul{padding:0;list-style:none}
+.wrap{max-width:1140px;margin:0 auto;padding:0 28px}
+
+.top{padding:54px 0 30px;border-bottom:2px solid var(--ink)}
+.tag{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--warn);margin-bottom:16px}
+h1{font-family:var(--sans);font-size:clamp(2.1rem,4.6vw,3.4rem);font-weight:800;line-height:1;
+  letter-spacing:-.035em;color:var(--ink);max-width:20ch;text-wrap:balance}
+.sub{margin-top:16px;max-width:62ch;font-size:1.04rem}
+.note{margin-top:20px;font-family:var(--mono);font-size:11.5px;line-height:1.7;color:var(--ink-3);
+  max-width:70ch;border-left:2px solid var(--line);padding-left:14px}
+
+.dir{padding:56px 0;border-bottom:1px solid var(--line)}
+.hd{display:grid;grid-template-columns:66px minmax(0,1fr);gap:22px;align-items:start;margin-bottom:26px}
+.num{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--accent);
+  padding-top:9px;border-top:2px solid var(--accent)}
+h2{font-family:var(--sans);font-size:clamp(1.5rem,2.8vw,2.1rem);font-weight:800;line-height:1.05;
+  letter-spacing:-.028em;color:var(--ink)}
+.hd p{margin-top:9px;max-width:64ch;font-size:1rem}
+.cost{margin-top:12px;font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--ink-3);
+  text-transform:uppercase}
+.cost b{color:var(--warn);font-weight:500}
+.stage{border:1px solid var(--line);background:var(--box);padding:0;overflow:hidden}
+.stage-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);padding:9px 14px;border-bottom:1px solid var(--line);display:flex;
+  justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ph{background:var(--box-2);display:block;border-radius:1px}
+
+/* ---- A: the bar ---- */
+.barwrap{padding:26px 20px 20px;position:relative}
+.plot{position:relative;height:210px;border-bottom:1px solid var(--line)}
+.barline{position:absolute;left:0;right:0;height:3px;background:var(--accent);cursor:ns-resize;
+  transition:top .05s linear}
+.barline::after{content:'drag';position:absolute;right:0;top:-20px;font-family:var(--mono);
+  font-size:10px;letter-spacing:.08em;color:var(--accent);text-transform:uppercase}
+.mk{position:absolute;bottom:0;width:26px;background:var(--ink-3);transition:background-color .18s}
+.mk.over{background:var(--accent)}
+.mk span{position:absolute;top:-19px;left:50%;transform:translateX(-50%);font-family:var(--mono);
+  font-size:9px;color:var(--ink-3)}
+.readout{margin-top:14px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--ink)}
+.readout b{color:var(--accent);font-weight:600}
+
+/* ---- B: the record builds ---- */
+.split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);min-height:330px}
+.scrollcol{border-right:1px solid var(--line);height:330px;overflow-y:auto;padding:20px;
+  scrollbar-width:thin}
+.beat{margin-bottom:26px}
+.beat .ph{height:9px;margin-bottom:7px}
+.beat .ph.s{width:58%} .beat .ph.m{width:82%}
+.beat h4{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 10px}
+.rail{padding:20px;background:var(--paper)}
+.rail-h{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:14px;display:flex;justify-content:space-between}
+.rail-h b{color:var(--accent);font-weight:600}
+.entry{display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);
+  opacity:0;transform:translateY(6px);transition:opacity .3s ease,transform .3s ease}
+.entry.in{opacity:1;transform:none}
+.entry i{width:8px;height:8px;background:var(--accent);flex:none;margin-top:6px;display:block}
+.entry .ph{height:8px;width:100%;margin-bottom:5px}
+.entry .ph.n{width:64%}
+
+/* ---- C: mess vs record ---- */
+.compare{position:relative;height:340px;overflow:hidden;cursor:col-resize;user-select:none}
+.pane{position:absolute;inset:0;padding:22px}
+.mess{background:var(--box)}
+.tidy{background:var(--paper);border-left:2px solid var(--accent);clip-path:inset(0 0 0 50%)}
+.scrap{position:absolute;background:var(--paper);border:1px solid var(--line);padding:10px;
+  box-shadow:2px 3px 0 rgba(0,0,0,.06)}
+.scrap .ph{height:7px;margin-bottom:5px}
+.scrap .lbl{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--ink-3);
+  text-transform:uppercase;margin-bottom:7px;display:block}
+.row{display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.row i{width:20px;height:20px;background:var(--accent-soft);flex:none;display:block}
+.row .ph{height:8px}
+.handle{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--accent);z-index:4}
+.handle::after{content:'⇤ ⇥';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:var(--mono);font-size:10px;background:var(--accent);color:var(--paper);
+  padding:5px 8px;white-space:nowrap}
+.ptag{position:absolute;top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;z-index:3}
+.ptag.l{left:16px;color:var(--ink-3)} .ptag.r{right:16px;color:var(--accent)}
+
+/* ---- D: typographic ---- */
+.typo{padding:34px 22px;background:var(--paper)}
+.mega{font-family:var(--sans);font-weight:800;font-size:clamp(2.4rem,8vw,6rem);line-height:.9;
+  letter-spacing:-.05em;color:var(--ink);text-wrap:balance}
+.mega em{font-style:normal;color:var(--accent)}
+.typo-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:30px}
+.c1{grid-column:1/6} .c2{grid-column:7/13;padding-top:52px} .c3{grid-column:3/11;margin-top:26px}
+.typo .ph{height:9px;margin-bottom:7px}
+.kick{font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--warn);margin-bottom:10px}
+.big-q{font-family:var(--sans);font-weight:500;font-size:clamp(1.2rem,2.6vw,1.9rem);line-height:1.15;
+  letter-spacing:-.02em;color:var(--ink);border-top:2px solid var(--ink);padding-top:16px}
+
+.foot{padding:48px 0 90px}
+.foot h3{font-family:var(--sans);font-size:1.3rem;font-weight:800;color:var(--ink);
+  letter-spacing:-.02em;margin-bottom:14px}
+.foot p{max-width:64ch;margin-bottom:1em}
+.mix{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);margin-top:22px}
+.mix div{background:var(--paper);padding:16px}
+.mix b{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:7px}
+.mix span{font-size:.92rem;line-height:1.5;display:block;color:var(--ink-2)}
+
+@media (max-width:860px){
+  .hd{grid-template-columns:1fr;gap:10px}
+  .num{border-top:0;padding-top:0}
+  .split{grid-template-columns:1fr}
+  .scrollcol{border-right:0;border-bottom:1px solid var(--line);height:260px}
+  .typo-grid{grid-template-columns:1fr}
+  .c1,.c2,.c3{grid-column:auto;padding-top:0;margin-top:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="tag">Low-fidelity · mechanics live, styling deliberately unfinished</p>
+  <h1>Four ways out of the wall of text.</h1>
+  <p class="sub">Same argument, same eight beats. The question is what the page <em>does</em> while
+    it makes the argument. Grey boxes are where copy goes. Drag, scroll and pull the things that
+    look draggable.</p>
+  <p class="note">Why this happened: the research said run the argument before showing the product.
+    I turned that into "text before everything," which is a different thing and a worse one.
+    None of these four abandon the argument. They stop setting it like a document.</p>
+</header>
+
+<!-- ============ A ============ -->
+<section class="dir">
+  <div class="hd">
+    <span class="num">01</span>
+    <div>
+      <h2>The bar is a real object, and it runs the whole page.</h2>
+      <p>Your brand is already a physical metaphor and the page currently ignores it. Make the bar a
+        line that persists from the header to the footer: it moves as you scroll, evidence marks
+        rise to meet it, and in one section the visitor grabs it and sets it themselves. The H1,
+        the name and the product mechanic become one visual idea.</p>
+      <p class="cost">Build cost <b>medium</b> · one SVG plus scroll math · nothing to maintain once set</p>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="stage-lbl"><span>Interactive — drag the teal line</span><span id="a-state">6 of 8 clearing</span></div>
+    <div class="barwrap">
+      <div class="plot" id="a-plot">
+        <div class="barline" id="a-bar" style="top:44%"></div>
+      </div>
+      <p class="readout">Set the bar where you think it belongs. <b id="a-count">6 of 8</b> clear it.
+        Move it and the answer changes, which is the entire argument for writing it down once.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="dir">
+  <div class="hd">
+    <span class="num">02</span>
+    <div>
+      <h2>The scroll builds the record in front of you.</h2>
+      <p>The page claims evidence accumulates on its own. So let the reader watch it happen. A rail
+        pins alongside the argument and fills as they scroll, one entry at a time. By the bottom
+        they have watched a year assemble without anyone sitting down to write a report. The proof
+        is the interaction, not a sentence about the interaction.</p>
+      <p class="cost">Build cost <b>medium</b> · intersection observer, no library · degrades to a static list</p>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="stage-lbl"><span>Interactive — scroll the left column</span><span>Rail fills as you go</span></div>
+    <div class="split">
+      <div class="scrollcol" id="b-scroll">
+        <div class="beat" data-e="2"><h4>Beat 02 — your week</h4>
+          <span class="ph" style="height:9px"></span><span class="ph m"></span><span class="ph"></span><span class="ph s"></span></div>
+        <div class="beat" data-e="2"><h4>Beat 03 — the argument</h4>
+          <span class="ph"></span><span class="ph m"></span><span class="ph s"></span></div>
+        <div class="beat" data-e="3"><h4>Beat 04 — three moves</h4>
+          <span class="ph"></span><span class="ph"></span><span class="ph m"></span><span class="ph s"></span></div>
+        <div class="beat" data-e="2"><h4>Beat 05 — the product</h4>
+          <span class="ph"></span><span class="ph m"></span><span class="ph s"></span></div>
+        <div class="beat" data-e="2"><h4>Beat 06 — who it's for</h4>
+          <span class="ph"></span><span class="ph m"></span><span class="ph"></span><span class="ph s"></span></div>
+      </div>
+      <div class="rail">
+        <div class="rail-h"><span>The record</span><b id="b-count">0 entries</b></div>
+        <div id="b-list"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ C ============ -->
+<section class="dir">
+  <div class="hd">
+    <span class="num">03</span>
+    <div>
+      <h2>Show the mess. Let them wipe it away.</h2>
+      <p>Beat two describes a spreadsheet, an abandoned Notion page and a Notes file. Right now that
+        is a paragraph. Draw it instead: scattered scraps at angles on the left, the same week as one
+        clean record on the right, and a handle the visitor drags between them. It is the before and
+        after of the whole product in one gesture, and it needs no screenshot of anything you have
+        to keep true.</p>
+      <p class="cost">Build cost <b>low</b> · one clip-path and a pointer listener · works on touch</p>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="stage-lbl"><span>Interactive — drag the divider</span><span>Left: today. Right: the same week, recorded.</span></div>
+    <div class="compare" id="c-cmp">
+      <div class="pane mess">
+        <span class="ptag l">What you have now</span>
+        <div class="scrap" style="left:5%;top:52px;width:38%;transform:rotate(-2.5deg)">
+          <span class="lbl">spreadsheet · january</span>
+          <span class="ph"></span><span class="ph" style="width:70%"></span></div>
+        <div class="scrap" style="left:38%;top:150px;width:42%;transform:rotate(1.8deg)">
+          <span class="lbl">notion · abandoned april</span>
+          <span class="ph"></span><span class="ph" style="width:55%"></span></div>
+        <div class="scrap" style="left:12%;top:230px;width:34%;transform:rotate(3.2deg)">
+          <span class="lbl">notes app</span>
+          <span class="ph"></span><span class="ph" style="width:80%"></span></div>
+        <div class="scrap" style="left:56%;top:44px;width:36%;transform:rotate(-1.4deg)">
+          <span class="lbl">slack · june?</span>
+          <span class="ph"></span><span class="ph" style="width:62%"></span></div>
+      </div>
+      <div class="pane tidy" id="c-tidy">
+        <span class="ptag r">The same week, on file</span>
+        <div style="margin-top:34px">
+          <div class="row"><i></i><div style="flex:1"><span class="ph" style="width:72%"></span><span class="ph" style="width:44%;height:6px"></span></div></div>
+          <div class="row"><i></i><div style="flex:1"><span class="ph" style="width:60%"></span><span class="ph" style="width:38%;height:6px"></span></div></div>
+          <div class="row"><i></i><div style="flex:1"><span class="ph" style="width:80%"></span><span class="ph" style="width:50%;height:6px"></span></div></div>
+          <div class="row"><i></i><div style="flex:1"><span class="ph" style="width:55%"></span><span class="ph" style="width:33%;height:6px"></span></div></div>
+        </div>
+      </div>
+      <div class="handle" id="c-handle"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ D ============ -->
+<section class="dir">
+  <div class="hd">
+    <span class="num">04</span>
+    <div>
+      <h2>No gimmick. Make the typography the architecture.</h2>
+      <p>The honest control in this set. Zero interaction, zero scroll tricks, nothing to maintain.
+        The page stops looking like a document because the type stops behaving like one: display
+        sizes that break the grid, an asymmetric column structure, marginalia, and pull quotes set
+        at a size that makes them events rather than decoration. This is the 37signals route, and it
+        is the only one of the four that costs nothing to keep alive.</p>
+      <p class="cost">Build cost <b>low</b> · CSS only · fastest page, best accessibility, no JS</p>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="stage-lbl"><span>Static — layout and scale only</span><span>Grey bars are body copy</span></div>
+    <div class="typo">
+      <p class="kick">Beat 03 — the argument</p>
+      <p class="mega">Two things have to be true, and <em>neither is a feature.</em></p>
+      <div class="typo-grid">
+        <div class="c1">
+          <span class="ph"></span><span class="ph" style="width:88%"></span><span class="ph"></span>
+          <span class="ph" style="width:64%"></span>
+        </div>
+        <div class="c2">
+          <span class="ph"></span><span class="ph" style="width:76%"></span><span class="ph" style="width:52%"></span>
+        </div>
+        <div class="c3">
+          <p class="big-q">If keeping the record costs you a Sunday, you won't keep it. I know
+            because I didn't, for about three years.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="foot">
+  <h3>What I'd actually do</h3>
+  <p>These are not four pages. Three of them stack. <b>04 is the floor</b> — do the typographic
+    work regardless, because it fixes "bland" on its own and costs nothing to keep. Then add
+    <b>03</b> at beat two, where you already have a paragraph describing exactly that mess, and
+    <b>01</b> as the spine that ties the name, the headline and the product mechanic together.</p>
+  <p>02 is the one I'd hold. It is the most impressive and the most fragile, it fights the reader
+    for attention while they are trying to read the best writing on the page, and it is the one that
+    will still be half-broken on someone's phone in six months.</p>
+  <div class="mix">
+    <div><b>Floor</b><span>04 typographic architecture. Do this first, on its own, and see whether "bland" survives it.</span></div>
+    <div><b>Then</b><span>03 the wipe, at beat two. Cheapest real interaction on the page and it draws the thing the copy already describes.</span></div>
+    <div><b>Then</b><span>01 the bar as spine. Highest brand payoff, most design work, worth doing properly or not at all.</span></div>
+    <div><b>Hold</b><span>02 scroll-built record. Save it for the product tour page, where earning attention is the job.</span></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  // ---- A: draggable bar ----
+  var plot=document.getElementById('a-plot'), bar=document.getElementById('a-bar');
+  var heights=[38,55,72,46,88,61,30,79], marks=[];
+  heights.forEach(function(h,i){
+    var m=document.createElement('div'); m.className='mk';
+    m.style.height=h+'%'; m.style.left=(4+i*12)+'%';
+    var s=document.createElement('span'); s.textContent=String.fromCharCode(65+i); m.appendChild(s);
+    plot.appendChild(m); marks.push({el:m,h:h});
+  });
+  function scoreA(pct){
+    var over=0;
+    marks.forEach(function(m){
+      var clears=m.h>=(100-pct);
+      m.el.classList.toggle('over',clears); if(clears) over++;
+    });
+    document.getElementById('a-count').textContent=over+' of 8';
+    document.getElementById('a-state').textContent=over+' of 8 clearing';
+  }
+  function setA(clientY){
+    var r=plot.getBoundingClientRect();
+    var pct=Math.min(92,Math.max(8,((clientY-r.top)/r.height)*100));
+    bar.style.top=pct+'%'; scoreA(100-pct);
+  }
+  var dragA=false;
+  bar.addEventListener('pointerdown',function(e){dragA=true;bar.setPointerCapture(e.pointerId);});
+  bar.addEventListener('pointermove',function(e){if(dragA)setA(e.clientY);});
+  bar.addEventListener('pointerup',function(){dragA=false;});
+  plot.addEventListener('pointerdown',function(e){if(e.target===plot)setA(e.clientY);});
+  scoreA(56);
+
+  // ---- B: scroll builds the rail ----
+  var sc=document.getElementById('b-scroll'), list=document.getElementById('b-list'),
+      cnt=document.getElementById('b-count'), shown=0, total=0;
+  var beats=sc.querySelectorAll('.beat');
+  beats.forEach(function(b){ total+=parseInt(b.dataset.e,10); });
+  function addEntry(){
+    if(shown>=total) return;
+    var e=document.createElement('div'); e.className='entry';
+    e.innerHTML='<i></i><div style="flex:1"><span class="ph" style="width:'+(58+Math.round(shown*4)%30)+'%"></span><span class="ph n"></span></div>';
+    list.appendChild(e); shown++;
+    cnt.textContent=shown+(shown===1?' entry':' entries');
+    requestAnimationFrame(function(){ e.classList.add('in'); });
+  }
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(en){
+      if(en.isIntersecting && !en.target.dataset.done){
+        en.target.dataset.done='1';
+        var n=parseInt(en.target.dataset.e,10);
+        for(var i=0;i<n;i++) setTimeout(addEntry,i*180);
+      }
+    });
+  },{root:sc,threshold:.6});
+  beats.forEach(function(b){io.observe(b);});
+
+  // ---- C: wipe ----
+  var cmp=document.getElementById('c-cmp'), tidy=document.getElementById('c-tidy'),
+      handle=document.getElementById('c-handle'), dragC=false;
+  function setC(x){
+    var r=cmp.getBoundingClientRect();
+    var pct=Math.min(94,Math.max(6,((x-r.left)/r.width)*100));
+    tidy.style.clipPath='inset(0 0 0 '+pct+'%)'; handle.style.left=pct+'%';
+  }
+  cmp.addEventListener('pointerdown',function(e){dragC=true;cmp.setPointerCapture(e.pointerId);setC(e.clientX);});
+  cmp.addEventListener('pointermove',function(e){if(dragC)setC(e.clientX);});
+  cmp.addEventListener('pointerup',function(){dragC=false;});
+  cmp.addEventListener('pointercancel',function(){dragC=false;});
+})();
+</script>

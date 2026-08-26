@@ -1,0 +1,27 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "What you said on Tuesday, waiting on Monday"
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "The record builds itself in the 1:1. It briefs you before the next one."
+  },
+  {
+    "name": "sentence",
+    "label": "The commitment in the drawing",
+    "type": "text",
+    "default": "You own the vendor review, draft by the 12th.",
+    "help_text": "The one real sentence in the picture. It appears in Tuesday's 1:1 and comes back in Monday's brief, so it changes in both places at once. Keep it under about 50 characters or it will overrun the card."
+  },
+  {
+    "name": "caption",
+    "label": "Control caption",
+    "type": "text",
+    "default": "Choose a day"
+  }
+]
