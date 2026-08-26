@@ -1257,7 +1257,7 @@ function SettingsDrawer({
               {capacitySaved && <span className="text-sm text-teal-700">Saved</span>}
             </div>
           </form>
-          <p className="mt-1.5 text-xs text-ink-muted">Leave blank to use your Settings &gt; Capacity defaults.</p>
+          <p className="mt-1.5 text-xs text-ink-muted">Leave blank to use your Settings &gt; Operating defaults.</p>
 
           <div className="mt-5">
             <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">

@@ -1,21 +1,11 @@
 "use client";
 
-// Settings — the configuration backbone (Session 6).
-// Four sections as of Session 12 (originally three from the Miro mockup
-// review, 2026-08-01): Profile & Company, Roles & Levels, Team, Expectations.
-// "Team" split out of Roles & Levels in Session 12 — the "who's in which
-// role" list + org_unit assignment moved to their own section; Roles &
-// Levels is now pure role_level CRUD (add/edit/delete role definitions).
-// Session 12 also added Edit (update-in-place) for role_levels, matching
-// the card-swap edit-in-place pattern from Goals (Session 10).
-// Deferred: evaluation weighting, scale definitions, capacity/recruitment,
-// project settings, permissions (all department-tier — see SESSION_HISTORY).
-//
-// Session 56 white-space audit — the entrance gap (subtitle -> the nav+
-// content two-column layout) now uses the shared SECTION_GAP token
-// (components/ZoneMap.tsx) instead of a bare mt-8. Spacing inside the
-// individual sections (Profile/Roles/People/Capacity) is untouched — out
-// of scope for this pass.
+// Settings is the product's configuration workspace. Its five foundations
+// make both readiness and blast radius visible before a manager edits:
+// Workspace identity, People & structure, Roles & expectations, Operating
+// defaults, and Your account. Frequently revisited management work still
+// lives in Team, Org, Capacity, and each person's Relationship Desk; this
+// page owns the shared setup those workspaces depend on.
 
 import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -81,7 +71,15 @@ import {
   draftIncludedCount,
 } from "@/components/DraftExpectationRows";
 import RoleImportPanel, { RoleImportResult } from "@/components/RoleImportPanel";
-import { INPUT, LABEL, BTN_PRIMARY, BTN_SECONDARY } from "@/lib/tokens";
+import {
+  CARD,
+  FEATURE_SURFACE,
+  INPUT,
+  LABEL,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  EYEBROW,
+} from "@/lib/tokens";
 import {
   GroupedRoleSelect,
   OrgUnitSelect,
@@ -102,12 +100,12 @@ import {
 // instead of bouncing between two settings tabs. See §6, Plan S4+S5.
 type SectionId = "profile" | "people" | "roles" | "capacity" | "account";
 
-const SECTIONS: { id: SectionId; label: string; blurb: string }[] = [
-  { id: "profile", label: "Profile & Company", blurb: "You and your company" },
-  { id: "people", label: "People", blurb: "Add your team, wire up roles and teams" },
-  { id: "roles", label: "Roles & expectations", blurb: "The jobs on your team, and what good looks like" },
-  { id: "capacity", label: "Capacity", blurb: "Baseline hours & utilization" },
-  { id: "account", label: "Account", blurb: "Session and access" },
+const FOUNDATIONS: { id: SectionId; label: string }[] = [
+  { id: "profile", label: "Workspace identity" },
+  { id: "people", label: "People & structure" },
+  { id: "roles", label: "Roles & expectations" },
+  { id: "capacity", label: "Operating defaults" },
+  { id: "account", label: "Your account" },
 ];
 
 const KIND_TABS: { id: ExpectationKind; label: string }[] = [
@@ -141,7 +139,9 @@ function SettingsFlow() {
   const [section, setSection] = useState<SectionId>(
     sectionParam === "people" || sectionParam === "roles" || sectionParam === "capacity" || sectionParam === "account"
       ? sectionParam
-      : "profile"
+      : sectionParam === "profile"
+        ? "profile"
+        : "capacity"
   );
   const [error, setError] = useState<string | null>(null);
   // Set by /app/org's "N people" click-through (Session 42, Plan S4+S5) —
@@ -159,6 +159,10 @@ function SettingsFlow() {
   const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  const [capacitySummary, setCapacitySummary] = useState<CapacitySettings | null>(null);
+  const [workUnitSummary, setWorkUnitSummary] = useState<WorkUnitConfig[]>([]);
 
   // Expectations' selected role + kind live here, not inside
   // ExpectationsSection, so they survive switching to another section and
@@ -182,108 +186,390 @@ function SettingsFlow() {
 
   function goDraftExpectations(roleLevelId: string) {
     setDraftForRoleId(roleLevelId);
-    setSection("roles");
+    selectSection("roles");
   }
 
+  const refreshSetupStatus = useCallback(() => {
+    getSetupStatus()
+      .then(setSetupStatus)
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to refresh setup status"));
+  }, []);
+
   useEffect(() => {
-    Promise.all([getRoleLevels(), getRoleFamilies(), getDirectReports(), getOrgUnits()])
-      .then(([rls, rfs, drs, ous]) => {
+    Promise.all([
+      getRoleLevels(),
+      getRoleFamilies(),
+      getDirectReports(),
+      getOrgUnits(),
+      getProfile(),
+      getSetupStatus(),
+      getCapacitySettings(),
+      getWorkUnitConfigs(),
+    ])
+      .then(([rls, rfs, drs, ous, prof, status, capacity, workUnits]) => {
         setRoleLevels(rls);
         setRoleFamilies(rfs);
         setReports(drs);
         setOrgUnits(ous);
+        setProfile(prof);
+        setSetupStatus(status);
+        setCapacitySummary(capacity);
+        setWorkUnitSummary(workUnits);
       })
       .catch((e) => setError(e.message));
   }, []);
 
+  function selectSection(next: SectionId) {
+    setSection(next);
+    setError(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("section", next);
+    if (next !== "people") params.delete("unit");
+    router.replace(`/app/settings?${params.toString()}`, { scroll: false });
+  }
+
+  const identityReady = !!profile?.full_name.trim() && !!profile?.company_name.trim();
+  const peopleReady = !!setupStatus &&
+    setupStatus.people_count > 0 &&
+    setupStatus.teams_count > 0 &&
+    setupStatus.people_without_role_count === 0 &&
+    setupStatus.people_without_team_count === 0;
+  const rolesReady = !!setupStatus &&
+    setupStatus.roles_count > 0 &&
+    setupStatus.roles_with_expectations_count === setupStatus.roles_count;
+  const defaultsReady = !!profile && !!capacitySummary;
+  const accountReady = !!profile?.email;
+  const readinessBySection: Record<SectionId, boolean> = {
+    profile: identityReady,
+    people: peopleReady,
+    roles: rolesReady,
+    capacity: defaultsReady,
+    account: accountReady,
+  };
+  const readyCount = Object.values(readinessBySection).filter(Boolean).length;
+
   return (
-    <PageShell maxWidth="4xl">
-      <h1 className="text-2xl font-semibold">Settings</h1>
-      <p className="mt-1 text-sm text-ink-secondary">
-        Set up roles and expectations once — everything else builds on them.
-      </p>
+    <PageShell maxWidth="7xl">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Settings</h1>
+          <p className="mt-1 text-sm text-ink-secondary">Keep the foundations of your management system clear.</p>
+        </div>
+        {profile?.company_name && <p className="text-xs text-ink-muted">{profile.company_name}</p>}
+      </div>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
-      <div className={`${SECTION_GAP} flex gap-10`}>
-        <nav className="w-48 shrink-0 space-y-1">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSection(s.id)}
-              className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                section === s.id ? "bg-sunken font-medium text-ink" : "text-ink-secondary hover:bg-canvas"
-              }`}
-            >
-              {s.label}
-              <span className="block text-xs font-normal text-ink-muted">{s.blurb}</span>
-            </button>
-          ))}
-        </nav>
+      <FoundationReadiness readyCount={readyCount} total={FOUNDATIONS.length} loading={!profile || !setupStatus || !capacitySummary} />
 
-        <div className="min-w-0 flex-1">
-          {section === "profile" && <ProfileSection onError={setError} />}
-          {section === "roles" && (
-            <div className="space-y-12">
-              <RolesSection
+      <div className={`${SECTION_GAP} grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]`}>
+        <FoundationMap
+          selected={section}
+          onSelect={selectSection}
+          readiness={readinessBySection}
+          profile={profile}
+          setupStatus={setupStatus}
+          roleFamilies={roleFamilies}
+          roleLevels={roleLevels}
+          capacity={capacitySummary}
+          workUnits={workUnitSummary}
+        />
+
+        <section className={`${CARD} min-w-0 overflow-hidden`}>
+          <FoundationEditorHeader section={section} ready={readinessBySection[section]} profile={profile} setupStatus={setupStatus} />
+          <div className="p-5 sm:p-6">
+            {section === "profile" && profile && (
+              <ProfileSection profile={profile} onSaved={setProfile} onError={setError} />
+            )}
+            {section === "roles" && (
+              <div className="space-y-12">
+                <RolesSection
+                  roleLevels={roleLevels}
+                  setRoleLevels={setRoleLevels}
+                  roleFamilies={roleFamilies}
+                  setRoleFamilies={setRoleFamilies}
+                  setReports={setReports}
+                  onChanged={refreshSetupStatus}
+                  onError={setError}
+                />
+                <div id="expectations-block" className="border-t border-hairline pt-10">
+                  <ExpectationsSection
+                    roleLevels={roleLevels}
+                    roleFamilies={roleFamilies}
+                    roleLevelId={expRoleLevelId}
+                    setRoleLevelId={setExpRoleLevelId}
+                    kind={expKind}
+                    setKind={setExpKind}
+                    initialDraftRoleId={draftForRoleId}
+                    onConsumeInitialDraft={() => setDraftForRoleId(null)}
+                    onChanged={refreshSetupStatus}
+                    onError={setError}
+                  />
+                </div>
+              </div>
+            )}
+            {section === "people" && (
+              <PeopleSection
+                reports={reports}
+                setReports={setReports}
                 roleLevels={roleLevels}
                 setRoleLevels={setRoleLevels}
                 roleFamilies={roleFamilies}
                 setRoleFamilies={setRoleFamilies}
-                setReports={setReports}
+                orgUnits={orgUnits}
+                setOrgUnits={setOrgUnits}
+                filterUnitId={peopleFilterUnitId}
+                onClearFilter={() => setPeopleFilterUnitId(null)}
+                onNavigateToRoles={() => selectSection("roles")}
+                onNavigateToExpectations={() => selectSection("roles")}
+                onDraftExpectations={goDraftExpectations}
+                initialSetupStatus={setupStatus}
+                onSetupStatusChange={setSetupStatus}
                 onError={setError}
               />
-              <div id="expectations-block" className="border-t border-hairline pt-10">
-                <ExpectationsSection
-                  roleLevels={roleLevels}
-                  roleFamilies={roleFamilies}
-                  roleLevelId={expRoleLevelId}
-                  setRoleLevelId={setExpRoleLevelId}
-                  kind={expKind}
-                  setKind={setExpKind}
-                  initialDraftRoleId={draftForRoleId}
-                  onConsumeInitialDraft={() => setDraftForRoleId(null)}
-                  onError={setError}
-                />
-              </div>
-            </div>
-          )}
-          {section === "people" && (
-            <PeopleSection
-              reports={reports}
-              setReports={setReports}
-              roleLevels={roleLevels}
-              setRoleLevels={setRoleLevels}
-              roleFamilies={roleFamilies}
-              setRoleFamilies={setRoleFamilies}
-              orgUnits={orgUnits}
-              setOrgUnits={setOrgUnits}
-              filterUnitId={peopleFilterUnitId}
-              onClearFilter={() => setPeopleFilterUnitId(null)}
-              onNavigateToRoles={() => setSection("roles")}
-              onNavigateToExpectations={() => setSection("roles")}
-              onDraftExpectations={goDraftExpectations}
-              onError={setError}
-            />
-          )}
-          {section === "capacity" && (
-            <CapacitySection roleLevels={roleLevels} roleFamilies={roleFamilies} onError={setError} />
-          )}
-          {section === "account" && (
-            <AccountSection
-              onSignedOut={() => {
-                router.replace("/app/login");
-                router.refresh();
-              }}
-            />
-          )}
-        </div>
+            )}
+            {section === "capacity" && profile && (
+              <OperatingDefaultsSection
+                profile={profile}
+                onProfileSaved={setProfile}
+                roleLevels={roleLevels}
+                roleFamilies={roleFamilies}
+                onCapacityChange={setCapacitySummary}
+                onWorkUnitsChange={setWorkUnitSummary}
+                onError={setError}
+              />
+            )}
+            {section === "account" && (
+              <AccountSection
+                profile={profile}
+                onSignedOut={() => {
+                  router.replace("/app/login");
+                  router.refresh();
+                }}
+              />
+            )}
+          </div>
+        </section>
       </div>
     </PageShell>
   );
 }
 
-function AccountSection({ onSignedOut }: { onSignedOut: () => void }) {
+function FoundationIcon({ id }: { id: SectionId }) {
+  const common = "h-4 w-4";
+  if (id === "profile") {
+    return (
+      <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M4 20V8l8-4 8 4v12" /><path d="M8 20v-6h8v6M8 9h.01M12 9h.01M16 9h.01" />
+      </svg>
+    );
+  }
+  if (id === "people") {
+    return (
+      <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0M14 15.5a4.5 4.5 0 0 1 6.5 4" />
+      </svg>
+    );
+  }
+  if (id === "roles") {
+    return (
+      <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M5 19h14M7 19v-5h4v5M13 19v-9h4v9M9 14V6h4v4" />
+      </svg>
+    );
+  }
+  if (id === "capacity") {
+    return (
+      <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M10 14v6" />
+      </svg>
+    );
+  }
+  return (
+    <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <circle cx="12" cy="8" r="3" /><path d="M5 20a7 7 0 0 1 14 0" />
+    </svg>
+  );
+}
+
+function FoundationReadiness({ readyCount, total, loading }: { readyCount: number; total: number; loading: boolean }) {
+  const complete = !loading && readyCount === total;
+  return (
+    <section className={`${FEATURE_SURFACE} ${SECTION_GAP} flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between`}>
+      <div>
+        <p className={EYEBROW}>Workspace foundation</p>
+        <h2 className="mt-1 text-lg font-semibold text-ink">
+          {loading ? "Checking your management system…" : complete ? "Your management system is ready" : `${total - readyCount} foundation${total - readyCount === 1 ? "" : "s"} need attention`}
+        </h2>
+        <p className="mt-1 text-xs text-ink-secondary">
+          {complete
+            ? "People, roles, expectations, and working defaults are connected."
+            : "Finish the amber areas so every downstream workspace has a trustworthy baseline."}
+        </p>
+      </div>
+      <div className="flex min-w-52 items-center gap-3" aria-label={loading ? "Loading foundation readiness" : `${readyCount} of ${total} foundations ready`}>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
+          <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${loading ? 0 : (readyCount / total) * 100}%` }} />
+        </div>
+        <span className={`whitespace-nowrap text-xs font-medium ${complete ? "text-brand-hover" : "text-amber-700"}`}>
+          {loading ? "Checking…" : `${readyCount} of ${total} ready`}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function foundationBlurb(
+  id: SectionId,
+  profile: Profile | null,
+  status: SetupStatus | null,
+  roleFamilies: RoleFamily[],
+  roleLevels: RoleLevel[],
+  capacity: CapacitySettings | null,
+  workUnits: WorkUnitConfig[]
+) {
+  if (id === "profile") return profile ? `${profile.company_name || "Company not named"} · ${profile.full_name || "Name missing"}` : "Loading identity…";
+  if (id === "people") {
+    if (!status) return "Loading people and structure…";
+    return `${status.people_count} ${status.people_count === 1 ? "person" : "people"} · ${status.team_units_count} team${status.team_units_count === 1 ? "" : "s"} · ${status.department_units_count} department${status.department_units_count === 1 ? "" : "s"}`;
+  }
+  if (id === "roles") {
+    if (!status) return "Loading role coverage…";
+    return `${roleFamilies.length} ladder${roleFamilies.length === 1 ? "" : "s"} · ${roleLevels.length} level${roleLevels.length === 1 ? "" : "s"} · ${status.roles_with_expectations_count}/${status.roles_count} covered`;
+  }
+  if (id === "capacity") {
+    if (!profile || !capacity) return "Loading working defaults…";
+    return `1:1 every ${profile.one_on_one_cadence_days} days · ${capacity.default_hours_per_week}h · ${capacity.default_target_utilization_pct}% utilization · ${workUnits.length} work unit${workUnits.length === 1 ? "" : "s"}`;
+  }
+  return profile?.email || "Loading account…";
+}
+
+function FoundationMap({
+  selected,
+  onSelect,
+  readiness,
+  profile,
+  setupStatus,
+  roleFamilies,
+  roleLevels,
+  capacity,
+  workUnits,
+}: {
+  selected: SectionId;
+  onSelect: (id: SectionId) => void;
+  readiness: Record<SectionId, boolean>;
+  profile: Profile | null;
+  setupStatus: SetupStatus | null;
+  roleFamilies: RoleFamily[];
+  roleLevels: RoleLevel[];
+  capacity: CapacitySettings | null;
+  workUnits: WorkUnitConfig[];
+}) {
+  return (
+    <nav className={`${CARD} overflow-hidden`} aria-label="Settings foundations">
+      <div className="border-b border-divider px-4 py-3.5">
+        <p className={EYEBROW}>Choose an area</p>
+        <h2 className="mt-1 text-sm font-semibold text-ink">What do you want to change?</h2>
+      </div>
+      {FOUNDATIONS.map((item) => {
+        const active = selected === item.id;
+        const ready = readiness[item.id];
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelect(item.id)}
+            aria-current={active ? "page" : undefined}
+            className={`grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-divider px-4 py-3 text-left first:border-t-0 ${active ? "bg-brand-tint" : "hover:bg-sunken"}`}
+          >
+            <span className={`grid h-8 w-8 place-items-center rounded-lg ${active ? "bg-teal-200 text-teal-800" : "bg-sunken text-ink-muted"}`}>
+              <FoundationIcon id={item.id} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-ink">{item.label}</span>
+              <span className="mt-0.5 block truncate text-xs text-ink-muted">
+                {foundationBlurb(item.id, profile, setupStatus, roleFamilies, roleLevels, capacity, workUnits)}
+              </span>
+            </span>
+            <span className={`text-xs font-semibold ${ready ? "text-brand-hover" : "text-amber-700"}`} title={ready ? "Ready" : "Needs attention"}>
+              {ready ? "✓" : "!"}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+const EDITOR_COPY: Record<SectionId, { eyebrow: string; title: string; description: string; scope: string }> = {
+  profile: {
+    eyebrow: "Workspace identity",
+    title: "Name the workspace and yourself",
+    description: "These names anchor the organization and identify you wherever the product refers to the manager.",
+    scope: "The workspace name appears at the root of Org. Your name appears anywhere you are identified as a manager.",
+  },
+  people: {
+    eyebrow: "People & structure",
+    title: "Connect people to the organization",
+    description: "Add people and connect each one to the role and team that supply their management context.",
+    scope: "Setup and assignments live here. Ongoing relationship work stays in Team and each Relationship Desk; hierarchy maintenance stays in Org.",
+  },
+  roles: {
+    eyebrow: "Roles & expectations",
+    title: "Define what good looks like",
+    description: "Build role ladders, then give every level a clear set of metrics, skills, and values.",
+    scope: "Expectations belong to a role level. A change affects every person assigned to that level, including future assignments.",
+  },
+  capacity: {
+    eyebrow: "Operating defaults",
+    title: "Set the starting assumptions",
+    description: "Give conversations and capacity an honest baseline before person-specific context takes over.",
+    scope: "These defaults apply to all direct reports. An explicit setting on a person's Relationship Desk still wins.",
+  },
+  account: {
+    eyebrow: "Your account",
+    title: "Account and session",
+    description: "Review the identity used to sign in and manage this browser session.",
+    scope: "Signing out ends only this browser session. Your team and workspace data stay exactly as they are.",
+  },
+};
+
+function FoundationEditorHeader({
+  section,
+  ready,
+  profile,
+  setupStatus,
+}: {
+  section: SectionId;
+  ready: boolean;
+  profile: Profile | null;
+  setupStatus: SetupStatus | null;
+}) {
+  const copy = EDITOR_COPY[section];
+  let statusLabel = ready ? "Configured" : "Needs attention";
+  if (section === "roles" && setupStatus) statusLabel = `${setupStatus.roles_with_expectations_count} of ${setupStatus.roles_count} covered`;
+  if (section === "people" && setupStatus) statusLabel = `${setupStatus.people_count} active`;
+  if (section === "account" && profile) statusLabel = "Active";
+  return (
+    <div className="border-b border-divider px-5 py-4 sm:px-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className={EYEBROW}>{copy.eyebrow}</p>
+          <h2 className="mt-1 text-lg font-semibold text-ink">{copy.title}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-ink-secondary">{copy.description}</p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${ready ? "bg-teal-50 text-teal-700" : "bg-amber-50 text-amber-700"}`}>
+          {ready ? "✓" : "!"} {statusLabel}
+        </span>
+      </div>
+      <div className={`mt-4 rounded-lg px-3 py-2.5 text-xs leading-relaxed ${ready ? "bg-brand-tint text-ink-body" : "bg-amber-50 text-amber-800"}`}>
+        <span className="font-semibold">Scope:</span> {copy.scope}
+      </div>
+    </div>
+  );
+}
+
+function AccountSection({ profile, onSignedOut }: { profile: Profile | null; onSignedOut: () => void }) {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
 
@@ -302,8 +588,11 @@ function AccountSection({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold">Account</h2>
-      <p className="mt-1 text-sm text-ink-secondary">
+      <div className="max-w-md">
+        <label className={labelCls}>Sign-in email</label>
+        <input value={profile?.email ?? "Loading…"} disabled className={`${inputCls} bg-canvas text-ink-muted`} />
+      </div>
+      <p className="mt-4 text-sm text-ink-secondary">
         End your session on this browser. Your team and workspace data will stay exactly as they are.
       </p>
       <button
@@ -323,24 +612,24 @@ function AccountSection({ onSignedOut }: { onSignedOut: () => void }) {
 // Section 1 — Profile & Company
 // ---------------------------------------------------------------------------
 
-function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [fullName, setFullName] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [cadenceDays, setCadenceDays] = useState(21);
+function ProfileSection({
+  profile,
+  onSaved,
+  onError,
+}: {
+  profile: Profile;
+  onSaved: (profile: Profile) => void;
+  onError: (m: string | null) => void;
+}) {
+  const [fullName, setFullName] = useState(profile.full_name);
+  const [companyName, setCompanyName] = useState(profile.company_name);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    getProfile()
-      .then((p) => {
-        setProfile(p);
-        setFullName(p.full_name);
-        setCompanyName(p.company_name);
-        setCadenceDays(p.one_on_one_cadence_days);
-      })
-      .catch((e) => onError(e.message));
-  }, [onError]);
+    setFullName(profile.full_name);
+    setCompanyName(profile.company_name);
+  }, [profile]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -350,10 +639,9 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
       const p = await updateProfile({
         full_name: fullName,
         company_name: companyName,
-        one_on_one_cadence_days: cadenceDays,
+        one_on_one_cadence_days: profile.one_on_one_cadence_days,
       });
-      setProfile(p);
-      setCadenceDays(p.one_on_one_cadence_days);
+      onSaved(p);
       setSaved(true);
       onError(null);
     } catch (e) {
@@ -363,8 +651,6 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
     }
   }
 
-  if (!profile) return <p className="text-ink-secondary">Loading...</p>;
-
   return (
     <form onSubmit={save} className="max-w-md space-y-4">
       <div>
@@ -372,28 +658,8 @@ function ProfileSection({ onError }: { onError: (m: string | null) => void }) {
         <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} placeholder="How you sign off" />
       </div>
       <div>
-        <label className={labelCls}>Email</label>
-        <input value={profile.email} disabled className={`${inputCls} bg-canvas text-ink-muted`} />
-      </div>
-      <div>
         <label className={labelCls}>Company</label>
         <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputCls} placeholder="Company name" />
-      </div>
-      <div>
-        <label className={labelCls}>Default 1:1 cadence (days)</label>
-        <input
-          type="number"
-          min={1}
-          max={365}
-          step={1}
-          value={cadenceDays}
-          onChange={(e) => setCadenceDays(parseInt(e.target.value || "21", 10))}
-          className={`${inputCls} max-w-[9rem]`}
-        />
-        <p className="mt-1 text-xs text-ink-muted">
-          How often you expect to meet 1:1 with a direct report, by default. Weekly for a new hire and monthly for a
-          senior IC is common — override per person on their report page.
-        </p>
       </div>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={saving} className={primaryBtnCls}>
@@ -675,6 +941,7 @@ function RolesSection({
   roleFamilies,
   setRoleFamilies,
   setReports,
+  onChanged,
   onError,
 }: {
   roleLevels: RoleLevel[];
@@ -682,6 +949,7 @@ function RolesSection({
   roleFamilies: RoleFamily[];
   setRoleFamilies: React.Dispatch<React.SetStateAction<RoleFamily[]>>;
   setReports: React.Dispatch<React.SetStateAction<DirectReport[]>>;
+  onChanged: () => void;
   onError: (m: string | null) => void;
 }) {
   const [editingLevelId, setEditingLevelId] = useState<string | null>(null);
@@ -718,6 +986,7 @@ function RolesSection({
       });
       setRoleLevels((r) => [...r, created]);
       setAddingLevel(null);
+      onChanged();
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to add role");
@@ -736,6 +1005,7 @@ function RolesSection({
       });
       setRoleLevels((r) => [...r, created]);
       setAddingLadder(false);
+      onChanged();
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to add ladder");
@@ -760,6 +1030,7 @@ function RolesSection({
       r.some((x) => x.id === withEmbed.id) ? r.map((x) => (x.id === withEmbed.id ? withEmbed : x)) : [...r, withEmbed]
     );
     setImportPanel(null);
+    onChanged();
     onError(null);
   }
 
@@ -781,6 +1052,7 @@ function RolesSection({
       setRoleLevels((r) => r.map((x) => (x.id === role.id ? updated : x)));
       onError(null);
       setEditingLevelId(null);
+      onChanged();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to save role");
     }
@@ -796,6 +1068,7 @@ function RolesSection({
       // at a role_level that no longer exists until the next full reload.
       setReports((rs) => rs.map((r) => (r.role_level_id === id ? { ...r, role_level_id: null } : r)));
       setEditingLevelId((current) => (current === id ? null : current));
+      onChanged();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to delete role");
     }
@@ -814,6 +1087,7 @@ function RolesSection({
       });
       setRoleLevels((r) => r.map((x) => (x.id === role.id ? updated : x)));
       setMovingLevelId(null);
+      onChanged();
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to move role");
@@ -831,6 +1105,7 @@ function RolesSection({
         r.map((x) => (x.role_family_id === id ? { ...x, role_families: { id, name: updated.name } } : x))
       );
       setRenamingFamilyId(null);
+      onChanged();
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to rename ladder");
@@ -846,6 +1121,7 @@ function RolesSection({
       setRoleLevels((r) =>
         r.map((x) => (x.role_family_id === id ? { ...x, role_family_id: null, role_families: null } : x))
       );
+      onChanged();
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to delete ladder");
@@ -1556,6 +1832,8 @@ function PeopleSection({
   onNavigateToRoles,
   onNavigateToExpectations,
   onDraftExpectations,
+  initialSetupStatus,
+  onSetupStatusChange,
   onError,
 }: {
   reports: DirectReport[];
@@ -1573,9 +1851,11 @@ function PeopleSection({
   onNavigateToRoles: () => void;
   onNavigateToExpectations: () => void;
   onDraftExpectations: (roleLevelId: string) => void;
+  initialSetupStatus: SetupStatus | null;
+  onSetupStatusChange: (status: SetupStatus) => void;
   onError: (m: string | null) => void;
 }) {
-  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(initialSetupStatus);
   // Which report row a role/team create-modal was opened from — null when
   // opened from the progress header itself (no row to auto-assign back to).
   const [creatingRoleFor, setCreatingRoleFor] = useState<DirectReport | "header" | null>(null);
@@ -1602,9 +1882,12 @@ function PeopleSection({
 
   const loadSetupStatus = useCallback(() => {
     getSetupStatus()
-      .then(setSetupStatus)
+      .then((status) => {
+        setSetupStatus(status);
+        onSetupStatusChange(status);
+      })
       .catch((e) => onError(e.message));
-  }, [onError]);
+  }, [onError, onSetupStatusChange]);
 
   useEffect(() => {
     loadSetupStatus();
@@ -1980,6 +2263,7 @@ function ExpectationsSection({
   setKind,
   initialDraftRoleId,
   onConsumeInitialDraft,
+  onChanged,
   onError,
 }: {
   roleLevels: RoleLevel[];
@@ -1994,6 +2278,7 @@ function ExpectationsSection({
   // reopen on a later visit to this section.
   initialDraftRoleId?: string | null;
   onConsumeInitialDraft?: () => void;
+  onChanged: () => void;
   onError: (m: string | null) => void;
 }) {
   // 'grid' is the entry point (coverage overview); 'detail' is the existing
@@ -2041,6 +2326,7 @@ function ExpectationsSection({
   function backToGrid() {
     setView("grid");
     loadCoverage();
+    onChanged();
   }
 
   if (roleLevels.length === 0) {
@@ -2081,6 +2367,7 @@ function ExpectationsSection({
           setKind={setKind}
           onBack={backToGrid}
           onDraft={() => setDraftingRoleId(roleLevelId)}
+          onChanged={onChanged}
           onError={onError}
         />
       )}
@@ -2093,6 +2380,7 @@ function ExpectationsSection({
           onCommitted={() => {
             setDraftingRoleId(null);
             loadCoverage();
+            onChanged();
           }}
           onError={onError}
         />
@@ -2206,6 +2494,7 @@ function ExpectationDetail({
   setKind,
   onBack,
   onDraft,
+  onChanged,
   onError,
 }: {
   roleLevels: RoleLevel[];
@@ -2216,6 +2505,7 @@ function ExpectationDetail({
   setKind: (k: ExpectationKind) => void;
   onBack: () => void;
   onDraft: () => void;
+  onChanged: () => void;
   onError: (m: string | null) => void;
 }) {
   const [items, setItems] = useState<Expectation[]>([]);
@@ -2254,6 +2544,7 @@ function ExpectationDetail({
       setItems((xs) => [...xs, created]);
       setName("");
       setExpectation("");
+      onChanged();
       onError(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to add");
@@ -2266,6 +2557,7 @@ function ExpectationDetail({
     try {
       await deleteExpectation(kind, id);
       setItems((xs) => xs.filter((x) => x.id !== id));
+      onChanged();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to delete");
     }
@@ -2813,13 +3105,113 @@ function DraftReviewPanel({
 // far more often than a baseline does.
 // ---------------------------------------------------------------------------
 
+function OperatingDefaultsSection({
+  profile,
+  onProfileSaved,
+  roleLevels,
+  roleFamilies,
+  onCapacityChange,
+  onWorkUnitsChange,
+  onError,
+}: {
+  profile: Profile;
+  onProfileSaved: (profile: Profile) => void;
+  roleLevels: RoleLevel[];
+  roleFamilies: RoleFamily[];
+  onCapacityChange: (settings: CapacitySettings) => void;
+  onWorkUnitsChange: (workUnits: WorkUnitConfig[]) => void;
+  onError: (m: string | null) => void;
+}) {
+  return (
+    <div className="space-y-10">
+      <CadenceDefaults profile={profile} onSaved={onProfileSaved} onError={onError} />
+      <div className="border-t border-hairline pt-10">
+        <CapacitySection
+          roleLevels={roleLevels}
+          roleFamilies={roleFamilies}
+          onCapacityChange={onCapacityChange}
+          onWorkUnitsChange={onWorkUnitsChange}
+          onError={onError}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CadenceDefaults({
+  profile,
+  onSaved,
+  onError,
+}: {
+  profile: Profile;
+  onSaved: (profile: Profile) => void;
+  onError: (m: string | null) => void;
+}) {
+  const [cadenceDays, setCadenceDays] = useState(profile.one_on_one_cadence_days);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const cadenceOptions = Array.from(new Set([7, 14, 21, 30, profile.one_on_one_cadence_days])).sort((a, b) => a - b);
+
+  useEffect(() => {
+    setCadenceDays(profile.one_on_one_cadence_days);
+  }, [profile.one_on_one_cadence_days]);
+
+  async function saveCadence(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    try {
+      const updated = await updateProfile({
+        full_name: profile.full_name,
+        company_name: profile.company_name,
+        one_on_one_cadence_days: cadenceDays,
+      });
+      onSaved(updated);
+      onError(null);
+      setSaved(true);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to save conversation rhythm");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="font-medium text-ink">Conversation rhythm</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
+        The default interval used to decide when a 1:1 is coming due. A person can use a different rhythm without changing this baseline.
+      </p>
+      <form onSubmit={saveCadence} className="mt-4 max-w-md">
+        <label className={labelCls}>Default 1:1 rhythm</label>
+        <select value={cadenceDays} onChange={(e) => setCadenceDays(Number(e.target.value))} className={`${inputCls} max-w-xs`}>
+          {cadenceOptions.map((days) => (
+            <option key={days} value={days}>Every {days} days</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-ink-muted">Weekly is common for a new hire; every two to four weeks is common for established relationships.</p>
+        <div className="mt-4 flex items-center gap-3">
+          <button type="submit" disabled={saving || cadenceDays === profile.one_on_one_cadence_days} className={primaryBtnCls}>
+            {saving ? "Saving…" : "Save rhythm"}
+          </button>
+          {saved && <span className="text-sm text-brand">Saved</span>}
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function CapacitySection({
   roleLevels,
   roleFamilies,
+  onCapacityChange,
+  onWorkUnitsChange,
   onError,
 }: {
   roleLevels: RoleLevel[];
   roleFamilies: RoleFamily[];
+  onCapacityChange: (settings: CapacitySettings) => void;
+  onWorkUnitsChange: (workUnits: WorkUnitConfig[]) => void;
   onError: (m: string | null) => void;
 }) {
   const [settings, setSettings] = useState<CapacitySettings | null>(null);
@@ -2843,9 +3235,11 @@ function CapacitySection({
         setUtilizationPct(s.default_target_utilization_pct);
         setOffDaysPerYear(s.default_off_days_per_year);
         setWorkUnits(wu);
+        onCapacityChange(s);
+        onWorkUnitsChange(wu);
       })
       .catch((e) => onError(e.message));
-  }, [onError]);
+  }, [onCapacityChange, onError, onWorkUnitsChange]);
 
   useEffect(() => {
     if (!wuRoleLevelId && roleLevels.length > 0) setWuRoleLevelId(roleLevels[0].id);
@@ -2862,6 +3256,7 @@ function CapacitySection({
         default_off_days_per_year: offDaysPerYear,
       });
       setSettings(s);
+      onCapacityChange(s);
       setSaved(true);
       onError(null);
     } catch (e) {
@@ -2881,7 +3276,11 @@ function CapacitySection({
         unit_name: wuUnitName.trim(),
         hours_per_unit: wuHoursPerUnit,
       });
-      setWorkUnits((wus) => [...wus.filter((w) => w.role_level_id !== wuRoleLevelId), created]);
+      setWorkUnits((wus) => {
+        const next = [...wus.filter((w) => w.role_level_id !== wuRoleLevelId), created];
+        onWorkUnitsChange(next);
+        return next;
+      });
       setWuUnitName("");
       onError(null);
     } catch (e) {
@@ -2894,7 +3293,11 @@ function CapacitySection({
   async function removeWorkUnit(id: string) {
     try {
       await deleteWorkUnitConfig(id);
-      setWorkUnits((wus) => wus.filter((w) => w.id !== id));
+      setWorkUnits((wus) => {
+        const next = wus.filter((w) => w.id !== id);
+        onWorkUnitsChange(next);
+        return next;
+      });
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to delete");
     }

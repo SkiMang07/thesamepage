@@ -353,7 +353,7 @@ export default function CapacityPage() {
               Open a person from{" "}
               <Link href="/app/team" className="underline hover:text-ink-secondary">Team</Link>{" "}
               to adjust their hours, target, or time off. Company defaults and native work units live in{" "}
-              <Link href="/app/settings" className="underline hover:text-ink-secondary">Capacity settings</Link>.
+              <Link href="/app/settings?section=capacity" className="underline hover:text-ink-secondary">Operating defaults</Link>.
             </p>
           </div>
 

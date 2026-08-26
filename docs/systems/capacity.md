@@ -75,4 +75,7 @@ logging live on the person page, next to the person. The Capacity page is the
 read/rollup surface. Same reasoning as expectations: config that varies per person
 lives with the person.
 
-Org-wide baseline defaults and work-unit setup live in Settings → Capacity.
+Org-wide baseline defaults and work-unit setup live in Settings → Operating
+defaults, alongside the default 1:1 rhythm. The editor states the precedence
+explicitly: a person-level setting on the Relationship Desk wins without
+changing the shared baseline.

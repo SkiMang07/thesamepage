@@ -299,7 +299,7 @@ export default function AssessmentScorecardPage() {
           ) : (
             <p className="mt-1 text-ink-secondary">
               No role assigned —{" "}
-              <Link href="/app/settings" className="underline hover:text-ink-body">
+              <Link href="/app/settings?section=people" className="underline hover:text-ink-body">
                 set one in Settings
               </Link>{" "}
               to unlock metric/skill/value scoring.
@@ -407,7 +407,7 @@ export default function AssessmentScorecardPage() {
       {totalConfigured === 0 && role && (
         <p className="mt-10 text-ink-secondary">
           No metrics, skills, or values configured for this role yet.{" "}
-          <Link href="/app/settings" className="underline hover:text-ink-body">
+          <Link href="/app/settings?section=roles" className="underline hover:text-ink-body">
             Add them in Settings
           </Link>
           . You can still set an overall rating above.

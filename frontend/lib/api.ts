@@ -585,7 +585,7 @@ export const getPeopleRollup = (): Promise<PeopleRollupItem[]> => authedFetch("/
 // Goals yet). Hours are the shared currency; work_unit_configs is an
 // optional per-role-level display translation on top (tickets/points/
 // campaigns). Own top-level page (/app/capacity); org-wide defaults + work
-// unit setup live in Settings > Capacity ("configured once"); per-person
+// unit setup live in Settings > Operating defaults ("configured once"); per-person
 // overrides + time off logging live on the DR detail page (used regularly).
 // See docs/SESSION_HISTORY.md and the capacity_scoping project memory note.
 // ---------------------------------------------------------------------------
@@ -1284,7 +1284,7 @@ export const getOneOnOnesOverview = (): Promise<OneOnOneOverviewItem[]> =>
   authedFetch("/api/one-on-ones/overview");
 
 // ---------------------------------------------------------------------------
-// Settings (Session 6) — Profile & Company, Roles & Levels, Expectations
+// Settings — workspace identity, people, roles, operating defaults, account
 // ---------------------------------------------------------------------------
 
 export type Profile = {
