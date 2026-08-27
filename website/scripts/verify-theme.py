@@ -80,10 +80,18 @@ for tf_name in sorted(os.listdir(tpl_dir)):
     tp=os.path.join(tpl_dir,tf_name)
     if not (os.path.isfile(tp) and tf_name.endswith(".html")): continue
     tpl=io.open(tp,encoding="utf-8").read()
-    for needle,msg in [("templateType: page","missing templateType annotation"),
-                       ("standard_header_includes","missing standard_header_includes"),
-                       ("standard_footer_includes","missing standard_footer_includes"),
-                       ("dnd_area","missing dnd_area")]:
+    # Blog templates are templateType: blog and carry no dnd_area — a blog
+    # listing and a blog post both take their content from the blog's own
+    # records, so there is nothing to drag into either one. Everything else
+    # (the annotation, both standard includes, resolvable partials) still
+    # applies to them.
+    is_blog = "templateType: blog" in tpl
+    needles=[("standard_header_includes","missing standard_header_includes"),
+             ("standard_footer_includes","missing standard_footer_includes")]
+    if not is_blog:
+        needles=[("templateType: page","missing templateType annotation")]+needles+[
+                 ("dnd_area","missing dnd_area")]
+    for needle,msg in needles:
         if needle not in tpl: bad("%s: %s"%(tf_name,msg))
     for inc in re.findall(r'include "([^"]+)"', tpl):
         p=os.path.normpath(os.path.join(tpl_dir,inc))

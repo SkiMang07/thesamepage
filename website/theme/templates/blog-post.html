@@ -1,0 +1,113 @@
+<!--
+  templateType: blog
+  isAvailableForNewContent: true
+  label: Blog — Field Guide post
+  screenshotPath: ../images/screenshot.png
+-->
+{#
+  THE FIELD GUIDE — blog post.
+
+  No dnd_area: the post record is the content.
+
+  EVERY PIECE OF PER-POST FURNITURE IS STYLED ON A STRUCTURAL ELEMENT, in
+  css/main.css, never on a class typed into the body. HubSpot Content Hub
+  Starter gives one authored string per post beyond the title, module fields do
+  not attach to posts, and the rich-text paste sanitiser strips classes. So:
+
+    first <blockquote>  ->  the "What you leave with" contract box
+    <pre>               ->  the carbon script block
+    <h3>                ->  a numbered step, numbered by a CSS counter
+    later blockquotes   ->  pull quotes
+
+  The labels on the first two are generated content, so the author writes the
+  bullets and the lines and never the furniture, and the step numerals renumber
+  themselves when a step moves.
+
+  The kind tape is the only part of this page that changes with the tag.
+#}
+<!doctype html>
+<html lang="{{ html_lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_meta.html_title }}</title>
+  <meta name="description" content="{{ page_meta.meta_description }}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+  {{ require_css(get_asset_url("../css/main.css")) }}
+  {{ standard_header_includes }}
+</head>
+<body class="body-wrapper">
+  {% include "./partials/header.html" %}
+
+  {% set kinds = content.tag_list|join(",", attribute="name")|lower %}
+  {% if "playbook" in kinds %}{% set k = "playbook" %}
+  {% elif "teardown" in kinds %}{% set k = "teardown" %}
+  {% elif "script" in kinds %}{% set k = "script" %}
+  {% else %}{% set k = "note" %}{% endif %}
+
+  <main id="main-content">
+    <article>
+      <section class="fg-post">
+        <div class="wrap">
+          <span class="fg-tape t-{{ k }}"><span class="gl gl-{{ k }}">{% if k == "script" %}[ ]{% endif %}</span>{{ k }}</span>
+          <h1>{{ content.name }}</h1>
+          {% if content.post_summary %}<p class="lede">{{ content.post_summary|striptags }}</p>{% endif %}
+          <div class="fg-byline">
+            {% if content.blog_post_author %}<span>{{ content.blog_post_author.display_name }}</span>{% endif %}
+            <span>{{ content.publish_date_localized }}</span>
+          </div>
+
+          <div class="fg-body">
+            {{ content.post_body }}
+          </div>
+
+          <div class="fg-end">
+            <h2>The bar, written down once, in the place the evidence lands.</h2>
+            <p>The Same Page holds the expectations for every role and level, and collects what happened against them as you go, so the version you defend in December is the one you wrote in August.</p>
+            <a class="btn btn-primary" href="#">Ask for a founding place</a>
+          </div>
+        </div>
+      </section>
+    </article>
+
+    {# Four fetched, at most three rendered, the current post skipped. That gives
+       two or three cards and never a fourth orphaned onto a second row. #}
+    <section class="fg-more">
+      <div class="wrap">
+        <div class="fg-more-head"><b>More from the field guide</b><a href="{{ blog.absolute_url }}">All pieces</a></div>
+        <div class="fg-grid">
+          {% for p in blog_recent_posts("default", 4) %}
+            {% if p.id != content.id and loop.index <= 3 %}
+              {% set pkinds = p.tag_list|join(",", attribute="name")|lower %}
+              {% if "playbook" in pkinds %}{% set pk = "playbook" %}
+              {% elif "teardown" in pkinds %}{% set pk = "teardown" %}
+              {% elif "script" in pkinds %}{% set pk = "script" %}
+              {% else %}{% set pk = "note" %}{% endif %}
+              <a class="fg-card k-{{ pk }}" href="{{ p.absolute_url }}">
+                <div class="fg-kind"><span class="gl gl-{{ pk }}">{% if pk == "script" %}[ ]{% endif %}</span><b>{{ pk }}</b></div>
+                <h2>{{ p.name }}</h2>
+                {% if p.post_summary %}<p>{{ p.post_summary|striptags|truncate(150) }}</p>{% endif %}
+                <span class="fg-date">{{ p.publish_date_localized }}</span>
+              </a>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    {# See the note in blog-index.html: the two counter numbers are duplicated
+       from the homepage's hero and close-cta module fields. Keep them true. #}
+    <section class="close">
+      <div class="wrap narrow">
+        <h2>Reading about it<br>is the easy part.</h2>
+        <p class="sub">The Same Page is where the bar gets written down, and where the evidence for it collects itself as you go.</p>
+        <a class="btn btn-on-dark" href="#">Ask for a founding place</a>
+        <div style="margin-top:.9rem"><span class="counter"><span class="dot"></span><span><b>14 of 20</b> founding places left &middot; 3 months free</span></span></div>
+      </div>
+    </section>
+  </main>
+
+  {% include "./partials/footer.html" %}
+  {{ standard_footer_includes }}
+</body>
+</html>

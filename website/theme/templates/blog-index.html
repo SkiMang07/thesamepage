@@ -1,0 +1,115 @@
+<!--
+  templateType: blog
+  isAvailableForNewContent: true
+  label: Blog — Field Guide index
+  screenshotPath: ../images/screenshot.png
+-->
+{#
+  THE FIELD GUIDE — blog listing.
+
+  No dnd_area. A blog listing takes its content from the blog's posts, so there
+  is nothing to drag into it. The masthead reads from the blog's own settings
+  (Settings > Website > Blog) with a hard fallback, so an empty setting can
+  never render an empty H1.
+
+  THE KIND COMES FROM A TAG. One of playbook / teardown / script / note, and it
+  decides the card's class, which decides its ground, its rule and its span.
+  Anything untagged falls through to `note`, which is the treatment that assumes
+  the least. This is the whole reason a kind can be added or retired later
+  without touching a template.
+
+  The legend is site chrome. It teaches the four in one glance and it belongs to
+  the blog, not to any post, so it lives here.
+#}
+<!doctype html>
+<html lang="{{ html_lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_meta.html_title }}</title>
+  <meta name="description" content="{{ page_meta.meta_description }}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+  {{ require_css(get_asset_url("../css/main.css")) }}
+  {{ standard_header_includes }}
+</head>
+<body class="body-wrapper">
+  {% include "./partials/header.html" %}
+
+  <main id="main-content">
+    <section class="fg-mast">
+      <div class="wrap">
+        <span class="eyebrow">Field guide</span>
+        <h1>{{ blog.public_title|default("The field guide", true) }}</h1>
+        <p class="lede">{{ blog.description|default("Short pieces on the parts of managing that nobody sits you down and explains. Every one is a playbook, a teardown, a script or a note, and the shape tells you what you are in for before you start reading.", true) }}</p>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <div class="fg-legend">
+        <div>
+          <div class="lg-head"><span class="gl gl-playbook"></span><b>Playbook</b></div>
+          <p>A sequence you run start to finish.</p>
+        </div>
+        <div>
+          <div class="lg-head"><span class="gl gl-teardown"></span><b>Teardown</b></div>
+          <p>A real artefact taken apart.</p>
+        </div>
+        <div>
+          <div class="lg-head"><span class="gl gl-script">[ ]</span><b>Script</b></div>
+          <p>Change the words, keep the order.</p>
+        </div>
+        <div>
+          <div class="lg-head"><span class="gl gl-note"></span><b>Note</b></div>
+          <p>One rule, under 400 words.</p>
+        </div>
+      </div>
+
+      <div class="fg-list{% if contents.total_page_count > 1 %} fg-has-pager{% endif %}">
+        <div class="fg-grid">
+          {% for content in contents %}
+            {% set kinds = content.tag_list|join(",", attribute="name")|lower %}
+            {% if "playbook" in kinds %}{% set k = "playbook" %}
+            {% elif "teardown" in kinds %}{% set k = "teardown" %}
+            {% elif "script" in kinds %}{% set k = "script" %}
+            {% else %}{% set k = "note" %}{% endif %}
+            <a class="fg-card k-{{ k }}" href="{{ content.absolute_url }}">
+              <div class="fg-kind"><span class="gl gl-{{ k }}">{% if k == "script" %}[ ]{% endif %}</span><b>{{ k }}</b></div>
+              <h2>{{ content.name }}</h2>
+              {% if content.post_summary %}<p>{{ content.post_summary|striptags|truncate(190) }}</p>{% endif %}
+              <span class="fg-date">{{ content.publish_date_localized }}</span>
+            </a>
+          {% else %}
+            <p class="fg-empty">The first pieces are being written. Check back shortly.</p>
+          {% endfor %}
+        </div>
+
+        {% if contents.total_page_count > 1 %}
+          <nav class="fg-pager" aria-label="Field guide pages">
+            {% if last_page_num %}<a href="{{ blog_page_link(last_page_num) }}">Newer</a>{% endif %}
+            {% if next_page_num %}<a href="{{ blog_page_link(next_page_num) }}">Older</a>{% endif %}
+            <span class="pg-now">Page {{ current_page_num }} of {{ contents.total_page_count }}</span>
+          </nav>
+        {% endif %}
+      </div>
+    </div>
+
+    {# The closing band is markup rather than a module: module fields are not
+       editable from a blog template, so a module would buy nothing here and
+       only hide the strings. THE TWO COUNTER NUMBERS ARE DUPLICATED from
+       hero.module and close-cta.module on the homepage. If the founding count
+       changes there, change it here too, or delete the counter from this file.
+       A counter that is not true costs more trust than it buys. #}
+    <section class="close">
+      <div class="wrap narrow">
+        <h2>Reading about it<br>is the easy part.</h2>
+        <p class="sub">The Same Page is where the bar gets written down, and where the evidence for it collects itself as you go.</p>
+        <a class="btn btn-on-dark" href="#">Ask for a founding place</a>
+        <div style="margin-top:.9rem"><span class="counter"><span class="dot"></span><span><b>14 of 20</b> founding places left &middot; 3 months free</span></span></div>
+      </div>
+    </section>
+  </main>
+
+  {% include "./partials/footer.html" %}
+  {{ standard_footer_includes }}
+</body>
+</html>

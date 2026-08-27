@@ -132,7 +132,7 @@ npx hs fetch theme tsp-theme       pull remote state down, for reconciling drift
 
 ## Architecture
 
-**Six templates, so far.** `page.html` is the flexible one: it's the homepage,
+**Six templates.** `page.html` is the flexible one: it's the homepage,
 and doubles as the fallback for anything without its own template yet (product
 walkthrough, support, offers — none of those are designed yet). About, Contact,
 and now Legal turned out common and simple enough to earn dedicated templates
@@ -141,18 +141,21 @@ its own module set directly, so HubSpot's page-creation screen shows a distinct
 card for it and a brand-new page lands pre-composed, no drag-and-drop cleanup
 required. Legal (`legal.html`) is reused for all three legal documents —
 Privacy, Terms, Security — since a policy document's shape doesn't change page
-to page, only its content does. The blog needs its own two, not built yet.
+to page, only its content does. The blog has its own two, `blog-index.html`
+and `blog-post.html`, and they are a different animal: see "The blog" below.
 
 ```
 theme/
   theme.json                    name, preview path, breakpoints
-  fields.json                   every colour and the font stack — theme settings
+  fields.json                   every colour — theme settings (type system allows no text)
   css/main.css                  THE stylesheet. Tokens at the top, everything else below.
   templates/
     page.html                   the flexible/home template — seeded with the 8 homepage modules
     about.html                  seeded with frame + founder + built-for + close-cta
     contact.html                seeded with frame + contact-form
     legal.html                  seeded with frame + legal-body; reused for Privacy/Terms/Security
+    blog-index.html             templateType: blog — the Field Guide listing, legend + kind grid
+    blog-post.html              templateType: blog — the Field Guide post
     partials/header.html        logo + site_nav menu + Start free
     partials/footer.html        logo + tagline + footer_nav menu
   modules/
@@ -184,7 +187,74 @@ whole upload batch for a cosmetic win. Swap the three Page frame fields
 (eyebrow/heading/lede) to the Contact copy once, in the page editor, the first
 time that page is built.
 
-Blog templates (`blog-index.html`, `blog-post.html`) are not built yet.
+## The blog
+
+The blog is **Direction 04, Field Guide**. `website/prototype/blog-index.html`,
+`blog-post.html` and `blog-argument.md` are what the two templates were cut
+from and stay as the reference.
+
+**Blog templates are `templateType: blog` and carry no `dnd_area`.** A listing
+and a post both take their content from the blog's own records, so there is
+nothing to drag into either one. `verify-theme.py` knows this and skips the
+`dnd_area` check for them; everything else it checks still applies.
+
+**They carry no modules either.** Module fields are not editable from a blog
+template, so a module there would buy nothing and only hide the strings. The
+legend and the closing band are markup in the templates. **The consequence worth
+remembering: the founding counter's two numbers are duplicated into both blog
+templates from `hero.module` and `close-cta.module`.** Change the count on the
+homepage and it has to change here too, or the counter comes out. A counter
+that is not true costs more trust than it buys.
+
+### The kind comes from a tag
+
+Every post is exactly one of **playbook / teardown / script / note**, taken from
+a HubSpot tag, and the kind decides the card's ground, its rule and its span
+(a playbook is double-width). An untagged post falls through to `note`, the
+treatment that assumes the least. Adding or retiring a kind later is a tagging
+change plus one CSS block, never a template rebuild.
+
+```
+{% set kinds = content.tag_list|join(",", attribute="name")|lower %}
+{% if "playbook" in kinds %}{% set k = "playbook" %}
+...
+```
+
+`{% set %}` inside an `{% if %}` persists; `{% set %}` inside a `{% for %}` does
+not survive the loop. That is why the kind is resolved with `join(attribute=)`
+and a chain of ifs rather than by looping the tags.
+
+### Per-post furniture is styled on structural elements
+
+**This is the rule the whole blog design rests on.** HubSpot Content Hub Starter
+gives **one authored string per post beyond the title** (`post_summary`), there
+are no custom per-post fields, module fields do not attach to posts, and the
+rich-text paste sanitiser strips classes and tags (it already did this on the
+Terms and Security pages). So none of the per-post furniture can be a field, and
+none of it can be a hand-pasted `<div class="...">` either.
+
+Everything is therefore styled on an element the editor preserves:
+
+| Furniture | Element | Author does |
+|---|---|---|
+| "What you leave with" contract box | the **first `<blockquote>`** | writes a blockquote with a bulleted list inside |
+| The carbon script block | a **`<pre>`** | uses the editor's code-block button |
+| A numbered step | an **`<h3>`** | uses Heading 3; the numeral is a CSS counter |
+| A pull quote | any **blockquote after the first** | writes a second blockquote |
+
+The two labels — "What you leave with" and "Say it like this" — are **generated
+content**, so the author writes the bullets and the lines and never the
+furniture. The step numerals are a counter, so they cannot go stale and they
+renumber themselves when a step moves.
+
+**Unverified against the live editor.** Publish one throwaway post through the
+normal editor and view source before trusting it. The fallback is the field's
+Advanced → source-code view, which the legal pages already proved works.
+
+### No JavaScript here either
+
+The mockup drew a Copy pill on the script block. It needed script, the site has
+none, and the rule was not broken for one button. The block ships without it.
 
 **One token file.** `theme/fields.json` declares every colour and the font stack;
 the token block at the top of `theme/css/main.css` consumes them as
@@ -204,8 +274,11 @@ Consequences, all deliberate now rather than accidental:
 
 - **Theme fields are colours only.** That is the right scope anyway — theme
   settings are the brand, not the content.
-- **The font stack is a literal in `css/main.css`**, with a comment saying why.
-  When a real typeface is chosen it becomes a proper `font` field.
+- **Every font stack is a literal in `css/main.css`**, with a comment saying
+  why: `--sans`, `--mono` (JetBrains Mono, the data/UI accent face) and
+  `--display` (Space Grotesk, the blog's heading face). Each is loaded through a
+  Google Fonts link in the templates that need it. Any of them becomes a proper
+  `font` field when it earns one.
 - **The site name and the tagline are literals in the partials.** They are site
   chrome, not page content, and too small a surface to justify a theme field.
 - **Nav links are HubSpot menus, not literals.** Both `header.html` and
@@ -461,6 +534,16 @@ pasting rendered text) is documented, but Andrew reviewed the result and
 called it good enough to ship as-is rather than re-pasting for pixel-perfect
 numbering. Worth doing properly next time a module needs long pasted HTML.
 
+**Blog: theme code done, blog not yet configured.** `blog-index.html` and
+`blog-post.html` are in the theme and `npm run verify` passes. What's left is
+manual, in HubSpot: under Settings → Website → Blog, point the blog's listing
+template at "Blog — Field Guide index" and its post template at "Blog — Field
+Guide post", and set the blog's public title and description (the masthead reads
+both, with the shipped copy as the fallback). Then create the four tags —
+Playbook, Teardown, Script, Note — publish one throwaway post through the normal
+editor to confirm the structural styling survives, and repoint the nav at the
+blog. See "The blog" under Architecture for why it is built the way it is.
+
 One manual step is outstanding on Security: `isolation.module` exists in the
 library but the page was built before it did, and a template edit cannot reach a
 page that already exists. Open `/legal/security` in the page editor and drag the
@@ -523,8 +606,19 @@ trade.
 
 ## Open items
 
-- Positioning and copy — done for the homepage and About/Contact. Still
-  needed for the product walkthrough, blog and offers pages.
+- Positioning and copy — done for the homepage, About/Contact and the blog's
+  chrome. Still needed for the product walkthrough and offers pages, and for
+  every actual blog post.
+- The blog's HubL is the one part of the theme that could not be proved from a
+  session: `blog.public_title`, `blog.description`, `content.tag_list`,
+  `blog_recent_posts` and `join(attribute=)` all resolve only in HubSpot. The
+  templates render clean through Jinja2 with stub data, which proves the loops,
+  the `{% set %}` scoping and the filters, and nothing more. **Preview both
+  before publishing.**
+- The nav button still says "Start free", which the homepage retired in favour
+  of "Ask for a founding place". That string is too long for the nav slot and
+  wraps to three lines on a phone, so the button wants a short string of its own
+  rather than a copy-paste.
 - Support routing: HubSpot Knowledge Base requires Service Hub Professional, so
   support will be a form or a routed inbox rather than a KB. The Contact page
   folds support in rather than splitting it out — one form, one inbox.
