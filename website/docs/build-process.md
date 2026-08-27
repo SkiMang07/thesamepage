@@ -150,7 +150,7 @@ theme/
   css/main.css                  THE stylesheet. Tokens at the top, everything else below.
   templates/
     page.html                   the flexible/home template — seeded with the 8 homepage modules
-    about.html                  seeded with frame + founder + close-cta
+    about.html                  seeded with frame + founder + built-for + close-cta
     contact.html                seeded with frame + contact-form
     legal.html                  seeded with frame + legal-body; reused for Privacy/Terms/Security
     partials/header.html        logo + site_nav menu + Start free
@@ -169,6 +169,8 @@ theme/
     legal-body.module           one richtext field for a whole policy doc; auto-numbered
                                  headings via CSS counters, a blockquote callout, a
                                  draft-note style for flagged/unresolved clauses
+    isolation.module            the Security drawing — one record under three accounts
+    built-for.module            the About drawing — two records that never merge
 ```
 
 About and Contact still draw from the same module library rather than getting
@@ -277,6 +279,106 @@ need it" is how a theme grows into an unmaintainable one.
 module emits markup and class names only. This is deliberate — it is what stops
 the Prism Tree outcome where a colour has to be hunted through fifteen files.
 
+## The illustration register — Soft
+
+The homepage carries four drawings. This is the hand they are drawn in, and any
+new illustration on this site draws inside it rather than re-deciding it. Four
+hands were built and compared side by side; Andrew picked Soft over Claude's own
+recommendation, which makes it **a deliberate override, not a default. Do not
+re-litigate it.**
+
+The register exists because the drawings are made of the same material as the
+product: UI surfaces, not ink. That single idea decides most of the rules below.
+
+### What things are made of
+
+- **A record is a surface, never an outline.** `--surface`, radius 16, carrying
+  the theme's own two-part shadow. A second record behind the first is
+  `--canvas` with a `--control` hairline and a softer shadow.
+- **Writing is a pill.** Rounded rect, height 10, radius 4.5. `--ink-muted` for
+  a heading, `--control` for a label, `--pill` for body. Real words appear only
+  where the word itself is the point.
+- **A mark is a filled rounded square**, about 5% of the card width, radius 6.
+  Three states and no more: **recorded** `--ink-faint`, **agreed** `--brand`,
+  and **still open**, which is `--amber-tint` filled with an `--amber-500`
+  stroke. That pair is why the open mark is one class rather than two.
+- **A dot says whose record it is, never a square.** `--brand` for the reader's
+  own record, `--control` for the other one. It is chrome rather than state, so
+  it does not disturb what teal means on a mark, and it has to be a circle: a
+  rounded square reads as a mark. It echoes `.counter .dot`, already on the page.
+- **Register marks are rounded corner brackets**, stroke 3.5, round caps, in
+  `--brand`, at the top left and bottom right of a joined record. Printer's crop
+  hairlines belong to a different hand and look borrowed in this one.
+- **No people.** The register draws objects and marks, never figures, faces or
+  hands. A person is present through what they left behind.
+
+### Contrast
+
+**Marks are held to a contrast floor. Pills are not.** Marks carry the meaning of
+the picture and each clears 3:1 against the card behind it. Pills stand in for
+handwriting and carry nothing on their own, so they are allowed to be light.
+**This is a judgment call, and it is the line to revisit if an accessibility
+review ever pushes back.**
+
+**The exemption covers pills only.** Any real type, including a caption naming a
+control, clears 4.5. Both drawing captions sit at `--ink-muted`, which measures
+4.84 on canvas; `--ink-faint` measures 3.15 there and is not enough for type.
+
+**On carbon**, the surface lifts to `rgba(255,255,255,.07)` with a
+`rgba(255,255,255,.16)` edge, pills go to `rgba(255,255,255,.24)`, a recorded
+mark to `rgba(255,255,255,.45)` at 4.13, and an agreed mark to `--teal-300` at
+7.35 on the lifted surface. Two hard limits there:
+
+- **`--brand` measures 2.92 on carbon and cannot be used on it at all.**
+- **`--amber-500` measures 3.68 on carbon**, technically passing and visually
+  muddy. A lifted `#E0A64B` measures 5.37. **That value is not in the theme.** If
+  a drawing ever lands on the dark band, add it to `theme/fields.json` as
+  something like `amber_on_carbon` rather than hard coding it into a module.
+
+### Motion
+
+**No JavaScript.** Inline SVG plus CSS transitions, which is what makes a drawing
+portable into a HubSpot module unchanged.
+
+**The resting state is the finished picture.** Registered, resolved, everything
+visible. Any un-registered or pre-interaction start state is applied only inside
+`@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference)`,
+so touch, keyboard and reduced motion all get the whole drawing and nothing is
+hidden behind an interaction that cannot happen. The card takes keyboard focus,
+so `:focus-within` does what `:hover` does. **Hint text naming the interaction
+lives inside that same media query**, or it promises something the device cannot
+do.
+
+**When a concept says scrub, drag or play, build a stepper.** Hidden radio inputs
+plus labels, a handful of named stops, no script. Clicking works on touch, arrow
+keys work natively because it is a real radio group, and every stop is a finished
+picture so the resting one needs no interaction. The homepage's film and bar are
+both this shape.
+
+**The drawings stack at 980px**, in their own media block, separate from the
+theme's 900px one. Each is two records side by side and needs more room than a
+row of three cards. Below that, the wider record scrolls inside its own box
+rather than shrinking its type past legibility.
+
+### Two traps this hand sets
+
+**Grey pills on a white card is how the entire internet draws a loading
+skeleton.** The first hero drawing had no colour at all in its resting state and
+read as an unfinished page. The teal identity dot is what fixed it. **Every
+drawing needs at least one saturated element at rest.**
+
+**A second surface behind the first reads as a drop shadow, not as a second
+thing.** The first pass had the back card peeking out by 18 units and the picture
+said "one document" rather than "two records that disagree". It has to fan far
+enough that the second record's own pills and marks are visible.
+
+### One more, about concepts
+
+**A chart is a different hand.** Person-cards floating at heights with a
+threshold drawn across them is the literal reading of "the bar", and it looks
+like a scatter plot in a costume. Keep a picture made of records and marks, which
+is what the rest of the page is made of.
+
 ## Editing the page after launch
 
 Everything on the homepage is a typed field. In HubSpot: Content → Website Pages →
@@ -359,6 +461,66 @@ pasting rendered text) is documented, but Andrew reviewed the result and
 called it good enough to ship as-is rather than re-pasting for pixel-perfect
 numbering. Worth doing properly next time a module needs long pasted HTML.
 
+One manual step is outstanding on Security: `isolation.module` exists in the
+library but the page was built before it did, and a template edit cannot reach a
+page that already exists. Open `/legal/security` in the page editor and drag the
+module in above the policy body, once. Privacy and Terms stay text-only, and
+because the module was never added to `legal.html` they stay that way by
+construction rather than by a conditional.
+
+## The homepage's four drawings
+
+Where they sit, so a later change knows what it is touching:
+
+- **The hero plate** lives inside `hero.module`, in place of the product roster
+  mockup it replaced. Two records of the same week that come into register.
+  Because it is an illustration rather than content, `hero.module` has no
+  `mockup_title` or `rows` fields any more and **the hero picture is not editable
+  in the page editor**.
+- **The desk** is the right-hand column of `recognition.module`, drawing the same
+  three objects item 01 names. The resting state is the mess, which is the
+  picture that beat needs; hover clears it.
+- **The film** is `film.module`, its own section between the three moves and the
+  argument, filling the spine's "product once" beat. Three stops, Monday resting.
+- **The bar** is `ladder.module`, between the argument and the close. Two SVGs
+  sharing one radio group, three levels, Mid resting.
+
+The film's sentence and the bar's three level names are module fields, so they
+change in the page editor. The drawings' geometry is fixed: renaming a level
+changes the word, not the picture, and the field help text says so.
+
+## The other two drawings
+
+About and Security carry one each. Contact, Privacy and Terms are text-only and
+that is a decision, not a gap: a form is already the object on Contact and the
+only action on the page, and a policy document trades on looking like a document
+rather than like marketing.
+
+- **The three accounts** is `isolation.module`, on the Security page. One
+  person's record drawn once per account that could ask for it: whole under your
+  own, two rows under another manager in the same organization, and an empty
+  outline under another organization. The three cards are the same size on
+  purpose. Rows another account cannot see are absent rather than greyed, which
+  is the difference between a permission check in software and a policy at the
+  database, and it is the claim the page exists to make.
+- **The two records** is `built-for.module`, between the founder note and the
+  close on About. A review-cycle artifact with one date stamp, one rhythm and no
+  teal at all, beside a manager's record with five day stamps, three mark states
+  and the reader's own identity dot. They never merge, which is what keeps it
+  from reading as the hero plate a second time.
+
+Both rest as the finished picture with no interaction at all, so neither carries
+a hover state and neither needs hint text. Both reuse the `.d-*` vocabulary
+unchanged and add no colour rule of their own.
+
+**A drawing on a legal page can only sit above or below the document.**
+`legal-body.module` is a single richtext field holding a whole policy, so no
+module can land inside it, and pasting SVG into that field meets the same
+sanitizer that already strips `h2` and `blockquote`. Above the document it works
+as the page's visual lede and the effective date follows it. Splitting a policy
+across two `legal-body` instances to get a drawing mid-document is the wrong
+trade.
+
 ## Open items
 
 - Positioning and copy — done for the homepage and About/Contact. Still
@@ -373,4 +535,10 @@ numbering. Worth doing properly next time a module needs long pasted HTML.
   employee-data section (new language, no Prism Tree precedent), Supabase's
   AWS region, and the governing-law state. None of these block the pages
   being live; they block calling the legal docs actually reviewed and final.
+- `.dmono` is a dead class. The desk's small capitals in `recognition.module`
+  carry it, but no rule in `main.css` ever defined it, so those labels render in
+  the sans face rather than the mono one. It was already true in the prototype,
+  so nothing regressed and nothing looks broken. Adding the rule would change the
+  shipped homepage, so it wants a look before it is fixed rather than a silent
+  one-line patch. The two new drawings use `.mono`, which is defined.
 - Whether to add the GitHub Action, or keep deploying from the watched folder.

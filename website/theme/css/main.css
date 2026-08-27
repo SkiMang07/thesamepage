@@ -585,6 +585,20 @@ a{color:inherit;text-decoration:none}
 /* the two-part shadow every record carries */
 .dfig feDropShadow,.film feDropShadow,.ladder feDropShadow{flood-color:var(--carbon-900)}
 
+/* ---------- two static drawings: the isolation drawing on the Security page
+   and the two-records drawing on About. Both rest as the finished picture, so
+   neither has a hover state and neither carries hint text. They reuse the
+   .d-* vocabulary above unchanged, so they add no colour rule of their own.
+   .mono is scoped per drawing container, so it needs saying for .dfig too. */
+.dfig .mono{font-family:var(--mono)}
+.iso-sec{padding:clamp(1.6rem,3vw,2.6rem) 0 clamp(3rem,5vw,4.4rem)}
+.iso{max-width:1000px;margin:0 auto}
+.iso-cap{margin:.7rem auto 0;max-width:60ch;text-align:center;
+  font-size:.95rem;line-height:1.55;color:var(--ink-muted)}
+.two{margin:0}
+.two-cap{margin-top:.7rem;max-width:62ch;
+  font-size:.95rem;line-height:1.55;color:var(--ink-muted)}
+
 /* the drawings stack earlier than the rest of the page: each of these is
    two records side by side, and two records need more room than three cards */
 @media (max-width:980px){
@@ -597,4 +611,9 @@ a{color:inherit;text-decoration:none}
   .ladder-stage{grid-template-columns:1fr;gap:1.6rem}
   .ladder-team{overflow-x:auto}
   .ladder-team svg{min-width:520px}
+  /* three cards and two records: same reason, same treatment */
+  .iso-stage{overflow-x:auto}
+  .iso-stage svg{min-width:940px}
+  .two-stage{overflow-x:auto}
+  .two-stage svg{min-width:940px}
 }

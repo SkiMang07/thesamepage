@@ -1,0 +1,42 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Built for the review cycle, or built for Tuesday"
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "Every serious tool in this category is an artifact of the review cycle, made in one sitting, four times a year. The record a manager actually needs fills itself in as the week goes."
+  },
+  {
+    "name": "record_left",
+    "label": "Left record — label",
+    "type": "text",
+    "default": "BUILT FOR THE REVIEW CYCLE",
+    "help_text": "Set in small capitals. Under about 30 characters."
+  },
+  {
+    "name": "record_right",
+    "label": "Right record — label",
+    "type": "text",
+    "default": "BUILT FOR TUESDAY",
+    "help_text": "Set in small capitals. Under about 30 characters."
+  },
+  {
+    "name": "stamp",
+    "label": "The left record's single date stamp",
+    "type": "text",
+    "default": "Q3",
+    "help_text": "The one stamp on the left record, against five day stamps on the right. That contrast is the argument the drawing makes, so keep it short: under about 12 characters. The five day names are part of the geometry and are fixed."
+  },
+  {
+    "name": "caption",
+    "label": "Caption",
+    "type": "text",
+    "default": "Same material. Different owner. They never merge.",
+    "help_text": "The sentence under the drawing. Leave it empty to hide it."
+  }
+]

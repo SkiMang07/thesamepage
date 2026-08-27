@@ -128,6 +128,36 @@ a{color:inherit;text-decoration:none}
   .founder{grid-template-columns:1fr}
   .wrap{padding:0 22px}
 }
+
+/* ---------- the drawings: every fill and stroke comes from a token ----------
+   Matches theme/css/main.css exactly. A shape names its role in the register
+   and takes its value from here; no drawing carries a colour of its own. */
+:root{--pill:#D5DADE;--amber-tint:#FBF1E0;
+  --mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace}
+.dfig{margin:0;isolation:isolate}
+.dfig svg{display:block;width:100%;height:auto}
+.dfig .mono{font-family:var(--mono)}
+.dfig .d-surface{fill:var(--surface)}
+.dfig .d-canvas{fill:var(--canvas)}
+.dfig .d-control{fill:var(--control)}
+.dfig .d-pill{fill:var(--pill)}
+.dfig .d-recorded{fill:var(--ink-faint)}
+.dfig .d-heading{fill:var(--ink-muted)}
+.dfig .d-label{fill:var(--ink-secondary)}
+.dfig .d-brand{fill:var(--brand)}
+.dfig .d-open{fill:var(--amber-tint);stroke:var(--amber-500)}
+.dfig .s-control{stroke:var(--control)}
+.dfig .s-hairline{stroke:var(--hairline)}
+.dfig feDropShadow{flood-color:var(--carbon-900)}
+
+/* ---------- the two-records drawing (About) ---------- */
+.two{margin:0}
+.two-cap{margin-top:.7rem;max-width:62ch;
+  font-size:.95rem;line-height:1.55;color:var(--ink-muted)}
+@media (max-width:980px){
+  .two-stage{overflow-x:auto}
+  .two-stage svg{min-width:940px}
+}
 </style>
 </head>
 <body>
@@ -176,6 +206,25 @@ a{color:inherit;text-decoration:none}
         <p class="sig"><b>Andrew Godlewski</b> · Founder</p>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- The two-records drawing, in the middle beat About did not have. The heading
+     and lede here are PLACEHOLDER copy written to hold the slot. -->
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rule"></div>
+      <h2 class="h2">Built for the review cycle, or built for Tuesday</h2>
+      <p class="lede">Every serious tool in this category is an artifact of the
+        review cycle, made in one sitting, four times a year. The record a manager
+        actually needs fills itself in as the week goes.</p>
+    </div>
+    <figure class="dfig two">
+      <div class="two-stage"><svg viewBox="-24 -8 1048 440" role="img" aria-label="Two records side by side. The left one carries a single quarter stamp, five identical rows and no teal at all. The right one carries a different day stamp on every row, marks in three different states, and your own teal identity dot."><defs><filter id="twosh" x="-45%" y="-45%" width="190%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-opacity="0.17"/><feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity="0.09"/></filter></defs><text class="mono d-label" x="15" y="26" font-size="12" letter-spacing="1.4">BUILT FOR THE REVIEW CYCLE</text><rect class="d-surface" x="15" y="42" width="430" height="340" rx="16" filter="url(#twosh)"/><circle class="d-control" cx="47" cy="82" r="8"/><rect class="d-heading" x="67" y="77" width="118" height="10" rx="4.5"/><rect class="d-control" x="47" y="104" width="70" height="10" rx="4.5"/><line class="s-hairline" x1="35" y1="132" x2="425" y2="132" stroke-width="1"/><text class="mono d-label" x="413" y="90" text-anchor="end" font-size="14" letter-spacing="1.6">Q3</text><rect class="d-recorded" x="47" y="154" width="18" height="18" rx="6"/><rect class="d-control" x="79" y="158" width="72" height="10" rx="4.5"/><rect class="d-pill" x="163" y="158" width="210" height="10" rx="4.5"/><rect class="d-recorded" x="47" y="198" width="18" height="18" rx="6"/><rect class="d-control" x="79" y="202" width="72" height="10" rx="4.5"/><rect class="d-pill" x="163" y="202" width="198" height="10" rx="4.5"/><rect class="d-recorded" x="47" y="242" width="18" height="18" rx="6"/><rect class="d-control" x="79" y="246" width="72" height="10" rx="4.5"/><rect class="d-pill" x="163" y="246" width="214" height="10" rx="4.5"/><rect class="d-recorded" x="47" y="286" width="18" height="18" rx="6"/><rect class="d-control" x="79" y="290" width="72" height="10" rx="4.5"/><rect class="d-pill" x="163" y="290" width="202" height="10" rx="4.5"/><rect class="d-recorded" x="47" y="330" width="18" height="18" rx="6"/><rect class="d-control" x="79" y="334" width="72" height="10" rx="4.5"/><rect class="d-pill" x="163" y="334" width="206" height="10" rx="4.5"/><text class="mono d-label" x="555" y="26" font-size="12" letter-spacing="1.4">BUILT FOR TUESDAY</text><rect class="d-surface" x="555" y="42" width="430" height="340" rx="16" filter="url(#twosh)"/><circle class="d-brand" cx="587" cy="82" r="8"/><rect class="d-heading" x="607" y="77" width="118" height="10" rx="4.5"/><rect class="d-control" x="587" y="104" width="70" height="10" rx="4.5"/><line class="s-hairline" x1="575" y1="132" x2="965" y2="132" stroke-width="1"/><text class="mono d-heading" x="587" y="167" font-size="11.5" letter-spacing="1.2">TUE</text><rect class="d-brand" x="641" y="154" width="18" height="18" rx="6"/><rect class="d-pill" x="673" y="158" width="228" height="10" rx="4.5"/><text class="mono d-heading" x="587" y="211" font-size="11.5" letter-spacing="1.2">TUE</text><rect class="d-recorded" x="641" y="198" width="18" height="18" rx="6"/><rect class="d-pill" x="673" y="202" width="176" height="10" rx="4.5"/><text class="mono d-heading" x="587" y="255" font-size="11.5" letter-spacing="1.2">THU</text><rect class="d-brand" x="641" y="242" width="18" height="18" rx="6"/><rect class="d-pill" x="673" y="246" width="246" height="10" rx="4.5"/><text class="mono d-heading" x="587" y="299" font-size="11.5" letter-spacing="1.2">FRI</text><rect class="d-open" x="641" y="286" width="18" height="18" rx="6" stroke-width="2.5"/><rect class="d-pill" x="673" y="290" width="194" height="10" rx="4.5"/><text class="mono d-heading" x="587" y="343" font-size="11.5" letter-spacing="1.2">MON</text><rect class="d-recorded" x="641" y="330" width="18" height="18" rx="6"/><rect class="d-pill" x="673" y="334" width="212" height="10" rx="4.5"/></svg></div>
+      <figcaption class="two-cap">Same material. Different owner. They never
+        merge.</figcaption>
+    </figure>
   </div>
 </section>
 

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "viewer_own",
+    "label": "Column 1 — the reader's own account",
+    "type": "text",
+    "default": "YOUR ACCOUNT",
+    "help_text": "Set in small capitals. The drawing's geometry is fixed: renaming a column changes the word, not the picture. Keep it under about 28 characters or it will run into the next column."
+  },
+  {
+    "name": "viewer_same_org",
+    "label": "Column 2 — another account in the same organization",
+    "type": "text",
+    "default": "ANOTHER MANAGER, SAME ORG",
+    "help_text": "Under about 28 characters."
+  },
+  {
+    "name": "viewer_other_org",
+    "label": "Column 3 — an account in a different organization",
+    "type": "text",
+    "default": "ANOTHER ORGANIZATION",
+    "help_text": "Under about 28 characters. This column is drawn as an empty outline on purpose."
+  },
+  {
+    "name": "caption",
+    "label": "Caption",
+    "type": "text",
+    "default": "Rows another account cannot see were never returned to it. Nothing is greyed out, because there was nothing to withhold. Another organization gets no record at all.",
+    "help_text": "The sentence under the drawing. Leave it empty to hide it. This is real type rather than a hint, so it should say what the picture means."
+  }
+]
