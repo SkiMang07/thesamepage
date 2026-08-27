@@ -15,10 +15,8 @@ frontend/package-lock.json
 # (Session 50) — nav-option-c-v2.html is the shipped mockup and stays
 # tracked; a/b/d plus the pre-v2 c were exploration, not source.
 .claude/
-mockups/nav/nav-option-a-grouped-rail.html
-mockups/nav/nav-option-b-command-deck.html
-mockups/nav/nav-option-c-hub-and-orbit.html
-mockups/nav/nav-option-d-dock.html
+# (mockups/nav retired entirely — the nav it explored was superseded by the
+# Session 51 top bar + left rail.)
 
 # Sandbox leftovers — cloud-rebuild tarballs the remote session can't delete
 # itself. Safe to remove from disk any time.
@@ -27,9 +25,8 @@ _to_delete/
 # Design source assets: ~31 MB of logo/palette exploration PNGs. Kept on disk
 # for reference, deliberately out of git — permanent history weight for files
 # that aren't source. The shipped mark is exported into the app, not read
-# from here.
-docs/branding/
-docs/marketing/
+# from here. Moved from docs/branding + docs/marketing into gtm/brand/assets.
+gtm/brand/assets/
 
 # Local agent caches and generated packages are not project state. The shared
 # TSP Push source is the exception: Codex loads it in place and the Claude

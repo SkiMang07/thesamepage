@@ -3,6 +3,11 @@
 The colour and logo system for the whole app. This doc says what the tokens
 mean and when to reach for each one.
 
+This doc is the **implementation spec** — tokens, hex values, and where they live in
+code. Brand *strategy* (positioning, voice, register, say/never-say) lives in `gtm/`,
+starting at `gtm/README.md`.
+
+
 Three files, three jobs:
 
 | File | Owns |
@@ -11,9 +16,9 @@ Three files, three jobs:
 | `frontend/tailwind.config.js` | The token **names**. Every colour is `rgb(var(--c-*) / <alpha-value>)`. |
 | `frontend/lib/tokens.ts` | The recurring class **strings** — a card, a badge, a button, a status. |
 
-Source of the locked decisions: `docs/branding/colors/README.md` (palette
-direction #11), `docs/branding/tsp/README.md` (logo T10-C), and
-`docs/Redesign Scoping/mission-control-bounded-synthesis.html` (the approved
+Source of the locked decisions: `gtm/brand/assets/colors/README.md` (palette
+direction #11), `gtm/brand/assets/tsp/README.md` (logo T10-C), and
+`docs/systems/mission-control-visual-authority.html` (the approved
 Mission Control reference in the dark product theme). The first two folders are
 gitignored — they exist on Andrew's disk only.
 
@@ -87,7 +92,7 @@ The whole app runs on five, and nothing else is allowed in.
 | **Info** | blue | Scribe, AI surfaces, focus rings — **nothing else** |
 | **Inert** | carbon | Structure, typography, anything that needs no attention |
 
-Blue's narrowness is the point. `docs/branding/colors/README.md` names blue
+Blue's narrowness is the point. `gtm/brand/assets/colors/README.md` names blue
 creep as the specific way this palette goes generic, so blue never becomes a
 status, a zone, or a decorative accent. It is not a KPI tile colour.
 
@@ -336,7 +341,7 @@ the AI-raster edge noise from 498 nodes to 136 at 0.1% pixel deviation.
 Geometry is four disconnected components with no counters.
 
 **Below ~32px the full mark's negative channels close up and it reads as a
-blob** — a limitation `docs/branding/tsp/README.md` predicted for T10. Use the
+blob** — a limitation `gtm/brand/assets/tsp/README.md` predicted for T10. Use the
 small cut or the tile, never a scaled-down `Logo`.
 
 Still open: horizontal wordmark lockups, and a clearance/similarity review

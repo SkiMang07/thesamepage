@@ -28,9 +28,13 @@ you're actually touching:
 | Backend, API, DB, auth, AI, infra | `docs/ENGINEERING.md` |
 | UI, component patterns, design decisions | `docs/DESIGN.md` |
 | Product scope, feature priority, roadmap | `PRODUCT_VISION.md` |
-| Pricing, GTM, content, ICP | `docs/GTM.md` |
+| Pricing, tiers, distribution, content strategy | `gtm/business-model.md` |
+| What we are, to whom, against what | `gtm/positioning.md` |
+| Who we sell to, their language and beliefs | `gtm/personas/new-manager.md` |
+| Voice, register, say/never-say | `gtm/brand/voice-rules.md` |
+| The argument behind a marketing page | `gtm/site/<page>.md` |
 | One specific feature area | `docs/systems/<area>.md` (see below) |
-| Marketing website (HubSpot) | `website/docs/build-process.md` |
+| Marketing website build (HubSpot) | `website/docs/build-process.md` |
 
 `docs/systems/` holds one current-state doc per subsystem — read on demand,
 never all at once:
@@ -58,9 +62,17 @@ Pending work that is scoped but not built has its own doc:
 `docs/NOTES_INGESTION_SCOPING.md`. Shipped scoping docs live in
 `docs/archive/scoping/` — historical, never current intent.
 
-`docs/Redesign Scoping/mission-control-bounded-synthesis.html` is the **approved
-Mission Control visual authority** — open it before visual work on that surface.
-Its example data is reference content, not validated customer data or final copy.
+`docs/systems/mission-control-visual-authority.html` is the **approved Mission
+Control visual authority** — open it before visual work on that surface. Its example
+data is reference content, not validated customer data or final copy.
+
+`gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
+the argument behind each marketing page. `website/` stays a build root with its own
+HubSpot tooling. **gtm/ is the thinking, website/ is the build.** Read `gtm/README.md`
+for the map and the order to read them in.
+
+Everything currently live on the marketing site is **scaffolding**, written to get a
+site standing pre-launch. No shipped line constrains brand or positioning work.
 
 ---
 
@@ -104,6 +116,15 @@ frontend/    Next.js App Router, deploys to Vercel on push
   lib/tokens.ts      brand class strings — status maps, buttons, cards, KPI tones
   public/            logo masters, favicon, app icons
   tailwind.config.js every colour value + the font token (see docs/systems/brand.md)
+
+gtm/         go-to-market: positioning, personas, brand/voice, per-page arguments
+  business-model.md    pricing, tiers, distribution, content strategy
+  positioning.md       the Dunford five, the statement, the lead by surface
+  personas/            who we sell to, evidence-backed
+  research/            the message-mining corpus, method and sampling gaps
+  brand/               voice rules now; point-of-view and messaging still to write
+    assets/            logo + palette exploration PNGs (gitignored, ~31 MB)
+  site/                the argument behind each marketing page
 
 docs/        see the table above
 ```

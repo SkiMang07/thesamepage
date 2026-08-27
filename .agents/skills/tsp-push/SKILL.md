@@ -68,7 +68,11 @@ Default to no documentation edit unless the change makes a current statement fal
 | `docs/DESIGN.md` | A reusable UI convention or still-load-bearing design decision changed. |
 | `CLAUDE.md` | Project routing, hard rules, top-level structure, or closeout conventions changed. |
 | `PRODUCT_VISION.md` | Product scope, priority, or roadmap intent changed. |
-| `docs/GTM.md` | Pricing, ICP, positioning, distribution, or go-to-market changed. |
+| `gtm/business-model.md` | Pricing, tiers, distribution, or content strategy changed. |
+| `gtm/positioning.md` | What we are, to whom, or against what alternative changed. |
+| `gtm/personas/<persona>.md` | Who we sell to, what they believe, or their language changed. |
+| `gtm/brand/<file>.md` | A voice, register, or messaging rule changed. |
+| `gtm/site/<page>.md` | The argument behind a marketing page changed. |
 | `docs/decisions/<decision>.md` | A qualifying durable decision was proposed, accepted, superseded, rejected, or implemented. |
 
 Canonical docs describe the present rather than narrating the change. Rewrite stale text in place. Move materially superseded reference content to the appropriate `docs/archive/` file when retaining it has historical value. Do not add session numbers, dated follow-up headings, or implementation details already obvious from the code and diff.

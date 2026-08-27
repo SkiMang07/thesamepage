@@ -190,7 +190,7 @@ time that page is built.
 ## The blog
 
 The blog is **Direction 04, Field Guide**. `website/prototype/blog-index.html`,
-`blog-post.html` and `blog-argument.md` are what the two templates were cut
+`blog-post.html` and `gtm/site/blog.md` are what the two templates were cut
 from and stay as the reference.
 
 **Blog templates are `templateType: blog` and carry no `dnd_area`.** A listing
@@ -520,8 +520,8 @@ Home (the problems, and how the product solves them) · product walkthrough · b
 contact · support · legal · about · offers.
 
 **About and Contact: theme code done, pages not yet live.** Argument docs and
-standalone prototypes live in `prototype/` (`about-argument.md`/`about.html`,
-`contact-argument.md`/`contact.html`), reviewed and approved. `about.html` and
+standalone prototypes live in `prototype/` (`gtm/site/about.md`/`about.html`,
+`gtm/site/contact.md`/`contact.html`), reviewed and approved. `about.html` and
 `contact.html` are real templates now (see Architecture above), each seeded
 with the right modules already — `npm run verify` passes. What's left is
 manual, in HubSpot itself, not code: create the two pages by picking the
@@ -537,7 +537,7 @@ their current "Deleted" state.
 
 **Legal: all three pages live in HubSpot** (`/legal/privacy`,
 `/legal/terms`, `/legal/security`), built by Andrew directly from the
-`legal-body.module` + `legal.html` template. `prototype/legal-argument.md`
+`legal-body.module` + `legal.html` template. `gtm/site/legal.md`
 plus the three prototypes remain as the reference the module was cut from.
 One real gap surfaced doing this by hand: pasting the Terms/Security content
 from a rendered browser tab strips real `<h2>`/`<blockquote>` tags down to
