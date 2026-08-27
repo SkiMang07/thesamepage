@@ -16,10 +16,10 @@ happened on the Terms and Security pages).
 
 | Furniture | Element | Author does |
 |---|---|---|
-| "What you leave with" contract box | the **first `<blockquote>`** | writes a blockquote with a bulleted list inside |
+| "What you leave with" contract box | **a `<blockquote>` containing a `<ul>`** | writes a blockquote with a bulleted list inside |
 | The carbon script block | a **`<pre>`** | uses the editor's code-block button |
 | A numbered step | an **`<h3>`** | uses Heading 3; the numeral is a CSS counter |
-| A pull quote | any **blockquote after the first** | writes a second blockquote |
+| A pull quote | **a blockquote with no list in it** | writes a blockquote of plain text |
 
 The two labels — "What you leave with" and "Say it like this" — are **generated
 content**, so the author writes the bullets and the lines and never the

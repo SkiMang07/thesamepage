@@ -237,19 +237,33 @@ Everything is therefore styled on an element the editor preserves:
 
 | Furniture | Element | Author does |
 |---|---|---|
-| "What you leave with" contract box | the **first `<blockquote>`** | writes a blockquote with a bulleted list inside |
+| "What you leave with" contract box | **a `<blockquote>` containing a `<ul>`** | writes a blockquote with a bulleted list inside |
 | The carbon script block | a **`<pre>`** | uses the editor's code-block button |
 | A numbered step | an **`<h3>`** | uses Heading 3; the numeral is a CSS counter |
-| A pull quote | any **blockquote after the first** | writes a second blockquote |
+| A pull quote | **a blockquote with no list in it** | writes a blockquote of plain text |
 
 The two labels — "What you leave with" and "Say it like this" — are **generated
 content**, so the author writes the bullets and the lines and never the
 furniture. The step numerals are a counter, so they cannot go stale and they
 renumber themselves when a step moves.
 
-**Unverified against the live editor.** Publish one throwaway post through the
-normal editor and view source before trusting it. The fallback is the field's
-Advanced → source-code view, which the legal pages already proved works.
+**Verified against the live editor**, on the first real post. All four survive
+HubSpot's rich-text paste. Two things that surfaced doing it, both now fixed:
+
+- The contract box originally keyed off the **first** blockquote in the body. A
+  post pasted in with a "Pro tip" quote near the top had that quote promoted and
+  relabelled. It now keys off `blockquote:has(ul)`, so a blockquote with bullets
+  is the contract box and a blockquote without one is a pull quote, wherever
+  either sits. **This is the rule to teach an author**, and it is the one that
+  survives a paste.
+- `publish_date_localized` follows the blog's own date format, which includes the
+  time of day, so a micro-label read "Aug 27, 2026, 3:47:45 PM". Both templates
+  now use `content.publish_date_local_time|datetimeformat('%d %b %Y')`.
+
+**The one thing an author has to get right is heading level.** A step is an
+`<h3>` and takes a numeral. An `<h2>` is a plain section heading and takes none,
+which is what a closing "Final thoughts" wants. Pasted copy tends to arrive as
+`<h2>` throughout, so the numerals silently do not appear.
 
 ### No JavaScript here either
 

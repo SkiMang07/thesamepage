@@ -76,7 +76,7 @@
               <div class="fg-kind"><span class="gl gl-{{ k }}">{% if k == "script" %}[ ]{% endif %}</span><b>{{ k }}</b></div>
               <h2>{{ content.name }}</h2>
               {% if content.post_summary %}<p>{{ content.post_summary|striptags|truncate(190) }}</p>{% endif %}
-              <span class="fg-date">{{ content.publish_date_localized }}</span>
+              <span class="fg-date">{{ content.publish_date_local_time|datetimeformat('%d %b %Y') }}</span>
             </a>
           {% else %}
             <p class="fg-empty">The first pieces are being written. Check back shortly.</p>

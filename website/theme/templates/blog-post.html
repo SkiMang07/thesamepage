@@ -54,7 +54,7 @@
           {% if content.post_summary %}<p class="lede">{{ content.post_summary|striptags }}</p>{% endif %}
           <div class="fg-byline">
             {% if content.blog_post_author %}<span>{{ content.blog_post_author.display_name }}</span>{% endif %}
-            <span>{{ content.publish_date_localized }}</span>
+            <span>{{ content.publish_date_local_time|datetimeformat('%d %b %Y') }}</span>
           </div>
 
           <div class="fg-body">
@@ -87,7 +87,7 @@
                 <div class="fg-kind"><span class="gl gl-{{ pk }}">{% if pk == "script" %}[ ]{% endif %}</span><b>{{ pk }}</b></div>
                 <h2>{{ p.name }}</h2>
                 {% if p.post_summary %}<p>{{ p.post_summary|striptags|truncate(150) }}</p>{% endif %}
-                <span class="fg-date">{{ p.publish_date_localized }}</span>
+                <span class="fg-date">{{ p.publish_date_local_time|datetimeformat('%d %b %Y') }}</span>
               </a>
             {% endif %}
           {% endfor %}
