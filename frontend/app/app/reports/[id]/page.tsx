@@ -457,6 +457,13 @@ export default function ReportDetailPage() {
   // Most-recent unfinished occurrence — scheduled or already prepped.
   const plannedSession = history.find((h) => h.status !== "completed");
 
+  // The prep sheet living on that occurrence. This card renders it directly:
+  // preparing CONSUMES the gathering sources (the /prep step folds capture
+  // notes into the sheet and deletes them), so a card that only knew about
+  // carry-forwards, suggestions and captures got emptier the moment a manager
+  // prepared — a fully prepped conversation reported "Nothing gathered yet."
+  const preppedGuide =
+    plannedSession?.status === "planned" ? plannedSession.prep_guide ?? null : null;
   const lastCompleted = history.find((h) => h.status === "completed");
   // This is historical evidence, not a second home for the next workspace.
   // Status is derived server-side from summary being set, so completed is the
@@ -617,6 +624,32 @@ export default function ReportDetailPage() {
               </li>
             </ol>
 
+            {preppedGuide && (
+              <div className="mt-4 rounded-lg border border-brand/30 bg-brand-tint px-3.5 py-3">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                  Planned agenda
+                </p>
+                {preppedGuide.situation_summary && (
+                  <p className="mt-1.5 text-sm leading-6 text-ink-body">
+                    {preppedGuide.situation_summary}
+                  </p>
+                )}
+                {preppedGuide.agenda_items.length > 0 && (
+                  <ol className="mt-2.5 space-y-1.5">
+                    {preppedGuide.agenda_items.map((item, index) => (
+                      <li key={index} className="flex gap-2 text-sm text-ink-body">
+                        <span className="shrink-0 text-ink-faint">{index + 1}.</span>
+                        <span>{item.title}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <p className="mt-2.5 text-[11px] text-ink-muted">
+                  Rationale and questions for each are on the prep sheet.
+                </p>
+              </div>
+            )}
+
             {(plannedSession?.carry_forward_items.length ?? 0) > 0 && (
               <div className="mt-4">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Carried forward</p>
@@ -668,7 +701,7 @@ export default function ReportDetailPage() {
               </div>
             )}
 
-            {worthRaising.length === 0 && captures.length === 0 && (plannedSession?.carry_forward_items.length ?? 0) === 0 && (
+            {!preppedGuide && worthRaising.length === 0 && captures.length === 0 && (plannedSession?.carry_forward_items.length ?? 0) === 0 && (
               <p className="mt-3 text-sm text-ink-muted">Nothing gathered yet.</p>
             )}
 

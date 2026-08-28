@@ -134,6 +134,16 @@ Only after that review does `/prep` generate and persist the prep guide. This
 keeps the agenda fresh instead of generating it immediately after the prior
 meeting, before later captures and commitment changes exist.
 
+Once the sheet exists, the person page's next-conversation card renders it —
+situation summary plus the agenda item titles — rather than the gathering
+sources that produced it. It has to: preparing **consumes** those sources, since
+generation deletes the captures it folded in. A card that only knew about
+carry-forwards, live suggestions and captures therefore went *emptier* the
+moment a manager prepared, and a fully prepped conversation could report
+"Nothing gathered yet." The empty state now belongs to the gathering and
+scheduled states alone. Rationale and suggested questions stay on the prep sheet
+itself; the card carries the titles.
+
 Output shape is `situation_summary` + `agenda_items[]`, not flat Q&A lists. Each
 agenda item renders as a collapsible card: rationale as italic subtext, suggested
 questions as an indented list. **The closing question is mandatory and always the
