@@ -8,7 +8,7 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 
 | Route | Notes |
 |---|---|
-| `GET`/`POST ""` | the log |
+| `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for" |
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
 | `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one |
@@ -27,6 +27,26 @@ exists while `scheduled_at`, `prep_guide`, and `summary` are null. **Scheduled**
 that can drift out of sync.
 
 "Deferred" is deliberately not a tracked status — nothing in the app triggers it.
+
+## The meeting date
+
+`scheduled_at` **is the meeting date**, planned or backfilled, past or future,
+encoded at noon UTC. Status derives from `summary` alone, so a past date never
+makes an occurrence look upcoming — the same rule `team_meetings` states in
+`schema.sql`. `logged_at` is when the write-up was saved. `created_at` is row
+creation and is never a meeting date: an ad-hoc log completes a workspace that
+already existed, so its `created_at` is whenever that shell happened to be made.
+
+`utils.meeting_date_of()` is the **single canonical resolver**, with
+`meeting_day_of()` and `meeting_sort_key()` beside it. Nothing reads the columns
+directly, the same discipline `resolve_cadence_days()` holds for cadence.
+`_serialize_session()` publishes `meeting_date`, so the frontend renders one
+field rather than choosing for itself. History sorts by the meeting date because
+it displays the meeting date; `/overview` picks the latest completed occurrence
+by meeting date; Mission Control counts conversations *held* this week.
+
+See `docs/decisions/meeting-date-is-scheduled-at.md` for why this is not a third
+date column.
 
 Every completed conversation leaves exactly one unfinished next-meeting
 workspace, even when the next date is unknown. The person page treats it as the
@@ -138,7 +158,11 @@ we cover" and "what's actually happening" without navigation.
 ## Wrap-up
 
 **Always draft-then-review.** The extracted summary and commitments render on an
-editable review screen before anything saves. Commitments are accountability
+editable review screen before anything saves. That screen also carries the
+**meeting date**, prefilled from the prep sheet on the prepared path and from
+the Log a 1:1 page on the ad-hoc one, and editable on both — it is the shared
+surface, so neither entry point can save a conversation without a date the
+manager saw. Commitments are accountability
 records; a hallucinated one costs trust in the entire product.
 
 Commitments render as editable review rows with owner and optional due date;
@@ -160,3 +184,20 @@ as record-keeper so RLS is untouched. `dropped` is a first-class status distinct
 from done, so accountability data stays honest.
 
 `one_on_ones.notes` is visible to the writing manager only, enforced by RLS.
+
+## Logging a conversation that was not prepped
+
+**Log a 1:1** asks for the meeting date, because it is the path most likely to
+be used days after the conversation.
+
+It also asks *which* conversation, but only when there is something to get
+wrong. Logging normally completes the person's current unfinished workspace, so
+an ad-hoc log does not strand it or open a second record of the same
+conversation. When that workspace has a prep sheet on it, completing it would
+throw the prep away and file the conversation under the upcoming meeting's date,
+so the page offers the choice: **That meeting** sends the occurrence id and
+completes it, **A different one** sends `separate_occurrence` and logs its own
+occurrence while the prepped workspace keeps its prep, its series and its date.
+Either way the confirmed carry-forward topics land on whichever occurrence is
+still open. A gathering or merely scheduled workspace holds no work worth
+protecting, so nothing is asked.

@@ -34,7 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from config import settings
-from utils import get_authenticated_client
+from utils import get_authenticated_client, meeting_date_of, meeting_sort_key
 
 _INVITE_TTL_DAYS = 7
 
@@ -61,7 +61,7 @@ def fetch_role_expectations(supabase, role_level_id: str | None) -> dict | None:
 
     role_rows = (
         supabase.table("role_levels")
-        .select("id,job_role,job_level,functional_team,job_responsibilities")
+        .select("id,job_role,job_level,functional_team,job_responsibilities,created_at")
         .eq("id", role_level_id)
         .execute()
         .data
@@ -167,13 +167,14 @@ async def get_team_overview(auth=Depends(get_authenticated_client)):
     # these two share the threshold (see CLAUDE.md); don't change one alone.
     one_on_ones = (
         supabase.table("one_on_ones")
-        .select("direct_report_id,created_at,summary")
+        .select("direct_report_id,scheduled_at,created_at,summary")
         .eq("manager_id", user_id)
         .not_.is_("summary", "null")
-        .order("created_at", desc=True)
         .execute()
         .data
     )
+    # Newest MEETING first, not newest row — see utils.meeting_date_of().
+    one_on_ones.sort(key=meeting_sort_key, reverse=True)
 
     open_commitments = (
         supabase.table("commitments")
@@ -187,7 +188,7 @@ async def get_team_overview(auth=Depends(get_authenticated_client)):
     # Newest-first order means the first occurrence per report is the latest 1:1.
     last_one_on_one: dict = {}
     for row in one_on_ones:
-        last_one_on_one.setdefault(row["direct_report_id"], row["created_at"])
+        last_one_on_one.setdefault(row["direct_report_id"], meeting_date_of(row))
 
     commitment_counts: dict = {}
     for row in open_commitments:

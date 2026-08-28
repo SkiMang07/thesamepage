@@ -127,7 +127,13 @@ export type OneOnOne = {
   recurrence_timezone?: string | null;
   carry_forward_items: string[];
   created_at: string;
+  // When the write-up was saved. Bookkeeping only — never a meeting date.
+  logged_at?: string | null;
   status: SessionStatus;
+  // When the conversation actually happened, server-derived. scheduled_at
+  // is the meeting date; created_at is a legacy fallback for rows the
+  // 2026-08-28 backfill could not reach. Render this, never the columns.
+  meeting_date: string | null;
   // completed -> summary; planned -> the prep sheet's situation_summary.
   // What the DR detail page's session list actually renders per row.
   display_summary: string;
@@ -1212,8 +1218,15 @@ export const logOneOnOne = (body: {
   new_commitments?: WrapUpCommitment[];
   carry_forward_items?: string[];
   // Set when this meeting was opened from its workspace. When omitted, the
-  // backend still completes the person's current unfinished occurrence.
+  // backend completes the person's current unfinished occurrence unless it
+  // has prep saved on it.
   one_on_one_id?: string;
+  // YYYY-MM-DD — the day the conversation happened, confirmed on the review
+  // screen. Encoded at noon UTC onto scheduled_at, which is the meeting date.
+  meeting_date?: string | null;
+  // "A different conversation from the one I have prep saved for." Logs its
+  // own occurrence and leaves the prepped workspace untouched.
+  separate_occurrence?: boolean;
 }): Promise<{ meeting: OneOnOne; next_session: OneOnOne }> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 

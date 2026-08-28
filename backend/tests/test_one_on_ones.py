@@ -55,6 +55,31 @@ def test_session_status_is_derived_across_gathering_scheduled_prepped_completed(
     assert completed["display_summary"] == "Agreed on the recovery plan."
 
 
+def test_meeting_date_is_the_scheduled_date_and_falls_back_to_row_creation():
+    """scheduled_at is the meeting date. created_at is only the safety net for
+    rows the 2026-08-28 backfill could not reach, and no surface should ever
+    have to make that choice for itself again."""
+    dated = _serialize_session({
+        "id": "dated",
+        "summary": "Talked through the territory plan.",
+        "prep_guide": None,
+        "carry_forward_items": [],
+        "scheduled_at": "2026-08-26T12:00:00+00:00",
+        "created_at": "2026-08-02T14:09:52+00:00",
+    })
+    assert dated["meeting_date"] == "2026-08-26T12:00:00+00:00"
+
+    legacy = _serialize_session({
+        "id": "legacy",
+        "summary": "Talked through the territory plan.",
+        "prep_guide": None,
+        "carry_forward_items": [],
+        "scheduled_at": None,
+        "created_at": "2026-08-02T14:09:52+00:00",
+    })
+    assert legacy["meeting_date"] == "2026-08-02T14:09:52+00:00"
+
+
 def test_next_occurrence_preserves_anchor_and_skips_past_dates():
     now = datetime(2026, 8, 23, 16, tzinfo=timezone.utc)
     assert _next_occurrence_at("2026-08-20T12:00:00Z", 2, now) == "2026-09-03T12:00:00+00:00"
@@ -209,12 +234,15 @@ def test_logging_recurring_call_completes_current_and_starts_next_occurrence():
                     )
                 ],
                 carry_forward_items=["Revisit renewal confidence"],
+                meeting_date="2026-08-25",
             ),
             auth=("manager", client),
         )
     )
 
     assert result["meeting"]["status"] == "completed"
+    assert result["meeting"]["meeting_date"] == "2026-08-25T12:00:00+00:00"
+    assert result["meeting"]["logged_at"]
     assert result["next_session"]["status"] == "scheduled"
     assert result["next_session"]["scheduled_at"] == "2026-09-08T12:00:00+00:00"
     assert result["next_session"]["carry_forward_items"] == ["Revisit renewal confidence"]
@@ -236,6 +264,7 @@ def test_logging_ad_hoc_call_completes_workspace_and_creates_undated_next_one():
                 direct_report_id="report",
                 summary="Talked through the new territory plan.",
                 carry_forward_items=["Check how the territory transition landed"],
+                meeting_date="2026-08-24",
             ),
             auth=("manager", client),
         )
@@ -243,9 +272,99 @@ def test_logging_ad_hoc_call_completes_workspace_and_creates_undated_next_one():
 
     assert result["meeting"]["id"] == "current"
     assert result["meeting"]["status"] == "completed"
+    # The day the manager said they talked, not the day the workspace shell
+    # happened to be created. This is the regression that filed an August 26
+    # conversation under August 2.
+    assert result["meeting"]["meeting_date"] == "2026-08-24T12:00:00+00:00"
     assert result["next_session"]["status"] == "gathering"
     assert result["next_session"]["scheduled_at"] is None
     assert result["next_session"]["carry_forward_items"] == [
         "Check how the territory transition landed"
     ]
     assert client.rows["dr_capture_notes"] == []
+
+
+def test_ad_hoc_log_leaves_a_prepped_workspace_alone():
+    """The destructive case. A manager who has prep saved for an upcoming 1:1
+    and then logs a hallway chat used to have that prepped occurrence quietly
+    marked completed with the hallway notes: the prep was gone and the chat
+    was filed under the upcoming meeting's date. The ad-hoc path no longer
+    consumes a prepped workspace — the conversation logs as its own
+    occurrence, and the prep stays waiting where the manager left it."""
+    client = _MemoryClient()
+
+    result = asyncio.run(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                summary="Quick catch-up after standup.",
+                carry_forward_items=["Circle back on the renewal"],
+                meeting_date="2026-08-24",
+            ),
+            auth=("manager", client),
+        )
+    )
+
+    assert result["meeting"]["id"] != "current"
+    assert result["meeting"]["status"] == "completed"
+    assert result["meeting"]["meeting_date"] == "2026-08-24T12:00:00+00:00"
+    # Ad-hoc, so deliberately not one of the recurring slots.
+    assert result["meeting"].get("series_id") is None
+
+    workspace = next(row for row in client.rows["one_on_ones"] if row["id"] == "current")
+    assert workspace["summary"] is None
+    assert workspace["prep_guide"] == {"situation_summary": "Current prep"}
+    assert workspace["scheduled_at"] == "2026-08-25T12:00:00+00:00"
+    assert workspace["series_id"] == "series"
+    # It is still the next conversation, so it collects the carry-forward.
+    assert workspace["carry_forward_items"] == ["Circle back on the renewal"]
+    assert result["next_session"]["id"] == "current"
+    assert result["next_session"]["status"] == "planned"
+
+
+def test_separate_occurrence_opts_out_even_when_the_workspace_is_unprepped():
+    """"A different conversation" is the manager's answer, not an inference.
+    An unprepped workspace would otherwise be consumed, so the flag has to be
+    honoured on its own."""
+    client = _MemoryClient()
+    client.rows["one_on_ones"][0]["prep_guide"] = None
+
+    result = asyncio.run(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                summary="Grabbed ten minutes before the offsite.",
+                meeting_date="2026-08-21",
+                separate_occurrence=True,
+            ),
+            auth=("manager", client),
+        )
+    )
+
+    assert result["meeting"]["id"] != "current"
+    workspace = next(row for row in client.rows["one_on_ones"] if row["id"] == "current")
+    assert workspace["summary"] is None
+    assert workspace["scheduled_at"] == "2026-08-25T12:00:00+00:00"
+
+
+def test_explicit_workspace_id_still_completes_a_prepped_occurrence():
+    """The other half of the same question. When the manager says "that is the
+    meeting I prepped", the Log page sends the occurrence id and it completes
+    normally — the guard above must not make a prepped meeting unloggable."""
+    client = _MemoryClient()
+
+    result = asyncio.run(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                one_on_one_id="current",
+                summary="Ran the prepped agenda.",
+                meeting_date="2026-08-25",
+            ),
+            auth=("manager", client),
+        )
+    )
+
+    assert result["meeting"]["id"] == "current"
+    assert result["meeting"]["status"] == "completed"
+    assert result["next_session"]["id"] != "current"

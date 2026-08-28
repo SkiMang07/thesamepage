@@ -13,6 +13,7 @@ import time
 import base64
 import json
 import uuid
+from datetime import date, datetime
 from fastapi import HTTPException, Header
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -177,6 +178,45 @@ def resolve_cadence_days(report: dict | None, org: dict | None) -> tuple[int, st
     if org_cadence is not None:
         return org_cadence, "org"
     return _DEFAULT_CADENCE_DAYS, "default"
+
+
+def meeting_date_of(row: dict | None) -> str | None:
+    """The single canonical answer to "when did this 1:1 happen".
+
+    `one_on_ones.scheduled_at` is the meeting date, planned or backfilled,
+    exactly as `team_meetings.scheduled_at` has been since 2026-08-24. Every
+    log path now writes a manager-confirmed date there, and the 2026-08-28
+    migration backfilled the completed rows that predate that.
+
+    `created_at` is row creation and means nothing about the conversation:
+    an ad-hoc log completes an existing workspace, so its created_at is
+    whenever that shell happened to be made. It stays here purely as a
+    fallback for a row the backfill could not reach, and it is the reason
+    this resolver exists at all -- the rule used to be re-implemented at
+    every call site, and drifted (History said one date, "Last met" said
+    another, and the prep prompt reported a stale gap). Read the meeting
+    date through this function, never off the columns.
+    """
+    if not row:
+        return None
+    return row.get("scheduled_at") or row.get("created_at")
+
+
+def meeting_day_of(row: dict | None) -> date | None:
+    """meeting_date_of() as a calendar day, for cadence and recency math."""
+    value = meeting_date_of(row)
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def meeting_sort_key(row: dict | None) -> str:
+    """Newest-meeting-first sort key. Empty string sorts an undated row last
+    under `reverse=True`, which is where an unknown date belongs."""
+    return str(meeting_date_of(row) or "")
 
 
 def get_org(user_id: str, supabase: Client) -> dict | None:

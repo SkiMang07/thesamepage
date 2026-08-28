@@ -42,7 +42,14 @@ from config import AI_DEFAULT_MODEL_LIGHT, settings
 from mission_control_engine import build_brief
 from routes.capacity import _time_off_hours
 from routes.expectations_ai import _compute_coverage
-from utils import get_authenticated_client, get_org, limiter, resolve_cadence_days
+from utils import (
+    get_authenticated_client,
+    get_org,
+    limiter,
+    meeting_date_of,
+    meeting_sort_key,
+    resolve_cadence_days,
+)
 
 router = APIRouter()
 
@@ -140,16 +147,17 @@ async def get_dashboard_insight(request: Request, auth=Depends(get_authenticated
     # cadence clock.
     one_on_ones = (
         supabase.table("one_on_ones")
-        .select("direct_report_id,created_at,summary")
+        .select("direct_report_id,scheduled_at,created_at,summary")
         .eq("manager_id", user_id)
         .not_.is_("summary", "null")
-        .order("created_at", desc=True)
         .execute()
         .data
     )
+    # Newest MEETING first, not newest row — see utils.meeting_date_of().
+    one_on_ones.sort(key=meeting_sort_key, reverse=True)
     last_one_on_one: dict = {}
     for row in one_on_ones:
-        last_one_on_one.setdefault(row["direct_report_id"], row["created_at"])
+        last_one_on_one.setdefault(row["direct_report_id"], meeting_date_of(row))
 
     open_commitments = (
         supabase.table("commitments")

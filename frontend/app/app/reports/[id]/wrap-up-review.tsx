@@ -3,6 +3,12 @@
 // Shared wrap-up review screen — used by the prep flow (after the call) and
 // the standalone Log a 1:1 page. The AI drafts a summary + commitments from
 // raw call notes; nothing is saved until the manager reviews and hits save.
+//
+// This is also where the meeting date is confirmed, deliberately on the
+// shared surface so both entry points get it. Whatever is showing here is
+// what the conversation files itself under, which is the difference between
+// a 1:1 held last Tuesday landing on last Tuesday and landing on whichever
+// day its workspace happened to be created.
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -53,6 +59,8 @@ export default function WrapUpReview({
   onBack,
   backLabel,
   oneOnOneId,
+  initialMeetingDate,
+  separateOccurrence = false,
   willRecur = false,
 }: {
   directReportId: string;
@@ -65,10 +73,17 @@ export default function WrapUpReview({
   // saving fills in that row instead of creating a new one. Omitted for
   // ad-hoc logs from the standalone Log a 1:1 flow.
   oneOnOneId?: string;
+  // YYYY-MM-DD. The prep flow passes the date already on the sheet; the Log
+  // flow passes the day the manager picked. Editable here either way.
+  initialMeetingDate: string;
+  // The manager said this was a different conversation from the one they
+  // have prep saved for, so it logs as its own occurrence.
+  separateOccurrence?: boolean;
   willRecur?: boolean;
 }) {
   const router = useRouter();
   const [summary, setSummary] = useState(draft.summary);
+  const [meetingDate, setMeetingDate] = useState(initialMeetingDate);
   const [commitments, setCommitments] = useState<EditableCommitment[]>(
     draft.commitments.map((c, i) => ({ ...c, key: i }))
   );
@@ -103,6 +118,8 @@ export default function WrapUpReview({
         direct_report_id: directReportId,
         summary: summary.trim(),
         notes: rawNotes,
+        meeting_date: meetingDate || null,
+        separate_occurrence: separateOccurrence,
         new_commitments: commitments
           .map(({ key: _key, ...c }) => ({ ...c, description: c.description.trim() }))
           .filter((c) => c.description),
@@ -143,6 +160,25 @@ export default function WrapUpReview({
         Drafted from your notes — fix anything that&apos;s off. The summary shows up in
         history and next time you prep; commitments get tracked until resolved.
       </p>
+
+      <div className="mt-8">
+        <label htmlFor="wrap-up-meeting-date" className="block text-sm font-medium text-ink-body">
+          Meeting date{" "}
+          <span className="font-normal text-ink-muted">— the day you actually talked</span>
+        </label>
+        <input
+          id="wrap-up-meeting-date"
+          type="date"
+          value={meetingDate}
+          onChange={(e) => setMeetingDate(e.target.value)}
+          className="mt-2 rounded-md border border-control px-3 py-2 text-sm text-ink-body focus:border-brand focus:outline-none"
+        />
+        <p className="mt-1 text-xs text-ink-muted">
+          This is where the conversation files itself in history, and what the
+          next prep sheet counts from. Change it if you are catching up on a
+          conversation from an earlier day.
+        </p>
+      </div>
 
       <div className="mt-8">
         <label className="block text-sm font-medium text-ink-body">Summary</label>

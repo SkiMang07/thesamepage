@@ -220,6 +220,14 @@ create unique index one_on_one_series_active_report_idx
 -- prep_guide = AI-generated prep stored for reference.
 -- carry_forward_items = manager-confirmed topics seeded from the prior call.
 -- org_id nullable for MVP.
+--
+-- scheduled_at IS THE MEETING DATE, planned or backfilled, encoded at noon
+-- UTC so the calendar day is stable in every timezone. STATUS DERIVES FROM
+-- summary, NOT FROM THE DATE -- same rule team_meetings states above, and
+-- what lets a past conversation be logged without pretending it is next.
+-- created_at is row creation and is never a meeting date; logged_at is when
+-- the write-up was saved. utils.meeting_date_of() is the only resolver for
+-- "when did this 1:1 happen" -- do not read these columns directly.
 -- -------------------------
 create table one_on_ones (
   id               uuid primary key default uuid_generate_v4(),
@@ -231,6 +239,7 @@ create table one_on_ones (
   summary          text,   -- post-meeting log, shown in history
   notes            text,   -- private to manager only
   prep_guide       jsonb,  -- AI-generated prep, stored for reference
+  logged_at        timestamptz,  -- when the write-up was saved, not the meeting date
   carry_forward_items jsonb not null default '[]'::jsonb
                     constraint one_on_ones_carry_forward_items_array
                     check (jsonb_typeof(carry_forward_items) = 'array'),

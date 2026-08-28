@@ -76,6 +76,15 @@ function scheduledAtToDate(value: string | null | undefined) {
   return value ? value.slice(0, 10) : "";
 }
 
+// Local calendar day, not the UTC one. Only a fallback here: an undated
+// occurrence still has to hand the review screen a meeting date.
+function localDateStr(d: Date = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // The first release schedules a calendar day, not a clock time. Noon UTC
 // keeps that date stable while preserving the existing timestamptz field for
 // the later calendar-sync pass.
@@ -615,6 +624,10 @@ function PrepFlow() {
         onBack={() => setStep(2)}
         backLabel="Back to the call"
         oneOnOneId={oneOnOneId ?? undefined}
+        // The MEETING DATE from the sheet carries straight through, so the
+        // usual case needs no second thought. It stays editable on review for
+        // the meeting that slipped a day.
+        initialMeetingDate={scheduleDate || localDateStr()}
         willRecur={recurrenceWeeks !== null}
       />
     );

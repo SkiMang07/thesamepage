@@ -288,7 +288,11 @@ export default function ReportDetailPage() {
     ])
       .then(([dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps]) => {
         setReport(dr);
-        setPageContext(`${dr.name}'s direct report page`);
+        setPageContext({
+          label: `${dr.name}'s direct report page`,
+          entity_type: "direct_report",
+          entity_id: dr.id,
+        });
         setHistory(h);
         setCommitments(c);
         setGoals(g);
@@ -467,7 +471,9 @@ export default function ReportDetailPage() {
   // 1:1 cadence section's honesty convention (custom override, else org
   // default).
   const resolvedCadence = cadenceDays.trim() ? parseInt(cadenceDays, 10) : orgCadenceDays;
-  const daysSinceLast = lastCompleted ? daysSince(lastCompleted.created_at) : null;
+  // The meeting date, never row creation: this header used to disagree with
+  // the History list a few hundred lines below about the same conversation.
+  const daysSinceLast = lastCompleted?.meeting_date ? daysSince(lastCompleted.meeting_date) : null;
   const daysUntilNext = daysSinceLast != null ? resolvedCadence - daysSinceLast : null;
 
   const capacityItem = capacityOverview.find((c) => c.direct_report_id === id);
@@ -505,7 +511,7 @@ export default function ReportDetailPage() {
               )}
               {report.notes && <p className="mt-1 text-sm text-ink-muted">{report.notes}</p>}
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
-                <span>Last met <strong className="font-medium text-ink-body">{lastCompleted ? timeAgo(lastCompleted.created_at) : "not yet"}</strong></span>
+                <span>Last met <strong className="font-medium text-ink-body">{lastCompleted?.meeting_date ? timeAgo(lastCompleted.meeting_date) : "not yet"}</strong></span>
                 <span>
                   Next {plannedSession?.scheduled_at ? (
                     <strong className="font-medium text-ink-body">{formatDate(plannedSession.scheduled_at)}</strong>
@@ -802,7 +808,7 @@ export default function ReportDetailPage() {
                   <li key={session.id} className="py-3">
                     <div className="flex items-center gap-2">
                       <p className="text-xs text-ink-muted">
-                        {formatDate(session.scheduled_at || session.created_at)}
+                        {session.meeting_date ? formatDate(session.meeting_date) : "Undated"}
                       </p>
                       <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
                         Completed

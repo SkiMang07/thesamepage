@@ -16,6 +16,14 @@ Status is derived, not stored: an undated unfinished next workspace is
 occurrence; a recurring series supplies its next date while an ad-hoc loop leaves
 the workspace undated.
 
+scheduled_at is THE MEETING DATE, not just a plan. Both log paths send a
+manager-confirmed `meeting_date` and it lands there, which is what makes
+logging a conversation from last week file it under last week. Status still
+derives from summary alone, so a past date never makes a row look upcoming.
+Never read created_at as a meeting date -- utils.meeting_date_of() is the
+one resolver, and this module's own history/overview/prep readers all go
+through it.
+
 Context Engine integration (Session IV, 2026-08-12): /prep is the pilot call
 site for backend/context_engine.py's retrieval helper — see that module's
 docstring for the two-tier design. Wiring the other generate_text() call
@@ -42,6 +50,9 @@ from utils import (
     get_email_from_token,
     get_org,
     limiter,
+    meeting_date_of,
+    meeting_day_of,
+    meeting_sort_key,
     resolve_cadence_days,
 )
 
@@ -101,6 +112,16 @@ class LogOneOnOneIn(BaseModel):
     # backend still completes this person's current unfinished occurrence if
     # one exists; every logged 1:1 leaves exactly one next workspace behind.
     one_on_one_id: str | None = None
+    # The day the conversation actually happened, confirmed by the manager on
+    # the review screen. A plain YYYY-MM-DD is encoded at noon UTC onto
+    # scheduled_at, which IS the meeting date. Omitted leaves whatever date
+    # the occurrence already carried, so an older client keeps working.
+    meeting_date: str | None = None
+    # "This was a different conversation from the one I have prep saved for."
+    # Set by the Log a 1:1 page when the manager picks that option, and the
+    # only way to log without consuming the open workspace. Ignored when
+    # one_on_one_id names a specific occurrence.
+    separate_occurrence: bool = False
 
 
 class WrapUpRequest(BaseModel):
@@ -386,6 +407,9 @@ def _serialize_session(row: dict) -> dict:
     return {
         **row,
         "status": status,
+        # One canonical date for the frontend, so no surface has to decide
+        # between scheduled_at and created_at for itself again.
+        "meeting_date": meeting_date_of(row),
         "display_summary": (
             row.get("summary", "")
             if is_completed
@@ -427,6 +451,31 @@ def _clean_follow_up_items(items: list[str]) -> list[str]:
         if len(cleaned) == 10:
             break
     return cleaned
+
+
+def _encode_meeting_date(value: str | None) -> str | None:
+    """A YYYY-MM-DD from a date input, encoded at noon UTC.
+
+    Same encoding team.py uses, and the same reason: the manager schedules
+    and logs a calendar day, not a clock time, and noon keeps that day stable
+    in every timezone the app is used in. An ISO timestamp is accepted and
+    passed through so a caller that already has one does not have to
+    downgrade it.
+    """
+    if not value:
+        return None
+    try:
+        if len(value) == 10:
+            parsed = datetime.fromisoformat(value).replace(
+                hour=12, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
+            )
+        else:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=422, detail="meeting_date must be a date or ISO timestamp")
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _normalize_scheduled_at(value: str | None) -> str | None:
@@ -585,13 +634,17 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
         supabase.table("one_on_ones")
         .select(
             "id,direct_report_id,series_id,scheduled_at,summary,notes,prep_guide,"
-            "carry_forward_items,created_at,one_on_one_series(interval_weeks,timezone,active)"
+            "carry_forward_items,created_at,logged_at,one_on_one_series(interval_weeks,timezone,active)"
         )
         .eq("manager_id", user_id)
-        .order("created_at", desc=True)
         .execute()
         .data
     )
+    # Newest MEETING first, not newest row. Ordering by created_at used to put
+    # a conversation logged today but held last month ahead of one held this
+    # week, so "the latest completed 1:1" could name the wrong meeting and the
+    # due badge below inherited its date.
+    sessions.sort(key=meeting_sort_key, reverse=True)
 
     planned_by_report: dict[str, dict] = {}
     completed_by_report: dict[str, dict] = {}
@@ -630,14 +683,9 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
     for r in reports:
         rid = r["id"]
         completed = completed_by_report.get(rid)
-        last_at = completed["created_at"] if completed else None
-        days_since_last: int | None = None
-        if last_at:
-            try:
-                last_date = datetime.fromisoformat(last_at.replace("Z", "+00:00")).date()
-                days_since_last = (today - last_date).days
-            except (ValueError, AttributeError):
-                pass
+        last_at = meeting_date_of(completed)
+        last_day = meeting_day_of(completed)
+        days_since_last = (today - last_day).days if last_day else None
 
         cadence_days, cadence_source = resolve_cadence_days(r, org)
         # Never met counts as due — same rule needsOneOnOne() used to apply
@@ -661,7 +709,7 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
             "last_completed": (
                 {
                     "id": completed["id"],
-                    "date": completed["created_at"],
+                    "date": meeting_date_of(completed),
                     "commitment_count": commitment_counts.get(completed["id"], 0),
                 }
                 if completed
@@ -782,7 +830,7 @@ async def prep_one_on_one(
     # utils.py: every cadence-aware call site shares that one resolver.
     history_rows_raw = (
         supabase.table("one_on_ones")
-        .select("summary,created_at")
+        .select("summary,scheduled_at,created_at")
         .eq("direct_report_id", body.direct_report_id)
         .eq("manager_id", user_id)
         .order("created_at", desc=True)
@@ -790,17 +838,17 @@ async def prep_one_on_one(
         .execute()
         .data
     )
+    # Sorted by when the conversations HAPPENED before taking the most recent
+    # three, so the summaries reach the prompt in the order they were lived.
+    history_rows_raw.sort(key=meeting_sort_key, reverse=True)
     history_rows = [row for row in history_rows_raw if row.get("summary")][:3]
 
-    # Compute days since last 1:1
-    days_since_last: int | None = None
-    if history_rows:
-        last_ts = history_rows[0].get("created_at", "")
-        try:
-            last_date = datetime.fromisoformat(last_ts.replace("Z", "+00:00")).date()
-            days_since_last = (date.today() - last_date).days
-        except (ValueError, AttributeError):
-            pass
+    # Days since the last 1:1 actually happened. Reading created_at here made
+    # the sheet open with a recency claim about row creation: log a meeting
+    # held last week into a workspace opened a month ago and the next prep
+    # announced a month-long gap that never existed.
+    last_day = meeting_day_of(history_rows[0]) if history_rows else None
+    days_since_last = (date.today() - last_day).days if last_day else None
 
     recent_summaries = [row["summary"] for row in history_rows if row.get("summary")]
 
@@ -997,7 +1045,15 @@ async def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends
 @router.post("")
 async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
+    # The day the conversation happened, as confirmed on the review screen.
+    # None means "leave whatever date this occurrence already carried".
+    meeting_at = _encode_meeting_date(body.meeting_date)
+    logged_at = datetime.now(timezone.utc).isoformat()
     source_session = None
+    # True only when this log completed the person's existing next-meeting
+    # workspace. A separate ad-hoc occurrence leaves that workspace alone,
+    # and must not inherit or overwrite its series and date below.
+    completed_workspace = False
 
     if body.one_on_one_id:
         # This meeting already has a workspace — complete that occurrence
@@ -1018,19 +1074,36 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
         if not source_rows:
             raise HTTPException(status_code=404, detail="Planned session not found")
         source_session = source_rows[0]
-    else:
+        completed_workspace = True
+    elif not body.separate_occurrence:
         # "Log a 1:1" still completes the current next-meeting workspace.
         # Without this, an ad-hoc log would leave the old workspace stranded
         # and create a second source of truth for the same conversation.
-        source_session = _find_open_session(supabase, user_id, body.direct_report_id)
+        #
+        # Unless that workspace has a prep sheet on it. Then the manager has
+        # already done work against a specific upcoming conversation, and
+        # quietly marking it completed with unrelated notes destroys the prep
+        # and files the meeting under the wrong date. The Log a 1:1 page asks
+        # which conversation this was and answers explicitly — one_on_one_id
+        # for "the one I prepped", separate_occurrence for "a different one".
+        # This branch only sees a caller that could not ask, so it takes the
+        # non-destructive half of that choice.
+        candidate = _find_open_session(supabase, user_id, body.direct_report_id)
+        if candidate and not candidate.get("prep_guide"):
+            source_session = candidate
+            completed_workspace = True
 
     if source_session:
+        updates = {
+            "summary": body.summary,
+            "notes": body.notes,
+            "logged_at": logged_at,
+        }
+        if meeting_at:
+            updates["scheduled_at"] = meeting_at
         result = (
             supabase.table("one_on_ones")
-            .update({
-                "summary": body.summary,
-                "notes": body.notes,
-            })
+            .update(updates)
             .eq("id", source_session["id"])
             .eq("manager_id", user_id)
             .eq("direct_report_id", body.direct_report_id)
@@ -1049,6 +1122,10 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
                 "summary": body.summary,
                 # Raw call notes — private to the writing manager (RLS).
                 "notes": body.notes,
+                # Its own occurrence, deliberately not on the series: an
+                # ad-hoc conversation is not one of the recurring slots.
+                "scheduled_at": meeting_at,
+                "logged_at": logged_at,
             })
             .execute()
             .data[0]
@@ -1073,7 +1150,7 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
     carry_forward_items = _clean_follow_up_items(body.carry_forward_items)
     next_session = None
     series = None
-    if source_session and source_session.get("series_id"):
+    if completed_workspace and source_session.get("series_id"):
         rows = (
             supabase.table("one_on_one_series")
             .select("id,interval_weeks,timezone,active,anchor_at")
@@ -1087,7 +1164,12 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
         series = rows[0] if rows else None
 
     if series:
-        current_at = source_session.get("scheduled_at") or series["anchor_at"]
+        # Roll forward from the date the manager confirmed, not the date the
+        # occurrence was originally planned for and not when they got round to
+        # logging it. _next_occurrence_at() skips occurrences already in the
+        # past, so backfilling a meeting from last week still lands the next
+        # one in the future instead of creating a stale shell.
+        current_at = meeting_at or source_session.get("scheduled_at") or series["anchor_at"]
         next_at = _next_occurrence_at(current_at, series["interval_weeks"])
     else:
         next_at = None
@@ -1108,13 +1190,20 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
         merged = _clean_follow_up_items(
             [*(open_rows[0].get("carry_forward_items") or []), *carry_forward_items]
         )
+        workspace_updates: dict = {"carry_forward_items": merged}
+        if completed_workspace:
+            # This log consumed the person's next-meeting slot, so the row we
+            # are about to touch is its replacement and inherits the series
+            # and the rolled-forward date.
+            workspace_updates["series_id"] = series["id"] if series else None
+            workspace_updates["scheduled_at"] = next_at
+        # Otherwise the open row is an untouched workspace that already has
+        # its own schedule — very likely the prepped occurrence this ad-hoc
+        # conversation was deliberately logged apart from. It collects the
+        # carry-forwards and keeps its series and date.
         next_session = (
             supabase.table("one_on_ones")
-            .update({
-                "series_id": series["id"] if series else None,
-                "scheduled_at": next_at,
-                "carry_forward_items": merged,
-            })
+            .update(workspace_updates)
             .eq("id", open_rows[0]["id"])
             .eq("manager_id", user_id)
             .execute()
@@ -1148,10 +1237,13 @@ async def get_history(direct_report_id: str, auth=Depends(get_authenticated_clie
         .select("*,one_on_one_series(interval_weeks,timezone,active)")
         .eq("direct_report_id", direct_report_id)
         .eq("manager_id", user_id)
-        .order("created_at", desc=True)
         .execute()
     )
-    return [_serialize_session(row) for row in result.data]
+    # The list renders the meeting date, so it sorts by the meeting date.
+    # Ordering by created_at while displaying something else is what buried a
+    # freshly logged conversation halfway down the person's history.
+    rows = sorted(result.data, key=meeting_sort_key, reverse=True)
+    return [_serialize_session(row) for row in rows]
 
 
 @router.get("/session/{one_on_one_id}")

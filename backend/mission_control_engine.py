@@ -13,6 +13,8 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from utils import meeting_date_of, meeting_sort_key
+
 STALE_DAYS = 14
 COMMITMENT_WINDOW_DAYS = 7
 CORE_DOMAINS = ("conversations", "commitments", "goals", "projects")
@@ -164,7 +166,9 @@ def _corroboration_components(reason_count: int) -> list[dict[str, Any]]:
 def _latest_by_report(sessions: list[dict[str, Any]]) -> tuple[dict[str, dict], dict[str, dict]]:
     planned: dict[str, dict] = {}
     completed: dict[str, dict] = {}
-    ordered = sorted(sessions, key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    # Latest by when the conversation happened, not by when the row was
+    # written. See utils.meeting_date_of().
+    ordered = sorted(sessions, key=meeting_sort_key, reverse=True)
     for row in ordered:
         report_id = row.get("direct_report_id")
         if not report_id:
@@ -324,7 +328,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
         last = completed.get(report_id)
         saved = planned.get(report_id)
         cadence = int(report.get("cadence_days") or 21)
-        days_since = _days_since((last or {}).get("created_at"), today)
+        days_since = _days_since(meeting_date_of(last), today)
         overdue_days = (days_since - cadence) if days_since is not None else None
         is_due = days_since is None or overdue_days > 0
 
@@ -336,7 +340,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
                 components.append({"code": "urgency", "label": urgency_label, "points": points})
                 cadence_source = str(report.get("cadence_source") or "default").replace("_", " ")
                 due_label = "No completed 1:1 is recorded" if days_since is None else f"1:1 cadence is overdue by {overdue_days} day{'s' if overdue_days != 1 else ''}"
-                evidence.append(_evidence("cadence_due", due_label, f"{cadence_source} cadence", (last or {}).get("created_at"), today))
+                evidence.append(_evidence("cadence_due", due_label, f"{cadence_source} cadence", meeting_date_of(last), today))
             compatible = due_commitments.get(report_id, [])
             if compatible:
                 soonest = min(_date(row["due_date"]) for row in compatible)
@@ -387,7 +391,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
             ]
             cadence_source = str(report.get("cadence_source") or "default").replace("_", " ")
             due_label = "No completed 1:1 is recorded" if days_since is None else f"1:1 cadence is overdue by {overdue_days} day{'s' if overdue_days != 1 else ''}"
-            evidence = [_evidence("cadence_due", due_label, f"{cadence_source} cadence", (last or {}).get("created_at"), today)]
+            evidence = [_evidence("cadence_due", due_label, f"{cadence_source} cadence", meeting_date_of(last), today)]
             candidates.append(
                 _candidate(
                     candidate_type="start_due_one_on_one_prep",
@@ -405,7 +409,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
                     components=components,
                     evidence=evidence,
                     facts={"last_completed_id": (last or {}).get("id"), "cadence_days": cadence, "cadence_source": report.get("cadence_source")},
-                    attention_since=(last or {}).get("created_at") or report.get("created_at"),
+                    attention_since=meeting_date_of(last) or report.get("created_at"),
                     exact_workflow=True,
                     boundaries=(
                         ["Cadence uses the current organization setting."]
@@ -535,7 +539,9 @@ def _sort_key(candidate: dict[str, Any]) -> tuple[Any, ...]:
 
 def _truth_signal(snapshot: dict[str, Any], today: date, candidates: list[dict[str, Any]], mode: str) -> dict[str, str]:
     week_start = today - timedelta(days=today.weekday())
-    sessions = [row for row in snapshot.get("sessions", []) if row.get("summary") and (_date(row.get("created_at")) or date.min) >= week_start]
+    # Conversations HELD this week. A meeting from last month, written up
+    # today, is not this week's progress.
+    sessions = [row for row in snapshot.get("sessions", []) if row.get("summary") and (_date(meeting_date_of(row)) or date.min) >= week_start]
     if sessions:
         count = len(sessions)
         return {"kind": "progress", "title": f"{count} 1:1{'s' if count != 1 else ''} completed this week.", "detail": "Based on conversations recorded in TSP."}
@@ -575,7 +581,7 @@ def _supporting(snapshot: dict[str, Any], today: date) -> dict[str, list[dict[st
     for report in snapshot.get("reports", []):
         report_id = report["id"]
         last = completed.get(report_id)
-        days = _days_since((last or {}).get("created_at"), today)
+        days = _days_since(meeting_date_of(last), today)
         cadence = int(report.get("cadence_days") or 21)
         if report_id in planned:
             state = "Prep saved"
@@ -594,7 +600,7 @@ def _supporting(snapshot: dict[str, Any], today: date) -> dict[str, list[dict[st
     report_names = {row["id"]: row["name"] for row in snapshot.get("reports", [])}
     for row in snapshot.get("sessions", []):
         if row.get("summary"):
-            changes.append({"id": f"one_on_one:{row['id']}", "title": "1:1 completed", "meta": report_names.get(row.get("direct_report_id"), "Direct report"), "at": row.get("created_at")})
+            changes.append({"id": f"one_on_one:{row['id']}", "title": "1:1 completed", "meta": report_names.get(row.get("direct_report_id"), "Direct report"), "at": meeting_date_of(row)})
     for row in snapshot.get("commitments", []):
         if row.get("status") in {"done", "dropped"} and row.get("completed_at"):
             changes.append({"id": f"commitment:{row['id']}", "title": "Commitment resolved", "meta": report_names.get(row.get("direct_report_id"), "Direct report"), "at": row.get("completed_at")})
