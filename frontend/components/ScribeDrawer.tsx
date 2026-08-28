@@ -17,6 +17,7 @@ import {
 } from "react";
 import {
   DraftEntity,
+  AssistantPageContext,
   GoalLevel,
   GoalStatus,
   ProjectStatus,
@@ -30,6 +31,7 @@ import {
   deleteProject,
   getProject,
   sendAssistantMessage,
+  updateAssistantDraft,
   updateProject,
 } from "@/lib/api";
 import { DrawerMessage, useDrawer } from "@/lib/drawer-context";
@@ -77,21 +79,21 @@ function statusLabel(status: string) {
 
 // Human-readable page label sent to the backend as page context.
 // Lets the agent resolve pronouns ("give him a commitment") correctly.
-function pageLabel(pathname: string, drawerPageContext: string | null): string | undefined {
+function pageLabel(pathname: string, drawerPageContext: AssistantPageContext | null): AssistantPageContext | undefined {
   // Individual pages may override via setPageContext (e.g. DR detail pages
   // that know the report's name).
   if (drawerPageContext) return drawerPageContext;
   // Generic path-based labels for common pages.
-  if (pathname === "/app/dashboard") return "Mission Control (main dashboard)";
-  if (pathname === "/app/goals") return "Goals page";
-  if (pathname === "/app/projects") return "Projects page";
-  if (pathname === "/app/team") return "Team page";
-  if (pathname.startsWith("/app/reports/")) return "a direct report's page";
-  if (pathname === "/app/assessments") return "Assessments page";
-  if (pathname === "/app/capacity") return "Capacity page";
-  if (pathname === "/app/context") return "Context (company knowledge) page";
-  if (pathname === "/app/org") return "Org chart page";
-  if (pathname === "/app/settings") return "Settings page";
+  if (pathname === "/app/dashboard") return { label: "Mission Control (main dashboard)" };
+  if (pathname === "/app/goals") return { label: "Goals page" };
+  if (pathname === "/app/projects") return { label: "Projects page" };
+  if (pathname === "/app/team") return { label: "Team page" };
+  if (pathname.startsWith("/app/reports/")) return { label: "a direct report's page" };
+  if (pathname === "/app/assessments") return { label: "Assessments page" };
+  if (pathname === "/app/capacity") return { label: "Capacity page" };
+  if (pathname === "/app/context") return { label: "Context (company knowledge) page" };
+  if (pathname === "/app/org") return { label: "Org chart page" };
+  if (pathname === "/app/settings") return { label: "Settings page" };
   return undefined;
 }
 
@@ -174,8 +176,25 @@ type ReceiptData = {
 type DraftCardState = "idle" | "editing" | "confirming" | "confirmed" | "discarded";
 
 function DraftCard({ draft }: { draft: DraftEntity }) {
-  const [cardState, setCardState] = useState<DraftCardState>("idle");
-  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const initialState: DraftCardState =
+    draft.status === "confirmed"
+      ? "confirmed"
+      : draft.status === "discarded" || draft.status === "superseded" || draft.status === "undone"
+        ? "discarded"
+        : draft.status === "confirming"
+          ? "confirming"
+          : "idle";
+  const [cardState, setCardState] = useState<DraftCardState>(initialState);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(() =>
+    draft.status === "confirmed" && draft.receipt_entity_id
+      ? {
+          label: draft.receipt_label ?? `${entityLabel(draft.entity_type)} saved`,
+          href: draft.receipt_href,
+          entityId: draft.receipt_entity_id,
+          entityType: draft.receipt_entity_type ?? draft.entity_type,
+        }
+      : null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [undoSeconds, setUndoSeconds] = useState<number | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -187,6 +206,8 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
     const p = draft.payload as Record<string, unknown>;
     setEditFields({
       title: String(p.title ?? ""),
+      name: String(p.name ?? ""),
+      role_title: String(p.role_title ?? ""),
       description: String(p.description ?? ""),
       due_date: String(p.due_date ?? ""),
       note: String(p.note ?? ""),
@@ -205,6 +226,9 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
     const base = { ...draft.payload } as Record<string, unknown>;
     if (cardState === "editing") {
       if (editFields.title) base.title = editFields.title;
+      if (editFields.name) base.name = editFields.name;
+      if (editFields.role_title !== undefined && editFields.role_title !== "undefined")
+        base.role_title = editFields.role_title || null;
       if (editFields.description !== undefined && editFields.description !== "undefined")
         base.description = editFields.description || null;
       if (editFields.due_date !== undefined && editFields.due_date !== "undefined")
@@ -245,18 +269,28 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
     try {
       if (draft.entity_type === "project") await deleteProject(entityId);
       else if (draft.entity_type === "goal") await deleteGoal(entityId);
-    } catch {
-      // best-effort
+      if (draft.draft_id) {
+        await updateAssistantDraft(draft.draft_id, { status: "undone" });
+      }
+      setCardState("discarded");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Undo failed");
+      setCardState("confirmed");
     }
-    setCardState("discarded");
   }
 
   async function handleConfirm() {
     setError(null);
     setCardState("confirming");
     const p = mergedPayload();
+    let lifecycleClaimed = false;
+    let sourceWriteCompleted = false;
 
     try {
+      if (draft.draft_id) {
+        await updateAssistantDraft(draft.draft_id, { status: "confirming" });
+        lifecycleClaimed = true;
+      }
       let rec: ReceiptData;
 
       switch (draft.entity_type) {
@@ -350,7 +384,17 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
           throw new Error(`Unsupported entity type: ${draft.entity_type}`);
       }
 
+      sourceWriteCompleted = true;
       setReceipt(rec);
+      if (draft.draft_id) {
+        await updateAssistantDraft(draft.draft_id, {
+          status: "confirmed",
+          receipt_entity_id: rec.entityId,
+          receipt_entity_type: rec.entityType,
+          receipt_label: rec.label,
+          receipt_href: rec.href,
+        });
+      }
       setCardState("confirmed");
 
       // Start undo timer for reversible actions
@@ -359,7 +403,37 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
-      setCardState("idle");
+      const sourceRejectedBeforeWrite =
+        lifecycleClaimed
+        && !sourceWriteCompleted
+        && e instanceof Error
+        && /^API error 4\d\d:/.test(e.message);
+      if (sourceRejectedBeforeWrite && draft.draft_id) {
+        try {
+          await updateAssistantDraft(draft.draft_id, { status: "pending" });
+          setCardState("idle");
+          return;
+        } catch {
+          // If releasing the claim fails, keep the card locked. Hydration will
+          // preserve that safe state and the user can inspect the target page.
+        }
+      }
+      // If confirmation was claimed, leave it locked. A network failure can
+      // happen after the source write succeeds; reopening it automatically
+      // would make a duplicate possible. Hydration will show the same state.
+      setCardState(lifecycleClaimed ? "confirming" : "idle");
+    }
+  }
+
+  async function handleDiscard() {
+    setError(null);
+    try {
+      if (draft.draft_id) {
+        await updateAssistantDraft(draft.draft_id, { status: "discarded" });
+      }
+      setCardState("discarded");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Discard failed");
     }
   }
 
@@ -414,6 +488,11 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
       {/* Fields */}
       <div className="space-y-2 px-4 py-3">
         {error && <p className="text-xs text-red-700">{error}</p>}
+        {cardState === "confirming" && (
+          <p className="text-xs text-amber-700">
+            Confirmation is in progress. Check the target page before trying this action again.
+          </p>
+        )}
 
         {/* === PROJECT === */}
         {draft.entity_type === "project" && (
@@ -519,7 +598,8 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
           <>
             {cardState === "editing" ? (
               <>
-                <EditField label="Name" value={editFields.title} onChange={(v) => setEditFields((f) => ({ ...f, title: v }))} />
+                <EditField label="Name" value={editFields.name} onChange={(v) => setEditFields((f) => ({ ...f, name: v }))} />
+                <EditField label="Role title" value={editFields.role_title} onChange={(v) => setEditFields((f) => ({ ...f, role_title: v }))} />
               </>
             ) : (
               <>
@@ -566,7 +646,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
               Edit details
             </button>
             <button
-              onClick={() => setCardState("discarded")}
+              onClick={handleDiscard}
               disabled={isLoading}
               className="ml-auto text-xs text-ink-muted hover:text-ink-secondary"
             >
@@ -624,7 +704,10 @@ function MessageBubble({
       {msg.drafts && msg.drafts.length > 0 && (
         <div className="w-full space-y-3">
           {msg.drafts.map((draft, i) => (
-            <DraftCard key={i} draft={draft} />
+            <DraftCard
+              key={`${draft.draft_id ?? i}:${draft.status ?? "pending"}`}
+              draft={draft}
+            />
           ))}
         </div>
       )}
@@ -637,11 +720,12 @@ function MessageBubble({
 // ---------------------------------------------------------------------------
 
 export default function ScribeDrawer() {
-  const { isOpen, close, messages, addTurn, pageContext, hydrating } = useDrawer();
+  const { isOpen, close, messages, addTurn, clearThread, pageContext, hydrating } = useDrawer();
   const pathname = usePathname();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -685,6 +769,21 @@ export default function ScribeDrawer() {
     }
   }
 
+  async function handleNewConversation() {
+    if (messages.length > 0 && !window.confirm("Start a new Scribe conversation? Existing source records will not be changed.")) {
+      return;
+    }
+    setClearing(true);
+    setSendError(null);
+    try {
+      await clearThread();
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : "Failed to start a new conversation");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col bg-surface">
       {/* Header */}
@@ -693,15 +792,24 @@ export default function ScribeDrawer() {
           <span className="text-base font-semibold text-ink">✦</span>
           <span className="text-sm font-medium text-ink-body">The Same Page</span>
         </div>
-        <button
-          onClick={close}
-          className="rounded-md p-1 text-ink-muted hover:bg-sunken hover:text-ink-secondary"
-          aria-label="Close"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleNewConversation}
+            disabled={clearing}
+            className="text-xs text-ink-muted hover:text-ink-secondary disabled:opacity-50"
+          >
+            {clearing ? "Starting…" : "New"}
+          </button>
+          <button
+            onClick={close}
+            className="rounded-md p-1 text-ink-muted hover:bg-sunken hover:text-ink-secondary"
+            aria-label="Close"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Thread */}

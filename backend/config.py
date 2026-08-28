@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     # AI providers
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    # Scribe establishes its quality bar independently from the model defaults
+    # used by one-shot generation elsewhere. Sonnet 5 matched the Opus 5 eval
+    # bar with tighter calibration; this remains environment-configurable.
+    AI_SCRIBE_MODEL: str = "claude-sonnet-5"
     # Dictation (talk-to-text). OpenAI rather than Anthropic because Claude
     # has no audio input modality at all, and because OPENAI_API_KEY is
     # already wired here — this adds no new vendor relationship. Alternatives
@@ -46,6 +50,7 @@ settings = Settings()
 # call path doesn't trigger provider fallback on 4xx errors.)
 AI_DEFAULT_MODEL_HEAVY = "claude-sonnet-4-6"
 AI_DEFAULT_MODEL_LIGHT = "claude-haiku-4-5-20251001"
+AI_SCRIBE_MODEL = settings.AI_SCRIBE_MODEL
 
 # Transcription model — an OpenAI name, NOT an Anthropic one. This never
 # routes through the Anthropic path or the provider-fallback map.

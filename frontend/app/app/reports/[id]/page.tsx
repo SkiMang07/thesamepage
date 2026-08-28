@@ -289,7 +289,11 @@ export default function ReportDetailPage() {
     ])
       .then(([dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps]) => {
         setReport(dr);
-        setPageContext(`${dr.name}'s direct report page`);
+        setPageContext({
+          label: `${dr.name}'s direct report page`,
+          entity_type: "direct_report",
+          entity_id: dr.id,
+        });
         setHistory(h);
         setCommitments(c);
         setGoals(g);
@@ -452,6 +456,7 @@ export default function ReportDetailPage() {
   const resolved = commitments.filter((c) => c.status !== "open");
   // Most-recent unfinished occurrence — scheduled or already prepped.
   const plannedSession = history.find((h) => h.status !== "completed");
+
   const lastCompleted = history.find((h) => h.status === "completed");
   // This is historical evidence, not a second home for the next workspace.
   // Status is derived server-side from summary being set, so completed is the

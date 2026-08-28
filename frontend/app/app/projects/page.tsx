@@ -227,8 +227,12 @@ export default function ProjectsPage() {
   useEffect(() => {
     setPageContext(
       selectedProject
-        ? `Projects page — selected initiative: ${selectedProject.title}`
-        : "Projects page — initiative portfolio"
+        ? {
+            label: `Projects page — selected initiative: ${selectedProject.title}`,
+            entity_type: "project",
+            entity_id: selectedProject.id,
+          }
+        : { label: "Projects page — initiative portfolio" }
     );
     return () => setPageContext(null);
   }, [selectedProject, setPageContext]);

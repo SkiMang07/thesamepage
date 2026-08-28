@@ -82,6 +82,7 @@ simple, explainable, cheap-to-verify heuristic. Revisit only if usage shows
 it's missing genuinely relevant docs a semantic search would catch.
 """
 from datetime import date, timedelta
+import re
 
 # Bounds how many documents get FULL extracted_text pulled into a prompt
 # (tier two). Judgment call, not discussed with Andrew: decks can run long,
@@ -156,6 +157,76 @@ _DECAY_UNKNOWN_DATE_MULTIPLIER = 0.85
 # cross this (their multiplier is always 1.0), which is correct: a values
 # doc isn't "aging" on a clock.
 _STALENESS_MULTIPLIER_THRESHOLD = 0.7
+
+_SEARCH_STOP_WORDS = {
+    "a", "about", "and", "are", "as", "at", "be", "by", "do", "for",
+    "from", "have", "how", "i", "in", "is", "it", "me", "my", "of",
+    "on", "our", "say", "said", "should", "that", "the", "their", "this",
+    "to", "we", "what", "where", "with",
+}
+
+
+def _search_terms(value: str) -> list[str]:
+    """Small, deterministic tokenizer used by document and workspace search.
+
+    This is intentionally lexical rather than pretending to be semantic search.
+    A light suffix trim covers common pairs such as onboarding/onboard and
+    risks/risk without adding another retrieval service.
+    """
+    tokens = re.findall(r"[a-z0-9]+", value.lower().replace("_", " "))
+    terms: list[str] = []
+    for token in tokens:
+        if token in _SEARCH_STOP_WORDS or len(token) < 2:
+            continue
+        stem = token
+        if len(token) > 5 and token.endswith("ing"):
+            stem = token[:-3]
+        elif len(token) > 4 and token.endswith("ed"):
+            stem = token[:-2]
+        elif len(token) > 3 and token.endswith("s"):
+            stem = token[:-1]
+        terms.append(stem)
+    return list(dict.fromkeys(terms))
+
+
+def _lexical_relevance(query: str, text: str) -> float:
+    terms = _search_terms(query)
+    if not terms:
+        return 0.0
+    text_terms = _search_terms(text)
+    if not text_terms:
+        return 0.0
+    score = 0.0
+    for query_term in terms:
+        matches = sum(
+            1 for text_term in text_terms
+            if text_term == query_term
+            or (len(query_term) >= 4 and text_term.startswith(query_term))
+            or (len(text_term) >= 4 and query_term.startswith(text_term))
+        )
+        if matches:
+            score += 1.0 + min(matches - 1, 3) * 0.15
+    normal_query = " ".join(re.findall(r"[a-z0-9]+", query.lower()))
+    normal_text = " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+    if normal_query and normal_query in normal_text:
+        score += 2.0
+    return score
+
+
+def _compact_excerpt(text: str | None, query: str, max_chars: int = 420) -> str:
+    compact = " ".join((text or "").split())
+    if len(compact) <= max_chars:
+        return compact
+    lowered = compact.lower()
+    positions = [lowered.find(term) for term in _search_terms(query)]
+    positions = [position for position in positions if position >= 0]
+    centre = min(positions) if positions else 0
+    start = max(0, centre - max_chars // 3)
+    end = min(len(compact), start + max_chars)
+    if end - start < max_chars:
+        start = max(0, end - max_chars)
+    excerpt = compact[start:end]
+    return f"{'…' if start else ''}{excerpt}{'…' if end < len(compact) else ''}"
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +405,162 @@ def get_relevant_context(
             **doc,
             "extracted_text": extracted_by_id.get(doc["id"]),
             "scope_label": scope_label.get(cascade[rank]["id"] if rank < len(cascade) else None, "company-wide"),
+        })
+    return results
+
+
+def search_confirmed_documents(
+    supabase,
+    org_id: str,
+    query: str,
+    today: date,
+    org_unit_ids: list[str] | None = None,
+    max_docs: int = _MAX_RETRIEVED_DOCS_DEFAULT,
+) -> list[dict]:
+    """Query-aware variant of the existing two-tier document retrieval.
+
+    Tier one searches only confirmed summary cards and metadata inside the
+    authenticated user's org. Tier two fetches extracted text for only the
+    few ranked documents, then returns a short matching excerpt. When an org
+    unit scope is supplied, the existing team -> department -> company scope
+    cascade determines eligibility and precedence. Without a scope, every
+    confirmed org document is discoverable, but its confirmed scope remains
+    explicit in the result so downstream reasoning cannot silently generalize
+    a team document to the company.
+    """
+    documents = (
+        supabase.table("documents")
+        .select(
+            "id,title,category,freshness_class,effective_date,summary_card,"
+            "novelty_score,confirmed_at,created_at"
+        )
+        .eq("org_id", org_id)
+        .eq("status", "confirmed")
+        .execute()
+        .data
+    )
+    if not documents:
+        return []
+
+    scope_was_requested = org_unit_ids is not None
+    requested_units = list(dict.fromkeys(str(value) for value in (org_unit_ids or []) if value))
+    specificity_by_doc: dict[str, int] = {}
+    labels_by_doc: dict[str, list[str]] = {}
+    scope_ids_by_doc: dict[str, list[str | None]] = {}
+
+    if scope_was_requested:
+        cascades = (
+            [_scope_cascade(supabase, requested_id) for requested_id in requested_units]
+            if requested_units
+            else [[{"id": None, "label": "company-wide"}]]
+        )
+        for cascade in cascades:
+            rank_by_scope = {tier["id"]: rank for rank, tier in enumerate(cascade)}
+            label_by_scope = {tier["id"]: tier["label"] for tier in cascade}
+            non_null_ids = [tier["id"] for tier in cascade if tier["id"] is not None]
+            for row in _fetch_scope_rows(supabase, non_null_ids, True):
+                scope_id = row.get("org_unit_id")
+                if scope_id not in rank_by_scope:
+                    continue
+                document_id = str(row["document_id"])
+                rank = rank_by_scope[scope_id]
+                specificity_by_doc[document_id] = min(
+                    rank, specificity_by_doc.get(document_id, rank)
+                )
+                label = label_by_scope[scope_id]
+                labels_by_doc.setdefault(document_id, [])
+                if label not in labels_by_doc[document_id]:
+                    labels_by_doc[document_id].append(label)
+                scope_ids_by_doc.setdefault(document_id, [])
+                if scope_id not in scope_ids_by_doc[document_id]:
+                    scope_ids_by_doc[document_id].append(scope_id)
+        documents = [doc for doc in documents if str(doc["id"]) in specificity_by_doc]
+    else:
+        document_ids = [str(doc["id"]) for doc in documents]
+        scope_rows = (
+            supabase.table("document_scopes")
+            .select("document_id,org_unit_id")
+            .in_("document_id", document_ids)
+            .execute()
+            .data
+            if document_ids else []
+        )
+        unit_ids = sorted({str(row["org_unit_id"]) for row in scope_rows if row.get("org_unit_id")})
+        unit_rows = (
+            supabase.table("org_units")
+            .select("id,name,unit_type")
+            .eq("org_id", org_id)
+            .in_("id", unit_ids)
+            .execute()
+            .data
+            if unit_ids else []
+        )
+        unit_labels = {
+            str(row["id"]): f"{row['name']} ({row['unit_type']})" for row in unit_rows
+        }
+        for row in scope_rows:
+            document_id = str(row["document_id"])
+            scope_id = str(row["org_unit_id"]) if row.get("org_unit_id") else None
+            if scope_id and scope_id not in unit_labels:
+                # A malformed cross-org scope must not be relabeled as
+                # company-wide. Exclude it rather than weakening attribution.
+                continue
+            label = unit_labels[scope_id] if scope_id else "company-wide"
+            labels_by_doc.setdefault(document_id, [])
+            if label not in labels_by_doc[document_id]:
+                labels_by_doc[document_id].append(label)
+            scope_ids_by_doc.setdefault(document_id, [])
+            if scope_id not in scope_ids_by_doc[document_id]:
+                scope_ids_by_doc[document_id].append(scope_id)
+            specificity_by_doc.setdefault(document_id, 0)
+        # A confirmed document should always have a confirmed scope. Keep the
+        # defensive exclusion explicit rather than guessing company-wide.
+        documents = [doc for doc in documents if str(doc["id"]) in labels_by_doc]
+
+    ranked: list[tuple[float, dict]] = []
+    for doc in documents:
+        searchable = " ".join(
+            str(value or "") for value in (
+                doc.get("title"),
+                doc.get("summary_card"),
+                doc.get("category"),
+            )
+        )
+        relevance = _lexical_relevance(query, searchable)
+        if relevance > 0:
+            ranked.append((relevance, doc))
+    ranked.sort(
+        key=lambda item: (
+            -item[0],
+            *_sort_key(item[1], specificity_by_doc, 100, today),
+        )
+    )
+    selected = ranked[:max_docs]
+    if not selected:
+        return []
+
+    selected_ids = [str(doc["id"]) for _, doc in selected]
+    extracted_rows = (
+        supabase.table("documents")
+        .select("id,extracted_text")
+        .eq("org_id", org_id)
+        .eq("status", "confirmed")
+        .in_("id", selected_ids)
+        .execute()
+        .data
+    )
+    extracted_by_id = {str(row["id"]): row.get("extracted_text") for row in extracted_rows}
+
+    results: list[dict] = []
+    for relevance, doc in selected:
+        document_id = str(doc["id"])
+        body = extracted_by_id.get(document_id) or doc.get("summary_card") or ""
+        results.append({
+            **doc,
+            "scope_labels": labels_by_doc.get(document_id, []),
+            "org_unit_ids": scope_ids_by_doc.get(document_id, []),
+            "matched_excerpt": _compact_excerpt(body, query),
+            "search_score": round(relevance, 3),
         })
     return results
 

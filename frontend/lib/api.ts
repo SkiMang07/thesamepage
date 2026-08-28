@@ -1741,11 +1741,24 @@ export type DraftEntity = {
   entity_type: DraftEntityType;
   payload: Record<string, unknown>;
   display?: Record<string, string>;
+  draft_id?: string;
+  status?: "pending" | "confirming" | "confirmed" | "discarded" | "superseded" | "undone";
+  replaces_draft_id?: string;
+  receipt_entity_id?: string;
+  receipt_entity_type?: DraftEntityType;
+  receipt_label?: string;
+  receipt_href?: string;
 };
 
 export type AssistantResponse = {
   text: string;
   drafts: DraftEntity[];
+};
+
+export type AssistantPageContext = {
+  label: string;
+  entity_type?: "direct_report" | "project";
+  entity_id?: string;
 };
 
 // Shape returned by GET /api/assistant/thread
@@ -1760,16 +1773,39 @@ export type StoredMessage = {
 export const getAssistantThread = (): Promise<StoredMessage[]> =>
   authedFetch("/api/assistant/thread");
 
+export const clearAssistantThread = (): Promise<{ ok: boolean }> =>
+  authedFetch("/api/assistant/thread", { method: "DELETE" });
+
+export const updateAssistantDraft = (
+  draftId: string,
+  update: {
+    status: "pending" | "confirming" | "confirmed" | "discarded" | "undone";
+    receipt_entity_id?: string;
+    receipt_entity_type?: DraftEntityType;
+    receipt_label?: string;
+    receipt_href?: string;
+  },
+): Promise<DraftEntity> =>
+  authedFetch(`/api/assistant/drafts/${draftId}`, {
+    method: "PATCH",
+    body: JSON.stringify(update),
+  });
+
 // pageContext: human-readable label for the page the drawer is currently on
 // (e.g. "Jordan's direct report page"). Injected into the agent system prompt
 // ephemerally so pronouns resolve correctly. Not stored in the DB.
 export const sendAssistantMessage = (
   message: string,
-  pageContext?: string,
+  pageContext?: AssistantPageContext,
 ): Promise<AssistantResponse> =>
   authedFetch("/api/assistant/message", {
     method: "POST",
-    body: JSON.stringify({ message, page_context: pageContext ?? null }),
+    body: JSON.stringify({
+      message,
+      page_context: pageContext?.label ?? null,
+      page_context_entity_type: pageContext?.entity_type ?? null,
+      page_context_entity_id: pageContext?.entity_id ?? null,
+    }),
   });
 
 // AI-drafted scores — reviewed/edited by the manager before saveAssessment.

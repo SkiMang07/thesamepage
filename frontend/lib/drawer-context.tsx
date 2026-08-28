@@ -19,7 +19,13 @@ import {
   useEffect,
   useState,
 } from "react";
-import { DraftEntity, StoredMessage, getAssistantThread } from "./api";
+import {
+  DraftEntity,
+  AssistantPageContext,
+  StoredMessage,
+  clearAssistantThread,
+  getAssistantThread,
+} from "./api";
 
 export type DrawerMessage = {
   id: string;
@@ -36,10 +42,11 @@ type DrawerContextType = {
   close: () => void;
   messages: DrawerMessage[];
   addTurn: (userText: string, assistantText: string, drafts: DraftEntity[]) => void;
-  clearThread: () => void;
+  clearThread: () => Promise<void>;
+  refreshThread: () => Promise<void>;
   // Page context — set by individual pages; read by ScribeDrawer
-  pageContext: string | null;
-  setPageContext: (ctx: string | null) => void;
+  pageContext: AssistantPageContext | null;
+  setPageContext: (ctx: AssistantPageContext | null) => void;
   hydrating: boolean;
 };
 
@@ -57,7 +64,7 @@ function storedToDrawerMessages(rows: StoredMessage[]): DrawerMessage[] {
 export function DrawerProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<DrawerMessage[]>([]);
-  const [pageContext, setPageContext] = useState<string | null>(null);
+  const [pageContext, setPageContext] = useState<AssistantPageContext | null>(null);
   const [hydrating, setHydrating] = useState(true);
 
   // Hydrate isOpen from sessionStorage once on mount.
@@ -69,17 +76,19 @@ export function DrawerProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem("scribe:open", String(isOpen));
   }, [isOpen]);
 
+  const refreshThread = useCallback(async () => {
+    const rows = await getAssistantThread();
+    setMessages(storedToDrawerMessages(rows));
+  }, []);
+
   // Hydrate thread from DB on mount.
   useEffect(() => {
-    getAssistantThread()
-      .then((rows) => {
-        if (rows.length > 0) setMessages(storedToDrawerMessages(rows));
-      })
+    refreshThread()
       .catch(() => {
         // Hydration failure is non-fatal — the thread starts fresh in-session.
       })
       .finally(() => setHydrating(false));
-  }, []);
+  }, [refreshThread]);
 
   const toggle = useCallback(() => setIsOpen((s) => !s), []);
   const open = useCallback(() => setIsOpen(true), []);
@@ -87,8 +96,18 @@ export function DrawerProvider({ children }: { children: React.ReactNode }) {
 
   const addTurn = useCallback(
     (userText: string, assistantText: string, drafts: DraftEntity[]) => {
+      const replaced = new Set(
+        drafts.map((draft) => draft.replaces_draft_id).filter((id): id is string => !!id),
+      );
       setMessages((prev) => [
-        ...prev,
+        ...prev.map((message) => ({
+          ...message,
+          drafts: message.drafts?.map((draft) =>
+            draft.draft_id && replaced.has(draft.draft_id)
+              ? { ...draft, status: "superseded" as const }
+              : draft,
+          ),
+        })),
         { id: crypto.randomUUID(), role: "user", text: userText },
         { id: crypto.randomUUID(), role: "assistant", text: assistantText, drafts },
       ]);
@@ -96,13 +115,16 @@ export function DrawerProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const clearThread = useCallback(() => setMessages([]), []);
+  const clearThread = useCallback(async () => {
+    await clearAssistantThread();
+    setMessages([]);
+  }, []);
 
   return (
     <DrawerContext.Provider
       value={{
         isOpen, toggle, open, close,
-        messages, addTurn, clearThread,
+        messages, addTurn, clearThread, refreshThread,
         pageContext, setPageContext,
         hydrating,
       }}
