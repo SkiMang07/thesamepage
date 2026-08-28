@@ -2096,3 +2096,17 @@ export type ContextCoverage = {
 };
 
 export const getContextCoverage = (): Promise<ContextCoverage> => authedFetch("/api/documents/coverage");
+
+// --- dictation --------------------------------------------------------------
+// Talk-to-text. A single recorded blob in, the manager's own words out.
+// Nothing is saved by this call: the transcript goes back into whatever field
+// the mic was used in, and that field's normal save endpoint is still the only
+// thing that writes. See components/NoteField.tsx and docs/systems/dictation.md.
+export const transcribeAudio = (blob: Blob, vocabulary = ""): Promise<{ text: string }> => {
+  const form = new FormData();
+  // The filename extension is cosmetic — the backend derives the real format
+  // from the blob's MIME type, because Safari and Chrome disagree about both.
+  form.append("file", blob, "dictation");
+  if (vocabulary) form.append("vocabulary", vocabulary);
+  return authedFormFetch("/api/transcribe", form);
+};

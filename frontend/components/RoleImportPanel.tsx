@@ -20,6 +20,7 @@
 
 import { useState } from "react";
 import { INPUT, LABEL, BTN_PRIMARY } from "@/lib/tokens";
+import NoteField from "@/components/NoteField";
 import {
   RoleFamily,
   RoleImportMatch,
@@ -435,11 +436,11 @@ export default function RoleImportPanel({
 
               <div className="mt-3">
                 <label className={labelCls}>Responsibilities (stored on the role, grounds future drafts)</label>
-                <textarea
+                <NoteField
                   value={responsibilities}
-                  onChange={(e) => setResponsibilities(e.target.value)}
+                  onChange={setResponsibilities}
                   rows={4}
-                  className={inputCls}
+                  baseClassName={inputCls}
                   placeholder="What this role owns"
                 />
               </div>

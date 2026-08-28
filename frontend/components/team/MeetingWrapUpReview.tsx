@@ -19,6 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
+import NoteField from "@/components/NoteField";
 import {
   TeamAgendaItem,
   TeamMeeting,
@@ -118,12 +119,12 @@ export default function MeetingWrapUpReview({
         <label className={LABEL} htmlFor="wrapup-summary">
           Summary
         </label>
-        <textarea
+        <NoteField
           id="wrapup-summary"
           value={summary}
-          onChange={(e) => setSummary(e.target.value)}
+          onChange={setSummary}
           rows={4}
-          className={`${TEXTAREA} text-sm`}
+          className="text-sm"
           placeholder="What the team actually covered..."
         />
         {!summary.trim() && (

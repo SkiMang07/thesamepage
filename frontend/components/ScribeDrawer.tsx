@@ -34,6 +34,7 @@ import {
 } from "@/lib/api";
 import { DrawerMessage, useDrawer } from "@/lib/drawer-context";
 
+import NoteField from "@/components/NoteField";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -723,15 +724,15 @@ export default function ScribeDrawer() {
       {/* Composer */}
       <div className="shrink-0 border-t border-hairline bg-canvas px-4 py-3">
         {sendError && <p className="mb-2 text-xs text-red-700">{sendError}</p>}
-        <textarea
+        <NoteField
           ref={composerRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={setInput}
           onKeyDown={handleKeyDown}
           disabled={sending}
           rows={3}
           placeholder="Tell me what's happening — I'll keep the pages up to date."
-          className="w-full resize-none rounded-lg border border-control bg-surface px-3 py-2 text-sm text-ink-body placeholder-ink-faint focus:border-control focus:outline-none disabled:opacity-50"
+          baseClassName="w-full resize-none rounded-lg border border-control bg-surface px-3 py-2 text-sm text-ink-body placeholder-ink-faint focus:border-control focus:outline-none disabled:opacity-50"
         />
         <div className="mt-2 flex items-center justify-between">
           <p className="text-xs text-ink-muted">⌘J · Nothing saves until you confirm.</p>

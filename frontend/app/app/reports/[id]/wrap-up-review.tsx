@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 
+import NoteField from "@/components/NoteField";
 type EditableCommitment = WrapUpCommitment & { key: number };
 type EditableFollowUp = { key: number; text: string };
 
@@ -187,11 +188,11 @@ export default function WrapUpReview({
             Couldn&apos;t draft a summary from these notes — write a quick one below.
           </p>
         )}
-        <textarea
+        <NoteField
           value={summary}
-          onChange={(e) => setSummary(e.target.value)}
+          onChange={setSummary}
           rows={5}
-          className="mt-2 w-full rounded-lg border border-control px-4 py-3 text-ink-body focus:border-brand focus:outline-none"
+          className="mt-2"
         />
       </div>
 

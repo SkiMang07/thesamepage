@@ -9,7 +9,7 @@ import logging
 import httpx
 from fastapi import HTTPException
 
-from config import settings, AI_DEFAULT_MODEL_HEAVY, AI_DEFAULT_MODEL_LIGHT
+from config import settings, AI_DEFAULT_MODEL_HEAVY, AI_DEFAULT_MODEL_LIGHT, AI_TRANSCRIBE_MODEL
 
 logger = logging.getLogger("ai_core")
 
@@ -184,3 +184,82 @@ def generate_text_from_document(
         prompt, document_base64, media_type, model=model, max_tokens=max_tokens
     )
     return extract_text("anthropic", response)
+
+
+# --- dictation --------------------------------------------------------------
+# Talk-to-text. Batch, never streaming: the manager taps stop and waits ~1-2s,
+# and OpenAI's realtime transcription endpoint costs 3.8x the batch one for a
+# latency win nobody asked for here. Cost at the batch rate is ~$0.27/hour of
+# audio, which is under $2 per manager per YEAR at realistic dictation volumes.
+#
+# Audio is sent, transcribed, and dropped. Nothing is stored — not in Supabase
+# Storage, not on disk, not in a log line. The bytes exist in memory for the
+# length of one request. That is a promise made in the UI (see NoteField's
+# first-use notice), so do not add caching here without changing that copy.
+
+_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
+
+# Hard ceiling on a single dictation. OpenAI's own limit is 25MB; this is far
+# tighter because a dictation is a person talking into a text box, not a
+# meeting recording. At the 32kbps the browser is told to record at, 5 minutes
+# is ~1.2MB, so 8MB is generous headroom for browsers that ignore the bitrate
+# hint (Safari does).
+MAX_DICTATION_BYTES = 8 * 1024 * 1024
+
+
+def transcribe_audio(
+    audio_bytes: bytes,
+    filename: str = "dictation.webm",
+    content_type: str = "audio/webm",
+    vocabulary: str = "",
+) -> str:
+    """Audio in, plain text out. Verbatim — this does NOT clean up, summarise
+    or restructure what was said.
+
+    That restraint is deliberate. Every other AI write in this app is
+    draft-then-review because the model is producing something the manager did
+    not say. Dictation is the opposite: the words are already the manager's, so
+    passing them through a model to be "tidied" would quietly make a draft out
+    of something that was never a draft. Cosmetic cleanup (leading filler, a
+    trailing full stop in a one-line field) happens deterministically in
+    _tidy() below, where it can be read and reasoned about.
+
+    `vocabulary` is an optional comma-separated hint — direct-report names, team
+    and product nouns — passed to the model's `prompt` parameter to bias
+    spelling. This is what stops "Priya" coming back as "Prea". It is a hint,
+    not an instruction: the model still transcribes what it hears.
+    """
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(status_code=503, detail="Dictation is not configured on this server")
+    if not audio_bytes:
+        raise HTTPException(status_code=422, detail="Empty recording")
+    if len(audio_bytes) > MAX_DICTATION_BYTES:
+        raise HTTPException(status_code=413, detail="Recording too long — 5 minutes max")
+
+    data = {"model": AI_TRANSCRIBE_MODEL, "response_format": "json"}
+    hint = (vocabulary or "").strip()
+    if hint:
+        # Capped hard. A prompt hint is a vocabulary nudge, not a channel for
+        # shipping arbitrary record content to the transcription vendor.
+        data["prompt"] = hint[:400]
+
+    try:
+        resp = httpx.post(
+            _TRANSCRIBE_URL,
+            headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+            files={"file": (filename, audio_bytes, content_type)},
+            data=data,
+            timeout=120.0,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.warning("transcription failed: %s %s", e.response.status_code, e.response.text[:300])
+        raise HTTPException(status_code=502, detail="Could not transcribe that recording")
+    except httpx.RequestError as e:
+        logger.warning("transcription request error: %s", e)
+        raise HTTPException(status_code=502, detail="Could not reach the transcription service")
+
+    try:
+        return resp.json()["text"].strip()
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=502, detail=f"Unexpected transcription response shape: {e}")

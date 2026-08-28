@@ -55,6 +55,7 @@ import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { INPUT, LABEL, BTN_PRIMARY, HEX, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone } from "@/lib/tokens";
 
+import NoteField from "@/components/NoteField";
 const LEVEL_TABS: { id: GoalLevel; label: string; blurb: string }[] = [
   { id: "individual", label: "Individual", blurb: "Goals for one direct report" },
   { id: "team", label: "Team", blurb: "Goals for your whole team" },
@@ -729,22 +730,22 @@ function GoalForm({
 
       <div>
         <label className={labelCls}>Description (optional)</label>
-        <textarea
+        <NoteField
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={setDescription}
           rows={2}
-          className={inputCls}
+          baseClassName={inputCls}
           placeholder="What this goal is about, in a sentence or two"
         />
       </div>
 
       <div>
         <label className={labelCls}>Success metric (optional)</label>
-        <textarea
+        <NoteField
           value={successMetrics}
-          onChange={(e) => setSuccessMetrics(e.target.value)}
+          onChange={setSuccessMetrics}
           rows={2}
-          className={inputCls}
+          baseClassName={inputCls}
           placeholder="How you'll know it's done — e.g. NRR at or above 110%, churn under 5%"
         />
       </div>

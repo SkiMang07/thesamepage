@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 
+import NoteField from "@/components/NoteField";
 type SkillValuePending = { evaluation_point: number | null; notes: string };
 type MetricPending = { value: string; period: string; notes: string };
 
@@ -343,12 +344,12 @@ export default function AssessmentScorecardPage() {
           ))}
         </div>
         {overallOrdinal !== null && (
-          <textarea
+          <NoteField
             value={overallNotes}
-            onChange={(e) => setOverallNotes(e.target.value)}
+            onChange={setOverallNotes}
             placeholder="Notes justifying this rating (optional)"
             rows={2}
-            className="mt-2 w-full rounded-md border border-hairline px-3 py-2 text-sm"
+            className="mt-2 text-sm"
           />
         )}
       </div>

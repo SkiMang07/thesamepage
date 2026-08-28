@@ -57,6 +57,7 @@ import {
 } from "@/lib/api";
 import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWrapUpReview";
 import PageShell from "@/components/PageShell";
+import NoteField from "@/components/NoteField";
 import {
   BADGE,
   BTN_GHOST,
@@ -511,17 +512,17 @@ export default function TeamMeetingPage() {
                         </span>
                       </label>
                       {outcome?.covered && (
-                        <textarea
+                        <NoteField
                           value={outcome.notes}
-                          onChange={(e) =>
+                          onChange={(v: string) =>
                             setOutcomes((rows) =>
                               rows.map((o) =>
-                                o.id === item.id ? { ...o, notes: e.target.value } : o
+                                o.id === item.id ? { ...o, notes: v } : o
                               )
                             )
                           }
                           rows={2}
-                          className={`${TEXTAREA} mt-1.5 text-sm`}
+                          className="mt-1.5 text-sm"
                           placeholder="What was said..."
                           aria-label={`Notes for ${item.item}`}
                         />
@@ -571,11 +572,11 @@ export default function TeamMeetingPage() {
             until you log the meeting — they aren&apos;t saved to your account yet, and won&apos;t
             follow you to another device.
           </p>
-          <textarea
+          <NoteField
             value={extraNotes}
-            onChange={(e) => setExtraNotes(e.target.value)}
+            onChange={setExtraNotes}
             rows={16}
-            className={`${TEXTAREA} mt-3 text-sm`}
+            className="mt-3 text-sm"
             placeholder={
               "– Pipeline is thin for Q4, whole team flagged it\n– I'll get the hiring req open with recruiting this week\n– Dana will own the QBR deck"
             }
@@ -758,11 +759,11 @@ function SummaryCard({
 
       {editing ? (
         <>
-          <textarea
+          <NoteField
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={setText}
             rows={5}
-            className={`${TEXTAREA} mt-2 text-sm`}
+            className="mt-2 text-sm"
             aria-label="Meeting summary"
           />
           {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}

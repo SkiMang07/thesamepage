@@ -26,6 +26,7 @@ import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { deriveOneOnOneSuggestions, OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
 
+import NoteField from "@/components/NoteField";
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -451,12 +452,12 @@ function PrepFlow() {
                 ? `${captures.length} captured note${captures.length === 1 ? " is" : "s are"} already included. Edit freely.`
                 : "Add anything the record does not already know."}
             </span>
-            <textarea
+            <NoteField
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={setNotes}
               placeholder="Anything else worth discussing, celebrating, or checking on…"
               rows={6}
-              className="mt-2 w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
+              className="mt-2"
             />
           </label>
           {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
@@ -590,12 +591,12 @@ function PrepFlow() {
               whatever you record with. When you&apos;re done, we&apos;ll draft the
               summary and pull out the commitments for you to review.
             </p>
-            <textarea
+            <NoteField
               value={callNotes}
-              onChange={(e) => setCallNotes(e.target.value)}
+              onChange={setCallNotes}
               placeholder={"– Pipeline looking thin for Q4, she's worried about the Acme renewal\n– I'll intro her to Sam on the design team\n– She'll draft the QBR deck by Friday"}
               rows={18}
-              className="mt-4 w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
+              className="mt-4"
             />
             {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
             <button

@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     # AI providers
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    # Dictation (talk-to-text). OpenAI rather than Anthropic because Claude
+    # has no audio input modality at all, and because OPENAI_API_KEY is
+    # already wired here — this adds no new vendor relationship. Alternatives
+    # if accuracy on manager-speak disappoints: "gpt-4o-transcribe" (older,
+    # 4.0% WER), "gpt-4o-mini-transcribe" (cheapest at $0.18/hr, 4.5% WER).
+    AI_TRANSCRIBE_MODEL: str = "gpt-transcribe"
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""
@@ -40,3 +46,7 @@ settings = Settings()
 # call path doesn't trigger provider fallback on 4xx errors.)
 AI_DEFAULT_MODEL_HEAVY = "claude-sonnet-4-6"
 AI_DEFAULT_MODEL_LIGHT = "claude-haiku-4-5-20251001"
+
+# Transcription model — an OpenAI name, NOT an Anthropic one. This never
+# routes through the Anthropic path or the provider-fallback map.
+AI_TRANSCRIBE_MODEL = settings.AI_TRANSCRIBE_MODEL

@@ -153,8 +153,9 @@ import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWra
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
 import { Icon, SECTION_GAP } from "@/components/ZoneMap";
-import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, ELEVATED, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, TEXTAREA, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
+import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, ELEVATED, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
 
+import NoteField from "@/components/NoteField";
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-sunken text-ink-secondary",
@@ -977,11 +978,11 @@ function CommitmentsCard({
             ))}
           </select>
           <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Commitment</label>
-          <textarea
+          <NoteField
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={setDescription}
             rows={2}
-            className={`${TEXTAREA} w-full text-sm`}
+            className="w-full text-sm"
           />
           <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Due date (optional)</label>
           <input
@@ -1112,12 +1113,12 @@ function CalloutsPanel({
 
       {editing ? (
         <div className="mt-3">
-          <textarea
+          <NoteField
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             rows={6}
             placeholder={"One callout per line, e.g.\nEnterprise tier scope is cut this quarter.\nQ3 roadmap draft due Friday."}
-            className={`${TEXTAREA} w-full text-sm`}
+            className="w-full text-sm"
           />
           {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
@@ -1225,12 +1226,12 @@ function DevFocusPanel({
 
       {editing ? (
         <div className="mt-3">
-          <textarea
+          <NoteField
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             rows={4}
             placeholder={"e.g. Q3 focus: leveling up async communication and stakeholder updates."}
-            className={`${TEXTAREA} w-full text-sm`}
+            className="w-full text-sm"
           />
           {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
@@ -1545,12 +1546,12 @@ function MeetingsPanel({
           <label className={`${LABEL} mt-2`} htmlFor="meeting-agenda">
             Agenda — one item per line
           </label>
-          <textarea
+          <NoteField
             id="meeting-agenda"
             value={formAgenda}
-            onChange={(e) => setFormAgenda(e.target.value)}
+            onChange={setFormAgenda}
             rows={4}
-            className={`${TEXTAREA} text-sm`}
+            className="text-sm"
             placeholder={"Update on Max's account\nDiscuss hiring for new CSM"}
           />
           <label className={`${LABEL} mt-2`} htmlFor="meeting-repeat">
@@ -1616,15 +1617,15 @@ function MeetingsPanel({
                   )}
                 </label>
                 {outcome?.covered && (
-                  <textarea
+                  <NoteField
                     value={outcome.notes}
-                    onChange={(e) =>
+                    onChange={(v: string) =>
                       setOutcomes((rows) =>
-                        rows.map((o) => (o.id === item.id ? { ...o, notes: e.target.value } : o))
+                        rows.map((o) => (o.id === item.id ? { ...o, notes: v } : o))
                       )
                     }
                     rows={2}
-                    className={`${TEXTAREA} mt-1 text-sm`}
+                    className="mt-1 text-sm"
                     placeholder="What happened..."
                     aria-label={`Notes for ${item.item}`}
                   />
@@ -1636,12 +1637,12 @@ function MeetingsPanel({
           <label className={`${LABEL} mt-3`} htmlFor="meeting-other">
             {next.agenda_items.length > 0 ? "Anything else" : "Notes"}
           </label>
-          <textarea
+          <NoteField
             id="meeting-other"
             value={extraNotes}
-            onChange={(e) => setExtraNotes(e.target.value)}
+            onChange={setExtraNotes}
             rows={3}
-            className={`${TEXTAREA} text-sm`}
+            className="text-sm"
             placeholder="Off-agenda notes, or paste from a recorder..."
           />
           {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
@@ -1861,11 +1862,11 @@ function LoggedMeetingModal({
 
         {editing ? (
           <div className="mt-3">
-            <textarea
+            <NoteField
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={setDraft}
               rows={5}
-              className={`${TEXTAREA} text-sm`}
+              className="text-sm"
               aria-label="Summary"
             />
             {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
@@ -2145,11 +2146,11 @@ function MemberDetailPanel({
           <p className="mb-2 text-xs leading-5 text-ink-muted">
             Manager-only and not sent to {member.name}. Use the Relationship Desk for private notes and 1:1 captures.
           </p>
-          <textarea
+          <NoteField
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             rows={3}
-            className={`${TEXTAREA} w-full text-sm`}
+            className="w-full text-sm"
             placeholder="Record a team update..."
           />
           <div className="mt-2">

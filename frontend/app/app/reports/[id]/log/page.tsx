@@ -27,6 +27,7 @@ import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import WrapUpReview from "../wrap-up-review";
 
+import NoteField from "@/components/NoteField";
 // Local calendar day, not the UTC one — "today" west of UTC is otherwise
 // "tomorrow" for most of the evening. Same helper goals/team already use.
 function localDateStr(d: Date = new Date()) {
@@ -183,12 +184,11 @@ export default function LogOneOnOnePage() {
           />
         </div>
 
-        <textarea
+        <NoteField
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={setNotes}
           placeholder={"– Caught up after standup about the Acme renewal\n– I'll pull the usage numbers before Thursday\n– She'll set up a call with their new champion"}
           rows={10}
-          className="w-full rounded-lg border border-control px-4 py-3 text-ink-body placeholder-ink-faint focus:border-brand focus:outline-none"
         />
         {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
         {needsChoice && (

@@ -71,6 +71,7 @@ import {
   draftIncludedCount,
 } from "@/components/DraftExpectationRows";
 import RoleImportPanel, { RoleImportResult } from "@/components/RoleImportPanel";
+import NoteField from "@/components/NoteField";
 import {
   CARD,
   FEATURE_SURFACE,
@@ -756,11 +757,11 @@ function RoleForm({
       </div>
       <div>
         <label className={labelCls}>Responsibilities (optional)</label>
-        <textarea
+        <NoteField
           value={responsibilities}
-          onChange={(e) => setResponsibilities(e.target.value)}
+          onChange={setResponsibilities}
           rows={2}
-          className={inputCls}
+          baseClassName={inputCls}
           placeholder="What this role owns, in a sentence or two"
         />
       </div>
@@ -2676,11 +2677,11 @@ function ExpectationDetail({
         </div>
         <div>
           <label className={labelCls}>{kind === "values" ? "What living this value looks like (optional)" : "What good looks like (optional)"}</label>
-          <textarea
+          <NoteField
             value={expectation}
-            onChange={(e) => setExpectation(e.target.value)}
+            onChange={setExpectation}
             rows={2}
-            className={inputCls}
+            baseClassName={inputCls}
             placeholder={kind === "metrics" ? "e.g. NRR at or above 110% each quarter" : "Describe the bar, in plain language"}
           />
         </div>

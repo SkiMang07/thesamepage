@@ -84,6 +84,7 @@ import {
 } from "@/lib/tokens";
 import { deriveOneOnOneSuggestions } from "@/lib/one-on-one-workspace";
 
+import NoteField from "@/components/NoteField";
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
   sick: "Sick",
@@ -668,12 +669,12 @@ export default function ReportDetailPage() {
 
             <div className="mt-4 border-t border-divider pt-3">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Keep for next time</p>
-              <textarea
+              <NoteField
                 value={newCapture}
-                onChange={(e) => setNewCapture(e.target.value)}
+                onChange={setNewCapture}
                 rows={2}
                 placeholder="Anything worth remembering for the next 1:1..."
-                className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink placeholder-ink-faint"
+                className="mt-2 text-sm"
               />
               <div className="mt-2 flex justify-end">
                 <button
@@ -1656,12 +1657,12 @@ function DevelopmentSection({
         )}
 
         <form onSubmit={addNote} className="mt-3">
-          <textarea
+          <NoteField
             value={newNote}
-            onChange={(e) => setNewNote(e.target.value)}
+            onChange={setNewNote}
             rows={2}
             placeholder="Write a private note..."
-            className="w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink placeholder-ink-faint"
+            className="text-sm"
           />
           <div className="mt-2 flex justify-end gap-2">
             <button
@@ -1719,12 +1720,12 @@ function DevelopmentSection({
             </div>
           </div>
         )}
-        <textarea
+        <NoteField
           value={planText}
-          onChange={(e) => setPlanText(e.target.value)}
+          onChange={setPlanText}
           rows={3}
           placeholder={`Write ${reportName.split(" ")[0]}'s development plan — growth focus, what's next, whatever's useful...`}
-          className="w-full rounded-md border border-control px-3 py-2 text-sm"
+          className="text-sm"
         />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
@@ -1773,12 +1774,12 @@ function DevelopmentSection({
               placeholder="Timeline (e.g. 12-18 months)"
               className="w-full rounded-md border border-control px-3 py-2 text-sm"
             />
-            <textarea
+            <NoteField
               value={aspirationNotes}
-              onChange={(e) => setAspirationNotes(e.target.value)}
+              onChange={setAspirationNotes}
               rows={2}
               placeholder="Notes"
-              className="w-full rounded-md border border-control px-3 py-2 text-sm"
+              className="text-sm"
             />
             <div className="flex justify-end gap-2">
               <button

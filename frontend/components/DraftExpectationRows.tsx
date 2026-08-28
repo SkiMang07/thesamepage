@@ -15,6 +15,7 @@
 
 import { useState } from "react";
 import { INPUT } from "@/lib/tokens";
+import NoteField from "@/components/NoteField";
 import {
   DraftMetricItem,
   DraftSkillItem,
@@ -173,11 +174,11 @@ export function DraftExpectationsReview({
                           <option value="none">Not time-based</option>
                         </select>
                       </div>
-                      <textarea
+                      <NoteField
                         value={m.expectation ?? ""}
-                        onChange={(e) => updateMetric(i, { expectation: e.target.value })}
+                        onChange={(v: string) => updateMetric(i, { expectation: v })}
                         rows={2}
-                        className={inputCls}
+                        baseClassName={inputCls}
                         placeholder="What good looks like"
                       />
                     </div>
@@ -205,11 +206,11 @@ export function DraftExpectationsReview({
                         <option value="secondary">Secondary</option>
                         <option value="tertiary">Tertiary</option>
                       </select>
-                      <textarea
+                      <NoteField
                         value={s.expectation ?? ""}
-                        onChange={(e) => updateSkill(i, { expectation: e.target.value })}
+                        onChange={(v: string) => updateSkill(i, { expectation: v })}
                         rows={2}
-                        className={inputCls}
+                        baseClassName={inputCls}
                         placeholder="What good looks like"
                       />
                     </div>
@@ -237,11 +238,11 @@ export function DraftExpectationsReview({
                         <option value="secondary">Secondary</option>
                         <option value="tertiary">Tertiary</option>
                       </select>
-                      <textarea
+                      <NoteField
                         value={v.description ?? ""}
-                        onChange={(e) => updateValue(i, { description: e.target.value })}
+                        onChange={(v: string) => updateValue(i, { description: v })}
                         rows={2}
-                        className={inputCls}
+                        baseClassName={inputCls}
                         placeholder="What living this value looks like"
                       />
                     </div>

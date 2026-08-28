@@ -32,6 +32,10 @@
 // page the same way the drawer's does.
 //
 // Keyboard: ⌘J summons the drawer with the composer focused; Esc closes.
+// ⌘⇧Space dictates into whatever text field is focused, on any page —
+// <DictationHotkey /> mounts here for the same reason the drawer does: it
+// is a global input method, not a page's feature. See components/NoteField.tsx
+// for the per-field mic and docs/systems/dictation.md for the whole design.
 //
 // Sticky-nav fix (this pass): `overflow-x-hidden` used to live on the same
 // div that wraps <AppNav />. Per the CSS overflow spec, setting overflow-x to
@@ -52,6 +56,7 @@ import { QuickAddProvider } from "@/lib/quick-add-context";
 import ScribeDrawer from "@/components/ScribeDrawer";
 import AppNav from "@/components/AppNav";
 import Sidebar from "@/components/Sidebar";
+import DictationHotkey from "@/components/DictationHotkey";
 
 const NO_NAV_PATHS = new Set(["/app/login", "/app/ic"]);
 
@@ -100,6 +105,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
         {showNav && <AppNav />}
         <div className="overflow-x-hidden">{children}</div>
       </div>
+
+      {showNav && <DictationHotkey />}
 
       {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
       {showNav && isOpen && (

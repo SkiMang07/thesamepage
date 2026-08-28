@@ -34,6 +34,7 @@ import {
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { useDrawer } from "@/lib/drawer-context";
+import NoteField from "@/components/NoteField";
 import {
   BADGE,
   BTN_GHOST,
@@ -701,11 +702,11 @@ function ProjectForm({
 
       <div>
         <label className={labelCls}>Description (optional)</label>
-        <textarea
+        <NoteField
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={setDescription}
           rows={2}
-          className={inputCls}
+          baseClassName={inputCls}
           placeholder="What this project is and how it ties back to the goal"
         />
       </div>
