@@ -288,11 +288,7 @@ export default function ReportDetailPage() {
     ])
       .then(([dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps]) => {
         setReport(dr);
-        setPageContext({
-          label: `${dr.name}'s direct report page`,
-          entity_type: "direct_report",
-          entity_id: dr.id,
-        });
+        setPageContext(`${dr.name}'s direct report page`);
         setHistory(h);
         setCommitments(c);
         setGoals(g);
