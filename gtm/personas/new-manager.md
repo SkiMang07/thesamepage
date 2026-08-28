@@ -79,11 +79,18 @@ objects.
 
 ### The AI line (standing rule)
 
-**AI is welcome upstream of the manager's judgment and offensive at or after it.**
+**AI is welcome upstream of the manager's judgment and offensive at or after it.
+The boundary is saving, not drafting.**
 
-- Fine: recall, retrieval, prep, a first draft the manager rewrites.
-- Not fine: producing or shading a rating; auto-scoring from activity metrics.
+- Fine: recall, retrieval, prep, and a draft scored against the manager's own scale
+  from evidence the manager can see.
+- Never: saving a value the manager didn't set; scoring from activity metrics;
+  filling a gap the evidence doesn't support.
 - Worse than not doing it: doing any of it undisclosed.
+
+The earlier wording banned "producing a rating" while permitting "a draft the manager
+rewrites," which left a drafted rating in both columns. See `gtm/brand/voice-rules.md`
+for the settled line.
 
 Differentiator against "just use Claude": an LLM tells you what happened. It has
 no standard to measure against, no continuity between sessions, and nothing the

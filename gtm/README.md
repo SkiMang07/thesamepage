@@ -23,10 +23,12 @@ too. Do not blur the two — see the contamination audit in `research/`.
 |---|---|
 | `business-model.md` | Pricing, tiers, distribution, the content and SEO plan |
 | `positioning.md` | Deciding what we are, to whom, against what alternative |
+| `brand/point-of-view.md` | The five beliefs, the named enemies, what we concede |
+| `brand/messaging.md` | The value prop, the three pillars, which pillar leads where |
 | `personas/new-manager.md` | Before writing any copy, or deciding who a feature is for |
 | `research/audience-2026-08.md` | Checking whether a claim is actually evidenced |
 | `research/miro-board-source.md` | The original board material, working source |
-| `brand/voice-rules.md` | Before writing a sentence anyone outside will read |
+| `brand/voice-rules.md` | Before writing a sentence anyone outside will read, or naming a field |
 | `site/<page>.md` | Changing what a marketing page argues |
 | `brand/assets/` | Logo and palette exploration. Gitignored, ~31 MB, reference only |
 
@@ -43,15 +45,13 @@ next. Skipping ahead is what produced copy nobody could defend.
 
 1. **Audience truth** — done. `personas/new-manager.md`
 2. **Positioning** — done. `positioning.md`
-3. **Point of view** — not written. The argument we would make in public even if we
-   sold nothing, plus what we are against. **Write it cold, before reading any
-   existing site copy.**
-4. **Message hierarchy** — not written. One value prop, three pillars, proof under
-   each. This is what turns page-writing from invention into assignment.
-5. **Voice system** — partial. `brand/voice-rules.md` holds the rules that already
-   bind. The full system comes after layers 3 and 4 and absorbs that file.
+3. **Point of view** — done, written cold. `brand/point-of-view.md`
+4. **Message hierarchy** — done. `brand/messaging.md`
+5. **Voice system** — done. `brand/voice-rules.md`, expanded in place into the full
+   system: four traits, three hard rules, register by surface, the coach's voice,
+   worked examples, and the test an H1 has to pass.
 
-Then the copy, rebuilt rather than defended.
+All five layers are built. Next is the copy itself, rebuilt rather than defended.
 
 ---
 
