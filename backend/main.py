@@ -75,4 +75,14 @@ async def options_handler(rest_of_path: str, request: Request) -> Response:
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "environment": settings.ENVIRONMENT}
+    # `dictation` is a boolean, never the key. It exists because the first
+    # production failure of dictation was indistinguishable from a vendor
+    # outage at the client, and answering "is OPENAI_API_KEY set on this
+    # deploy?" required a signed-in browser and devtools. One unauthenticated
+    # GET now answers it. Add a flag here for any capability that lives behind
+    # a secret this repo does not otherwise use.
+    return {
+        "status": "ok",
+        "environment": settings.ENVIRONMENT,
+        "dictation": bool(settings.OPENAI_API_KEY),
+    }

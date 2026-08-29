@@ -90,6 +90,50 @@ audio. A manager dictating twenty minutes every working day costs about $2 a
 year. This is deliberately the batch endpoint and not the realtime one, which
 costs 3.8× for a latency win nobody asked for in a text box.
 
+## Configuration, and the failure it caused
+
+`OPENAI_API_KEY` must be set on the backend host. It is the *only* OpenAI
+dependency in an otherwise Anthropic-only stack, which is precisely why it is
+easy to miss: the service deploys green and every other AI feature works
+without it. Dictation shipped to production without that key and failed on
+every attempt, and the client rendered the resulting 503 as the same
+"Couldn't transcribe that. Try again?" it showed for everything else — which
+invited a retry that could never succeed.
+
+Two things changed as a result, and both are load-bearing:
+
+- **`/health` reports `"dictation": true|false`.** A boolean, never the key.
+  "Is the key set on this deploy?" is now one unauthenticated GET rather than a
+  signed-in browser and devtools. Add a flag here for any future capability that
+  hides behind a secret this repo does not otherwise use.
+- **The client maps status to message.** See below.
+
+`AI_TRANSCRIBE_MODEL` defaults to `gpt-transcribe` and does not need setting.
+
+One consequence worth knowing before that key is added anywhere new:
+`generate_text()`'s Anthropic→OpenAI 5xx fallback is gated on the same
+variable. Without the key the fallback silently never fires and an Anthropic
+5xx is a hard 502. With it, `_call_openai()` — a path that has never executed
+in production — becomes live during the next Anthropic outage.
+
+## When it fails
+
+`dictationErrorMessage()` in `useDictation.ts` owns the mapping, because these
+statuses mean opposite things and a single catch-all string hides that:
+
+| Status | Cause | Worth retrying? |
+|---|---|---|
+| 503 | `OPENAI_API_KEY` unset on the server | Never — it is configuration, not luck |
+| 502 | OpenAI rejected the call or was unreachable. `transcribe_audio()` logs the vendor's own status and body — that log line is the diagnosis | Sometimes |
+| 415 | The browser produced a format outside `_ALLOWED_PREFIXES` | No |
+| 413 | Past the 8MB ceiling | No |
+| 429 | Past the 30/minute limit | Shortly |
+| no status | `fetch` itself rejected — offline, CORS, backend down | Yes |
+
+`ApiError` in `lib/api.ts` is what carries the status that far; it is thrown by
+both `authedFetch` and `authedFormFetch`, so any other surface that needs to
+tell a configuration failure from a vendor failure can now do it too.
+
 ## Vocabulary hints
 
 `transcribe_audio()` takes an optional comma-separated `vocabulary` string,

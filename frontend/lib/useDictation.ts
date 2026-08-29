@@ -32,7 +32,7 @@
 //     the blob is only uploaded on an explicit stop keeps the failure honest.
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useRef, useState } from "react";
-import { transcribeAudio } from "./api";
+import { ApiError, transcribeAudio } from "./api";
 
 export type DictationState = "idle" | "starting" | "recording" | "transcribing";
 
@@ -184,8 +184,8 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
         const trimmed = (text || "").trim();
         if (trimmed) onTextRef.current(trimmed);
         else setError("Didn't catch anything.");
-      } catch {
-        setError("Couldn't transcribe that. Try again?");
+      } catch (e) {
+        setError(dictationErrorMessage(e));
       } finally {
         setState("idle");
       }
@@ -253,6 +253,43 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
     toggle,
     isBusy: state !== "idle",
   };
+}
+
+/**
+ * Turn a failed transcribe call into something a manager can act on.
+ *
+ * The first version of this caught every failure as "Couldn't transcribe that.
+ * Try again?" — which is the one thing you must not do to an error you will
+ * later have to debug from a screenshot. It rendered a 503 (the server has no
+ * transcription key; retrying will never work) identically to a 502 (the
+ * vendor blipped; retrying probably will) and to a dead connection. The status
+ * is on ApiError; use it, and print the number in the cases where the words
+ * alone do not tell you which one you got.
+ */
+export function dictationErrorMessage(e: unknown): string {
+  // Not an ApiError means fetch() itself rejected: offline, DNS, CORS, or the
+  // backend not answering at all. There is no status to report.
+  if (!(e instanceof ApiError)) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  switch (e.status) {
+    case 401:
+    case 403:
+      return "Your session expired. Reload the page and try again.";
+    case 413:
+      return "That recording was too long to send.";
+    case 415:
+      return "This browser recorded audio in a format we can't transcribe (415).";
+    case 422:
+      return "Didn't catch anything.";
+    case 429:
+      return "That's a lot of dictating. Give it a moment and try again.";
+    case 503:
+      // Configuration, not the manager. Says so, so nobody retries for a minute.
+      return "Dictation isn't set up on this server yet (503).";
+    default:
+      return `Couldn't transcribe that (${e.status}). Try again?`;
+  }
 }
 
 /** mm:ss for the recording timer. */

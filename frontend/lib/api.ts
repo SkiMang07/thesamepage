@@ -4,6 +4,40 @@
 import { createClient } from "./supabase";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+/**
+ * A non-2xx response from the backend.
+ *
+ * `new Error("API error 503: ...")` threw away the one thing a caller needs to
+ * behave differently: a 503 means the server is missing configuration and
+ * retrying will never work, while a 502 means a vendor blipped and retrying
+ * probably will. Both used to arrive as an identical string, so every catch
+ * block in the app was forced into a single catch-all message. `message` is
+ * unchanged from what it always was, so anything reading it still works.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  /** FastAPI's `detail`, when the body was JSON. Otherwise the raw body,
+   *  truncated — a gateway timeout returns an HTML page, not our schema. */
+  readonly detail: string;
+
+  constructor(status: number, body: string) {
+    super(`API error ${status}: ${body}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = parseDetail(body);
+  }
+}
+
+function parseDetail(body: string): string {
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed?.detail === "string") return parsed.detail;
+  } catch {
+    /* not JSON — a proxy, a gateway error page, or an empty body */
+  }
+  return body.slice(0, 200);
+}
+
 export const RECORDS_CHANGED_EVENT = "tsp:records-changed";
 export const RECORDS_CHANGED_STORAGE_KEY = "tsp:records-changed-at";
 
@@ -30,7 +64,7 @@ async function authedFetch(path: string, options: RequestInit = {}) {
     },
   });
 
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, await res.text());
   const data = await res.json();
   announceRecordChange(path, (options.method || "GET").toUpperCase());
   return data;
@@ -52,7 +86,7 @@ async function authedFormFetch(path: string, formData: FormData) {
     body: formData,
   });
 
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, await res.text());
   const data = await res.json();
   announceRecordChange(path, "POST");
   return data;
