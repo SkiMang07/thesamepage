@@ -3,10 +3,31 @@
 // ---------------------------------------------------------------------------
 // Dictation — the browser half of talk-to-text.
 //
-// Records with MediaRecorder, stops, uploads once, inserts the transcript.
-// Batch, not streaming: a manager taps stop and waits a second or two, and
-// OpenAI's realtime endpoint costs 3.8x the batch one for a latency win nobody
-// asked for in a text box.
+// Records with MediaRecorder, stops, uploads once, and surfaces the
+// transcript for review — a human confirms or discards it before it lands in
+// a field, rather than the hook inserting it immediately. Batch, not
+// streaming: a manager taps stop and waits a second or two, and OpenAI's
+// realtime endpoint costs 3.8x the batch one for a latency win nobody asked
+// for in a text box.
+//
+// THE REVIEW STEP. Landing a transcript straight into the field with no
+// pause meant the first sign of a misheard word was finding it later, mixed
+// in with typed text. `state === "reviewing"` holds the transcript in
+// `pendingText` until the caller explicitly confirms (`confirmReview`) or
+// discards (`discardReview`). This is still not the draft-then-review
+// boundary the rest of the app uses for AI writes — no model touches
+// `pendingText`, the manager's own edits are the only thing that can change
+// it, and `onText` (the thing that actually inserts) still fires exactly
+// once, same as it always did — just at confirm instead of at transcribe.
+// The review step decides *when* insertion happens, not what gets inserted
+// or who wrote it.
+//
+// THE LEVEL METER. Not a partial transcript — that stays off the table for
+// the same cost reason as streaming. It's a cheap Web Audio AnalyserNode
+// read off the live MediaStream, entirely client-side, that answers one
+// question while you're mid-sentence with no other feedback: is the mic
+// actually hearing me. No network call, no cost, nothing that touches the
+// "audio is transcribed and discarded" promise this feature makes.
 //
 // THE BROWSER GOTCHAS THIS FILE EXISTS TO ABSORB:
 //
@@ -34,7 +55,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, transcribeAudio } from "./api";
 
-export type DictationState = "idle" | "starting" | "recording" | "transcribing";
+export type DictationState =
+  | "idle"
+  | "starting"
+  | "recording"
+  | "transcribing"
+  | "reviewing";
 
 /** Hard stop. Matches the backend's 5-minute ceiling. A dictation is a person
  *  talking into a text box; anything longer is a recording, which is a
@@ -47,6 +73,8 @@ const MIME_CANDIDATES = [
   "audio/mp4", // Safari < 18.4
   "", // let the browser pick, and hope
 ];
+
+const NO_SPEECH_MESSAGE = "Didn't catch anything.";
 
 export function isDictationSupported(): boolean {
   if (typeof window === "undefined") return false;
@@ -69,7 +97,9 @@ function pickMimeType(): string {
 }
 
 type Options = {
-  /** Called with the transcript. Never called with an empty string. */
+  /** Called with the confirmed transcript, once, at the moment it's
+   *  confirmed (via `confirmReview`, typically from the review card).
+   *  Never called with an empty string, and never called automatically. */
   onText: (text: string) => void;
   /** Comma-separated names/nouns to bias spelling (direct reports, products). */
   vocabulary?: string;
@@ -78,6 +108,8 @@ type Options = {
 export function useDictation({ onText, vocabulary = "" }: Options) {
   const [state, setState] = useState<DictationState>("idle");
   const [seconds, setSeconds] = useState(0);
+  const [level, setLevel] = useState(0);
+  const [pendingText, setPendingText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -93,18 +125,86 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
   const vocabRef = useRef(vocabulary);
   vocabRef.current = vocabulary;
 
+  // The level meter's own plumbing: an AudioContext + an rAF loop, kept
+  // separate from the MediaRecorder refs above since it has its own
+  // lifecycle and must not be confused with the recorder's.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const levelDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const levelRafRef = useRef<number | null>(null);
+
+  const stopLevelMeter = useCallback(() => {
+    if (levelRafRef.current !== null) {
+      cancelAnimationFrame(levelRafRef.current);
+      levelRafRef.current = null;
+    }
+    analyserRef.current = null;
+    levelDataRef.current = null;
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {
+        /* already closed, or the browser refused — nothing to do about it */
+      });
+      audioCtxRef.current = null;
+    }
+    setLevel(0);
+  }, []);
+
+  // Best-effort. A manager should never lose dictation because their browser
+  // doesn't like AnalyserNode — the meter is cosmetic, recording is not.
+  const startLevelMeter = useCallback((stream: MediaStream) => {
+    try {
+      const AudioCtxCtor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioCtxCtor) return;
+      const audioCtx = new AudioCtxCtor();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.6;
+      source.connect(analyser);
+
+      audioCtxRef.current = audioCtx;
+      analyserRef.current = analyser;
+      levelDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+
+      const tick = () => {
+        const a = analyserRef.current;
+        const data = levelDataRef.current;
+        if (!a || !data) return;
+        a.getByteTimeDomainData(data);
+        let sumSquares = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128;
+          sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / data.length);
+        // Speech RMS sits low relative to the 0-1 range this loop produces;
+        // 4x brings a normal speaking voice to a legible height without
+        // clipping shouted or close-mic'd input at 1.
+        setLevel(Math.min(1, rms * 4));
+        levelRafRef.current = requestAnimationFrame(tick);
+      };
+      levelRafRef.current = requestAnimationFrame(tick);
+    } catch {
+      /* no AnalyserNode support, or a locked-down environment; skip the meter */
+    }
+  }, []);
+
   const teardown = useCallback(() => {
     if (tickRef.current) {
       clearInterval(tickRef.current);
       tickRef.current = null;
     }
+    stopLevelMeter();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     recorderRef.current = null;
     chunksRef.current = [];
     elapsedRef.current = 0;
     setSeconds(0);
-  }, []);
+  }, [stopLevelMeter]);
 
   // Stop the microphone if the field unmounts mid-recording. Without this the
   // browser's recording indicator stays lit after navigating away.
@@ -172,9 +272,17 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
       const discarded = discardRef.current;
       teardown();
 
-      if (discarded || blob.size < 1200) {
-        // Under ~1.2KB is a mis-tap, not speech. Say nothing, cost nothing.
+      if (discarded) {
         setState("idle");
+        return;
+      }
+
+      if (blob.size < 1200) {
+        // Under ~1.2KB is a mis-tap, not speech. Say so rather than doing
+        // nothing — a silent no-op looks identical to the feature being
+        // broken.
+        setState("idle");
+        setError(NO_SPEECH_MESSAGE);
         return;
       }
 
@@ -182,12 +290,16 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
       try {
         const { text } = await transcribeAudio(blob, vocabRef.current);
         const trimmed = (text || "").trim();
-        if (trimmed) onTextRef.current(trimmed);
-        else setError("Didn't catch anything.");
+        if (trimmed) {
+          setPendingText(trimmed);
+          setState("reviewing");
+        } else {
+          setState("idle");
+          setError(NO_SPEECH_MESSAGE);
+        }
       } catch (e) {
-        setError(dictationErrorMessage(e));
-      } finally {
         setState("idle");
+        setError(dictationErrorMessage(e));
       }
     };
 
@@ -195,6 +307,7 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
     recorderRef.current = recorder;
     setState("recording");
     setSeconds(0);
+    startLevelMeter(stream);
     // The elapsed count is kept outside React state as well as in it. React 18
     // may invoke a state updater twice (StrictMode), so the ceiling check must
     // not live inside one — doing that double-counts the clock and calls
@@ -212,7 +325,7 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
         }
       }
     }, 1000);
-  }, [state, teardown]);
+  }, [state, teardown, startLevelMeter]);
 
   const stop = useCallback(() => {
     if (state !== "recording") return;
@@ -225,7 +338,9 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
     }
   }, [state, teardown]);
 
-  /** Throw the recording away without transcribing it. Bound to Escape. */
+  /** Throw the recording away without transcribing it. Bound to Escape while
+   *  recording. Not to be confused with `discardReview`, which throws away an
+   *  already-transcribed pending review instead. */
   const cancel = useCallback(() => {
     if (state !== "recording") return;
     discardRef.current = true;
@@ -242,15 +357,38 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
     else if (state === "idle") start();
   }, [state, start, stop]);
 
+  /** Accept the pending transcript: fire `onText` with whatever the manager
+   *  left in `pendingText` (their edits included) and return to idle. */
+  const confirmReview = useCallback(() => {
+    if (state !== "reviewing") return;
+    const text = pendingText.trim();
+    setPendingText("");
+    setState("idle");
+    if (text) onTextRef.current(text);
+  }, [state, pendingText]);
+
+  /** Throw away a pending transcript without inserting it. Bound to Escape
+   *  while reviewing. */
+  const discardReview = useCallback(() => {
+    if (state !== "reviewing") return;
+    setPendingText("");
+    setState("idle");
+  }, [state]);
+
   return {
     state,
     seconds,
+    level,
+    pendingText,
+    setPendingText,
     error,
     clearError: useCallback(() => setError(null), []),
     start,
     stop,
     cancel,
     toggle,
+    confirmReview,
+    discardReview,
     isBusy: state !== "idle",
   };
 }
@@ -281,7 +419,7 @@ export function dictationErrorMessage(e: unknown): string {
     case 415:
       return "This browser recorded audio in a format we can't transcribe (415).";
     case 422:
-      return "Didn't catch anything.";
+      return NO_SPEECH_MESSAGE;
     case 429:
       return "That's a lot of dictating. Give it a moment and try again.";
     case 503:
@@ -307,8 +445,8 @@ export function formatDictationClock(total: number): string {
  * value it rendered on the node, sees no change, and the next render puts the
  * old string back. Calling the prototype's native setter and then dispatching
  * a bubbling `input` event is what makes React's onChange fire for real. This
- * is only used by the global ⌘⇧D path, which types into fields it does not
- * own; NoteField controls its own value and just calls onChange.
+ * is only used by the global ⌘⇧Space path, which types into fields it does
+ * not own; NoteField controls its own value and just calls onChange.
  */
 export function insertAtCaret(el: HTMLTextAreaElement | HTMLInputElement, text: string) {
   const proto =

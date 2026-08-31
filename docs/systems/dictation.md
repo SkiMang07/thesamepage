@@ -17,7 +17,7 @@ is inserted **verbatim** into the field they were already typing in, no model
 tidies it, and their existing Save button remains the only thing that writes to
 the database.
 
-Two consequences that must not drift:
+Three consequences that must not drift:
 
 - **Never auto-save on transcript arrival.** The field's own save path is
   untouched by this feature. If dictation ever writes directly, it stops being
@@ -26,6 +26,15 @@ Two consequences that must not drift:
   the manager's words. It would be a *draft*, and drafts get reviewed. If that
   feature is ever wanted it is a separate, explicit, second action with its own
   review — not something dictation does quietly on the way in.
+- **The confirm/discard step is a human checkpoint, not an AI review step.** A
+  stopped recording lands in an editable `DictationReview` card — the manager
+  can fix a misheard word or bail entirely — before `insertAtCaret`/`insert()`
+  ever runs (`frontend/components/DictationReview.tsx`). This does not move
+  dictation onto the draft-then-review boundary: no model reads or changes
+  `pendingText`, only the manager can, and the field's Save button is still the
+  only writer to the database. It only changes *when* the verbatim insert
+  happens, from "the instant transcription finishes" to "once the manager says
+  so."
 
 Cosmetic handling (caret placement, whitespace joining) is deterministic and
 lives in `NoteField.insert()` / `insertAtCaret()`, where it can be read.
@@ -56,16 +65,25 @@ POST /api/transcribe (multipart)  →   routes/transcribe.py
                                         ↓  OpenAI /v1/audio/transcriptions
                                       { text }
   ↓
+review card (editable) · manager confirms or discards
+  ↓ confirm
 insert at caret · field state · manager edits · manager saves
 ```
+
+A client-side Web Audio level meter (`useDictation`'s `level`, rendered by
+`DictationLevelMeter`) runs alongside the recording. It never leaves the
+browser and touches no part of this diagram — it's an AnalyserNode reading the
+live MediaStream, not a second transcription path.
 
 **Files**
 
 | File | Owns |
 |---|---|
-| `frontend/lib/useDictation.ts` | MediaRecorder lifecycle, mime negotiation, timer, cancel, the caret-insert helper |
+| `frontend/lib/useDictation.ts` | MediaRecorder lifecycle, mime negotiation, timer, level meter, the review state (`pendingText`/`confirmReview`/`discardReview`), cancel, the caret-insert helper |
 | `frontend/components/NoteField.tsx` | The app's textarea. Mic built in. **Reach for this instead of a raw `<textarea>`.** |
-| `frontend/components/DictationHotkey.tsx` | ⌘⇧Space, global. Mounted once in `app/app/layout.tsx` |
+| `frontend/components/DictationReview.tsx` | The editable confirm/discard card, shared by NoteField (anchored at the field) and DictationHotkey (anchored in its pill) |
+| `frontend/components/DictationLevelMeter.tsx` | The small live-input meter, shared the same way |
+| `frontend/components/DictationHotkey.tsx` | ⌘⇧Space, global. Mounted once in `app/app/layout.tsx`. Its floating pill becomes the review card while reviewing, since it types into fields it doesn't own |
 | `backend/routes/transcribe.py` | The one endpoint. Auth, caps, format allowlist |
 | `backend/ai_core.py` → `transcribe_audio()` | The provider call. Every AI call still routes through ai_core |
 
@@ -133,6 +151,12 @@ statuses mean opposite things and a single catch-all string hides that:
 `ApiError` in `lib/api.ts` is what carries the status that far; it is thrown by
 both `authedFetch` and `authedFormFetch`, so any other surface that needs to
 tell a configuration failure from a vendor failure can now do it too.
+
+A recording under ~1.2KB never reaches the network at all — `useDictation`
+discards it client-side (a mis-tap, not speech) and shows the same "Didn't
+catch anything." message directly, rather than doing nothing. Before this it
+failed silently: no error, no text, state just returned to idle, which looked
+identical to the feature being broken.
 
 ## Vocabulary hints
 
@@ -221,3 +245,9 @@ replace it, not append to it.
 - No `vocabulary` is wired into any call site yet. The plumbing is there; the
   first place to use it is the 1:1 prep/log pages, where the direct report's
   name is already in scope.
+- **The confirm/discard review card and the level meter haven't been used
+  live yet.** They were built 2026-08-31 in response to Andrew's first live
+  use of dictation (which had shipped 2026-08-28 and gone unused until then).
+  ⌘⇧Space's discoverability was raised in that same pass and deliberately
+  parked — nothing in the app currently teaches a new user the shortcut
+  exists.

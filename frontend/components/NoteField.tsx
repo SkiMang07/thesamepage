@@ -11,21 +11,25 @@
 // feature and the missing component are one change: reach for <NoteField>
 // wherever a manager writes prose, and dictation comes with it for free.
 //
-// WHAT DICTATION DOES NOT DO. It does not save, and it does not rewrite. The
-// transcript is inserted at the caret in the field the manager was already
-// typing in; their existing Save button is still the only thing that writes to
-// the database, and the words that land are verbatim — no model tidies them,
-// summarises them or turns them into bullets. That keeps dictation entirely
-// outside the draft-then-review boundary instead of punching a new hole in it.
-// Every other AI write in this app is reviewed because a model produced text
-// the manager did not say. Here the manager said it.
+// WHAT DICTATION DOES NOT DO. It does not save, and it does not rewrite. A
+// stopped recording is transcribed and held for review — the manager sees it,
+// can edit it, and only then confirms or discards (see DictationReview and
+// docs/systems/dictation.md) — but no model tidies it, summarises it or turns
+// it into bullets, and their existing Save button is still the only thing
+// that writes to the database. That keeps dictation entirely outside the
+// draft-then-review boundary instead of punching a new hole in it. Every
+// other AI write in this app is reviewed because a model produced text the
+// manager did not say. Here the manager said it; the review step just adds a
+// pause before it lands, not a rewrite.
 //
-// Insert, never replace: dictating into a field with text in it adds to what is
-// there, at the caret. Losing typed words to a mis-tapped mic would be the one
-// unforgivable bug in this feature.
+// Insert, never replace: confirming a review adds to what's already in the
+// field, at the caret it had when recording stopped. Losing typed words to a
+// mis-tapped mic would be the one unforgivable bug in this feature.
 // ---------------------------------------------------------------------------
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { TEXTAREA } from "@/lib/tokens";
+import DictationLevelMeter from "@/components/DictationLevelMeter";
+import DictationReview from "@/components/DictationReview";
 import {
   formatDictationClock,
   isDictationSupported,
@@ -125,7 +129,19 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
     [value, onChange],
   );
 
-  const { state, seconds, error, clearError, toggle, cancel } = useDictation({
+  const {
+    state,
+    seconds,
+    level,
+    pendingText,
+    setPendingText,
+    error,
+    clearError,
+    toggle,
+    cancel,
+    confirmReview,
+    discardReview,
+  } = useDictation({
     onText: insert,
     vocabulary,
   });
@@ -133,22 +149,25 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
   const recording = state === "recording";
   const transcribing = state === "transcribing";
   const starting = state === "starting";
+  const reviewing = state === "reviewing";
 
-  // Escape cancels the recording and must not bubble — the app shell closes
-  // the Scribe drawer on Escape, and a manager hitting Esc to abandon a
-  // dictation should not also lose the drawer.
+  // Escape cancels a live recording, or discards a pending review, and must
+  // not bubble — the app shell closes the Scribe drawer on Escape, and a
+  // manager hitting Esc to abandon a dictation should not also lose the
+  // drawer.
   useEffect(() => {
-    if (!recording) return;
+    if (!recording && !reviewing) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        cancel();
+        if (recording) cancel();
+        else discardReview();
       }
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [recording, cancel]);
+  }, [recording, reviewing, cancel, discardReview]);
 
   const handleToggle = () => {
     clearError();
@@ -182,17 +201,20 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
         {micVisible && (
           <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
             {recording && (
-              <span
-                className="rounded-full bg-brand-tint px-2 py-0.5 text-[11px] font-medium tabular-nums text-brand"
-                aria-live="off"
-              >
-                {formatDictationClock(seconds)}
-              </span>
+              <>
+                <DictationLevelMeter level={level} />
+                <span
+                  className="rounded-full bg-brand-tint px-2 py-0.5 text-[11px] font-medium tabular-nums text-brand"
+                  aria-live="off"
+                >
+                  {formatDictationClock(seconds)}
+                </span>
+              </>
             )}
             <button
               type="button"
               onClick={handleToggle}
-              disabled={transcribing || starting}
+              disabled={transcribing || starting || reviewing}
               aria-label={recording ? "Stop dictating" : "Dictate"}
               aria-pressed={recording}
               title={recording ? "Stop (Esc to discard)" : "Dictate"}
@@ -223,6 +245,16 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
         <p className="mt-1 text-xs text-ink-muted">Listening — click to stop, Esc to discard.</p>
       )}
       {transcribing && <p className="mt-1 text-xs text-ink-muted">Transcribing…</p>}
+      {reviewing && (
+        <div className="mt-1.5">
+          <DictationReview
+            text={pendingText}
+            onChange={setPendingText}
+            onConfirm={confirmReview}
+            onDiscard={discardReview}
+          />
+        </div>
+      )}
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
       {showNotice && !error && (
         <p className="mt-1 text-xs text-ink-muted">
