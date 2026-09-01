@@ -11,6 +11,9 @@ import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AwayPeriod,
+  AwaySweepItem,
+  AwaySweepResult,
   CapacitySettings,
   DirectReport,
   Expectation,
@@ -24,6 +27,7 @@ import {
   SetupStatus,
   SetupStatusPerson,
   WorkUnitConfig,
+  applyAwayPeriod,
   archiveDirectReport,
   assignReportOrgUnit,
   assignReportRole,
@@ -41,6 +45,7 @@ import {
   draftOrgValues,
   expectationName,
   getArchivedDirectReports,
+  getAwayPeriods,
   getCapacitySettings,
   getDirectReports,
   getExpectations,
@@ -51,6 +56,7 @@ import {
   getRoleLevels,
   getSetupStatus,
   getWorkUnitConfigs,
+  previewAwayPeriod,
   unarchiveDirectReport,
   updateCapacitySettings,
   updateDirectReportProfile,
@@ -3127,6 +3133,9 @@ function OperatingDefaultsSection({
     <div className="space-y-10">
       <CadenceDefaults profile={profile} onSaved={onProfileSaved} onError={onError} />
       <div className="border-t border-hairline pt-10">
+        <AwaySection />
+      </div>
+      <div className="border-t border-hairline pt-10">
         <CapacitySection
           roleLevels={roleLevels}
           roleFamilies={roleFamilies}
@@ -3201,6 +3210,193 @@ function CadenceDefaults({
     </section>
   );
 }
+
+function AwaySection() {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [previewing, setPreviewing] = useState(false);
+  const [preview, setPreview] = useState<AwaySweepResult | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState<AwaySweepResult | null>(null);
+  const [history, setHistory] = useState<AwayPeriod[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getAwayPeriods()
+      .then(setHistory)
+      .catch(() => {
+        // History is a nice-to-have below the fold; a failed load here
+        // shouldn't block the form above it.
+      });
+  }, []);
+
+  const canPreview = startDate.length > 0 && endDate.length > 0 && endDate >= startDate;
+
+  async function runPreview(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canPreview) return;
+    setPreviewing(true);
+    setApplied(null);
+    try {
+      const result = await previewAwayPeriod({ start_date: startDate, end_date: endDate });
+      setPreview(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to check what would move");
+      setPreview(null);
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function confirmApply() {
+    setApplying(true);
+    try {
+      const result = await applyAwayPeriod({
+        start_date: startDate,
+        end_date: endDate,
+        reason: reason.trim() || undefined,
+      });
+      setApplied(result);
+      setPreview(null);
+      setError(null);
+      setHistory(await getAwayPeriods());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reschedule");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function groupByType(items: AwaySweepItem[]) {
+    const groups: Partial<Record<AwaySweepItem["entity_type"], AwaySweepItem[]>> = {};
+    for (const item of items) {
+      (groups[item.entity_type] ??= []).push(item);
+    }
+    return groups;
+  }
+
+  return (
+    <section>
+      <h2 className="font-medium text-ink">Away</h2>
+      <p className="mt-1 text-sm text-ink-secondary">
+        Set the dates you&apos;ll be out and this pushes your upcoming 1:1s, team meetings, and your own commitment,
+        goal, and project due dates forward by however many days you&apos;re away — so nothing sits as false
+        delinquency while you&apos;re gone. Items a direct report owns are left untouched.
+      </p>
+
+      <form onSubmit={runPreview} className="mt-4 max-w-md space-y-3">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className={labelCls}>Away from</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setPreview(null);
+                setApplied(null);
+              }}
+              className={inputCls}
+            />
+          </div>
+          <div className="flex-1">
+            <label className={labelCls}>Back on</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setPreview(null);
+                setApplied(null);
+              }}
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Reason (optional)</label>
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className={inputCls}
+            placeholder="e.g. vacation"
+          />
+        </div>
+        <button type="submit" disabled={!canPreview || previewing} className={BTN_SECONDARY}>
+          {previewing ? "Checking…" : "See what would move"}
+        </button>
+      </form>
+
+      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+
+      {preview && (
+        <div className="mt-4 max-w-lg rounded-lg border border-hairline p-4">
+          {preview.items.length === 0 ? (
+            <p className="text-sm text-ink-secondary">Nothing falls in that window — there&apos;s nothing to move.</p>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-ink">
+                {preview.items.length} item{preview.items.length === 1 ? "" : "s"} would shift forward{" "}
+                {preview.window_days} day{preview.window_days === 1 ? "" : "s"}:
+              </p>
+              <div className="mt-3 space-y-3">
+                {Object.entries(groupByType(preview.items)).map(([type, items]) => (
+                  <div key={type}>
+                    <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                      {AWAY_TYPE_LABELS[type as AwaySweepItem["entity_type"]]}
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {(items ?? []).map((item) => (
+                        <li key={item.entity_id} className="text-sm text-ink-secondary">
+                          {item.label} — {item.old_date} &rarr; {item.new_date}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <button onClick={confirmApply} disabled={applying} className={`${primaryBtnCls} mt-4`}>
+                {applying
+                  ? "Rescheduling…"
+                  : `Confirm — reschedule ${preview.items.length} item${preview.items.length === 1 ? "" : "s"}`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {applied && (
+        <p className="mt-4 text-sm text-brand">
+          Done — {applied.items.length} item{applied.items.length === 1 ? "" : "s"} rescheduled.
+        </p>
+      )}
+
+      {history.length > 0 && (
+        <div className="mt-6">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Past away periods</p>
+          <ul className="mt-2 space-y-1">
+            {history.map((p) => (
+              <li key={p.id} className="text-sm text-ink-secondary">
+                {p.start_date} &ndash; {p.end_date}
+                {p.reason ? ` (${p.reason})` : ""} — {p.shift_count} item{p.shift_count === 1 ? "" : "s"} moved
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const AWAY_TYPE_LABELS: Record<AwaySweepItem["entity_type"], string> = {
+  one_on_one: "1:1s",
+  team_meeting: "Team meetings",
+  commitment: "Commitments",
+  goal: "Goals",
+  project: "Projects",
+};
 
 function CapacitySection({
   roleLevels,

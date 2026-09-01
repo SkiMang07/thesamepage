@@ -294,6 +294,62 @@ create index commitments_open_idx on commitments (direct_report_id, status) wher
 create index direct_reports_archived_at_idx on direct_reports (archived_at);
 
 -- -------------------------
+-- AWAY PERIODS
+-- Manager-declared "I'll be away" windows (2026-09-01, prompted by
+-- Andrew's own upcoming ten-day trip). Deliberately NOT built on top of
+-- time_off_entries: that table is a passive capacity-math input scoped to
+-- direct_report_id (see capacity.py), read continuously by the hours
+-- rollup, and going on vacation there doesn't move a single 1:1 or due
+-- date. This table is the opposite shape — it exists to trigger one
+-- explicit, one-time sweep of the manager's OWN upcoming schedule and due
+-- dates, so they don't sit as false delinquency while the manager is out.
+-- See backend/routes/away.py for the sweep logic and docs/systems/away.md
+-- for the full design, including why the two tables stayed separate.
+--
+-- applied_at defaults to now() because there is no draft/unapplied row in
+-- this table at all — GET /api/away/preview computes the same candidate
+-- list without persisting anything, and only a POST that actually performs
+-- the sweep inserts a row here. If a future pass adds a "review later"
+-- draft state, applied_at going nullable is the signal that changed.
+--
+-- away_period_shifts is the audit trail: one row per item actually moved,
+-- so a manager can see exactly what changed and reason about it later (or,
+-- eventually, undo it). manager_id is denormalized onto it, same reasoning
+-- as team_meeting_agenda_items, so its RLS policy stays a flat
+-- manager_id = auth.uid() instead of a subquery through away_periods.
+-- -------------------------
+create table away_periods (
+  id           uuid primary key default uuid_generate_v4(),
+  manager_id   uuid not null references auth.users(id),
+  start_date   date not null,
+  end_date     date not null,
+  reason       text,
+  applied_at   timestamptz not null default now(),
+  created_at   timestamptz not null default now(),
+  constraint away_periods_date_range check (end_date >= start_date)
+);
+
+alter table away_periods enable row level security;
+
+create index away_periods_manager_idx on away_periods (manager_id, start_date desc);
+
+create table away_period_shifts (
+  id             uuid primary key default uuid_generate_v4(),
+  away_period_id uuid not null references away_periods(id) on delete cascade,
+  manager_id     uuid not null references auth.users(id),
+  entity_type    text not null check (entity_type in ('one_on_one', 'team_meeting', 'commitment', 'goal', 'project')),
+  entity_id      uuid not null,
+  label          text not null,
+  old_date       date not null,
+  new_date       date not null,
+  created_at     timestamptz not null default now()
+);
+
+alter table away_period_shifts enable row level security;
+
+create index away_period_shifts_period_idx on away_period_shifts (away_period_id);
+
+-- -------------------------
 -- DIRECT-REPORT CAPTURE NOTES
 -- Session 50 (2026-08-21) — Person Page "Command Deck" rework's between-
 -- sessions capture box. Quick freeform jots that fold into the next /prep
@@ -1318,6 +1374,15 @@ create policy "one_on_one_series_all_own" on one_on_one_series
 -- commitments — visible to the owner (manager who made the commitment)
 create policy "commitments_all_own" on commitments
   for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- away_periods / away_period_shifts — manager-scoped, same flat pattern as
+-- commitments. See the AWAY PERIODS table comment above for why
+-- manager_id is denormalized onto the shifts table.
+create policy "away_periods_all_own" on away_periods
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
+create policy "away_period_shifts_all_own" on away_period_shifts
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
 -- dr_capture_notes — same flat manager-scoped pattern as commitments
 create policy "dr_capture_notes_all_own" on dr_capture_notes

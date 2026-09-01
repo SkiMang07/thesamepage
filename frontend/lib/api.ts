@@ -745,6 +745,57 @@ export const getCapacityRollup = (periodStart: string, periodEnd: string): Promi
   authedFetch(`/api/capacity/rollup?period_start=${periodStart}&period_end=${periodEnd}`);
 
 // ---------------------------------------------------------------------------
+// Away (Session 2026-09-01) — a manager declares "I'll be out from X to Y"
+// and every upcoming 1:1, team meeting, and self-owned commitment/goal/
+// project due date in that window shifts forward by however many days long
+// the window is, so nothing sits as false delinquency while they're gone.
+// v1 is manager-only; a direct report's own out-of-office is a separate
+// follow-up. See backend/routes/away.py and docs/systems/away.md.
+// ---------------------------------------------------------------------------
+
+export type AwayEntityType = "one_on_one" | "team_meeting" | "commitment" | "goal" | "project";
+
+export type AwaySweepItem = {
+  entity_type: AwayEntityType;
+  entity_id: string;
+  label: string;
+  old_date: string;
+  new_date: string;
+};
+
+export type AwaySweepResult = {
+  window_days: number;
+  items: AwaySweepItem[];
+};
+
+export type AwayPeriodIn = {
+  start_date: string;
+  end_date: string;
+  reason?: string;
+};
+
+// Computes what would move without persisting anything.
+export const previewAwayPeriod = (body: AwayPeriodIn): Promise<AwaySweepResult> =>
+  authedFetch("/api/away/preview", { method: "POST", body: JSON.stringify(body) });
+
+// Recomputed fresh server-side (never trusts a stale client-held preview),
+// then actually applied.
+export const applyAwayPeriod = (body: AwayPeriodIn): Promise<AwaySweepResult & { id: string }> =>
+  authedFetch("/api/away", { method: "POST", body: JSON.stringify(body) });
+
+export type AwayPeriod = {
+  id: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  applied_at: string;
+  created_at: string;
+  shift_count: number;
+};
+
+export const getAwayPeriods = (): Promise<AwayPeriod[]> => authedFetch("/api/away");
+
+// ---------------------------------------------------------------------------
 // Dashboard (Session 19) — Mission Control's AI insight banner. One optional
 // insight per load; all-null fields mean nothing crossed the noteworthy bar
 // today — a valid, expected, and common response, not an error state (see
