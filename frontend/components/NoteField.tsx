@@ -12,24 +12,34 @@
 // wherever a manager writes prose, and dictation comes with it for free.
 //
 // WHAT DICTATION DOES NOT DO. It does not save, and it does not rewrite. A
-// stopped recording is transcribed and held for review — the manager sees it,
-// can edit it, and only then confirms or discards (see DictationReview and
-// docs/systems/dictation.md) — but no model tidies it, summarises it or turns
-// it into bullets, and their existing Save button is still the only thing
-// that writes to the database. That keeps dictation entirely outside the
-// draft-then-review boundary instead of punching a new hole in it. Every
-// other AI write in this app is reviewed because a model produced text the
-// manager did not say. Here the manager said it; the review step just adds a
-// pause before it lands, not a rewrite.
+// stopped recording is transcribed and inserted verbatim at the caret — no
+// model tidies it, summarises it or turns it into bullets, and the field's
+// existing Save button is still the only thing that writes to the database.
+// That keeps dictation entirely outside the draft-then-review boundary
+// instead of punching a new hole in it. Every other AI write in this app is
+// reviewed because a model produced text the manager did not say. Here the
+// manager said it.
 //
-// Insert, never replace: confirming a review adds to what's already in the
-// field, at the caret it had when recording stopped. Losing typed words to a
-// mis-tapped mic would be the one unforgivable bug in this feature.
+// THE UNDO WINDOW. Inserting straight in, with no pause, means the first
+// sign of a misheard word used to be finding it later, mixed in with typed
+// text. A prior pass fixed that with an explicit confirm/discard card — a
+// second textarea the transcript had to sit in first — which read as a form
+// appearing to approve text for another form (see useDictation.ts and
+// docs/systems/dictation.md for the research that led here). What this does
+// instead: the transcript lands in the real field immediately, tinted, with
+// `justDictated` holding the value and caret from just before the insert.
+// The tint and the "Esc to undo" caption clear on the manager's first
+// keystroke or on blur — the moment they've moved on, it's just their text,
+// same as anything they typed. Until then, Escape reverts the field to
+// exactly what it held before, caret included.
+//
+// Insert, never replace: a confirmed transcript adds to what's already in
+// the field, at the caret it had when recording stopped. Losing typed words
+// to a mis-tapped mic would be the one unforgivable bug in this feature.
 // ---------------------------------------------------------------------------
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { TEXTAREA } from "@/lib/tokens";
 import DictationLevelMeter from "@/components/DictationLevelMeter";
-import DictationReview from "@/components/DictationReview";
 import {
   formatDictationClock,
   isDictationSupported,
@@ -59,6 +69,11 @@ type Props = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" 
    *  own base here and are unchanged by this component. */
   baseClassName?: string;
 };
+
+/** What the field held right before a transcript landed, so Escape can put
+ *  it back exactly, caret included. Cleared on the manager's first keystroke
+ *  or on blur — see the header comment. */
+type JustDictated = { prevValue: string; prevCaret: number };
 
 const MicIcon = ({ className = "" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
@@ -104,11 +119,17 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
   const [showNotice, setShowNotice] = useState(false);
   useEffect(() => setSupported(isDictationSupported()), []);
 
+  const [justDictated, setJustDictated] = useState<JustDictated | null>(null);
+
   const insert = useCallback(
     (text: string) => {
       const el = innerRef.current;
+      const prevValue = value;
+      const prevCaret = el ? (el.selectionStart ?? value.length) : value.length;
+
       if (!el) {
         onChange(value ? `${value.replace(/\s+$/, "")} ${text}` : text);
+        setJustDictated({ prevValue, prevCaret });
         return;
       }
       const start = el.selectionStart ?? value.length;
@@ -125,22 +146,33 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
         el.focus();
         el.setSelectionRange(caret, caret);
       });
+      setJustDictated({ prevValue, prevCaret: start });
     },
     [value, onChange],
   );
+
+  /** Escape while the tint is still up: put the field back exactly how it
+   *  was, caret included, and drop the undo window. */
+  const undoDictation = useCallback(() => {
+    if (!justDictated) return;
+    const { prevValue, prevCaret } = justDictated;
+    setJustDictated(null);
+    onChange(prevValue);
+    const el = innerRef.current;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(prevCaret, prevCaret);
+    });
+  }, [justDictated, onChange]);
 
   const {
     state,
     seconds,
     level,
-    pendingText,
-    setPendingText,
     error,
     clearError,
     toggle,
     cancel,
-    confirmReview,
-    discardReview,
   } = useDictation({
     onText: insert,
     vocabulary,
@@ -149,28 +181,30 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
   const recording = state === "recording";
   const transcribing = state === "transcribing";
   const starting = state === "starting";
-  const reviewing = state === "reviewing";
 
-  // Escape cancels a live recording, or discards a pending review, and must
-  // not bubble — the app shell closes the Scribe drawer on Escape, and a
-  // manager hitting Esc to abandon a dictation should not also lose the
+  // Escape cancels a live recording, or undoes a just-landed transcript, and
+  // must not bubble — the app shell closes the Scribe drawer on Escape, and a
+  // manager hitting Esc to back out of a dictation should not also lose the
   // drawer.
   useEffect(() => {
-    if (!recording && !reviewing) return;
+    if (!recording && !justDictated) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
         if (recording) cancel();
-        else discardReview();
+        else undoDictation();
       }
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [recording, reviewing, cancel, discardReview]);
+  }, [recording, justDictated, cancel, undoDictation]);
 
   const handleToggle = () => {
     clearError();
+    // Starting a new take forfeits any still-open undo window from the last
+    // one — one Escape can't sensibly undo two dictations.
+    if (justDictated) setJustDictated(null);
     if (state === "idle" && typeof window !== "undefined") {
       try {
         if (!window.localStorage.getItem(NOTICE_KEY)) {
@@ -194,8 +228,15 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
           ref={innerRef}
           value={value}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          className={`${baseClassName} ${className} ${micVisible ? "pr-12" : ""}`}
+          onChange={(e) => {
+            onChange(e.target.value);
+            // A real keystroke, not our own insert — the field is the
+            // manager's again.
+            if (justDictated) setJustDictated(null);
+          }}
+          onBlur={() => setJustDictated(null)}
+          style={justDictated ? { backgroundColor: "rgb(var(--c-brand-tint))" } : undefined}
+          className={`${baseClassName} ${className} ${micVisible ? "pr-12" : ""} transition-colors duration-300`}
         />
 
         {micVisible && (
@@ -214,7 +255,7 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
             <button
               type="button"
               onClick={handleToggle}
-              disabled={transcribing || starting || reviewing}
+              disabled={transcribing || starting}
               aria-label={recording ? "Stop dictating" : "Dictate"}
               aria-pressed={recording}
               title={recording ? "Stop (Esc to discard)" : "Dictate"}
@@ -245,15 +286,8 @@ const NoteField = forwardRef<HTMLTextAreaElement, Props>(function NoteField(
         <p className="mt-1 text-xs text-ink-muted">Listening — click to stop, Esc to discard.</p>
       )}
       {transcribing && <p className="mt-1 text-xs text-ink-muted">Transcribing…</p>}
-      {reviewing && (
-        <div className="mt-1.5">
-          <DictationReview
-            text={pendingText}
-            onChange={setPendingText}
-            onConfirm={confirmReview}
-            onDiscard={discardReview}
-          />
-        </div>
+      {justDictated && !error && (
+        <p className="mt-1 text-xs text-ink-muted">Inserted — Esc to undo.</p>
       )}
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
       {showNotice && !error && (

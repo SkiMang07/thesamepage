@@ -26,18 +26,43 @@ Three consequences that must not drift:
   the manager's words. It would be a *draft*, and drafts get reviewed. If that
   feature is ever wanted it is a separate, explicit, second action with its own
   review — not something dictation does quietly on the way in.
-- **The confirm/discard step is a human checkpoint, not an AI review step.** A
-  stopped recording lands in an editable `DictationReview` card — the manager
-  can fix a misheard word or bail entirely — before `insertAtCaret`/`insert()`
-  ever runs (`frontend/components/DictationReview.tsx`). This does not move
-  dictation onto the draft-then-review boundary: no model reads or changes
-  `pendingText`, only the manager can, and the field's Save button is still the
-  only writer to the database. It only changes *when* the verbatim insert
-  happens, from "the instant transcription finishes" to "once the manager says
-  so."
+- **The undo window is a human checkpoint, not an AI review step.** A stopped
+  recording inserts immediately — no card, no confirm button — but the field
+  briefly tints and Escape reverts it exactly, caret included, until the
+  manager's first keystroke or the field blurs (`justDictated` in `NoteField`
+  and `DictationHotkey`; see `useDictation.ts`'s `setNativeFieldValue`). This
+  does not move dictation onto the draft-then-review boundary: no model reads
+  or changes what landed, only the manager can, and the field's Save button is
+  still the only writer to the database. It only changes how long "just landed,
+  not yet touched" stays visible before it's simply the manager's text.
 
 Cosmetic handling (caret placement, whitespace joining) is deterministic and
 lives in `NoteField.insert()` / `insertAtCaret()`, where it can be read.
+
+### Why a review CARD didn't survive
+
+A pass on 2026-08-31 tried gating insertion behind an explicit confirm/discard
+step instead — a second, editable `<textarea>` in its own bordered panel that
+a transcript had to sit in before `insertAtCaret`/`insert()` ever ran. It
+worked, but Andrew's read on seeing it live was that it felt sloppy compared
+to how best-in-class dictation UX actually handles this moment — worth
+researching before shipping.
+
+That research (2026-09-01, findings kept in project memory as
+`dictation_v2_research`) found no reference product uses a second box for
+this. macOS, iOS and Gboard dictation stream straight into the cursor with no
+stop moment at all. Wispr Flow is batch, the same tradeoff this app makes, and
+still inserts directly into the real field with zero visible intermediate
+state — correction afterward is normal text editing or a voice command, never
+a gate. ChatGPT's mobile app once showed transcribed text in the actual
+message box before sending, closest of anything found to an editable-review
+pattern — and removing that in favor of auto-send caused a real user
+backlash, which is the evidence that a pre-commit checkpoint isn't the wrong
+idea. What no reference product does, even the ones that pause before commit,
+is put the editable text in a *second* box separate from the real one. That's
+the more precise theory for why the card read as hacky, and it's why v2
+replaced the card with a tint-and-undo pattern in the real field instead —
+same checkpoint, no second box.
 
 ## Retention: none
 
@@ -65,9 +90,8 @@ POST /api/transcribe (multipart)  →   routes/transcribe.py
                                         ↓  OpenAI /v1/audio/transcriptions
                                       { text }
   ↓
-review card (editable) · manager confirms or discards
-  ↓ confirm
-insert at caret · field state · manager edits · manager saves
+insert at caret, immediately · field tints · manager types, edits, or
+  hits Esc to undo · manager saves
 ```
 
 A client-side Web Audio level meter (`useDictation`'s `level`, rendered by
@@ -79,11 +103,10 @@ live MediaStream, not a second transcription path.
 
 | File | Owns |
 |---|---|
-| `frontend/lib/useDictation.ts` | MediaRecorder lifecycle, mime negotiation, timer, level meter, the review state (`pendingText`/`confirmReview`/`discardReview`), cancel, the caret-insert helper |
-| `frontend/components/NoteField.tsx` | The app's textarea. Mic built in. **Reach for this instead of a raw `<textarea>`.** |
-| `frontend/components/DictationReview.tsx` | The editable confirm/discard card, shared by NoteField (anchored at the field) and DictationHotkey (anchored in its pill) |
-| `frontend/components/DictationLevelMeter.tsx` | The small live-input meter, shared the same way |
-| `frontend/components/DictationHotkey.tsx` | ⌘⇧Space, global. Mounted once in `app/app/layout.tsx`. Its floating pill becomes the review card while reviewing, since it types into fields it doesn't own |
+| `frontend/lib/useDictation.ts` | MediaRecorder lifecycle, mime negotiation, timer, level meter, `setNativeFieldValue` (drives a field's native setter + dispatches `input`, used by both the caret-insert helper and undo), cancel |
+| `frontend/components/NoteField.tsx` | The app's textarea. Mic built in. **Reach for this instead of a raw `<textarea>`.** Owns its own `justDictated` tint/undo state, since it controls the field's React value |
+| `frontend/components/DictationLevelMeter.tsx` | The small live-input meter, shared by NoteField and DictationHotkey |
+| `frontend/components/DictationHotkey.tsx` | ⌘⇧Space, global. Mounted once in `app/app/layout.tsx`. Owns its own `justDictated` tracking for whatever field it last typed into, since it doesn't control that field's React state and has to write an undo back through the native setter |
 | `backend/routes/transcribe.py` | The one endpoint. Auth, caps, format allowlist |
 | `backend/ai_core.py` → `transcribe_audio()` | The provider call. Every AI call still routes through ai_core |
 
@@ -198,7 +221,8 @@ These are not hypotheticals; each one is a bug that would otherwise ship.
 
 `⌘⇧Space` (Ctrl+Shift+Space) dictates into whatever text field has focus, on any
 page, including fields that are not `NoteField`s. `Esc` while recording discards
-without transcribing.
+without transcribing; `Esc` in the few seconds after a transcript lands undoes
+the insert instead (see the undo-window section above).
 
 ⌘⇧D and ⌘⇧M were the obvious picks and are both taken at the **browser** level
 on at least one major platform (bookmark-all-tabs, switch-profile), where
@@ -235,7 +259,10 @@ own `baseClassName` and are visually unchanged.
 `baseClassName` exists because **Tailwind resolves conflicts by stylesheet
 order, not by the order classes appear in a string**. A caller passing `px-3` in
 `className` would still lose to the token's `px-4`. Overriding the base has to
-replace it, not append to it.
+replace it, not append to it. The undo-window tint sidesteps this entirely by
+using an inline `style` (referencing the `--c-brand-tint` CSS variable directly)
+rather than a Tailwind class, since inline styles always win regardless of
+stylesheet order — the one case here where that's the simpler and safer choice.
 
 ## Open
 
@@ -245,9 +272,10 @@ replace it, not append to it.
 - No `vocabulary` is wired into any call site yet. The plumbing is there; the
   first place to use it is the 1:1 prep/log pages, where the direct report's
   name is already in scope.
-- **The confirm/discard review card and the level meter haven't been used
-  live yet.** They were built 2026-08-31 in response to Andrew's first live
-  use of dictation (which had shipped 2026-08-28 and gone unused until then).
-  ⌘⇧Space's discoverability was raised in that same pass and deliberately
-  parked — nothing in the app currently teaches a new user the shortcut
-  exists.
+- **The tint-and-undo pattern and the level meter haven't been used live
+  yet.** The level meter shipped 2026-08-31 in response to Andrew's first live
+  use of dictation (which had shipped 2026-08-28 and gone unused until then);
+  the review card that followed it went through one more revision (this one)
+  before anyone tried it live. ⌘⇧Space's discoverability was raised in the
+  2026-08-31 pass and deliberately parked — nothing in the app currently
+  teaches a new user the shortcut exists.

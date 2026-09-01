@@ -3,24 +3,33 @@
 // ---------------------------------------------------------------------------
 // Dictation — the browser half of talk-to-text.
 //
-// Records with MediaRecorder, stops, uploads once, and surfaces the
-// transcript for review — a human confirms or discards it before it lands in
-// a field, rather than the hook inserting it immediately. Batch, not
-// streaming: a manager taps stop and waits a second or two, and OpenAI's
-// realtime endpoint costs 3.8x the batch one for a latency win nobody asked
-// for in a text box.
+// Records with MediaRecorder, stops, uploads once, and inserts the transcript
+// straight into the field. Batch, not streaming: a manager taps stop and
+// waits a second or two, and OpenAI's realtime endpoint costs 3.8x the batch
+// one for a latency win nobody asked for in a text box.
 //
-// THE REVIEW STEP. Landing a transcript straight into the field with no
-// pause meant the first sign of a misheard word was finding it later, mixed
-// in with typed text. `state === "reviewing"` holds the transcript in
-// `pendingText` until the caller explicitly confirms (`confirmReview`) or
-// discards (`discardReview`). This is still not the draft-then-review
-// boundary the rest of the app uses for AI writes — no model touches
-// `pendingText`, the manager's own edits are the only thing that can change
-// it, and `onText` (the thing that actually inserts) still fires exactly
-// once, same as it always did — just at confirm instead of at transcribe.
-// The review step decides *when* insertion happens, not what gets inserted
-// or who wrote it.
+// AN UNDO WINDOW, NOT A REVIEW STEP. A prior pass gated insertion behind an
+// explicit confirm/discard card — a second, editable `<textarea>` in its own
+// bordered panel that the transcript had to sit in before it was allowed
+// into the real field. It worked, but it read as a form appearing to approve
+// text for another form. None of the products this app took cues from does
+// that (see the research note in docs/systems/dictation.md): macOS, iOS and
+// Gboard stream straight into the cursor with no stop moment at all; Wispr
+// Flow is batch, same tradeoff as here, and still inserts directly with zero
+// visible intermediate state. Even ChatGPT's old show-it-before-sending
+// behaviour — the closest any reference product came to a gate — put the
+// editable text in the SAME box it was about to send from, never a second
+// one bolted on top of it.
+//
+// So this hook is back to firing `onText` once, immediately, the moment a
+// transcript comes back — exactly like the first thing this feature ever
+// shipped. The human checkpoint didn't go away; it moved from "a card you
+// must dismiss" to "a few seconds where the just-inserted text is tinted and
+// Escape undoes it," and that logic now lives with each caller (NoteField,
+// DictationHotkey) rather than in this hook, because "undo" means something
+// different for a field this component controls (`onChange` back to the
+// prior value) than for a field it doesn't (writing the prior value back
+// through the native setter, via `setNativeFieldValue` below).
 //
 // THE LEVEL METER. Not a partial transcript — that stays off the table for
 // the same cost reason as streaming. It's a cheap Web Audio AnalyserNode
@@ -55,12 +64,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, transcribeAudio } from "./api";
 
-export type DictationState =
-  | "idle"
-  | "starting"
-  | "recording"
-  | "transcribing"
-  | "reviewing";
+export type DictationState = "idle" | "starting" | "recording" | "transcribing";
 
 /** Hard stop. Matches the backend's 5-minute ceiling. A dictation is a person
  *  talking into a text box; anything longer is a recording, which is a
@@ -97,9 +101,9 @@ function pickMimeType(): string {
 }
 
 type Options = {
-  /** Called with the confirmed transcript, once, at the moment it's
-   *  confirmed (via `confirmReview`, typically from the review card).
-   *  Never called with an empty string, and never called automatically. */
+  /** Called with the transcript, once, immediately when transcription
+   *  finishes. Never called with an empty string, and never called on
+   *  failure. */
   onText: (text: string) => void;
   /** Comma-separated names/nouns to bias spelling (direct reports, products). */
   vocabulary?: string;
@@ -109,7 +113,6 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
   const [state, setState] = useState<DictationState>("idle");
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
-  const [pendingText, setPendingText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -291,8 +294,8 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
         const { text } = await transcribeAudio(blob, vocabRef.current);
         const trimmed = (text || "").trim();
         if (trimmed) {
-          setPendingText(trimmed);
-          setState("reviewing");
+          onTextRef.current(trimmed);
+          setState("idle");
         } else {
           setState("idle");
           setError(NO_SPEECH_MESSAGE);
@@ -339,8 +342,7 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
   }, [state, teardown]);
 
   /** Throw the recording away without transcribing it. Bound to Escape while
-   *  recording. Not to be confused with `discardReview`, which throws away an
-   *  already-transcribed pending review instead. */
+   *  recording. */
   const cancel = useCallback(() => {
     if (state !== "recording") return;
     discardRef.current = true;
@@ -357,38 +359,16 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
     else if (state === "idle") start();
   }, [state, start, stop]);
 
-  /** Accept the pending transcript: fire `onText` with whatever the manager
-   *  left in `pendingText` (their edits included) and return to idle. */
-  const confirmReview = useCallback(() => {
-    if (state !== "reviewing") return;
-    const text = pendingText.trim();
-    setPendingText("");
-    setState("idle");
-    if (text) onTextRef.current(text);
-  }, [state, pendingText]);
-
-  /** Throw away a pending transcript without inserting it. Bound to Escape
-   *  while reviewing. */
-  const discardReview = useCallback(() => {
-    if (state !== "reviewing") return;
-    setPendingText("");
-    setState("idle");
-  }, [state]);
-
   return {
     state,
     seconds,
     level,
-    pendingText,
-    setPendingText,
     error,
     clearError: useCallback(() => setError(null), []),
     start,
     stop,
     cancel,
     toggle,
-    confirmReview,
-    discardReview,
     isBusy: state !== "idle",
   };
 }
@@ -438,23 +418,46 @@ export function formatDictationClock(total: number): string {
 }
 
 /**
- * Insert text into an uncontrolled-from-our-side <textarea>/<input> at the
- * caret, in a way React notices.
+ * Set a <textarea>/<input>'s value via its native setter and dispatch a
+ * bubbling `input` event, so a React-controlled field notices the change as
+ * if the manager had typed or undone it themselves.
  *
- * Assigning el.value directly is invisible to React: React caches the last
- * value it rendered on the node, sees no change, and the next render puts the
- * old string back. Calling the prototype's native setter and then dispatching
- * a bubbling `input` event is what makes React's onChange fire for real. This
- * is only used by the global ⌘⇧Space path, which types into fields it does
- * not own; NoteField controls its own value and just calls onChange.
+ * Assigning `el.value` directly is invisible to React: React caches the last
+ * value it rendered on the node, sees no change, and the next render puts
+ * the old string back. The prototype's native setter plus a dispatched
+ * `input` event is what makes React's onChange fire for real.
+ *
+ * Shared by `insertAtCaret` (writing a transcript in) and by
+ * DictationHotkey's undo (writing the pre-dictation value back) — anywhere
+ * this app needs to change a field it does not itself control the React
+ * state of. `caret`, when given, is applied after the value so the field
+ * ends up focused where the caller wants it, not wherever the browser
+ * defaults to after a value change.
  */
-export function insertAtCaret(el: HTMLTextAreaElement | HTMLInputElement, text: string) {
+export function setNativeFieldValue(
+  el: HTMLTextAreaElement | HTMLInputElement,
+  value: string,
+  caret?: number,
+) {
   const proto =
     el instanceof HTMLTextAreaElement
       ? window.HTMLTextAreaElement.prototype
       : window.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
 
+  if (setter) setter.call(el, value);
+  else el.value = value;
+
+  if (caret !== undefined) el.setSelectionRange?.(caret, caret);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/**
+ * Insert text into an uncontrolled-from-our-side <textarea>/<input> at the
+ * caret. Only used by the global ⌘⇧Space path, which types into fields it
+ * does not own; NoteField controls its own value and just calls onChange.
+ */
+export function insertAtCaret(el: HTMLTextAreaElement | HTMLInputElement, text: string) {
   const current = el.value ?? "";
   const start = el.selectionStart ?? current.length;
   const end = el.selectionEnd ?? current.length;
@@ -463,11 +466,7 @@ export function insertAtCaret(el: HTMLTextAreaElement | HTMLInputElement, text: 
   const after = current.slice(end);
   const joiner = before && !/\s$/.test(before) ? " " : "";
   const next = before + joiner + text + after;
-
-  if (setter) setter.call(el, next);
-  else el.value = next;
-
   const caret = (before + joiner + text).length;
-  el.setSelectionRange?.(caret, caret);
-  el.dispatchEvent(new Event("input", { bubbles: true }));
+
+  setNativeFieldValue(el, next, caret);
 }
