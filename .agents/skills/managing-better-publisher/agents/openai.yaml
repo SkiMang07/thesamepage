@@ -1,0 +1,4 @@
+interface:
+  display_name: "Managing Better Publisher"
+  short_description: "Push and verify Managing Better in HubSpot"
+  default_prompt: "Use $managing-better-publisher to push this approved post to HubSpot as a draft and verify it."

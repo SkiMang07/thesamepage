@@ -73,6 +73,7 @@
             {% elif "script" in kinds %}{% set k = "script" %}
             {% else %}{% set k = "note" %}{% endif %}
             <a class="fg-card k-{{ k }}" href="{{ content.absolute_url }}">
+              {% if content.featured_image %}<img class="fg-card-image" src="{{ content.featured_image|escape_url }}" alt="{{ content.featured_image_alt_text|escape_attr }}" loading="lazy" decoding="async">{% endif %}
               <div class="fg-kind"><span class="gl gl-{{ k }}">{% if k == "script" %}[ ]{% endif %}</span><b>{{ k }}</b></div>
               <h2>{{ content.name }}</h2>
               {% if content.post_summary %}<p>{{ content.post_summary|striptags|truncate(190) }}</p>{% endif %}

@@ -29,6 +29,7 @@ too. Do not blur the two — see the contamination audit in `research/`.
 | `research/audience-2026-08.md` | Checking whether a claim is actually evidenced |
 | `research/miro-board-source.md` | The original board material, working source |
 | `brand/voice-rules.md` | Before writing a sentence anyone outside will read, or naming a field |
+| `managing-better/editorial-system.md` | Writing, reviewing, packaging, or publishing a Managing Better post |
 | `site/<page>.md` | Changing what a marketing page argues |
 | `brand/assets/` | Logo and palette exploration. Gitignored, ~31 MB, reference only |
 

@@ -1,0 +1,13 @@
+{
+  "account": "tsp-hubspot",
+  "api_version": "2026-03",
+  "content_group_id": null,
+  "blog_author_id": null,
+  "format_tag_ids": {
+    "playbook": null,
+    "teardown": null,
+    "script": null,
+    "note": null
+  },
+  "image_folder": "/managing-better"
+}

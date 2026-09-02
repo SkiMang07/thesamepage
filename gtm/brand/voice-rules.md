@@ -233,6 +233,28 @@ out most of the correctives and most of the metered balance at once, because the
 is what sets up the second beat. Watch also for "not X but Y" constructions,
 rule-of-three lists, "actually," and anaphora runs.
 
+### Long-form source fidelity
+
+Andrew's spoken reasoning is qualified, example-led and comfortable carrying several
+clauses before it lands. Editing removes filler; it does not replace that movement
+with clipped declarations. In blog body copy:
+
+- preserve a qualifier when it changes the truth of the claim;
+- preserve uncertainty at the strength Andrew gave it instead of making the line
+  cleaner and more certain;
+- let a sentence carry the example, exception and conclusion together when that is
+  how Andrew reasoned through it;
+- treat two short declarative sentences in a row as a warning, not a house style;
+- do not manufacture aphorisms, polished binaries, named frameworks or tidy lessons
+  from source material that was messier and more specific;
+- keep Andrew's self-implication. Do not turn his own deferred priority or imperfect
+  process into detached advice for managers.
+
+The source note and finished paragraph should still share more than subject matter.
+They should share the order of thought, the degree of certainty and the concrete
+objects doing the work. A paragraph with Andrew's CRM, 1:1 and account-transition
+facts can still fail if the connective voice belongs to a generic essayist.
+
 ---
 
 ## Worked examples

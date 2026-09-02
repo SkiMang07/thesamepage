@@ -51,11 +51,25 @@
         <div class="wrap">
           <span class="fg-tape t-{{ k }}"><span class="gl gl-{{ k }}">{% if k == "script" %}[ ]{% endif %}</span>{{ k }}</span>
           <h1>{{ content.name }}</h1>
-          {% if content.post_summary %}<p class="lede">{{ content.post_summary|striptags }}</p>{% endif %}
+          {# Content Hub Starter derives post_summary from the body before the
+             Read more separator and keeps that paragraph in post_body. Keep the
+             separately rendered lede when the body does not already contain it,
+             and avoid printing the same paragraph twice for Starter posts. #}
+          {% set plain_post_summary = content.post_summary|striptags %}
+          {% if content.post_summary %}
+            {% if content.post_body is string_containing plain_post_summary %}
+            {% else %}<p class="lede">{{ content.post_summary|striptags }}</p>{% endif %}
+          {% endif %}
           <div class="fg-byline">
             {% if content.blog_post_author %}<span>{{ content.blog_post_author.display_name }}</span>{% endif %}
             <span>{{ content.publish_date_local_time|datetimeformat('%d %b %Y') }}</span>
           </div>
+
+          {% if content.featured_image %}
+            <figure class="fg-featured">
+              <img src="{{ content.featured_image|escape_url }}" alt="{{ content.featured_image_alt_text|escape_attr }}" loading="eager" decoding="async" fetchpriority="high">
+            </figure>
+          {% endif %}
 
           <div class="fg-body">
             {{ content.post_body }}
@@ -84,6 +98,7 @@
               {% elif "script" in pkinds %}{% set pk = "script" %}
               {% else %}{% set pk = "note" %}{% endif %}
               <a class="fg-card k-{{ pk }}" href="{{ p.absolute_url }}">
+                {% if p.featured_image %}<img class="fg-card-image" src="{{ p.featured_image|escape_url }}" alt="{{ p.featured_image_alt_text|escape_attr }}" loading="lazy" decoding="async">{% endif %}
                 <div class="fg-kind"><span class="gl gl-{{ pk }}">{% if pk == "script" %}[ ]{% endif %}</span><b>{{ pk }}</b></div>
                 <h2>{{ p.name }}</h2>
                 {% if p.post_summary %}<p>{{ p.post_summary|striptags|truncate(150) }}</p>{% endif %}

@@ -100,6 +100,24 @@ for tf_name in sorted(os.listdir(tpl_dir)):
         if not os.path.isdir(os.path.join(md,p+".module")):
             bad("%s: dnd_module path missing: %s"%(tf_name,p))
 
+# --- 7. blog featured-image contract. The publisher attaches one native image;
+#     these three render points make it visible without duplicating it in post_body.
+blog_post=io.open(os.path.join(tpl_dir,"blog-post.html"),encoding="utf-8").read()
+blog_index=io.open(os.path.join(tpl_dir,"blog-index.html"),encoding="utf-8").read()
+blog_image_contract = [
+    (blog_post, 'class="fg-featured"', "blog-post.html: missing featured post image"),
+    (blog_post, "content.featured_image_alt_text|escape_attr", "blog-post.html: missing featured image alt text"),
+    (blog_post, 'class="fg-card-image"', "blog-post.html: missing related-card image"),
+    (blog_post, "p.featured_image_alt_text|escape_attr", "blog-post.html: missing related-card image alt text"),
+    (blog_index, 'class="fg-card-image"', "blog-index.html: missing listing-card image"),
+    (blog_index, "content.featured_image_alt_text|escape_attr", "blog-index.html: missing listing-card image alt text"),
+    (css, ".fg-card-image", "main.css: missing card image treatment"),
+    (css, ".fg-featured img", "main.css: missing post image treatment"),
+    (css, "aspect-ratio:16/9", "main.css: missing shared 16:9 image crop"),
+]
+for haystack,needle,msg in blog_image_contract:
+    if needle not in haystack: bad(msg)
+
 if fail:
     print("FAIL (%d)"%len(fail))
     for f in fail: print("  -",f)

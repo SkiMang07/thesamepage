@@ -1,7 +1,9 @@
 # The blog — the argument
 
-Direction 04, **Field Guide**. Locked 2026-08-27. This file records why the two
-pages are shaped the way they are, so a later session changes them on purpose.
+The publication is **Managing Better**. Direction 04, **Field Guide**, remains the
+name of the approved page design and its four-format visual system. Locked
+2026-08-27. This file records why the two pages are shaped the way they are, so a
+later session changes them on purpose.
 
 ## The constraint that decided the whole design
 

@@ -36,6 +36,10 @@ gtm/brand/assets/
 .agents/skills/*
 !.agents/skills/tsp-push/
 !.agents/skills/tsp-push/**
+!.agents/skills/managing-better-writer/
+!.agents/skills/managing-better-writer/**
+!.agents/skills/managing-better-publisher/
+!.agents/skills/managing-better-publisher/**
 
 # Marketing site (website/). The HubSpot CLI credential belongs in
 # ~/.hscli/config.yml, outside this repo entirely — see website/docs/security.md.

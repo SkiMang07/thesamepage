@@ -32,6 +32,7 @@ you're actually touching:
 | What we are, to whom, against what | `gtm/positioning.md` |
 | Who we sell to, their language and beliefs | `gtm/personas/new-manager.md` |
 | Voice, register, say/never-say | `gtm/brand/voice-rules.md` |
+| Managing Better post, backlog, launch calendar, publishing | `gtm/managing-better/editorial-system.md` |
 | The argument behind a marketing page | `gtm/site/<page>.md` |
 | One specific feature area | `docs/systems/<area>.md` (see below) |
 | Marketing website build (HubSpot) | `website/docs/build-process.md` |
@@ -124,6 +125,7 @@ gtm/         go-to-market: positioning, personas, brand/voice, per-page argument
   research/            the message-mining corpus, method and sampling gaps
   brand/               voice rules now; point-of-view and messaging still to write
     assets/            logo + palette exploration PNGs (gitignored, ~31 MB)
+  managing-better/     blog operating system, backlog, launch plan, image direction
   site/                the argument behind each marketing page
 
 docs/        see the table above

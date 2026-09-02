@@ -1,0 +1,4 @@
+interface:
+  display_name: "Managing Better Writer"
+  short_description: "Draft and package on-brand Managing Better posts"
+  default_prompt: "Use $managing-better-writer to turn these ideas into a Managing Better post."

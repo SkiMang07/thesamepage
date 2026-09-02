@@ -65,8 +65,9 @@ It checks: no zero-byte files, all JSON parses, theme fields are colours only wi
 no reserved names, every `theme.x.y` reference resolves, every `{{ module.x }}` has
 a field, no reserved module field names, every repeatable group has an
 `occurrence.default` at least its minimum, no literal colour below the token block,
-the template annotation and standard includes are present, and every `include` and
-`dnd_module path=` resolves on disk.
+the template annotation and standard includes are present, every `include` and
+`dnd_module path=` resolves on disk, and all three native blog featured-image render
+points plus their alt-text bindings and shared 16:9 treatment remain present.
 
 **Why the empty-file check is first.** Both partials once shipped as zero bytes, so
 the site had no nav and no footer — and nothing reported an error, because an empty
@@ -189,9 +190,10 @@ time that page is built.
 
 ## The blog
 
-The blog is **Direction 04, Field Guide**. `website/prototype/blog-index.html`,
-`blog-post.html` and `gtm/site/blog.md` are what the two templates were cut
-from and stay as the reference.
+The publication is **Managing Better**. Its approved page design remains
+**Direction 04, Field Guide**. `website/prototype/blog-index.html`,
+`blog-post.html` and `gtm/site/blog.md` are what the two templates were cut from
+and stay as the reference.
 
 **Blog templates are `templateType: blog` and carry no `dnd_area`.** A listing
 and a post both take their content from the blog's own records, so there is
@@ -242,6 +244,12 @@ Everything is therefore styled on an element the editor preserves:
 | A numbered step | an **`<h3>`** | uses Heading 3; the numeral is a CSS counter |
 | A pull quote | **a blockquote with no list in it** | writes a blockquote of plain text |
 
+Every approved post also carries HubSpot's native featured image and alt text. The
+post template renders it below the byline, and the index plus related-post cards
+render the same image in a crop-safe 16:9 frame. Posts without a featured image keep
+their existing spacing and card structure. An inline image remains part of the body
+only when it explains a relationship the featured illustration does not.
+
 The two labels — "What you leave with" and "Say it like this" — are **generated
 content**, so the author writes the bullets and the lines and never the
 furniture. The step numerals are a counter, so they cannot go stale and they
@@ -264,6 +272,40 @@ HubSpot's rich-text paste. Two things that surfaced doing it, both now fixed:
 `<h3>` and takes a numeral. An `<h2>` is a plain section heading and takes none,
 which is what a closing "Final thoughts" wants. Pasted copy tends to arrive as
 `<h2>` throughout, so the numerals silently do not appear.
+
+### Posts publish from approved local packages
+
+Managing Better's editorial source lives under `gtm/managing-better/`; HubSpot is
+the delivery system. Each approved post carries body-only semantic HTML, a human
+publishing card, a machine-readable manifest and final images. The local package
+is the source of truth. A later edit made in HubSpot must be reconciled rather
+than overwritten silently.
+
+`.agents/skills/managing-better-writer/` creates and reviews the package.
+`.agents/skills/managing-better-publisher/` validates it and uses the pinned
+HubSpot CLI for authenticated API operations and deterministic image upload.
+Professional and Enterprise portals can send the raw `postBody` HTML into the
+blog-post record. Content Hub Starter does not expose the blog API's required
+`content` scope, so Starter uses the authenticated editor's source-code view for
+the body. Credentials remain in `~/.hscli/config.yml`; neither the package nor
+the publishing manifest contains a key.
+
+Publishing is deliberately draft first. The publisher uploads or safely reuses
+images, creates a new draft or updates only the recorded post's draft endpoint,
+fetches the result, and compares its fields and semantic HTML fingerprint. The
+real HubSpot preview still needs a desktop and phone visual check. Creating the
+remote draft, publishing it and scheduling it are separate authorization gates.
+The tooling exposes no delete, unpublish, archive or revision-restore command.
+
+On Starter, put the saved post summary in the first body paragraph, insert
+HubSpot's native Read more separator, then append the package's `post.html`. The
+post template checks whether the body already contains the saved summary and
+suppresses its separate lede in that case, so the full post shows the opening
+once while the listing still receives `post_summary`.
+
+`gtm/managing-better/hubspot.json` holds non-secret account and object IDs. Its
+blog, author and four format-tag IDs remain unset until the one-time HubSpot blog
+bootstrap is performed and confirmed.
 
 ### No JavaScript here either
 
