@@ -340,7 +340,7 @@ create table away_period_shifts (
   id             uuid primary key default uuid_generate_v4(),
   away_period_id uuid not null references away_periods(id) on delete cascade,
   manager_id     uuid not null references auth.users(id),
-  entity_type    text not null check (entity_type in ('one_on_one', 'team_meeting', 'commitment', 'goal', 'project')),
+  entity_type    text not null check (entity_type in ('one_on_one', 'team_meeting', 'commitment', 'goal', 'project', 'outside_meeting')),
   entity_id      uuid not null,
   label          text not null,
   old_date       date not null,
@@ -1310,6 +1310,31 @@ alter table outside_people enable row level security;
 
 create index outside_people_owner_idx on outside_people (owner_id, archived_at);
 
+-- Repeating 1:1s beyond the team (Phase 2). Mirrors one_on_one_series: one
+-- ACTIVE series per (owner, person); occurrences stay outside_meetings rows
+-- via series_id. 1:1s only — group meetings don't repeat.
+create table outside_meeting_series (
+  id              uuid primary key default uuid_generate_v4(),
+  owner_id        uuid not null references auth.users(id),
+  person_id       uuid not null references outside_people(id) on delete cascade,
+  interval_weeks  smallint not null check (interval_weeks between 1 and 4),
+  anchor_at       timestamptz not null,
+  timezone        text not null default 'UTC',
+  active          boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
+alter table outside_meeting_series enable row level security;
+
+create unique index outside_meeting_series_active_person_idx
+  on outside_meeting_series (owner_id, person_id)
+  where active;
+
+-- Status derives from the row, never stored: logged = summary set;
+-- otherwise upcoming (future or undated) or not-yet-written-up (past).
+-- carry_forward_items = topics carried INTO this meeting from the last one,
+-- the same meaning as one_on_ones.carry_forward_items. prep_guide is the
+-- generated prep sheet for an upcoming 1:1.
 create table outside_meetings (
   id            uuid primary key default uuid_generate_v4(),
   org_id        uuid references organizations(id),
@@ -1320,12 +1345,18 @@ create table outside_meetings (
   notes         text,          -- raw notes, private
   summary       text,          -- confirmed write-up; null until logged
   logged_at     timestamptz,
+  series_id     uuid references outside_meeting_series(id) on delete set null,
+  prep_guide    jsonb,
+  carry_forward_items jsonb not null default '[]'::jsonb
+                constraint outside_meetings_carry_forward_items_array
+                check (jsonb_typeof(carry_forward_items) = 'array'),
   created_at    timestamptz not null default now()
 );
 
 alter table outside_meetings enable row level security;
 
 create index outside_meetings_owner_idx on outside_meetings (owner_id, scheduled_at desc);
+create index outside_meetings_upcoming_idx on outside_meetings (owner_id, scheduled_at) where summary is null;
 
 create table outside_meeting_people (
   meeting_id  uuid not null references outside_meetings(id) on delete cascade,
@@ -1584,8 +1615,19 @@ create policy "check_ins_all_own" on check_ins
 create policy "outside_people_all_own" on outside_people
   for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
+create policy "outside_meeting_series_all_own" on outside_meeting_series
+  for all using (owner_id = auth.uid())
+  with check (
+    owner_id = auth.uid()
+    and exists (select 1 from outside_people p where p.id = person_id and p.owner_id = auth.uid())
+  );
+
 create policy "outside_meetings_all_own" on outside_meetings
-  for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+  for all using (owner_id = auth.uid())
+  with check (
+    owner_id = auth.uid()
+    and (series_id is null or exists (select 1 from outside_meeting_series s where s.id = series_id and s.owner_id = auth.uid()))
+  );
 
 create policy "outside_meeting_people_all_own" on outside_meeting_people
   for all using (owner_id = auth.uid())

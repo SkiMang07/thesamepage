@@ -14,8 +14,8 @@ Decisions locked before this file was written:
     the return date". A meeting date that lands on a weekend is nudged
     forward to the next Monday; a due date is left wherever it lands — a
     Saturday due date is harmless, a Saturday 1:1 is not.
-  - Scope of what gets swept: the manager's own upcoming 1:1s and team
-    meetings (the single next occurrence per series — see
+  - Scope of what gets swept: the manager's own upcoming 1:1s, team
+    meetings and meetings beyond the team (added 2026-09-22) (the single next occurrence per series — see
     one_on_ones_upcoming_idx / team_meetings_open_idx, this app never
     materializes a batch of future rows), plus due dates on commitments,
     goals, and projects the MANAGER owns — never something a direct report
@@ -53,6 +53,7 @@ _OPEN_STATUSES = ("active", "on_track", "at_risk")
 _ENTITY_TABLES = {
     "one_on_one": ("one_on_ones", "scheduled_at", "manager_id"),
     "team_meeting": ("team_meetings", "scheduled_at", "manager_id"),
+    "outside_meeting": ("outside_meetings", "scheduled_at", "owner_id"),
     "commitment": ("commitments", "due_date", "owner_id"),
     "goal": ("goals", "due_date", "owner_id"),
     "project": ("projects", "due_date", "owner_id"),
@@ -158,6 +159,53 @@ def _compute_sweep(user_id: str, supabase, start: date, end: date) -> tuple[int,
         label = f"{unit['name']} team meeting" if unit.get("name") else "Team meeting"
         items.append({
             "entity_type": "team_meeting",
+            "entity_id": row["id"],
+            "label": label,
+            "old_date": old_day.isoformat(),
+            "new_date": new_day.isoformat(),
+        })
+
+    # Meetings beyond the team (boss, skip-level, peers) — every unlogged one
+    # dated inside the window, repeating or not. You're away for those too.
+    # Fails soft: Away must keep working before the Beyond migration runs.
+    try:
+        outside = (
+            supabase.table("outside_meetings")
+            .select("id,title,kind,scheduled_at")
+            .eq("owner_id", user_id)
+            .is_("summary", "null")
+            .not_.is_("scheduled_at", "null")
+            .gte("scheduled_at", start_ts)
+            .lt("scheduled_at", end_ts)
+            .execute()
+            .data
+        )
+        names: dict[str, list[str]] = {}
+        if outside:
+            joins = (
+                supabase.table("outside_meeting_people")
+                .select("meeting_id,outside_people(name)")
+                .eq("owner_id", user_id)
+                .in_("meeting_id", [row["id"] for row in outside])
+                .execute()
+                .data
+            )
+            for j in joins:
+                names.setdefault(j["meeting_id"], []).append((j.get("outside_people") or {}).get("name") or "")
+    except Exception:
+        outside, names = [], {}
+    for row in outside:
+        old_day = datetime.fromisoformat(row["scheduled_at"].replace("Z", "+00:00")).date()
+        new_day = _nudge_off_weekend(_shift_date(old_day, shift_days))
+        who = [n for n in names.get(row["id"], []) if n]
+        if row.get("title"):
+            label = row["title"]
+        elif row.get("kind") == "one_on_one" and who:
+            label = f"1:1 with {who[0]}"
+        else:
+            label = "Meeting beyond the team"
+        items.append({
+            "entity_type": "outside_meeting",
             "entity_id": row["id"],
             "label": label,
             "old_date": old_day.isoformat(),

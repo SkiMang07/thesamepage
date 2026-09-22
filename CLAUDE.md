@@ -61,8 +61,8 @@ costly-to-reverse choices whose rationale would otherwise be relitigated. Read
 one when you are about to change what it decided.
 
 Pending work that is scoped but not built has its own doc:
-`docs/NOTES_INGESTION_SCOPING.md`, and `docs/BEYOND_THE_TEAM_SCOPING.md` (Phase 1
-shipped — see `docs/systems/beyond.md`; Phase 2 pending). Shipped scoping docs live in
+`docs/NOTES_INGESTION_SCOPING.md`. `docs/BEYOND_THE_TEAM_SCOPING.md` is fully
+shipped (see `docs/systems/beyond.md`) and awaits archiving. Shipped scoping docs live in
 `docs/archive/scoping/` — historical, never current intent.
 
 `docs/systems/mission-control-visual-authority.html` is the **approved Mission

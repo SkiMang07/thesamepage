@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from routes.one_on_ones import (
@@ -244,7 +244,13 @@ def test_logging_recurring_call_completes_current_and_starts_next_occurrence():
     assert result["meeting"]["meeting_date"] == "2026-08-25T12:00:00+00:00"
     assert result["meeting"]["logged_at"]
     assert result["next_session"]["status"] == "scheduled"
-    assert result["next_session"]["scheduled_at"] == "2026-09-08T12:00:00+00:00"
+    # Two weeks on from the SCHEDULED date, stepping past any date already
+    # gone — so the expectation is computed, not a hard-coded date that goes
+    # stale (it did: "2026-09-08" failed from Sep 9 on).
+    expected = datetime(2026, 8, 25, 12, tzinfo=timezone.utc) + timedelta(weeks=2)
+    while expected <= datetime.now(timezone.utc):
+        expected += timedelta(weeks=2)
+    assert result["next_session"]["scheduled_at"] == expected.isoformat()
     assert result["next_session"]["carry_forward_items"] == ["Revisit renewal confidence"]
     assert client.rows["commitments"][0]["source_id"] == "current"
 

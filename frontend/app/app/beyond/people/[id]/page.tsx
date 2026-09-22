@@ -35,7 +35,7 @@ import {
   SELECT,
   TEXTAREA,
 } from "@/lib/tokens";
-import { RELATIONSHIP_LABEL, RELATIONSHIP_ORDER, meetingTitle, shortDate } from "../../shared";
+import { RELATIONSHIP_LABEL, RELATIONSHIP_ORDER, longDate, meetingTitle, shortDate } from "../../shared";
 
 export default function OutsidePersonPage() {
   const params = useParams();
@@ -117,6 +117,12 @@ export default function OutsidePersonPage() {
   const youOwe = open.filter((c) => c.committed_by !== "counterpart");
   const done = commitments.filter((c) => c.status !== "open");
   const meetingById = new Map(meetings.map((m) => [m.id, m]));
+  // The next 1:1 with them: the soonest unlogged 1:1, undated last.
+  const next = meetings
+    .filter((m) => m.status === "upcoming" && m.kind === "one_on_one")
+    .sort((a, b) => (a.meeting_date ?? "9999").localeCompare(b.meeting_date ?? "9999"))[0];
+  const repeat = data.recurrence_weeks;
+  const pastMeetings = meetings.filter((m) => m.status !== "upcoming");
 
   return (
     <PageShell maxWidth="4xl">
@@ -185,12 +191,53 @@ export default function OutsidePersonPage() {
             ) : (
               <button type="button" onClick={() => setArchived(true)} className={BTN_GHOST}>Archive</button>
             )}
-            <Link href={`/app/beyond/meetings/new?person=${person.id}`} className={BTN_PRIMARY}>
+            <Link
+              href={`/app/beyond/meetings/new?person=${person.id}`}
+              className={next ? BTN_SECONDARY : BTN_PRIMARY}
+            >
               Log a meeting
             </Link>
           </div>
         </div>
       )}
+
+      <section className={`${CARD_PAD} mt-5 flex flex-wrap items-center justify-between gap-3`}>
+        {next ? (
+          <>
+            <div>
+              <p className={EYEBROW}>Next 1:1</p>
+              <p className="mt-1 text-sm text-ink">
+                {next.meeting_date ? longDate(next.meeting_date) : "No date yet"}
+                {repeat ? ` · repeats ${repeat === 1 ? "weekly" : `every ${repeat} weeks`}` : ""}
+              </p>
+              <p className={META}>
+                {[
+                  next.prep_guide ? "Prepared" : "Not prepared yet",
+                  next.carry_forward_items.length > 0 && `${next.carry_forward_items.length} carried from last time`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            <Link href={`/app/beyond/meetings/${next.id}`} className={BTN_PRIMARY}>
+              {next.prep_guide ? "Open prep" : "Prepare"}
+            </Link>
+          </>
+        ) : (
+          <>
+            <div>
+              <p className={EYEBROW}>Next 1:1</p>
+              <p className={`${META} mt-1`}>
+                None planned. Plan one and set it to repeat, and you&apos;ll get a prep sheet before each 1:1 with{" "}
+                {firstName}.
+              </p>
+            </div>
+            <Link href={`/app/beyond/meetings/new?person=${person.id}&plan=1`} className={BTN_SECONDARY}>
+              Plan the next 1:1
+            </Link>
+          </>
+        )}
+      </section>
 
       <div className="mt-5 grid gap-5 md:grid-cols-2">
         <section className={CARD_PAD}>
@@ -240,11 +287,11 @@ export default function OutsidePersonPage() {
 
       <section className="mt-5">
         <p className={EYEBROW}>Meetings</p>
-        {meetings.length === 0 ? (
+        {pastMeetings.length === 0 ? (
           <p className={`${META} mt-2`}>No meetings with {firstName} yet.</p>
         ) : (
           <ul className="mt-2 space-y-2">
-            {meetings.map((m) => (
+            {pastMeetings.map((m) => (
               <li key={m.id}>
                 <Link href={`/app/beyond/meetings/${m.id}`} className={`${CARD_PAD} block hover:bg-sunken`}>
                   <div className="flex items-baseline justify-between gap-3">

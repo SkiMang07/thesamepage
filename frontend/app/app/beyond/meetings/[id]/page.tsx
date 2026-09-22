@@ -36,6 +36,8 @@ export default function OutsideMeetingPage() {
   const [editing, setEditing] = useState(false);
   const [summary, setSummary] = useState("");
   const [saving, setSaving] = useState(false);
+  // Set right after logging a 1:1 that left a next one (repeat or carried topics).
+  const [nextId, setNextId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     getOutsideMeeting(id)
@@ -82,11 +84,15 @@ export default function OutsideMeetingPage() {
     );
   }
 
-  if (meeting.status === "draft") {
+  if (meeting.status !== "logged") {
     return (
       <MeetingEditor
+        key={meeting.id}
         existing={meeting}
-        onLogged={(logged) => setMeeting(logged)}
+        onLogged={(logged) => {
+          setNextId(logged.next_meeting_id ?? null);
+          setMeeting(logged);
+        }}
         onDeleted={() => router.push("/app/beyond")}
       />
     );
@@ -116,6 +122,19 @@ export default function OutsideMeetingPage() {
             </Link>
           ))}
         </div>
+      )}
+
+      {nextId && (
+        <Link
+          href={`/app/beyond/meetings/${nextId}`}
+          className={`${CARD_PAD} mt-5 flex items-center justify-between gap-3 hover:bg-sunken`}
+        >
+          <span className="text-sm text-ink">
+            Your next 1:1 with {meeting.people[0]?.name.split(" ")[0] ?? "them"} is set up
+            {meeting.recurrence_weeks ? "" : " (no date yet)"}.
+          </span>
+          <span className="text-sm font-medium text-brand">Open it →</span>
+        </Link>
       )}
 
       <section className={`${CARD_PAD} mt-5`}>

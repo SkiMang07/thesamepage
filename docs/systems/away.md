@@ -40,6 +40,9 @@ Only the manager's own things — never something a direct report owes:
   the series' `anchor_at` — so nothing else needs to change for the cadence to
   continue correctly from the new date.
 - **Team meetings** — same shape as 1:1s, via `team_meetings_open_idx`.
+- **Meetings beyond the team** — every unlogged `outside_meetings` row dated in
+  the window, repeating or not (`entity_type = 'outside_meeting'`). Labelled by
+  title, else "1:1 with <name>". Fails soft if the table isn't there yet.
 - **Commitments** — `committed_by = 'manager'` and `status = 'open'`. Note
   `owner_id` is always the manager (it means "who keeps the record", not "who owes
   it") — `committed_by` is the field that actually distinguishes the manager's own

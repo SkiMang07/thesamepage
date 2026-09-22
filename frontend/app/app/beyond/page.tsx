@@ -59,6 +59,10 @@ export default function BeyondPage() {
   const people = data?.people ?? [];
   const meetings = data?.meetings ?? [];
   const drafts = meetings.filter((m) => m.status === "draft");
+  // Soonest first; an undated next 1:1 (carried topics, no repeat) last.
+  const upcoming = meetings
+    .filter((m) => m.status === "upcoming")
+    .sort((a, b) => (a.meeting_date ?? "9999").localeCompare(b.meeting_date ?? "9999"));
   const logged = meetings.filter((m) => m.status === "logged");
 
   return (
@@ -155,7 +159,11 @@ export default function BeyondPage() {
                                 {[
                                   p.they_owe > 0 && `owes you ${p.they_owe}`,
                                   p.you_owe > 0 && `you owe ${p.you_owe}`,
-                                  p.last_met ? `met ${shortDate(p.last_met)}` : "not met yet",
+                                  p.next_meeting?.date
+                                    ? `next ${shortDate(p.next_meeting.date)}`
+                                    : p.last_met
+                                      ? `met ${shortDate(p.last_met)}`
+                                      : "not met yet",
                                 ]
                                   .filter(Boolean)
                                   .join(" · ")}
@@ -172,6 +180,43 @@ export default function BeyondPage() {
           </section>
 
           <section>
+            {upcoming.length > 0 && (
+              <div className="mb-5">
+                <p className={EYEBROW}>Coming up</p>
+                <ul className="mt-2 space-y-2">
+                  {upcoming.map((m) => (
+                    <li key={m.id}>
+                      <Link
+                        href={`/app/beyond/meetings/${m.id}`}
+                        className={`${CARD_PAD} flex items-baseline justify-between gap-3 hover:bg-sunken`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-ink">{meetingTitle(m)}</span>
+                          <span className={META}>
+                            {[
+                              m.recurrence_weeks &&
+                                (m.recurrence_weeks === 1 ? "repeats weekly" : `every ${m.recurrence_weeks} weeks`),
+                              m.carry_forward_items.length > 0 && `${m.carry_forward_items.length} carried`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {m.kind === "one_on_one" && (
+                            <span className={`${BADGE} ${m.prep_guide ? "bg-teal-50 text-teal-700" : "bg-sunken text-ink-muted"}`}>
+                              {m.prep_guide ? "Prepared" : "Not prepared"}
+                            </span>
+                          )}
+                          <span className={META}>{m.meeting_date ? shortDate(m.meeting_date) : "No date yet"}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {drafts.length > 0 && (
               <div className="mb-5">
                 <p className={EYEBROW}>Not written up yet</p>

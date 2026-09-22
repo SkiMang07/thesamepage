@@ -753,7 +753,7 @@ export const getCapacityRollup = (periodStart: string, periodEnd: string): Promi
 // follow-up. See backend/routes/away.py and docs/systems/away.md.
 // ---------------------------------------------------------------------------
 
-export type AwayEntityType = "one_on_one" | "team_meeting" | "commitment" | "goal" | "project";
+export type AwayEntityType = "one_on_one" | "team_meeting" | "commitment" | "goal" | "project" | "outside_meeting";
 
 export type AwaySweepItem = {
   entity_type: AwayEntityType;
@@ -2264,6 +2264,18 @@ export type OutsidePersonSummary = OutsidePerson & {
   meeting_count: number;
   you_owe: number;
   they_owe: number;
+  // The next unlogged 1:1 with them, if there is one.
+  next_meeting: { id: string; date: string | null; prepared: boolean } | null;
+  recurrence_weeks: number | null;
+};
+
+export type OutsidePrepGuide = {
+  situation_summary: string;
+  agenda_items: { title: string; rationale: string; talking_points: string[] }[];
+  asks: string[];
+  // team_update for your boss / skip-level; between_you for everyone else.
+  shape: "team_update" | "between_you";
+  prepared_at: string;
 };
 
 export type OutsideMeeting = {
@@ -2276,9 +2288,16 @@ export type OutsideMeeting = {
   logged_at: string | null;
   created_at: string;
   meeting_date: string | null;
-  // Derived from summary, never stored: "draft" until the wrap-up is logged.
-  status: "draft" | "logged";
+  // Derived, never stored: logged once written up; otherwise upcoming
+  // (future or undated) or draft (happened, not written up yet).
+  status: "draft" | "upcoming" | "logged";
   people: { id: string; name: string; relationship: OutsideRelationship }[];
+  series_id: string | null;
+  // 1-4 when this 1:1 belongs to an active repeat rule.
+  recurrence_weeks: number | null;
+  // Topics carried INTO this meeting from the last one.
+  carry_forward_items: string[];
+  prep_guide: OutsidePrepGuide | null;
 };
 
 // counterpart = something the other person owes the manager. A null
@@ -2324,6 +2343,7 @@ export type BeyondOverview = {
 
 export type BeyondPersonDetail = {
   person: OutsidePerson;
+  recurrence_weeks: number | null;
   meetings: OutsideMeeting[];
   commitments: BeyondCommitment[];
   links: OutsideMeetingLink[];
@@ -2351,6 +2371,21 @@ export type BeyondWrapUpDraft = {
   commitments: BeyondDraftCommitment[];
   check_ins: BeyondDraftCheckIn[];
   report_notes: BeyondDraftReportNote[];
+  carry_forward_items: string[];
+};
+
+export type BeyondPrepSources = {
+  person: { id: string; name: string; relationship: OutsideRelationship };
+  shape: "team_update" | "between_you";
+  since: string;
+  last_meeting: { id: string; date: string; summary: string | null } | null;
+  carried: string[];
+  you_owe: { id: string; description: string; due_date: string | null }[];
+  they_owe: { id: string; description: string; due_date: string | null }[];
+  goals: { id: string; title: string; level: string; status: GoalStatus; due_date: string | null; progress: number | null }[];
+  projects: { id: string; title: string; status: GoalStatus; due_date: string | null; progress: number | null }[];
+  moved: { item: string; kind: "goal" | "project"; status: GoalStatus; progress: number | null; note: string | null; date: string }[];
+  heard: { item: string | null; note: string; meeting: string | null }[];
 };
 
 export type BeyondLinkHistoryItem = {
@@ -2416,6 +2451,7 @@ export const createOutsideMeeting = (body: {
   scheduledAt: string | null;
   personIds: string[];
   notes?: string | null;
+  recurrenceWeeks?: number | null;
 }): Promise<OutsideMeeting> =>
   authedFetch("/api/beyond/meetings", {
     method: "POST",
@@ -2425,6 +2461,7 @@ export const createOutsideMeeting = (body: {
       scheduled_at: body.scheduledAt,
       person_ids: body.personIds,
       notes: body.notes ?? null,
+      recurrence_weeks: body.recurrenceWeeks ?? null,
     }),
   });
 
@@ -2441,6 +2478,10 @@ export const updateOutsideMeeting = (
     personIds?: string[];
     notes?: string;
     summary?: string;
+    // 1-4 starts or changes the repeat rule; clearRecurrence stops it.
+    recurrenceWeeks?: number;
+    clearRecurrence?: boolean;
+    carryForwardItems?: string[];
   }
 ): Promise<OutsideMeeting> =>
   authedFetch(`/api/beyond/meetings/${id}`, {
@@ -2452,6 +2493,9 @@ export const updateOutsideMeeting = (
       person_ids: body.personIds,
       notes: body.notes,
       summary: body.summary,
+      recurrence_weeks: body.recurrenceWeeks,
+      clear_recurrence: body.clearRecurrence ?? false,
+      carry_forward_items: body.carryForwardItems,
     }),
   });
 
@@ -2476,8 +2520,9 @@ export const logOutsideMeeting = (
     commitments: BeyondDraftCommitment[];
     checkIns: BeyondDraftCheckIn[];
     reportNotes: BeyondDraftReportNote[];
+    carryForwardItems: string[];
   }
-): Promise<OutsideMeetingDetail> =>
+): Promise<OutsideMeetingDetail & { next_meeting_id: string | null }> =>
   authedFetch(`/api/beyond/meetings/${id}/log`, {
     method: "POST",
     body: JSON.stringify({
@@ -2487,7 +2532,19 @@ export const logOutsideMeeting = (
       commitments: body.commitments,
       check_ins: body.checkIns,
       report_notes: body.reportNotes,
+      carry_forward_items: body.carryForwardItems,
     }),
+  });
+
+// What a 1:1's prep sheet would draw on. Deterministic — no AI, no writes.
+export const getOutsideMeetingPrepSources = (id: string): Promise<BeyondPrepSources> =>
+  authedFetch(`/api/beyond/meetings/${id}/prep-sources`);
+
+// Generate (or regenerate) the prep sheet and keep it on the meeting.
+export const prepareOutsideMeeting = (id: string, notes: string | null): Promise<OutsideMeetingDetail> =>
+  authedFetch(`/api/beyond/meetings/${id}/prep`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
   });
 
 // Meetings beyond the team that touched one goal, project or report.

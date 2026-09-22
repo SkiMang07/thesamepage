@@ -9,7 +9,9 @@
 //   - commitments can be owed by the other person ("They owe you"),
 //   - a goal or project the meeting moved gets a check-in,
 //   - something said about one of your reports becomes a private,
-//     secondhand note in that report's 1:1 prep.
+//     secondhand note in that report's 1:1 prep,
+//   - in a 1:1, topics to bring up next time carry into the next 1:1 with
+//     that person (and its prep).
 //
 // NOTHING IS WRITTEN UNTIL THE MANAGER CONFIRMS. Every row here is editable
 // and removable, and the one save goes through /log, which re-checks every
@@ -28,7 +30,7 @@ import {
   OutsideMeetingDetail,
   logOutsideMeeting,
 } from "@/lib/api";
-import { BTN_GHOST, EYEBROW, INPUT, LABEL, META, SELECT } from "@/lib/tokens";
+import { BTN_GHOST, BTN_SECONDARY, EYEBROW, INPUT, LABEL, META, SELECT } from "@/lib/tokens";
 import { CHECK_IN_STATUS_OPTIONS } from "./shared";
 
 type Named = { id: string; name: string };
@@ -73,7 +75,7 @@ export default function BeyondWrapUpReview({
   rawNotes: string;
   draft: BeyondWrapUpDraft;
   onBack: () => void;
-  onSaved: (meeting: OutsideMeetingDetail) => void;
+  onSaved: (meeting: OutsideMeetingDetail & { next_meeting_id?: string | null }) => void;
 }) {
   const [summary, setSummary] = useState(draft.summary);
   const [meetingDate, setMeetingDate] = useState(meeting.meeting_date ? meeting.meeting_date.slice(0, 10) : "");
@@ -88,6 +90,18 @@ export default function BeyondWrapUpReview({
     }))
   );
   const [reportNotes, setReportNotes] = useState<BeyondDraftReportNote[]>(draft.report_notes);
+  const isOneOnOne = meeting.kind === "one_on_one" && meeting.people.length === 1;
+  // Starts from what the model suggests. Topics carried INTO this meeting
+  // are listed above it so the manager can re-add any that are still open.
+  const [carry, setCarry] = useState<string[]>(draft.carry_forward_items ?? []);
+  const [newCarry, setNewCarry] = useState("");
+
+  function addCarry() {
+    const text = newCarry.trim();
+    if (!text) return;
+    setCarry((rows) => (rows.some((r) => r.toLowerCase() === text.toLowerCase()) ? rows : [...rows, text]));
+    setNewCarry("");
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,6 +145,7 @@ export default function BeyondWrapUpReview({
         commitments: liveCommitments.map(fromOwnerKey),
         checkIns: checkInBodies,
         reportNotes: reportNotes.map((n) => ({ direct_report_id: n.direct_report_id, note: n.note.trim() })),
+        carryForwardItems: isOneOnOne ? carry : [],
       });
       onSaved(result);
     } catch (e) {
@@ -329,6 +344,57 @@ export default function BeyondWrapUpReview({
             </p>
           )}
         </div>
+
+        {isOneOnOne && (
+          <div className="mt-5">
+            <p className={EYEBROW}>Bring up next time</p>
+            {meeting.carry_forward_items.length > 0 && (
+              <p className={`${META} mt-1`}>
+                Carried into this one: {meeting.carry_forward_items.join("; ")}. Add any that are still open.
+              </p>
+            )}
+            {carry.length === 0 ? (
+              <p className={`${META} mt-2`}>Nothing carrying forward.</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {carry.map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-center gap-2 rounded-lg border border-hairline bg-sunken px-3 py-1.5 text-sm"
+                  >
+                    <span className="flex-1">{item}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCarry((rows) => rows.filter((r) => r !== item))}
+                      className={BTN_GHOST}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2 flex gap-2">
+              <input
+                value={newCarry}
+                onChange={(e) => setNewCarry(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCarry();
+                  }
+                }}
+                className={INPUT}
+                placeholder={`Something to raise with ${meeting.people[0]?.name.split(" ")[0] ?? "them"} next time...`}
+                aria-label="Add a topic for next time"
+              />
+              <button type="button" onClick={addCarry} className={BTN_SECONDARY}>
+                Add
+              </button>
+            </div>
+            <p className={`${META} mt-1.5`}>These go on your next 1:1 with them and into its prep.</p>
+          </div>
+        )}
       </WrapUpReviewShell>
     </div>
   );

@@ -1,7 +1,8 @@
 # Beyond the Team — Scoping Doc
 
-**Scoped:** 2026-09-22 (Cowork session with Andrew) · **Status:** Phase 1 built
-(current state in `docs/systems/beyond.md`); Phase 2 not started
+**Scoped:** 2026-09-22 (Cowork session with Andrew) · **Status:** Phases 1 and 2
+built — current state in `docs/systems/beyond.md`. This doc is kept for the
+original reasoning; move it to `docs/archive/scoping/` at the next docs pass.
 
 ---
 
@@ -192,3 +193,17 @@ Andrew took the lean on all three.
 2. **Check-ins from meetings → add the columns.** Nullable `check_ins.source_type`
    / `source_id`, same shape as commitments.
 3. **Person view → own route.** `/app/beyond/people/[id]` shipped in Phase 1.
+
+## 8. Phase 2 questions — resolved 2026-09-22
+
+Andrew took the lean on all four.
+
+1. **What repeats → 1:1s only.** Group meetings stay one-off logs.
+2. **What managing-up prep may draw on → work, not people.** Goals, projects,
+   check-ins, commitments between you, carried topics. No assessments, 1:1
+   notes, development plans, individual-level goals or secondhand notes about
+   reports.
+3. **Prep shape → by relationship.** Boss and skip-level get the team update;
+   everyone else gets what's open between you.
+4. **Carry-forward → yes, like team meetings.** The 1:1 wrap-up proposes topics
+   for next time; they land on the next 1:1 and feed its prep.

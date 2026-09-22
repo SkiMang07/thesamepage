@@ -3393,6 +3393,7 @@ function AwaySection() {
 const AWAY_TYPE_LABELS: Record<AwaySweepItem["entity_type"], string> = {
   one_on_one: "1:1s",
   team_meeting: "Team meetings",
+  outside_meeting: "Meetings beyond the team",
   commitment: "Commitments",
   goal: "Goals",
   project: "Projects",
