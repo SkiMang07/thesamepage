@@ -57,6 +57,7 @@ import ScribeDrawer from "@/components/ScribeDrawer";
 import AppNav from "@/components/AppNav";
 import Sidebar from "@/components/Sidebar";
 import DictationHotkey from "@/components/DictationHotkey";
+import { ZoneDataProvider } from "@/components/ZoneMap";
 
 const NO_NAV_PATHS = new Set(["/app/login", "/app/ic"]);
 
@@ -94,30 +95,35 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // chrome (NO_NAV_PATHS), so they stay light too — same condition that hides
   // the nav. `bg-canvas` paints the ground; globals.css mirrors it onto <html>
   // via :has() so an overscroll bounce doesn't flash white.
+  // ZoneDataProvider: the nav's roster/profile and ZoneMap's door labels are
+  // fetched once here and shared, not per caller (N-5). Disabled where the
+  // nav is hidden, so /app/login and /app/ic make no zone calls.
   return (
-    <div className={`flex min-h-screen ${showNav ? "theme-dark bg-canvas text-ink" : ""}`}>
-      {showNav && <Sidebar />}
+    <ZoneDataProvider enabled={showNav}>
+      <div className={`flex min-h-screen ${showNav ? "theme-dark bg-canvas text-ink" : ""}`}>
+        {showNav && <Sidebar />}
 
-      {/* Main content — flex-1 so it gives up space to the sidebar/drawer.
-          AppNav lives outside the overflow-x-hidden div (see note above) so
-          its sticky header/strip resolve against the real page scroll. */}
-      <div className="flex-1 min-w-0">
-        {showNav && <AppNav />}
-        <div className="overflow-x-hidden">{children}</div>
+        {/* Main content — flex-1 so it gives up space to the sidebar/drawer.
+            AppNav lives outside the overflow-x-hidden div (see note above) so
+            its sticky header/strip resolve against the real page scroll. */}
+        <div className="flex-1 min-w-0">
+          {showNav && <AppNav />}
+          <div className="overflow-x-hidden">{children}</div>
+        </div>
+
+        {showNav && <DictationHotkey />}
+
+        {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
+        {showNav && isOpen && (
+          <aside
+            className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-hairline bg-surface shadow-xl"
+            style={{ zIndex: 40 }}
+          >
+            <ScribeDrawer />
+          </aside>
+        )}
       </div>
-
-      {showNav && <DictationHotkey />}
-
-      {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
-      {showNav && isOpen && (
-        <aside
-          className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-hairline bg-surface shadow-xl"
-          style={{ zIndex: 40 }}
-        >
-          <ScribeDrawer />
-        </aside>
-      )}
-    </div>
+    </ZoneDataProvider>
   );
 }
 

@@ -22,7 +22,7 @@
 // and Mission Control's Individual Performance card both just read its
 // is_due field rather than each re-deriving it.
 
-import { useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { IDENTITY_HEX } from "@/lib/tokens";
 import Link from "next/link";
 import {
@@ -38,6 +38,8 @@ import {
   getTeamAssessments,
   GoalStatus,
   OneOnOneOverviewItem,
+  RECORDS_CHANGED_EVENT,
+  RECORDS_CHANGED_STORAGE_KEY,
 } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -389,153 +391,281 @@ export type ZoneData = {
   profileEmail: string | null;
 };
 
-// One hook, called independently by AppNav (for the orbit roster + the map
-// overlay) and by Mission Control (for the inline map that replaced the
-// stat ribbon). Each caller re-fetches rather than sharing a context — this
-// matches how the rest of the app already duplicates overlapping fetches
-// per-page (e.g. dashboard and /app/team both independently fetch
-// getProjects()) rather than introducing shared global data state.
-export function useZoneData(): ZoneData {
-  const [data, setData] = useState<ZoneData>({
-    loading: true,
-    doorStates: {},
-    roster: [],
-    profileName: null,
-    profileEmail: null,
-  });
+// Zone data — one shared fetch for the whole authenticated app (N-5).
+//
+// ZoneDataProvider mounts once in app/app/layout.tsx, which persists across
+// client-side navigation, so nothing here re-fetches when the page changes.
+// Two groups, fetched separately:
+//   - core: getOneOnOnesOverview + getProfile. What AppNav needs (roster,
+//     avatar name/email). Fetched once on mount.
+//   - doors: the other eight calls. They only feed the door labels on
+//     ZoneMap, so they are fetched the first time a consumer asks for them
+//     (useZoneData({ doors: true })) and cached for the session after that.
+// Both refresh on lib/api.ts's records-changed signal (same event + storage
+// key the dashboard already listens to, same 250 ms debounce). Core always
+// refetches. Doors refetch only while a door consumer is mounted; otherwise
+// they are marked stale and refetched on next use. Previous data stays on
+// screen during a refresh, so there is no loading flash after a write.
 
-  useEffect(() => {
-    let cancelled = false;
-    const weekStart = startOfWeek(new Date());
-    const weekEnd = addDays(weekStart, 6);
+type CoreResults = [
+  PromiseSettledResult<Awaited<ReturnType<typeof getOneOnOnesOverview>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getProfile>>>,
+];
 
-    Promise.allSettled([
-      getOneOnOnesOverview(),
-      getTeamAssessments(),
-      getGoals(),
-      getProjects(),
-      getCapacityOverview(toISODate(weekStart), toISODate(weekEnd)),
-      getOrgUnits(),
-      getContextCoverage(),
-      getProfile(),
-      getSetupStatus(),
-      getBeyondOverview(),
-    ]).then((results) => {
-      if (cancelled) return;
-      const [teamR, assessR, goalsR, projectsR, capR, orgR, ctxR, profR, setupR, beyondR] = results;
-      const doorStates: Partial<Record<string, DoorState>> = {};
-      let roster: RosterPerson[] = [];
-      let profileName: string | null = null;
-      let profileEmail: string | null = null;
+type DoorResults = [
+  PromiseSettledResult<Awaited<ReturnType<typeof getTeamAssessments>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getGoals>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getProjects>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getCapacityOverview>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getOrgUnits>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getContextCoverage>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getSetupStatus>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getBeyondOverview>>>,
+];
 
-      if (teamR.status === "fulfilled") {
-        const team = teamR.value as OneOnOneOverviewItem[];
-        doorStates.team = { label: `${team.length} ${team.length === 1 ? "person" : "people"}` };
-        const dueCount = team.filter((r) => r.is_due).length;
-        doorStates.oneonones = dueCount > 0 ? { label: `${dueCount} due`, tone: "warn" } : { label: "up to date" };
-        roster = team.map((r, i) => ({
-          id: r.direct_report_id,
-          name: r.name,
-          firstName: r.name.split(" ")[0],
-          initials: initialsOf(r.name),
-          color: AVATAR_COLORS[i % AVATAR_COLORS.length],
-          due: r.is_due,
-        }));
-      }
+function fetchCore(): Promise<CoreResults> {
+  return Promise.allSettled([getOneOnOnesOverview(), getProfile()]) as Promise<CoreResults>;
+}
 
-      if (assessR.status === "fulfilled") {
-        const dates = assessR.value.map((a) => a.assessed_at).filter((d): d is string => !!d);
-        doorStates.assessments = dates.length
-          ? { label: `last ${new Date(dates.reduce((a, b) => (a > b ? a : b))).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` }
-          : { label: "no assessments yet" };
-      }
+function fetchDoors(): Promise<DoorResults> {
+  const weekStart = startOfWeek(new Date());
+  const weekEnd = addDays(weekStart, 6);
+  return Promise.allSettled([
+    getTeamAssessments(),
+    getGoals(),
+    getProjects(),
+    getCapacityOverview(toISODate(weekStart), toISODate(weekEnd)),
+    getOrgUnits(),
+    getContextCoverage(),
+    getSetupStatus(),
+    getBeyondOverview(),
+  ]) as Promise<DoorResults>;
+}
 
-      if (beyondR.status === "fulfilled") {
-        const last = beyondR.value.last_logged;
-        doorStates.beyond = last
-          ? { label: `last ${new Date(last).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` }
-          : { label: "nothing logged yet" };
-      }
+// Pure derivation. Door-label logic is unchanged from the old per-caller
+// hook; only door states whose inputs have loaded are filled in.
+function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Omit<ZoneData, "loading"> {
+  const unloaded = { status: "rejected", reason: null } as const;
+  const [teamR, profR] = core ?? [unloaded, unloaded];
+  const [assessR, goalsR, projectsR, capR, orgR, ctxR, setupR, beyondR] = doors ?? [
+    unloaded, unloaded, unloaded, unloaded, unloaded, unloaded, unloaded, unloaded,
+  ];
+  const doorStates: Partial<Record<string, DoorState>> = {};
+  let roster: RosterPerson[] = [];
+  let profileName: string | null = null;
+  let profileEmail: string | null = null;
 
-      if (goalsR.status === "fulfilled") {
-        const goals = goalsR.value;
-        const atRisk = goals.filter((g) => g.status === "at_risk").length;
-        doorStates.goals =
-          atRisk > 0
-            ? { label: `${atRisk} at risk`, tone: "risk" }
-            : goals.length > 0
-              ? { label: `${goals.length} goal${goals.length === 1 ? "" : "s"}` }
-              : { label: "no goals yet" };
-      }
+  if (teamR.status === "fulfilled") {
+    const team = teamR.value as OneOnOneOverviewItem[];
+    doorStates.team = { label: `${team.length} ${team.length === 1 ? "person" : "people"}` };
+    const dueCount = team.filter((r) => r.is_due).length;
+    doorStates.oneonones = dueCount > 0 ? { label: `${dueCount} due`, tone: "warn" } : { label: "up to date" };
+    roster = team.map((r, i) => ({
+      id: r.direct_report_id,
+      name: r.name,
+      firstName: r.name.split(" ")[0],
+      initials: initialsOf(r.name),
+      color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+      due: r.is_due,
+    }));
+  }
 
-      if (projectsR.status === "fulfilled") {
-        const projects = projectsR.value;
-        const active = projects.filter((p) => ACTIVE_PROJECT_STATUSES.has(p.status)).length;
-        doorStates.projects =
-          active > 0 ? { label: `${active} active` } : projects.length > 0 ? { label: "none active" } : { label: "no projects yet" };
-      }
+  if (assessR.status === "fulfilled") {
+    const dates = assessR.value.map((a) => a.assessed_at).filter((d): d is string => !!d);
+    doorStates.assessments = dates.length
+      ? { label: `last ${new Date(dates.reduce((a, b) => (a > b ? a : b))).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` }
+      : { label: "no assessments yet" };
+  }
 
-      if (capR.status === "fulfilled") {
-        const capacity = capR.value;
-        const total = capacity.reduce((s, c) => s + c.available_hours, 0);
-        doorStates.capacity = capacity.length > 0 ? { label: `${Math.round(total)}h free` } : { label: "not set up" };
-      }
+  if (beyondR.status === "fulfilled") {
+    const last = beyondR.value.last_logged;
+    doorStates.beyond = last
+      ? { label: `last ${new Date(last).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` }
+      : { label: "nothing logged yet" };
+  }
 
-      if (orgR.status === "fulfilled") {
-        const units = orgR.value;
-        doorStates.org = units.length > 0 ? { label: `${units.length} unit${units.length === 1 ? "" : "s"}` } : { label: "not set up" };
-      }
+  if (goalsR.status === "fulfilled") {
+    const goals = goalsR.value;
+    const atRisk = goals.filter((g) => g.status === "at_risk").length;
+    doorStates.goals =
+      atRisk > 0
+        ? { label: `${atRisk} at risk`, tone: "risk" }
+        : goals.length > 0
+          ? { label: `${goals.length} goal${goals.length === 1 ? "" : "s"}` }
+          : { label: "no goals yet" };
+  }
 
-      if (ctxR.status === "fulfilled") {
-        const categories = ctxR.value.categories;
-        if (categories.length > 0) {
-          const avg = Math.round(categories.reduce((s, c) => s + c.fill_score, 0) / categories.length);
-          doorStates.knowledge = { label: `${avg}% covered` };
-        } else {
-          doorStates.knowledge = { label: "not started" };
-        }
-      }
+  if (projectsR.status === "fulfilled") {
+    const projects = projectsR.value;
+    const active = projects.filter((p) => ACTIVE_PROJECT_STATUSES.has(p.status)).length;
+    doorStates.projects =
+      active > 0 ? { label: `${active} active` } : projects.length > 0 ? { label: "none active" } : { label: "no projects yet" };
+  }
 
-      // Settings door (Session 41, Plan S1): previously only checked
-      // org_ready (does the org row exist at all — true the moment a
-      // manager saves Profile & Company once). That's a much lower bar than
-      // "setup is actually done," so a manager could clear this door's
-      // warning without a single person, team, role, or expectation
-      // configured. Now reads the real setup-status four-step model —
-      // people / teams / roles-assigned / expectations-covered — the same
-      // data People's progress header and roster badges read, so all three
-      // surfaces agree on what "done" means.
-      if (setupR.status === "fulfilled") {
-        const s = setupR.value;
-        const fullySetUp =
-          s.people_count > 0 &&
-          s.teams_count > 0 &&
-          s.people_without_role_count === 0 &&
-          s.roles_count > 0 &&
-          s.roles_with_expectations_count === s.roles_count;
-        // Only render a state when setup isn't finished — a finished
-        // Settings door shows no count at all (Session 36 decision).
-        if (!fullySetUp) doorStates.settings = { label: "not finished", tone: "setup" };
-      } else if (profR.status === "fulfilled" && !profR.value.org_ready) {
-        // Fallback if setup-status itself failed to load: org_ready is a
-        // strictly weaker signal, but better than showing nothing.
-        doorStates.settings = { label: "not finished", tone: "setup" };
-      }
+  if (capR.status === "fulfilled") {
+    const capacity = capR.value;
+    const total = capacity.reduce((s, c) => s + c.available_hours, 0);
+    doorStates.capacity = capacity.length > 0 ? { label: `${Math.round(total)}h free` } : { label: "not set up" };
+  }
 
-      if (profR.status === "fulfilled") {
-        profileName = profR.value.full_name || null;
-        profileEmail = profR.value.email || null;
-      }
+  if (orgR.status === "fulfilled") {
+    const units = orgR.value;
+    doorStates.org = units.length > 0 ? { label: `${units.length} unit${units.length === 1 ? "" : "s"}` } : { label: "not set up" };
+  }
 
-      setData({ loading: false, doorStates, roster, profileName, profileEmail });
+  if (ctxR.status === "fulfilled") {
+    const categories = ctxR.value.categories;
+    if (categories.length > 0) {
+      const avg = Math.round(categories.reduce((s, c) => s + c.fill_score, 0) / categories.length);
+      doorStates.knowledge = { label: `${avg}% covered` };
+    } else {
+      doorStates.knowledge = { label: "not started" };
+    }
+  }
+
+  // Settings door (Session 41, Plan S1): previously only checked
+  // org_ready (does the org row exist at all — true the moment a
+  // manager saves Profile & Company once). That's a much lower bar than
+  // "setup is actually done," so a manager could clear this door's
+  // warning without a single person, team, role, or expectation
+  // configured. Now reads the real setup-status four-step model —
+  // people / teams / roles-assigned / expectations-covered — the same
+  // data People's progress header and roster badges read, so all three
+  // surfaces agree on what "done" means.
+  if (setupR.status === "fulfilled") {
+    const s = setupR.value;
+    const fullySetUp =
+      s.people_count > 0 &&
+      s.teams_count > 0 &&
+      s.people_without_role_count === 0 &&
+      s.roles_count > 0 &&
+      s.roles_with_expectations_count === s.roles_count;
+    // Only render a state when setup isn't finished — a finished
+    // Settings door shows no count at all (Session 36 decision).
+    if (!fullySetUp) doorStates.settings = { label: "not finished", tone: "setup" };
+  } else if (profR.status === "fulfilled" && !profR.value.org_ready) {
+    // Fallback if setup-status itself failed to load: org_ready is a
+    // strictly weaker signal, but better than showing nothing.
+    doorStates.settings = { label: "not finished", tone: "setup" };
+  }
+
+  if (profR.status === "fulfilled") {
+    profileName = profR.value.full_name || null;
+    profileEmail = profR.value.email || null;
+  }
+
+  // Door states that come from core results (team, 1:1s, Settings fallback)
+  // only show alongside the rest of the doors, as they did before.
+  return { doorStates: doors ? doorStates : {}, roster, profileName, profileEmail };
+}
+
+type ZoneContextValue = {
+  core: CoreResults | null;
+  doors: DoorResults | null;
+  registerDoorConsumer: () => () => void;
+};
+
+const ZoneDataContext = createContext<ZoneContextValue | null>(null);
+
+export function ZoneDataProvider({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+  const [core, setCore] = useState<CoreResults | null>(null);
+  const [doors, setDoors] = useState<DoorResults | null>(null);
+  const coreGen = useRef(0);
+  const doorGen = useRef(0);
+  const doorConsumers = useRef(0);
+  const doorsStale = useRef(true);
+  const doorsInFlight = useRef(false);
+
+  const loadCore = useCallback(() => {
+    const gen = ++coreGen.current;
+    fetchCore().then((r) => {
+      if (gen === coreGen.current) setCore(r);
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  return data;
+  const loadDoors = useCallback(() => {
+    const gen = ++doorGen.current;
+    doorsStale.current = false;
+    doorsInFlight.current = true;
+    fetchDoors().then((r) => {
+      if (gen !== doorGen.current) return;
+      doorsInFlight.current = false;
+      setDoors(r);
+    });
+  }, []);
+
+  // Load on enable. Route changes inside the app don't touch `enabled`, so
+  // this runs once per session. Leaving the nav (sign-out lands on
+  // /app/login) drops the cache, so a different sign-in in the same tab
+  // never sees the previous account's roster.
+  useEffect(() => {
+    if (enabled) {
+      loadCore();
+      return;
+    }
+    coreGen.current += 1;
+    doorGen.current += 1;
+    doorsInFlight.current = false;
+    doorsStale.current = true;
+    setCore(null);
+    setDoors(null);
+  }, [enabled, loadCore]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: number | undefined;
+    const refreshAfterChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        loadCore();
+        if (doorConsumers.current > 0) loadDoors();
+        else doorsStale.current = true;
+      }, 250);
+    };
+    const refreshFromAnotherTab = (event: StorageEvent) => {
+      if (event.key === RECORDS_CHANGED_STORAGE_KEY) refreshAfterChange();
+    };
+    window.addEventListener(RECORDS_CHANGED_EVENT, refreshAfterChange);
+    window.addEventListener("storage", refreshFromAnotherTab);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(RECORDS_CHANGED_EVENT, refreshAfterChange);
+      window.removeEventListener("storage", refreshFromAnotherTab);
+    };
+  }, [enabled, loadCore, loadDoors]);
+
+  // A door consumer registers on mount; the first one (or the first after a
+  // write while none was mounted) triggers the door fetch.
+  const registerDoorConsumer = useCallback(() => {
+    doorConsumers.current += 1;
+    if (doorsStale.current && !doorsInFlight.current) loadDoors();
+    return () => {
+      doorConsumers.current -= 1;
+    };
+  }, [loadDoors]);
+
+  const value = useMemo(() => ({ core, doors, registerDoorConsumer }), [core, doors, registerDoorConsumer]);
+  return <ZoneDataContext.Provider value={value}>{children}</ZoneDataContext.Provider>;
+}
+
+// Read the shared zone data. AppNav calls this bare (roster + profile only).
+// Pass { doors: true } to also get door labels for ZoneMap.
+export function useZoneData(options: { doors?: boolean } = {}): ZoneData {
+  const ctx = useContext(ZoneDataContext);
+  if (!ctx) throw new Error("useZoneData must be inside ZoneDataProvider");
+  const wantDoors = !!options.doors;
+  const { core, doors, registerDoorConsumer } = ctx;
+
+  useEffect(() => {
+    if (!wantDoors) return;
+    return registerDoorConsumer();
+  }, [wantDoors, registerDoorConsumer]);
+
+  return useMemo(() => {
+    const derived = deriveZoneData(core, wantDoors ? doors : null);
+    const loading = core === null || (wantDoors && doors === null);
+    return { loading, ...derived };
+  }, [core, doors, wantDoors]);
 }
 
 // ---------------------------------------------------------------------------

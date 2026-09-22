@@ -255,7 +255,7 @@ export default function DashboardPage() {
 }
 
 function LegacyDashboardPage() {
-  const zone = useZoneData();
+  const zone = useZoneData({ doors: true });
   const [team, setTeam] = useState<PerformanceRow[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

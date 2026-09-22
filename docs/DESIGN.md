@@ -76,6 +76,20 @@ the nav, so `/app/login` and `/app/ic` stay light without any override:
 `/app/login` and `/app/ic` render none of this — one is pre-auth, the other is an
 IC stub, and a manager-oriented nav would fetch data neither has.
 
+**Shell data is fetched once, not per page.** `ZoneDataProvider` (in
+`ZoneMap.tsx`, mounted in `layout.tsx`) owns the data the chrome reads, and
+`useZoneData()` reads it from context. It holds two groups. *Core*
+(`getOneOnOnesOverview` + `getProfile`) feeds AppNav's roster, Quick Add picker and
+avatar, and is fetched once when the nav first shows. *Doors* (the other eight
+calls behind `ZoneMap`'s door labels) are fetched only when a caller asks
+(`useZoneData({ doors: true })`), then cached. Both refresh on `lib/api.ts`'s
+records-changed event and storage key. Doors refetch only while a door caller is
+mounted; otherwise they're marked stale. The cache is dropped when the nav hides
+(sign-out), so a second sign-in in the same tab starts clean. Add new chrome data
+here rather than giving a shell component its own fetch: layout-level components
+never remount on navigation, so a local fetch there goes stale after a write,
+and a page-level copy duplicates the requests.
+
 **Sticky gotcha:** `overflow-x-hidden` in `layout.tsx` wraps only `{children}`,
 never the div that also renders `<AppNav />`. Setting `overflow-x` to anything but
 `visible` makes the browser compute `overflow-y: auto` too, silently turning that

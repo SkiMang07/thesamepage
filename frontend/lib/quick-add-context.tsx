@@ -8,7 +8,7 @@
 //
 // This context deliberately owns ONLY the open/close boolean, not the
 // direct-reports list the modal needs for its "who is this project/goal
-// for" picker — AppNav already fetches that via useZoneData()'s roster
+// for" picker — AppNav already reads that via useZoneData()'s roster
 // (one shared fetch, not a new one), and is the one place that actually
 // renders <QuickAddModal>. Other pages (e.g. the dashboard's "add your
 // first direct report" empty state) just call open() to trigger it.
