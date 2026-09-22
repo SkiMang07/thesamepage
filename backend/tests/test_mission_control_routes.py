@@ -5,6 +5,12 @@ from datetime import datetime, timedelta, timezone
 from routes.dashboard import MissionControlEventIn, MissionControlEventsIn, record_mission_control_events
 
 
+def _resolve(result):
+    """Route handlers are plain `def` unless they await (file uploads), so a
+    call returns either the value or a coroutine to run."""
+    return asyncio.run(result) if asyncio.iscoroutine(result) else result
+
+
 class _Result:
     def __init__(self, data):
         self.data = data
@@ -72,7 +78,7 @@ def test_dispositions_only_append_events_and_never_mutate_source_records():
         ]
     )
 
-    result = asyncio.run(
+    result = _resolve(
         record_mission_control_events(body, auth=(str(uuid.uuid4()), client))
     )
 

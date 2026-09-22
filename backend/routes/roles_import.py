@@ -498,7 +498,7 @@ def _validate_role(raw_role: dict) -> ImportedRole | None:
 
 @router.post("/draft", response_model=RoleImportDraft)
 @limiter.limit("10/minute")
-async def draft_role_import(
+def draft_role_import(
     request: Request,
     file: UploadFile | None = File(None),
     text: str | None = Form(None),
@@ -524,7 +524,7 @@ async def draft_role_import(
     if has_file:
         original_filename = Path(file.filename or "upload").name
         import_type = _infer_import_type(original_filename, file.content_type)
-        raw_bytes = await file.read()
+        raw_bytes = file.file.read()
         if not raw_bytes:
             raise HTTPException(status_code=422, detail="Uploaded file is empty")
         if len(raw_bytes) > _MAX_UPLOAD_BYTES:

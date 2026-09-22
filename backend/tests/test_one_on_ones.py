@@ -13,6 +13,12 @@ from routes.one_on_ones import (
 )
 
 
+def _resolve(result):
+    """Route handlers are plain `def` unless they await (file uploads), so a
+    call returns either the value or a coroutine to run."""
+    return asyncio.run(result) if asyncio.iscoroutine(result) else result
+
+
 def test_session_status_is_derived_across_gathering_scheduled_prepped_completed():
     gathering = _serialize_session({
         "id": "gathering",
@@ -219,7 +225,7 @@ class _MemoryClient:
 
 def test_logging_recurring_call_completes_current_and_starts_next_occurrence():
     client = _MemoryClient()
-    result = asyncio.run(
+    result = _resolve(
         log_one_on_one(
             LogOneOnOneIn(
                 direct_report_id="report",
@@ -264,7 +270,7 @@ def test_logging_ad_hoc_call_completes_workspace_and_creates_undated_next_one():
     })
     client.rows["one_on_one_series"] = []
 
-    result = asyncio.run(
+    result = _resolve(
         log_one_on_one(
             LogOneOnOneIn(
                 direct_report_id="report",
@@ -299,7 +305,7 @@ def test_ad_hoc_log_leaves_a_prepped_workspace_alone():
     occurrence, and the prep stays waiting where the manager left it."""
     client = _MemoryClient()
 
-    result = asyncio.run(
+    result = _resolve(
         log_one_on_one(
             LogOneOnOneIn(
                 direct_report_id="report",
@@ -335,7 +341,7 @@ def test_separate_occurrence_opts_out_even_when_the_workspace_is_unprepped():
     client = _MemoryClient()
     client.rows["one_on_ones"][0]["prep_guide"] = None
 
-    result = asyncio.run(
+    result = _resolve(
         log_one_on_one(
             LogOneOnOneIn(
                 direct_report_id="report",
@@ -359,7 +365,7 @@ def test_explicit_workspace_id_still_completes_a_prepped_occurrence():
     normally — the guard above must not make a prepped meeting unloggable."""
     client = _MemoryClient()
 
-    result = asyncio.run(
+    result = _resolve(
         log_one_on_one(
             LogOneOnOneIn(
                 direct_report_id="report",

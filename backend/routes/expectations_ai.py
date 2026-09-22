@@ -102,7 +102,7 @@ def _compute_coverage(supabase) -> dict:
 
 
 @router.get("/coverage")
-async def get_coverage(auth=Depends(get_authenticated_client)):
+def get_coverage(auth=Depends(get_authenticated_client)):
     _, supabase = auth
     return _compute_coverage(supabase)
 
@@ -226,7 +226,7 @@ measurement_period must be one of: month, week, quarter, annual, none. order_typ
 
 @router.post("/draft", response_model=ExpectationsDraft)
 @limiter.limit("10/minute")
-async def draft_expectations(
+def draft_expectations(
     request: Request,
     body: DraftIn,
     auth=Depends(get_authenticated_client),
@@ -396,7 +396,7 @@ order_type must be one of: primary, secondary, tertiary — most sets should hav
 
 @router.post("/draft-org-values", response_model=ExpectationsDraft)
 @limiter.limit("10/minute")
-async def draft_org_values(request: Request, auth=Depends(get_authenticated_client)):
+def draft_org_values(request: Request, auth=Depends(get_authenticated_client)):
     """Pure AI-call route — nothing is saved. The manager reviews in the
     Org-wide values block, then POST /values/batch with role_level_id: null
     commits whatever they keep (same batch endpoint the role-level draft
@@ -440,7 +440,7 @@ class ExpectationBatchIn(BaseModel):
 
 
 @router.post("/{kind}/batch")
-async def batch_create_expectations(
+def batch_create_expectations(
     kind: str,
     body: ExpectationBatchIn,
     auth=Depends(get_authenticated_client),

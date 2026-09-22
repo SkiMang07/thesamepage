@@ -199,7 +199,7 @@ class TeamDevFocusIn(BaseModel):
 
 
 @router.get("")
-async def get_team(auth=Depends(get_authenticated_client)):
+def get_team(auth=Depends(get_authenticated_client)):
     """Roster + what each person is working on right now, assembled from
     data that already exists. email/user_id (Session 22) drive the Invite
     action — user_id set means the report already claimed an account."""
@@ -285,7 +285,7 @@ async def get_team(auth=Depends(get_authenticated_client)):
 
 
 @router.get("/{report_id}/messages")
-async def list_team_messages(report_id: str, auth=Depends(get_authenticated_client)):
+def list_team_messages(report_id: str, auth=Depends(get_authenticated_client)):
     """Full update history for one report, newest first."""
     user_id, supabase = auth
     rows = (
@@ -301,7 +301,7 @@ async def list_team_messages(report_id: str, auth=Depends(get_authenticated_clie
 
 
 @router.post("/{report_id}/messages")
-async def send_team_message(report_id: str, body: TeamMessageIn, auth=Depends(get_authenticated_client)):
+def send_team_message(report_id: str, body: TeamMessageIn, auth=Depends(get_authenticated_client)):
     """Log a free-text update for one report. STORE-ONLY — see this module's
     docstring. Nothing is emailed or otherwise delivered."""
     user_id, supabase = auth
@@ -317,7 +317,7 @@ async def send_team_message(report_id: str, body: TeamMessageIn, auth=Depends(ge
 
 
 @router.get("/goals")
-async def get_team_goals(auth=Depends(get_authenticated_client)):
+def get_team_goals(auth=Depends(get_authenticated_client)):
     """Company/department/team-level goal progress for Mission Control's
     middle column (department added Session 46 — see this module's
     docstring). Goals are owner-scoped everywhere in this codebase (see
@@ -608,7 +608,7 @@ def _serialize_meeting(row: dict, items_by_meeting: dict[str, list[dict]]) -> di
 
 
 @router.get("/meetings")
-async def list_team_meetings(auth=Depends(get_authenticated_client)):
+def list_team_meetings(auth=Depends(get_authenticated_client)):
     """Every meeting for this manager, newest scheduled first, with agenda
     items attached. Which team a meeting belongs to is filtered client-side
     (null org_unit_id means "all teams" and shows under every team), same
@@ -637,7 +637,7 @@ async def list_team_meetings(auth=Depends(get_authenticated_client)):
 
 
 @router.post("/meetings")
-async def create_team_meeting(body: TeamMeetingIn, auth=Depends(get_authenticated_client)):
+def create_team_meeting(body: TeamMeetingIn, auth=Depends(get_authenticated_client)):
     """Plan a meeting: a date, an agenda, and optionally a repeat rule."""
     user_id, supabase = auth
     scheduled_at = _encode_meeting_date(body.scheduled_at)
@@ -683,7 +683,7 @@ def _fetch_agenda_items(supabase, user_id: str, meeting_id: str) -> list[dict]:
 
 
 @router.patch("/meetings/{meeting_id}")
-async def update_team_meeting(
+def update_team_meeting(
     meeting_id: str, body: TeamMeetingPatch, auth=Depends(get_authenticated_client)
 ):
     """Edit an unlogged meeting's date, agenda, or repeat rule — or fix the
@@ -767,7 +767,7 @@ async def update_team_meeting(
 
 
 @router.delete("/meetings/{meeting_id}")
-async def delete_team_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
+def delete_team_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
     """Drop a PLANNED meeting. Agenda items cascade.
 
     A logged meeting is history and is not deletable here — the same posture
@@ -846,7 +846,7 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
 @router.post("/meetings/{meeting_id}/wrapup", response_model=TeamWrapUpDraft)
 @limiter.limit("10/minute")
-async def wrap_up_team_meeting(
+def wrap_up_team_meeting(
     request: Request,
     meeting_id: str,
     body: TeamWrapUpRequest,
@@ -922,7 +922,7 @@ async def wrap_up_team_meeting(
 
 
 @router.post("/meetings/{meeting_id}/log")
-async def log_team_meeting(
+def log_team_meeting(
     meeting_id: str, body: LogTeamMeetingIn, auth=Depends(get_authenticated_client)
 ):
     """Save the reviewed wrap-up, then roll the series forward.
@@ -1119,7 +1119,7 @@ def _append_agenda_items(supabase, user_id: str, meeting_id: str, items: list[st
 
 
 @router.get("/commitments")
-async def list_team_commitments(auth=Depends(get_authenticated_client)):
+def list_team_commitments(auth=Depends(get_authenticated_client)):
     """Team-level commitments — commitments rows flagged is_team_commitment,
     each still assigned to exactly one direct report. Same joined-name shape
     as commitments.py's list_commitments, filtered to the team-wide subset."""
@@ -1143,7 +1143,7 @@ async def list_team_commitments(auth=Depends(get_authenticated_client)):
 
 
 @router.post("/commitments")
-async def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authenticated_client)):
+def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authenticated_client)):
     """Create a commitment assigned to one direct report, flagged so it also
     shows up on this team-wide list (in addition to wherever commitments
     already surface — dashboard, DR detail, prep). Manager-authored only, so
@@ -1190,7 +1190,7 @@ async def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authen
 
 
 @router.get("/callout")
-async def get_team_callout(auth=Depends(get_authenticated_client)):
+def get_team_callout(auth=Depends(get_authenticated_client)):
     """Every "critical callouts" row for this manager (Session 45) — one per
     led team that's ever had a callout saved, plus at most one
     org_unit_id-null "all teams" row. Used to be a single object; now a list
@@ -1208,7 +1208,7 @@ async def get_team_callout(auth=Depends(get_authenticated_client)):
 
 
 @router.put("/callout")
-async def update_team_callout(body: TeamCalloutIn, auth=Depends(get_authenticated_client)):
+def update_team_callout(body: TeamCalloutIn, auth=Depends(get_authenticated_client)):
     """Upserts the callout row for (manager, org_unit_id) — this is a pinned
     block that gets overwritten, not a log, so there's no create vs. update
     distinction for the caller. Empty string is a valid message (clearing
@@ -1246,7 +1246,7 @@ async def update_team_callout(body: TeamCalloutIn, auth=Depends(get_authenticate
 
 
 @router.get("/dev-focus")
-async def get_team_dev_focus(auth=Depends(get_authenticated_client)):
+def get_team_dev_focus(auth=Depends(get_authenticated_client)):
     """Every "training focus" row for this manager — one per led team that's
     ever had a focus note saved, plus at most one org_unit_id-null "all
     teams" row. Same list-not-single-object shape as GET /callout (Session
@@ -1263,7 +1263,7 @@ async def get_team_dev_focus(auth=Depends(get_authenticated_client)):
 
 
 @router.put("/dev-focus")
-async def update_team_dev_focus(body: TeamDevFocusIn, auth=Depends(get_authenticated_client)):
+def update_team_dev_focus(body: TeamDevFocusIn, auth=Depends(get_authenticated_client)):
     """Upserts the focus-note row for (manager, org_unit_id) — a pinned
     block that gets overwritten, same manual look-up-then-write as
     update_team_callout (see that function's docstring for why a plain

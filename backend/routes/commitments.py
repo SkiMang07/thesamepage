@@ -29,7 +29,7 @@ class CommitmentUpdate(BaseModel):
 
 
 @router.post("")
-async def create_commitment(body: CommitmentIn, auth=Depends(get_authenticated_client)):
+def create_commitment(body: CommitmentIn, auth=Depends(get_authenticated_client)):
     """Standalone commitment creation — used by the Scribe confirm handler.
     Validates that the direct report belongs to the manager before inserting."""
     user_id, supabase = auth
@@ -63,7 +63,7 @@ async def create_commitment(body: CommitmentIn, auth=Depends(get_authenticated_c
 
 
 @router.get("")
-async def list_commitments(
+def list_commitments(
     direct_report_id: str | None = None,
     status: str | None = None,
     auth=Depends(get_authenticated_client),
@@ -92,7 +92,7 @@ async def list_commitments(
 
 
 @router.patch("/{commitment_id}")
-async def update_commitment(
+def update_commitment(
     commitment_id: str,
     body: CommitmentUpdate,
     auth=Depends(get_authenticated_client),

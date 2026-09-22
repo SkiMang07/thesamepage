@@ -525,6 +525,17 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
 - [x] ✔ Nav fan-out (N-5) fixed or cached — the app currently does 11+
   round-trips to Railway per page, and Railway's single instance is the
   ceiling `utils.py:47–52` already warns about.
+- [x] ✔ Backend serialised every request (found 2026-09-22 while chasing
+  Team's load time). Every route was `async def` around the synchronous
+  Supabase client, so one uvicorn worker ran one request's queries at a time,
+  across all users, and AI calls froze the whole API for their full duration.
+  Each request also rebuilt two HTTP clients, reloading the CA bundle (~140 ms
+  of CPU under the GIL) and opening fresh TLS to Supabase. Handlers are now
+  plain `def` on the thread pool, and per-request clients share one pooled
+  transport. Measured against a fake Supabase at 80 ms per query, Team's 13
+  requests: 1 user 3.5 s → 0.8 s, 3 concurrent users 10 s → 1.0 s, 10 users
+  30 s → 1.7 s. `GET /api/setup-status` (7 sequential queries) is now the
+  slowest single call on that page.
 - [ ] ◐ Railway: confirm the service is not on a sleeping/hobby plan (cold
   starts read as "the app is broken" to a first-time user); set a
   healthcheck path to `/health` and restart policy.

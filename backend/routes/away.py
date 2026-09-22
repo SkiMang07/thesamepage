@@ -288,7 +288,7 @@ def _compute_sweep(user_id: str, supabase, start: date, end: date) -> tuple[int,
 
 
 @router.post("/preview")
-async def preview_away_period(body: AwayPeriodIn, auth=Depends(get_authenticated_client)):
+def preview_away_period(body: AwayPeriodIn, auth=Depends(get_authenticated_client)):
     """Compute what would move without persisting anything."""
     user_id, supabase = auth
     _validate_window(body.start_date, body.end_date)
@@ -297,7 +297,7 @@ async def preview_away_period(body: AwayPeriodIn, auth=Depends(get_authenticated
 
 
 @router.post("")
-async def apply_away_period(body: AwayPeriodIn, auth=Depends(get_authenticated_client)):
+def apply_away_period(body: AwayPeriodIn, auth=Depends(get_authenticated_client)):
     """Recompute the sweep fresh (see module docstring on staleness), then
     apply it: create the away_periods row, update every affected item's
     date, and write one away_period_shifts audit row per item moved."""
@@ -349,7 +349,7 @@ async def apply_away_period(body: AwayPeriodIn, auth=Depends(get_authenticated_c
 
 
 @router.get("")
-async def list_away_periods(auth=Depends(get_authenticated_client)):
+def list_away_periods(auth=Depends(get_authenticated_client)):
     """History of past away periods, each with how many items it moved."""
     user_id, supabase = auth
     periods = (
@@ -380,7 +380,7 @@ async def list_away_periods(auth=Depends(get_authenticated_client)):
 
 
 @router.get("/{period_id}")
-async def get_away_period(period_id: str, auth=Depends(get_authenticated_client)):
+def get_away_period(period_id: str, auth=Depends(get_authenticated_client)):
     """One past away period plus the full list of items it moved."""
     user_id, supabase = auth
     periods = (

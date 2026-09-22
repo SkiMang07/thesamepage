@@ -99,7 +99,7 @@ def _validate_leader_assignment(supabase, leader_user_id: str | None):
 
 
 @router.get("")
-async def list_org_units(auth=Depends(get_authenticated_client)):
+def list_org_units(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # RLS scopes to own org; empty list before the org bootstrap has run
     # (e.g. a brand new manager who hasn't saved their Settings profile yet).
@@ -114,7 +114,7 @@ async def list_org_units(auth=Depends(get_authenticated_client)):
 
 
 @router.get("/led")
-async def list_led_org_units(auth=Depends(get_authenticated_client)):
+def list_led_org_units(auth=Depends(get_authenticated_client)):
     """Units the caller DIRECTLY leads (not the descendant scope
     led_org_unit_ids() computes server-side for the rollup functions) — the
     Org and Capacity pages use this to know which subtrees to render a
@@ -133,7 +133,7 @@ async def list_led_org_units(auth=Depends(get_authenticated_client)):
 
 
 @router.get("/members")
-async def list_org_members(auth=Depends(get_authenticated_client)):
+def list_org_members(auth=Depends(get_authenticated_client)):
     """Org members for the leader picker. Relies on the existing
     users_select_own_org RLS policy (id = auth.uid() or same org_id) —
     no manual org_id filter needed, same pattern noted throughout
@@ -149,7 +149,7 @@ async def list_org_members(auth=Depends(get_authenticated_client)):
 
 
 @router.post("")
-async def create_org_unit(
+def create_org_unit(
     body: OrgUnitIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)
 ):
     user_id, supabase = auth
@@ -167,7 +167,7 @@ async def create_org_unit(
 
 
 @router.put("/{unit_id}")
-async def update_org_unit(unit_id: str, body: OrgUnitIn, auth=Depends(get_authenticated_client)):
+def update_org_unit(unit_id: str, body: OrgUnitIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_unit_type(body.unit_type)
     _validate_parent_assignment(supabase, unit_id, body.parent_unit_id)
@@ -185,7 +185,7 @@ async def update_org_unit(unit_id: str, body: OrgUnitIn, auth=Depends(get_authen
 
 
 @router.delete("/{unit_id}")
-async def delete_org_unit(unit_id: str, auth=Depends(get_authenticated_client)):
+def delete_org_unit(unit_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     children = (
         supabase.table("org_units")

@@ -455,13 +455,13 @@ class ReviseNoteOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/{direct_report_id}")
-async def get_development_plan(direct_report_id: str, auth=Depends(get_authenticated_client)):
+def get_development_plan(direct_report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     return _fetch_bundle(user_id, supabase, direct_report_id)
 
 
 @router.put("/{direct_report_id}/plan")
-async def update_plan_text(direct_report_id: str, body: PlanTextIn, auth=Depends(get_authenticated_client)):
+def update_plan_text(direct_report_id: str, body: PlanTextIn, auth=Depends(get_authenticated_client)):
     """Upserts development_plans.plan_text in place (Session 49) — the
     primary, always-writable development-plan narrative. Unlike
     dev_plan_manager_notes (append-only, private, unrelated), this is a
@@ -475,7 +475,7 @@ async def update_plan_text(direct_report_id: str, body: PlanTextIn, auth=Depends
 
 
 @router.put("/{direct_report_id}/aspiration")
-async def upsert_aspiration(direct_report_id: str, body: AspirationIn, auth=Depends(get_authenticated_client)):
+def upsert_aspiration(direct_report_id: str, body: AspirationIn, auth=Depends(get_authenticated_client)):
     """Upserts the single aspiration row for this plan (see
     dev_plan_aspirations_plan_uq in schema.sql). Manual look-up-then-write,
     same pattern team.py's update_team_callout uses, since the aspiration
@@ -510,7 +510,7 @@ async def upsert_aspiration(direct_report_id: str, body: AspirationIn, auth=Depe
 
 
 @router.post("/{direct_report_id}/opportunities")
-async def create_opportunity(direct_report_id: str, body: OpportunityIn, auth=Depends(get_authenticated_client)):
+def create_opportunity(direct_report_id: str, body: OpportunityIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     if body.type not in ("skill", "knowledge"):
         raise HTTPException(status_code=422, detail="type must be 'skill' or 'knowledge'")
@@ -533,7 +533,7 @@ async def create_opportunity(direct_report_id: str, body: OpportunityIn, auth=De
 
 
 @router.delete("/opportunities/{opportunity_id}")
-async def delete_opportunity(opportunity_id: str, auth=Depends(get_authenticated_client)):
+def delete_opportunity(opportunity_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     own_plan_ids = [
         p["id"]
@@ -552,7 +552,7 @@ async def delete_opportunity(opportunity_id: str, auth=Depends(get_authenticated
 
 
 @router.post("/{direct_report_id}/training")
-async def create_training(direct_report_id: str, body: TrainingIn, auth=Depends(get_authenticated_client)):
+def create_training(direct_report_id: str, body: TrainingIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     description = body.description.strip()
     if not description:
@@ -572,7 +572,7 @@ async def create_training(direct_report_id: str, body: TrainingIn, auth=Depends(
 
 
 @router.patch("/training/{training_id}")
-async def update_training(training_id: str, body: TrainingUpdateIn, auth=Depends(get_authenticated_client)):
+def update_training(training_id: str, body: TrainingUpdateIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     own_plan_ids = [
         p["id"]
@@ -597,7 +597,7 @@ async def update_training(training_id: str, body: TrainingUpdateIn, auth=Depends
 
 
 @router.delete("/training/{training_id}")
-async def delete_training(training_id: str, auth=Depends(get_authenticated_client)):
+def delete_training(training_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     own_plan_ids = [
         p["id"]
@@ -616,7 +616,7 @@ async def delete_training(training_id: str, auth=Depends(get_authenticated_clien
 
 
 @router.post("/{direct_report_id}/notes")
-async def create_manager_note(direct_report_id: str, body: ManagerNoteIn, auth=Depends(get_authenticated_client)):
+def create_manager_note(direct_report_id: str, body: ManagerNoteIn, auth=Depends(get_authenticated_client)):
     """Append-only, private-to-manager log — no edit/delete in v1, same
     minimal posture team_meeting_notes shipped with."""
     user_id, supabase = auth
@@ -634,7 +634,7 @@ async def create_manager_note(direct_report_id: str, body: ManagerNoteIn, auth=D
 
 @router.post("/{direct_report_id}/draft", response_model=DevelopmentDraft)
 @limiter.limit("10/minute")
-async def draft_development(
+def draft_development(
     request: Request,
     direct_report_id: str,
     auth=Depends(get_authenticated_client),
@@ -711,7 +711,7 @@ async def draft_development(
 
 @router.post("/{direct_report_id}/notes/revise", response_model=ReviseNoteOut)
 @limiter.limit("10/minute")
-async def revise_note(
+def revise_note(
     request: Request,
     direct_report_id: str,
     body: ReviseNoteIn,

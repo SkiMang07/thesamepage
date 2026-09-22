@@ -98,7 +98,7 @@ def _shape_rows(rows: list[dict]) -> list[dict]:
 
 
 @router.get("")
-async def list_projects(
+def list_projects(
     direct_report_id: str | None = None,
     goal_id: str | None = None,
     org_unit_id: str | None = None,
@@ -122,14 +122,14 @@ async def list_projects(
 
 
 @router.get("/{project_id}/check-ins")
-async def get_project_check_ins(project_id: str, auth=Depends(get_authenticated_client)):
+def get_project_check_ins(project_id: str, auth=Depends(get_authenticated_client)):
     """Check-in history for one project, newest first (Session 26)."""
     user_id, supabase = auth
     return list_check_ins(supabase, user_id, "project_id", project_id)
 
 
 @router.post("/{project_id}/check-ins")
-async def create_project_check_in(project_id: str, body: CheckInIn, auth=Depends(get_authenticated_client)):
+def create_project_check_in(project_id: str, body: CheckInIn, auth=Depends(get_authenticated_client)):
     """Log a check-in (status + optional progress % + optional note). Writes
     the status through to projects.status — see routes/check_ins.py."""
     user_id, supabase = auth
@@ -137,7 +137,7 @@ async def create_project_check_in(project_id: str, body: CheckInIn, auth=Depends
 
 
 @router.get("/rollup")
-async def get_projects_rollup(auth=Depends(get_authenticated_client)):
+def get_projects_rollup(auth=Depends(get_authenticated_client)):
     """Project status counts across the org units the caller leads —
     aggregate-only, same contract as capacity's rollup."""
     user_id, supabase = auth
@@ -160,7 +160,7 @@ async def get_projects_rollup(auth=Depends(get_authenticated_client)):
 
 
 @router.get("/{project_id}")
-async def get_project(project_id: str, auth=Depends(get_authenticated_client)):
+def get_project(project_id: str, auth=Depends(get_authenticated_client)):
     """Single project by id — used by the Scribe confirm handler when linking a project to a goal."""
     user_id, supabase = auth
     result = (
@@ -176,7 +176,7 @@ async def get_project(project_id: str, auth=Depends(get_authenticated_client)):
 
 
 @router.post("")
-async def create_project(body: ProjectIn, auth=Depends(get_authenticated_client)):
+def create_project(body: ProjectIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_status(body.status)
     result = (
@@ -188,7 +188,7 @@ async def create_project(body: ProjectIn, auth=Depends(get_authenticated_client)
 
 
 @router.put("/{project_id}")
-async def update_project(project_id: str, body: ProjectIn, auth=Depends(get_authenticated_client)):
+def update_project(project_id: str, body: ProjectIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_status(body.status)
     result = (
@@ -204,7 +204,7 @@ async def update_project(project_id: str, body: ProjectIn, auth=Depends(get_auth
 
 
 @router.patch("/{project_id}")
-async def update_project_status(project_id: str, body: ProjectStatusUpdate, auth=Depends(get_authenticated_client)):
+def update_project_status(project_id: str, body: ProjectStatusUpdate, auth=Depends(get_authenticated_client)):
     """Status-only update for the inline status pill — mirrors goals.py's
     PATCH so the frontend doesn't need to resend the whole record."""
     user_id, supabase = auth
@@ -222,7 +222,7 @@ async def update_project_status(project_id: str, body: ProjectStatusUpdate, auth
 
 
 @router.delete("/{project_id}")
-async def delete_project(project_id: str, auth=Depends(get_authenticated_client)):
+def delete_project(project_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # No unparenting needed before delete (unlike goals.delete_goal) — nothing
     # references a project as its own parent; goal_id on a project points up

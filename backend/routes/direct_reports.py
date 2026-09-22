@@ -126,7 +126,7 @@ class DirectReportCreateIn(DirectReportIn):
 
 
 @router.get("")
-async def list_direct_reports(archived: bool = False, auth=Depends(get_authenticated_client)):
+def list_direct_reports(archived: bool = False, auth=Depends(get_authenticated_client)):
     """Active people by default (Session 43, Polish Pass A — see
     docs/TEAM_SETUP_UX_REVIEW.md §7.3, finding P1). Every other listing
     surface in the app (rosters, rollups, capacity, setup counts) composes
@@ -144,7 +144,7 @@ async def list_direct_reports(archived: bool = False, auth=Depends(get_authentic
 
 # NOTE: declared before /{report_id} so FastAPI doesn't match "overview" as an id.
 @router.get("/overview")
-async def get_team_overview(auth=Depends(get_authenticated_client)):
+def get_team_overview(auth=Depends(get_authenticated_client)):
     """Dashboard rollup: every direct report with their last 1:1 date and
     open commitment count. Three queries + a Python merge — fine at MVP
     scale (a manager has a handful of reports, not thousands)."""
@@ -207,7 +207,7 @@ async def get_team_overview(auth=Depends(get_authenticated_client)):
 
 # NOTE: declared before /{report_id} so FastAPI doesn't match "rollup" as an id.
 @router.get("/rollup")
-async def get_people_rollup(auth=Depends(get_authenticated_client)):
+def get_people_rollup(auth=Depends(get_authenticated_client)):
     """Headcount + role breakdown across the org units the caller leads —
     aggregate-only, never a named individual outside your own team."""
     user_id, supabase = auth
@@ -230,7 +230,7 @@ async def get_people_rollup(auth=Depends(get_authenticated_client)):
 
 
 @router.post("")
-async def create_direct_report(body: DirectReportCreateIn, auth=Depends(get_authenticated_client)):
+def create_direct_report(body: DirectReportCreateIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     row = body.model_dump()
     if row.get("email"):
@@ -254,7 +254,7 @@ async def create_direct_report(body: DirectReportCreateIn, auth=Depends(get_auth
 # ---------------------------------------------------------------------------
 
 @router.post("/{report_id}/archive")
-async def archive_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
+def archive_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     result = (
         supabase.table("direct_reports")
@@ -269,7 +269,7 @@ async def archive_direct_report(report_id: str, auth=Depends(get_authenticated_c
 
 
 @router.post("/{report_id}/unarchive")
-async def unarchive_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
+def unarchive_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     result = (
         supabase.table("direct_reports")
@@ -296,7 +296,7 @@ class DirectReportProfileIn(BaseModel):
 
 
 @router.patch("/{report_id}/profile")
-async def update_direct_report_profile(report_id: str, body: DirectReportProfileIn, auth=Depends(get_authenticated_client)):
+def update_direct_report_profile(report_id: str, body: DirectReportProfileIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     name = body.name.strip()
     if not name:
@@ -325,7 +325,7 @@ class InviteIn(BaseModel):
 # two-segment path, but kept alongside overview/rollup's ordering note for
 # consistency.
 @router.post("/{report_id}/invite")
-async def invite_direct_report(report_id: str, body: InviteIn, auth=Depends(get_authenticated_client)):
+def invite_direct_report(report_id: str, body: InviteIn, auth=Depends(get_authenticated_client)):
     """Generate a one-time invite link. Confirms the report belongs to this
     manager, backfills direct_reports.email, soft-expires any prior pending
     invite for this report (so an old copied link stops working once a
@@ -369,7 +369,7 @@ async def invite_direct_report(report_id: str, body: InviteIn, auth=Depends(get_
 
 
 @router.get("/{report_id}")
-async def get_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
+def get_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     try:
         result = (
@@ -392,7 +392,7 @@ async def get_direct_report(report_id: str, auth=Depends(get_authenticated_clien
 
 
 @router.put("/{report_id}")
-async def update_direct_report(report_id: str, body: DirectReportIn, auth=Depends(get_authenticated_client)):
+def update_direct_report(report_id: str, body: DirectReportIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     result = (
         supabase.table("direct_reports")
@@ -405,7 +405,7 @@ async def update_direct_report(report_id: str, body: DirectReportIn, auth=Depend
 
 
 @router.delete("/{report_id}")
-async def delete_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
+def delete_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     supabase.table("direct_reports").delete().eq("id", report_id).eq("manager_id", user_id).execute()
     return {"deleted": True}

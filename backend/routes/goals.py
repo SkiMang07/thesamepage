@@ -109,7 +109,7 @@ def _shape_rows(rows: list[dict]) -> list[dict]:
 
 
 @router.get("")
-async def list_goals(
+def list_goals(
     level: str | None = None,
     direct_report_id: str | None = None,
     org_unit_id: str | None = None,
@@ -133,14 +133,14 @@ async def list_goals(
 
 
 @router.get("/{goal_id}/check-ins")
-async def get_goal_check_ins(goal_id: str, auth=Depends(get_authenticated_client)):
+def get_goal_check_ins(goal_id: str, auth=Depends(get_authenticated_client)):
     """Check-in history for one goal, newest first (Session 26)."""
     user_id, supabase = auth
     return list_check_ins(supabase, user_id, "goal_id", goal_id)
 
 
 @router.post("/{goal_id}/check-ins")
-async def create_goal_check_in(goal_id: str, body: CheckInIn, auth=Depends(get_authenticated_client)):
+def create_goal_check_in(goal_id: str, body: CheckInIn, auth=Depends(get_authenticated_client)):
     """Log a check-in (status + optional progress % + optional note). Writes
     the status through to goals.status — see routes/check_ins.py."""
     user_id, supabase = auth
@@ -148,7 +148,7 @@ async def create_goal_check_in(goal_id: str, body: CheckInIn, auth=Depends(get_a
 
 
 @router.get("/rollup")
-async def get_goals_rollup(auth=Depends(get_authenticated_client)):
+def get_goals_rollup(auth=Depends(get_authenticated_client)):
     """Department/team goal status counts across the org units the caller
     leads (see led_org_unit_ids()) — aggregate-only, same contract as
     capacity's rollup. Joined here with org_units purely to attach display
@@ -173,7 +173,7 @@ async def get_goals_rollup(auth=Depends(get_authenticated_client)):
 
 
 @router.post("")
-async def create_goal(body: GoalIn, auth=Depends(get_authenticated_client)):
+def create_goal(body: GoalIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_level(body.level)
     _validate_status(body.status)
@@ -186,7 +186,7 @@ async def create_goal(body: GoalIn, auth=Depends(get_authenticated_client)):
 
 
 @router.put("/{goal_id}")
-async def update_goal(goal_id: str, body: GoalIn, auth=Depends(get_authenticated_client)):
+def update_goal(goal_id: str, body: GoalIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_level(body.level)
     _validate_status(body.status)
@@ -203,7 +203,7 @@ async def update_goal(goal_id: str, body: GoalIn, auth=Depends(get_authenticated
 
 
 @router.patch("/{goal_id}")
-async def update_goal_status(goal_id: str, body: GoalStatusUpdate, auth=Depends(get_authenticated_client)):
+def update_goal_status(goal_id: str, body: GoalStatusUpdate, auth=Depends(get_authenticated_client)):
     """Status is the one field goals get updated on constantly — a
     lightweight sibling to PUT, mirroring commitments.py's status-only
     PATCH so the frontend's inline status select doesn't need to resend the
@@ -223,7 +223,7 @@ async def update_goal_status(goal_id: str, body: GoalStatusUpdate, auth=Depends(
 
 
 @router.delete("/{goal_id}")
-async def delete_goal(goal_id: str, auth=Depends(get_authenticated_client)):
+def delete_goal(goal_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # parent_goal_id has no ON DELETE clause (defaults to NO ACTION) — unparent
     # any children first so deleting a goal with sub-goals never blocks on the

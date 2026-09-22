@@ -539,7 +539,7 @@ def _commitment_rows(supabase, user_id: str, *, meeting_ids: list[str] | None = 
 # ---------------------------------------------------------------------------
 
 @router.get("")
-async def get_overview(auth=Depends(get_authenticated_client)):
+def get_overview(auth=Depends(get_authenticated_client)):
     """People (active, with last-met date and open items) and meetings,
     newest first. Also the nav door state: the date of the latest logged
     meeting."""
@@ -623,7 +623,7 @@ async def get_overview(auth=Depends(get_authenticated_client)):
 # ---------------------------------------------------------------------------
 
 @router.post("/people")
-async def create_person(body: PersonIn, auth=Depends(get_authenticated_client)):
+def create_person(body: PersonIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     name = body.name.strip()
     if not name:
@@ -651,7 +651,7 @@ async def create_person(body: PersonIn, auth=Depends(get_authenticated_client)):
 
 
 @router.patch("/people/{person_id}")
-async def update_person(person_id: str, body: PersonPatch, auth=Depends(get_authenticated_client)):
+def update_person(person_id: str, body: PersonPatch, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _fetch_person(supabase, user_id, person_id)
     updates: dict = {}
@@ -682,7 +682,7 @@ async def update_person(person_id: str, body: PersonPatch, auth=Depends(get_auth
 
 
 @router.get("/people/{person_id}")
-async def get_person(person_id: str, auth=Depends(get_authenticated_client)):
+def get_person(person_id: str, auth=Depends(get_authenticated_client)):
     """Everything between the manager and one person: the meetings they were
     in, commitments either way, and what those meetings touched on the
     manager's own team."""
@@ -730,7 +730,7 @@ async def get_person(person_id: str, auth=Depends(get_authenticated_client)):
 # ---------------------------------------------------------------------------
 
 @router.post("/meetings")
-async def create_meeting(body: MeetingIn, auth=Depends(get_authenticated_client)):
+def create_meeting(body: MeetingIn, auth=Depends(get_authenticated_client)):
     """Start a meeting record: who, when, and the raw notes. It stays a draft
     until the wrap-up is confirmed through /log."""
     user_id, supabase = auth
@@ -774,7 +774,7 @@ async def create_meeting(body: MeetingIn, auth=Depends(get_authenticated_client)
 
 
 @router.get("/meetings/{meeting_id}")
-async def get_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
+def get_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     meeting = _fetch_meeting(supabase, user_id, meeting_id)
     people = _people_by_id(supabase, user_id)
@@ -787,7 +787,7 @@ async def get_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
 
 
 @router.patch("/meetings/{meeting_id}")
-async def update_meeting(meeting_id: str, body: MeetingPatch, auth=Depends(get_authenticated_client)):
+def update_meeting(meeting_id: str, body: MeetingPatch, auth=Depends(get_authenticated_client)):
     """Edit who, when, title and notes at any time. The write-up itself
     (summary) is only editable once the meeting is logged; before that it is
     produced through wrap-up review, never set directly."""
@@ -857,7 +857,7 @@ async def update_meeting(meeting_id: str, body: MeetingPatch, auth=Depends(get_a
 
 
 @router.delete("/meetings/{meeting_id}")
-async def delete_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
+def delete_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
     """Drop an unlogged meeting. A logged meeting is history: commitments and
     check-ins point at it through source_id, same posture as team meetings.
     Dropping the next occurrence of a repeating 1:1 also stops the repeat,
@@ -993,7 +993,7 @@ def _parse_json(raw: str) -> dict:
 
 @router.post("/meetings/{meeting_id}/wrapup", response_model=WrapUpDraft)
 @limiter.limit("10/minute")
-async def wrap_up_meeting(
+def wrap_up_meeting(
     request: Request,
     meeting_id: str,
     body: WrapUpRequest,
@@ -1117,7 +1117,7 @@ def _sanitize_draft(parsed: dict, *, attendee_ids: set, report_ids: set, goal_id
 
 
 @router.post("/meetings/{meeting_id}/log")
-async def log_meeting(meeting_id: str, body: LogMeetingIn, auth=Depends(get_authenticated_client)):
+def log_meeting(meeting_id: str, body: LogMeetingIn, auth=Depends(get_authenticated_client)):
     """Save the reviewed wrap-up. Everything in the body has been confirmed
     by the manager on the review screen; every id is re-checked here anyway.
 
@@ -1259,7 +1259,7 @@ async def log_meeting(meeting_id: str, body: LogMeetingIn, auth=Depends(get_auth
             _clean_items(body.carry_forward_items),
         )
 
-    return {**(await get_meeting(meeting_id, auth)), "next_meeting_id": next_meeting_id}
+    return {**get_meeting(meeting_id, auth), "next_meeting_id": next_meeting_id}
 
 
 def _roll_forward(supabase, user_id: str, meeting: dict, person_id: str, carried: list[str]) -> str | None:
@@ -1637,7 +1637,7 @@ def _clean_prep(parsed: dict) -> dict | None:
 
 
 @router.get("/meetings/{meeting_id}/prep-sources")
-async def get_prep_sources(meeting_id: str, auth=Depends(get_authenticated_client)):
+def get_prep_sources(meeting_id: str, auth=Depends(get_authenticated_client)):
     """What the prep sheet would draw on — shown before preparing so the
     manager can see (and trust) what goes in. No AI, no writes."""
     user_id, supabase = auth
@@ -1647,7 +1647,7 @@ async def get_prep_sources(meeting_id: str, auth=Depends(get_authenticated_clien
 
 @router.post("/meetings/{meeting_id}/prep")
 @limiter.limit("10/minute")
-async def prepare_meeting(
+def prepare_meeting(
     request: Request, meeting_id: str, body: PrepIn, auth=Depends(get_authenticated_client)
 ):
     """Generate the prep sheet and keep it on the meeting — the same posture
@@ -1672,7 +1672,7 @@ async def prepare_meeting(
         .eq("owner_id", user_id)
         .execute()
     )
-    return await get_meeting(meeting_id, auth)
+    return get_meeting(meeting_id, auth)
 
 
 # ---------------------------------------------------------------------------
@@ -1680,7 +1680,7 @@ async def prepare_meeting(
 # ---------------------------------------------------------------------------
 
 @router.get("/links")
-async def list_links(
+def list_links(
     goal_id: str | None = None,
     project_id: str | None = None,
     direct_report_id: str | None = None,

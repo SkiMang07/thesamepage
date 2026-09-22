@@ -616,7 +616,7 @@ def _upsert_series_for_session(
 # it can't (both are two-segment paths) — but kept first for the same
 # ordering-hygiene reason direct_reports.py flags on its /overview.
 @router.get("/overview")
-async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
+def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
     """Front door for the 1:1 loop (/app/1-1s, nav rework pass 2 — see
     docs/ONE_ON_ONES_PAGE_SPEC.md section 5). Every direct report with a
     resolved cadence, whether they're due, any in-flight planned session,
@@ -740,7 +740,7 @@ async def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
 
 
 @router.get("/open/{direct_report_id}")
-async def get_open_session(direct_report_id: str, auth=Depends(get_authenticated_client)):
+def get_open_session(direct_report_id: str, auth=Depends(get_authenticated_client)):
     """Return the report's current gathering/scheduled/prepared occurrence."""
     user_id, supabase = auth
     row = _find_open_session(supabase, user_id, direct_report_id)
@@ -749,7 +749,7 @@ async def get_open_session(direct_report_id: str, auth=Depends(get_authenticated
 
 @router.post("/prep", response_model=PrepResponse)
 @limiter.limit("10/minute")
-async def prep_one_on_one(
+def prep_one_on_one(
     request: Request,
     body: PrepRequest,
     auth=Depends(get_authenticated_client),
@@ -996,7 +996,7 @@ async def prep_one_on_one(
 
 @router.post("/wrapup", response_model=WrapUpDraft)
 @limiter.limit("10/minute")
-async def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_authenticated_client)):
+def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_authenticated_client)):
     """Distill raw in-call notes into a DRAFT summary + commitments (both
     sides). Pure AI-call route — nothing is saved; the manager reviews the
     draft and then POST / logs it."""
@@ -1064,7 +1064,7 @@ async def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends
 
 
 @router.post("")
-async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
+def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # The day the conversation happened, as confirmed on the review screen.
     # None means "leave whatever date this occurrence already carried".
@@ -1250,7 +1250,7 @@ async def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_cli
 
 
 @router.get("/{direct_report_id}/history")
-async def get_history(direct_report_id: str, auth=Depends(get_authenticated_client)):
+def get_history(direct_report_id: str, auth=Depends(get_authenticated_client)):
     """Combined completed and unfinished occurrences for the person page."""
     user_id, supabase = auth
     result = (
@@ -1268,7 +1268,7 @@ async def get_history(direct_report_id: str, auth=Depends(get_authenticated_clie
 
 
 @router.get("/session/{one_on_one_id}")
-async def get_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
+def get_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
     """A single session by id — used to resume a planned prep sheet without
     regenerating it (frontend: prep/page.tsx?resume={id})."""
     user_id, supabase = auth
@@ -1289,7 +1289,7 @@ async def get_session(one_on_one_id: str, auth=Depends(get_authenticated_client)
 
 
 @router.patch("/session/{one_on_one_id}/schedule")
-async def update_session_schedule(
+def update_session_schedule(
     one_on_one_id: str,
     body: ScheduleUpdate,
     auth=Depends(get_authenticated_client),
@@ -1328,7 +1328,7 @@ async def update_session_schedule(
 
 
 @router.delete("/session/{one_on_one_id}")
-async def dismiss_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
+def dismiss_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
     """Dismiss an unfinished occurrence and stop its series, if attached.
     Completed history is never deletable through this route."""
     user_id, supabase = auth
@@ -1370,7 +1370,7 @@ class CaptureNoteIn(BaseModel):
 
 
 @router.get("/{direct_report_id}/captures")
-async def list_captures(direct_report_id: str, auth=Depends(get_authenticated_client)):
+def list_captures(direct_report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     rows = (
         supabase.table("dr_capture_notes")
@@ -1385,7 +1385,7 @@ async def list_captures(direct_report_id: str, auth=Depends(get_authenticated_cl
 
 
 @router.post("/{direct_report_id}/captures")
-async def create_capture(direct_report_id: str, body: CaptureNoteIn, auth=Depends(get_authenticated_client)):
+def create_capture(direct_report_id: str, body: CaptureNoteIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     content = body.content.strip()
     if not content:
@@ -1400,7 +1400,7 @@ async def create_capture(direct_report_id: str, body: CaptureNoteIn, auth=Depend
 
 
 @router.delete("/captures/{capture_id}")
-async def delete_capture(capture_id: str, auth=Depends(get_authenticated_client)):
+def delete_capture(capture_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     supabase.table("dr_capture_notes").delete().eq("id", capture_id).eq("manager_id", user_id).execute()
     return {"deleted": True}

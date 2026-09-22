@@ -45,7 +45,7 @@ _EXT_BY_PREFIX = {
 
 @router.post("")
 @limiter.limit("30/minute")
-async def transcribe(
+def transcribe(
     request: Request,
     file: UploadFile = File(...),
     # Optional comma-separated vocabulary hint (direct-report names, team
@@ -63,7 +63,7 @@ async def transcribe(
     if content_type and not content_type.startswith(_ALLOWED_PREFIXES):
         raise HTTPException(status_code=415, detail=f"Unsupported audio format: {content_type}")
 
-    raw = await file.read()
+    raw = file.file.read()
     if not raw:
         raise HTTPException(status_code=422, detail="Empty recording")
     if len(raw) > MAX_DICTATION_BYTES:

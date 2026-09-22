@@ -316,7 +316,7 @@ def _resolve_series(supabase, org_id: str, existing_series: list[dict], series_n
 # ---------------------------------------------------------------------------
 
 @router.get("/coverage")
-async def get_coverage(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
+def get_coverage(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     """The Brain's data source (Session V) — per-category fill/decay/gap/
     citation/staleness data for app/context/page.tsx's coverage
     visualization, plus (Session VI) cross-category-pair conflict flags.
@@ -341,7 +341,7 @@ async def get_coverage(auth=Depends(get_authenticated_client), authorization: st
 
 
 @router.get("")
-async def list_documents(status: str | None = None, auth=Depends(get_authenticated_client)):
+def list_documents(status: str | None = None, auth=Depends(get_authenticated_client)):
     """Minimal list endpoint for verifying the pipeline manually — NOT the
     Session III review queue. RLS scopes to the caller's own org."""
     user_id, supabase = auth
@@ -356,7 +356,7 @@ async def list_documents(status: str | None = None, auth=Depends(get_authenticat
 
 @router.post("/upload")
 @limiter.limit("10/minute")
-async def upload_document(
+def upload_document(
     request: Request,
     file: UploadFile = File(...),
     title: str | None = Form(None),
@@ -369,7 +369,7 @@ async def upload_document(
     original_filename = Path(file.filename or "upload").name  # strip any path components
     file_type = _infer_file_type(original_filename, file.content_type)
 
-    raw_bytes = await file.read()
+    raw_bytes = file.file.read()
     if not raw_bytes:
         raise HTTPException(status_code=422, detail="Uploaded file is empty")
     if len(raw_bytes) > _MAX_UPLOAD_BYTES:
@@ -519,7 +519,7 @@ def _replace_scopes(supabase, document_id: str, org_unit_ids: list) -> list[dict
 
 
 @router.put("/{document_id}/confirm")
-async def confirm_document(document_id: str, body: DocumentConfirmIn, auth=Depends(get_authenticated_client)):
+def confirm_document(document_id: str, body: DocumentConfirmIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
 
     _validate_category(body.category)
@@ -582,7 +582,7 @@ async def confirm_document(document_id: str, body: DocumentConfirmIn, auth=Depen
 
 
 @router.delete("/{document_id}")
-async def delete_document(document_id: str, auth=Depends(get_authenticated_client)):
+def delete_document(document_id: str, auth=Depends(get_authenticated_client)):
     """Discard a document — any status (a bad extraction stuck in
     'pending_review', a 'failed' upload, or a 'confirmed' doc the manager
     no longer wants). Best-effort Storage cleanup: if the object is already

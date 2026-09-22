@@ -42,7 +42,7 @@ class RoleFamilyIn(BaseModel):
 
 
 @router.get("")
-async def list_role_families(auth=Depends(get_authenticated_client)):
+def list_role_families(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # RLS scopes to own org; empty list before the org bootstrap has run.
     return (
@@ -55,7 +55,7 @@ async def list_role_families(auth=Depends(get_authenticated_client)):
 
 
 @router.post("")
-async def create_role_family(
+def create_role_family(
     body: RoleFamilyIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)
 ):
     user_id, supabase = auth
@@ -69,7 +69,7 @@ async def create_role_family(
 
 
 @router.put("/{family_id}")
-async def update_role_family(family_id: str, body: RoleFamilyIn, auth=Depends(get_authenticated_client)):
+def update_role_family(family_id: str, body: RoleFamilyIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     result = (
         supabase.table("role_families")
@@ -83,7 +83,7 @@ async def update_role_family(family_id: str, body: RoleFamilyIn, auth=Depends(ge
 
 
 @router.delete("/{family_id}")
-async def delete_role_family(family_id: str, auth=Depends(get_authenticated_client)):
+def delete_role_family(family_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # role_levels.role_family_id is ON DELETE SET NULL — any level in this
     # family falls into the "Ungrouped" bucket automatically, no manual

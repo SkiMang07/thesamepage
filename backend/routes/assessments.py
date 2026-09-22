@@ -368,13 +368,13 @@ class SaveAssessmentIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.get("/levels")
-async def get_levels(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
+def get_levels(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     user_id, supabase = auth
     return _ensure_levels(user_id, supabase, authorization)
 
 
 @router.put("/levels/{ordinal}")
-async def rename_level(
+def rename_level(
     ordinal: int,
     body: LevelLabelIn,
     auth=Depends(get_authenticated_client),
@@ -397,7 +397,7 @@ async def rename_level(
 
 # NOTE: declared before /{direct_report_id} so FastAPI doesn't match "" as an id.
 @router.get("")
-async def list_team_assessments(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
+def list_team_assessments(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     """Every direct report + their latest overall rating, for the
     /app/assessments list page. A few queries + a Python merge, same shape
     as direct_reports.py's /overview."""
@@ -438,7 +438,7 @@ async def list_team_assessments(auth=Depends(get_authenticated_client), authoriz
 
 
 @router.get("/{direct_report_id}")
-async def get_scorecard(
+def get_scorecard(
     direct_report_id: str,
     auth=Depends(get_authenticated_client),
     authorization: str = Header(None),
@@ -449,7 +449,7 @@ async def get_scorecard(
 
 @router.post("/{direct_report_id}/draft", response_model=AssessmentDraft)
 @limiter.limit("10/minute")
-async def draft_assessment(
+def draft_assessment(
     request: Request,
     direct_report_id: str,
     auth=Depends(get_authenticated_client),
@@ -561,7 +561,7 @@ async def draft_assessment(
 
 
 @router.post("/{direct_report_id}")
-async def save_assessment(
+def save_assessment(
     direct_report_id: str,
     body: SaveAssessmentIn,
     auth=Depends(get_authenticated_client),

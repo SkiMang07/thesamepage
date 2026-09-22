@@ -123,7 +123,7 @@ class CapacitySettingsIn(BaseModel):
 
 
 @router.get("/settings")
-async def get_capacity_settings(auth=Depends(get_authenticated_client)):
+def get_capacity_settings(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     org_id = _get_org_id(user_id, supabase)
     row = None
@@ -140,7 +140,7 @@ async def get_capacity_settings(auth=Depends(get_authenticated_client)):
 
 
 @router.put("/settings")
-async def update_capacity_settings(
+def update_capacity_settings(
     body: CapacitySettingsIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)
 ):
     user_id, supabase = auth
@@ -148,7 +148,7 @@ async def update_capacity_settings(
     supabase.table("capacity_settings").upsert(
         {**body.model_dump(), "org_id": org_id}, on_conflict="org_id"
     ).execute()
-    return await get_capacity_settings(auth=auth)
+    return get_capacity_settings(auth=auth)
 
 
 # ---------------------------------------------------------------------------
@@ -163,13 +163,13 @@ class WorkUnitConfigIn(BaseModel):
 
 
 @router.get("/work-units")
-async def list_work_unit_configs(auth=Depends(get_authenticated_client)):
+def list_work_unit_configs(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     return supabase.table("work_unit_configs").select("*").execute().data
 
 
 @router.post("/work-units")
-async def create_work_unit_config(
+def create_work_unit_config(
     body: WorkUnitConfigIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)
 ):
     user_id, supabase = auth
@@ -187,7 +187,7 @@ async def create_work_unit_config(
 
 
 @router.delete("/work-units/{config_id}")
-async def delete_work_unit_config(config_id: str, auth=Depends(get_authenticated_client)):
+def delete_work_unit_config(config_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     supabase.table("work_unit_configs").delete().eq("id", config_id).execute()
     return {"deleted": True}
@@ -204,7 +204,7 @@ class CapacityProfileIn(BaseModel):
 
 
 @router.get("/profiles/{direct_report_id}")
-async def get_capacity_profile(direct_report_id: str, auth=Depends(get_authenticated_client)):
+def get_capacity_profile(direct_report_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # RLS (direct_reports_all_own) blocks reading a report that isn't this
     # manager's, so a report the caller can't see 404s here rather than
@@ -227,7 +227,7 @@ async def get_capacity_profile(direct_report_id: str, auth=Depends(get_authentic
 
 
 @router.put("/profiles/{direct_report_id}")
-async def upsert_capacity_profile(
+def upsert_capacity_profile(
     direct_report_id: str, body: CapacityProfileIn, auth=Depends(get_authenticated_client)
 ):
     user_id, supabase = auth
@@ -265,7 +265,7 @@ def _validate_time_off(body: TimeOffIn):
 
 
 @router.get("/time-off")
-async def list_time_off(direct_report_id: str | None = None, auth=Depends(get_authenticated_client)):
+def list_time_off(direct_report_id: str | None = None, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     query = supabase.table("time_off_entries").select("*")
     if direct_report_id:
@@ -274,7 +274,7 @@ async def list_time_off(direct_report_id: str | None = None, auth=Depends(get_au
 
 
 @router.post("/time-off")
-async def create_time_off(body: TimeOffIn, auth=Depends(get_authenticated_client)):
+def create_time_off(body: TimeOffIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_time_off(body)
     payload = body.model_dump(mode="json")
@@ -285,7 +285,7 @@ async def create_time_off(body: TimeOffIn, auth=Depends(get_authenticated_client
 
 
 @router.delete("/time-off/{entry_id}")
-async def delete_time_off(entry_id: str, auth=Depends(get_authenticated_client)):
+def delete_time_off(entry_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     supabase.table("time_off_entries").delete().eq("id", entry_id).execute()
     return {"deleted": True}
@@ -299,7 +299,7 @@ async def delete_time_off(entry_id: str, auth=Depends(get_authenticated_client))
 # ---------------------------------------------------------------------------
 
 @router.get("/overview")
-async def get_overview(period_start: date, period_end: date, auth=Depends(get_authenticated_client)):
+def get_overview(period_start: date, period_end: date, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     if period_end < period_start:
         raise HTTPException(status_code=422, detail="period_end must be on or after period_start")
@@ -402,7 +402,7 @@ async def get_overview(period_start: date, period_end: date, auth=Depends(get_au
 # ---------------------------------------------------------------------------
 
 @router.get("/rollup")
-async def get_rollup(period_start: date, period_end: date, auth=Depends(get_authenticated_client)):
+def get_rollup(period_start: date, period_end: date, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     if period_end < period_start:
         raise HTTPException(status_code=422, detail="period_end must be on or after period_start")

@@ -23,7 +23,7 @@ router = APIRouter()
 
 
 @router.get("")
-async def get_setup_status(auth=Depends(get_authenticated_client)):
+def get_setup_status(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
 
     # Archived people (Session 43, Polish Pass A) are excluded here the same

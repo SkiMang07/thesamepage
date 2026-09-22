@@ -118,7 +118,7 @@ Or, when nothing is noteworthy:
 
 @router.get("/insight", response_model=DashboardInsight)
 @limiter.limit("10/minute")
-async def get_dashboard_insight(request: Request, auth=Depends(get_authenticated_client)):
+def get_dashboard_insight(request: Request, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
 
     now = time.time()
@@ -544,7 +544,7 @@ def _load_action_snapshot(user_id: str, supabase, local_date: date) -> tuple[dic
 
 
 @router.get("/brief")
-async def get_action_brief(
+def get_action_brief(
     local_date: str | None = None,
     timezone_name: str = "UTC",
     auth=Depends(get_authenticated_client),
@@ -567,7 +567,7 @@ async def get_action_brief(
 
 
 @router.post("/events")
-async def record_mission_control_events(
+def record_mission_control_events(
     body: MissionControlEventsIn,
     auth=Depends(get_authenticated_client),
 ):
@@ -632,7 +632,7 @@ async def record_mission_control_events(
 
 
 @router.post("/reconcile")
-async def reconcile_mission_control_outcomes(auth=Depends(get_authenticated_client)):
+def reconcile_mission_control_outcomes(auth=Depends(get_authenticated_client)):
     """Infer only outcomes current records can establish; never mutate them."""
     user_id, supabase = auth
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
@@ -735,7 +735,7 @@ async def reconcile_mission_control_outcomes(auth=Depends(get_authenticated_clie
 
 @router.post("/explain")
 @limiter.limit("10/minute")
-async def explain_action_brief(
+def explain_action_brief(
     request: Request,
     body: ExplainIn,
     auth=Depends(get_authenticated_client),

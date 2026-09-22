@@ -9,6 +9,7 @@ Supabase uses) and returns an RLS-scoped client so every DB query
 automatically enforces per-user data isolation. No route should ever use
 the service-role client directly against user data.
 """
+import threading
 import time
 import base64
 import json
@@ -17,7 +18,12 @@ from datetime import date, datetime
 from fastapi import HTTPException, Header
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from supabase import create_client, Client
+import httpx
+from gotrue.http_clients import SyncClient as GoTrueHttpClient
+from postgrest import SyncPostgrestClient
+from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
+from postgrest.utils import SyncClient as PostgrestHttpClient
+from supabase import create_client, Client, SupabaseAuthClient
 
 from config import settings
 
@@ -34,6 +40,10 @@ limiter = Limiter(key_func=get_remote_address)
 
 # token -> (user_data, cached_until_epoch_seconds)
 _token_cache: dict[str, tuple[dict, float]] = {}
+# Route handlers are plain `def` and run on FastAPI's thread pool, so this
+# cache is read and written from many threads at once. The lock covers every
+# access; the network call to Supabase happens outside it.
+_token_cache_lock = threading.Lock()
 
 _CACHE_SAFETY_BUFFER_SECONDS = 60
 
@@ -69,9 +79,9 @@ def _decode_exp_unverified(token: str) -> float | None:
 
 def verify_token_with_supabase(token: str) -> dict:
     now = time.time()
-    _evict_expired_tokens(now)
-
-    cached = _token_cache.get(token)
+    with _token_cache_lock:
+        _evict_expired_tokens(now)
+        cached = _token_cache.get(token)
     if cached and cached[1] > now:
         return cached[0]
 
@@ -95,9 +105,62 @@ def verify_token_with_supabase(token: str) -> dict:
 
     exp = _decode_exp_unverified(token)
     ttl = max((exp - now - _CACHE_SAFETY_BUFFER_SECONDS), 0) if exp else 30
-    _token_cache[token] = (user_data, now + ttl)
+    with _token_cache_lock:
+        _token_cache[token] = (user_data, now + ttl)
 
     return user_data
+
+
+# ---------------------------------------------------------------------------
+# Pooled Supabase connections (pre-launch perf pass, N-5 follow-up).
+#
+# `create_client()` builds fresh httpx clients for PostgREST and GoTrue on
+# every request, and each one reloads the CA bundle from disk (~33 ms of
+# GIL-holding CPU apiece, ~140 ms per request) and opens a brand-new TLS
+# connection to Supabase. Under concurrency that CPU serialises every request
+# in the process.
+#
+# The fix keeps one Supabase client PER REQUEST (so each user's JWT lives only
+# on that request's own httpx session headers, exactly as before) but backs
+# those sessions with ONE shared httpx transport. A transport holds the
+# connection pool and the SSL context, never headers, so no auth state is
+# shared between users. httpcore's pool is thread-safe.
+#
+# Never call .close()/.aclose() on a pooled client: closing an httpx.Client
+# closes its transport, which here is shared by every request. Nothing in
+# the codebase does today; per-request clients are simply garbage-collected.
+# Storage keeps the library's default (it is only built lazily, on uploads).
+# ---------------------------------------------------------------------------
+_SUPABASE_TRANSPORT = httpx.HTTPTransport(http2=True)
+
+
+class _PooledPostgrestClient(SyncPostgrestClient):
+    def create_session(self, base_url, headers, timeout, verify=True, proxy=None):
+        return PostgrestHttpClient(
+            base_url=base_url,
+            headers=headers,
+            timeout=timeout,
+            transport=_SUPABASE_TRANSPORT,
+            follow_redirects=True,
+        )
+
+
+class _PooledSupabaseClient(Client):
+    @staticmethod
+    def _init_postgrest_client(rest_url, headers, schema, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT, verify=True, proxy=None):
+        return _PooledPostgrestClient(rest_url, headers=headers, schema=schema, timeout=timeout)
+
+    @staticmethod
+    def _init_supabase_auth_client(auth_url, client_options, verify=True, proxy=None):
+        return SupabaseAuthClient(
+            url=auth_url,
+            auto_refresh_token=client_options.auto_refresh_token,
+            persist_session=client_options.persist_session,
+            storage=client_options.storage,
+            headers=client_options.headers,
+            flow_type=client_options.flow_type,
+            http_client=GoTrueHttpClient(transport=_SUPABASE_TRANSPORT, follow_redirects=True),
+        )
 
 
 def get_authenticated_client(authorization: str = Header(None)) -> tuple[str, Client]:
@@ -111,7 +174,7 @@ def get_authenticated_client(authorization: str = Header(None)) -> tuple[str, Cl
     if not user_id:
         raise HTTPException(status_code=401, detail="Could not resolve user from token")
 
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
+    client = _PooledSupabaseClient.create(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
     client.postgrest.auth(token)
     # Propagate the user's JWT to Storage too (added Session 28 — the Context
     # Engine's upload endpoint is the first route to touch `client.storage`).

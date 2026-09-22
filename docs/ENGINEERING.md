@@ -46,7 +46,28 @@ keep this rule intact.
 `_token_cache`, keyed by raw token and TTL'd to the token's own `exp`.
 `_evict_expired_tokens()` sweeps on every call, so it stays bounded by
 currently-valid tokens. Per-process and in-memory — not shared if this ever runs
-on more than one Railway instance; fine at today's scale.
+on more than one Railway instance; fine at today's scale. Handlers run on a
+thread pool (below), so every access goes through `_token_cache_lock`.
+
+### Route handlers are plain `def`
+
+The Supabase Python client is synchronous. Inside an `async def` handler its
+queries run on the event loop, and with Railway's single uvicorn worker that
+blocks every other request in the process until the query returns. A plain
+`def` handler runs on FastAPI's thread pool instead, so requests proceed
+concurrently. **Write every route handler as `def`.** Read uploads with
+`file.file.read()`, not `await file.read()`. One handler calls another directly
+(`return get_meeting(...)`), with no `await`. `tests/test_request_concurrency.py`
+fails the suite if an `async def` route handler appears.
+
+**Pooled connections.** `get_authenticated_client()` builds a new Supabase client
+per request, so each user's JWT lives only on that request's own HTTP session. Its
+PostgREST and auth sessions share one module-level `httpx.HTTPTransport`
+(`_SUPABASE_TRANSPORT`), which holds the connection pool and SSL context but
+never headers. This skips a CA-bundle reload (~140 ms of CPU per request) and a
+fresh TLS handshake to Supabase on every call. Never `.close()` a request's
+client or session: that would close the shared transport. The same test file
+checks that two requests get separate tokens on the same transport.
 
 ### AI calls
 
@@ -281,8 +302,7 @@ Not yet built, deliberately:
 
 - Error monitoring — `sentry-sdk` is in `requirements.txt`, unused. Same
   "installed ahead of being wired up" state `slowapi` was in before it got used.
-- Automated tests — `pytest` is in `requirements.txt`, unused. No test files,
-  `tests/` directory, or CI anywhere in the repo. Andrew's explicit call: keep
-  flagging rather than scope a first pass now.
+- CI — `backend/tests/` runs under `pytest` (from `backend/`), but nothing runs
+  it automatically before a push deploys to Railway.
 - Pagination — no list endpoint paginates. Fine at one manager's scale, not at
   an org's.

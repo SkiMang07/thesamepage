@@ -304,7 +304,7 @@ def _save_turn(supabase, user_id: str, user_text: str, assistant_text: str, draf
 
 
 @router.get("/thread")
-async def get_thread(auth=Depends(get_authenticated_client)):
+def get_thread(auth=Depends(get_authenticated_client)):
     """Return the stored thread for the current manager (for drawer hydration)."""
     user_id, supabase = auth
     rows = (
@@ -319,7 +319,7 @@ async def get_thread(auth=Depends(get_authenticated_client)):
 
 
 @router.delete("/thread")
-async def delete_thread(auth=Depends(get_authenticated_client)):
+def delete_thread(auth=Depends(get_authenticated_client)):
     """Start a new conversation. Source records created by prior drafts remain."""
     user_id, supabase = auth
     (
@@ -332,7 +332,7 @@ async def delete_thread(auth=Depends(get_authenticated_client)):
 
 
 @router.patch("/drafts/{draft_id}")
-async def update_draft_status(
+def update_draft_status(
     draft_id: UUID,
     body: AssistantDraftStatusIn,
     auth=Depends(get_authenticated_client),
@@ -369,7 +369,7 @@ async def update_draft_status(
 
 @router.post("/message")
 @limiter.limit("10/minute")
-async def post_message(
+def post_message(
     request: Request,
     body: AssistantMessageIn,
     auth=Depends(get_authenticated_client),

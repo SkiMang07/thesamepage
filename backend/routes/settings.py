@@ -73,7 +73,7 @@ class ProfileIn(BaseModel):
 
 
 @router.get("/profile")
-async def get_profile(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
+def get_profile(auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     user_id, supabase = auth
     profile = _get_profile(user_id, supabase)
     org = None
@@ -90,7 +90,7 @@ async def get_profile(auth=Depends(get_authenticated_client), authorization: str
 
 
 @router.put("/profile")
-async def update_profile(body: ProfileIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
+def update_profile(body: ProfileIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     user_id, supabase = auth
     email = _get_email(authorization)
     org_id = _ensure_org(user_id, supabase, email, company_name=body.company_name.strip() or None)
@@ -99,7 +99,7 @@ async def update_profile(body: ProfileIn, auth=Depends(get_authenticated_client)
     if body.company_name.strip():
         org_update["name"] = body.company_name.strip()
     supabase.table("organizations").update(org_update).eq("id", org_id).execute()
-    return await get_profile(auth=auth, authorization=authorization)
+    return get_profile(auth=auth, authorization=authorization)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ def _validate_role_family(role_family_id: str | None, supabase) -> None:
 
 
 @router.get("/role-levels")
-async def list_role_levels(auth=Depends(get_authenticated_client)):
+def list_role_levels(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # RLS scopes to own org; empty list before the org bootstrap has run.
     # Embeds the family name (Session 40) so the frontend can group/label
@@ -150,7 +150,7 @@ async def list_role_levels(auth=Depends(get_authenticated_client)):
 
 
 @router.post("/role-levels")
-async def create_role_level(body: RoleLevelIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
+def create_role_level(body: RoleLevelIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     user_id, supabase = auth
     org_id = _ensure_org(user_id, supabase, _get_email(authorization))
     _validate_role_family(body.role_family_id, supabase)
@@ -163,7 +163,7 @@ async def create_role_level(body: RoleLevelIn, auth=Depends(get_authenticated_cl
 
 
 @router.put("/role-levels/{role_level_id}")
-async def update_role_level(role_level_id: str, body: RoleLevelIn, auth=Depends(get_authenticated_client)):
+def update_role_level(role_level_id: str, body: RoleLevelIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     _validate_role_family(body.role_family_id, supabase)
     result = (
@@ -178,7 +178,7 @@ async def update_role_level(role_level_id: str, body: RoleLevelIn, auth=Depends(
 
 
 @router.delete("/role-levels/{role_level_id}")
-async def delete_role_level(role_level_id: str, auth=Depends(get_authenticated_client)):
+def delete_role_level(role_level_id: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     # No cascade on role_level_id FKs: unassign direct reports and remove the
     # role's expectations first (scale definitions do cascade off configs).
@@ -228,7 +228,7 @@ def _validate_kind(kind: str):
 
 
 @router.get("/expectations/{kind}")
-async def list_expectations(kind: str, role_level_id: str | None = None, auth=Depends(get_authenticated_client)):
+def list_expectations(kind: str, role_level_id: str | None = None, auth=Depends(get_authenticated_client)):
     _validate_kind(kind)
     user_id, supabase = auth
     table, name_col = _CONFIG_TABLES[kind]
@@ -239,7 +239,7 @@ async def list_expectations(kind: str, role_level_id: str | None = None, auth=De
 
 
 @router.post("/expectations/{kind}")
-async def create_expectation(kind: str, body: ExpectationIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
+def create_expectation(kind: str, body: ExpectationIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     _validate_kind(kind)
     user_id, supabase = auth
     org_id = _ensure_org(user_id, supabase, _get_email(authorization))
@@ -253,7 +253,7 @@ async def create_expectation(kind: str, body: ExpectationIn, auth=Depends(get_au
 
 
 @router.put("/expectations/{kind}/{config_id}")
-async def update_expectation(kind: str, config_id: str, body: ExpectationIn, auth=Depends(get_authenticated_client)):
+def update_expectation(kind: str, config_id: str, body: ExpectationIn, auth=Depends(get_authenticated_client)):
     _validate_kind(kind)
     user_id, supabase = auth
     table, _ = _CONFIG_TABLES[kind]
@@ -269,7 +269,7 @@ async def update_expectation(kind: str, config_id: str, body: ExpectationIn, aut
 
 
 @router.delete("/expectations/{kind}/{config_id}")
-async def delete_expectation(kind: str, config_id: str, auth=Depends(get_authenticated_client)):
+def delete_expectation(kind: str, config_id: str, auth=Depends(get_authenticated_client)):
     _validate_kind(kind)
     user_id, supabase = auth
     table, _ = _CONFIG_TABLES[kind]

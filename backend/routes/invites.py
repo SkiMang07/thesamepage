@@ -34,7 +34,7 @@ def _anon_client():
 
 
 @router.get("/{token}")
-async def preview_invite(token: str):
+def preview_invite(token: str):
     rows = _anon_client().rpc("get_invite_preview", {"p_token": token}).execute().data
     if not rows or not rows[0].get("valid"):
         raise HTTPException(status_code=404, detail="This invite link is invalid or has expired")
@@ -48,7 +48,7 @@ async def preview_invite(token: str):
 
 
 @router.post("/{token}/accept")
-async def accept_invite(token: str, auth=Depends(get_authenticated_client)):
+def accept_invite(token: str, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     try:
         direct_report_id = supabase.rpc("accept_direct_report_invite", {"p_token": token}).execute().data

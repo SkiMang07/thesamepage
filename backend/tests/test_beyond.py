@@ -172,8 +172,9 @@ def _seed():
     return db
 
 
-def _run(coro):
-    return asyncio.run(coro)
+def _run(result):
+    # Handlers are plain `def` unless they await, so accept a value or a coroutine.
+    return asyncio.run(result) if asyncio.iscoroutine(result) else result
 
 
 # ---------------------------------------------------------------------------
