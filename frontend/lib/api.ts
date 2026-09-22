@@ -2231,3 +2231,274 @@ export const transcribeAudio = (blob: Blob, vocabulary = ""): Promise<{ text: st
   if (vocabulary) form.append("vocabulary", vocabulary);
   return authedFormFetch("/api/transcribe", form);
 };
+
+// ---------------------------------------------------------------------------
+// Beyond the team — meetings outside the manager's own team (boss,
+// skip-level, indirect reports, peers, cross-functional and project
+// meetings). backend/routes/beyond.py; docs/systems/beyond.md.
+// ---------------------------------------------------------------------------
+
+export type OutsideRelationship =
+  | "manager"
+  | "skip_level"
+  | "indirect_report"
+  | "peer"
+  | "cross_functional"
+  | "other";
+
+export type OutsideMeetingKind = "one_on_one" | "group";
+
+export type OutsidePerson = {
+  id: string;
+  name: string;
+  relationship: OutsideRelationship;
+  role_title: string | null;
+  email: string | null;
+  notes: string | null;
+  archived_at: string | null;
+  created_at: string;
+};
+
+export type OutsidePersonSummary = OutsidePerson & {
+  last_met: string | null;
+  meeting_count: number;
+  you_owe: number;
+  they_owe: number;
+};
+
+export type OutsideMeeting = {
+  id: string;
+  title: string | null;
+  kind: OutsideMeetingKind;
+  scheduled_at: string | null;
+  notes: string | null;
+  summary: string | null;
+  logged_at: string | null;
+  created_at: string;
+  meeting_date: string | null;
+  // Derived from summary, never stored: "draft" until the wrap-up is logged.
+  status: "draft" | "logged";
+  people: { id: string; name: string; relationship: OutsideRelationship }[];
+};
+
+// counterpart = something the other person owes the manager. A null
+// direct_report_id on a "manager" row is the manager's own commitment.
+export type BeyondCommitment = {
+  id: string;
+  description: string;
+  due_date: string | null;
+  status: "open" | "done" | "dropped";
+  committed_by: "manager" | "direct_report" | "counterpart";
+  direct_report_id: string | null;
+  direct_report_name: string | null;
+  outside_person_id: string | null;
+  source_type: string | null;
+  source_id: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type OutsideMeetingLink = {
+  id: string;
+  meeting_id: string;
+  goal_id: string | null;
+  project_id: string | null;
+  direct_report_id: string | null;
+  note: string | null;
+  created_at: string;
+  target_type: "goal" | "project" | "direct_report";
+  target_name: string | null;
+};
+
+export type OutsideMeetingDetail = OutsideMeeting & {
+  commitments: BeyondCommitment[];
+  links: OutsideMeetingLink[];
+};
+
+export type BeyondOverview = {
+  people: OutsidePersonSummary[];
+  meetings: OutsideMeeting[];
+  // Date of the latest logged meeting — the nav door state.
+  last_logged: string | null;
+};
+
+export type BeyondPersonDetail = {
+  person: OutsidePerson;
+  meetings: OutsideMeeting[];
+  commitments: BeyondCommitment[];
+  links: OutsideMeetingLink[];
+};
+
+export type BeyondDraftCommitment = {
+  description: string;
+  owner: "you" | "report" | "counterpart";
+  direct_report_id: string | null;
+  outside_person_id: string | null;
+  due_date: string | null;
+};
+
+export type BeyondDraftCheckIn = {
+  goal_id: string | null;
+  project_id: string | null;
+  status: GoalStatus;
+  note: string | null;
+};
+
+export type BeyondDraftReportNote = { direct_report_id: string; note: string };
+
+export type BeyondWrapUpDraft = {
+  summary: string;
+  commitments: BeyondDraftCommitment[];
+  check_ins: BeyondDraftCheckIn[];
+  report_notes: BeyondDraftReportNote[];
+};
+
+export type BeyondLinkHistoryItem = {
+  id: string;
+  meeting_id: string;
+  note: string | null;
+  created_at: string;
+  meeting_title: string | null;
+  meeting_kind: OutsideMeetingKind | null;
+  meeting_date: string | null;
+};
+
+export const getBeyondOverview = (): Promise<BeyondOverview> => authedFetch("/api/beyond");
+
+export const createOutsidePerson = (body: {
+  name: string;
+  relationship: OutsideRelationship;
+  roleTitle?: string | null;
+  email?: string | null;
+  notes?: string | null;
+}): Promise<OutsidePerson> =>
+  authedFetch("/api/beyond/people", {
+    method: "POST",
+    body: JSON.stringify({
+      name: body.name,
+      relationship: body.relationship,
+      role_title: body.roleTitle ?? null,
+      email: body.email ?? null,
+      notes: body.notes ?? null,
+    }),
+  });
+
+// Omitted fields are left alone; archived toggles archive (never delete).
+export const updateOutsidePerson = (
+  id: string,
+  body: {
+    name?: string;
+    relationship?: OutsideRelationship;
+    roleTitle?: string;
+    email?: string;
+    notes?: string;
+    archived?: boolean;
+  }
+): Promise<OutsidePerson> =>
+  authedFetch(`/api/beyond/people/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      name: body.name,
+      relationship: body.relationship,
+      role_title: body.roleTitle,
+      email: body.email,
+      notes: body.notes,
+      archived: body.archived,
+    }),
+  });
+
+export const getOutsidePerson = (id: string): Promise<BeyondPersonDetail> =>
+  authedFetch(`/api/beyond/people/${id}`);
+
+export const createOutsideMeeting = (body: {
+  title: string | null;
+  kind: OutsideMeetingKind;
+  scheduledAt: string | null;
+  personIds: string[];
+  notes?: string | null;
+}): Promise<OutsideMeeting> =>
+  authedFetch("/api/beyond/meetings", {
+    method: "POST",
+    body: JSON.stringify({
+      title: body.title,
+      kind: body.kind,
+      scheduled_at: body.scheduledAt,
+      person_ids: body.personIds,
+      notes: body.notes ?? null,
+    }),
+  });
+
+export const getOutsideMeeting = (id: string): Promise<OutsideMeetingDetail> =>
+  authedFetch(`/api/beyond/meetings/${id}`);
+
+// Omitted fields are left alone. summary is only accepted on a logged meeting.
+export const updateOutsideMeeting = (
+  id: string,
+  body: {
+    title?: string;
+    kind?: OutsideMeetingKind;
+    scheduledAt?: string;
+    personIds?: string[];
+    notes?: string;
+    summary?: string;
+  }
+): Promise<OutsideMeeting> =>
+  authedFetch(`/api/beyond/meetings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      title: body.title,
+      kind: body.kind,
+      scheduled_at: body.scheduledAt,
+      person_ids: body.personIds,
+      notes: body.notes,
+      summary: body.summary,
+    }),
+  });
+
+// Draft meetings only — a logged one is history.
+export const deleteOutsideMeeting = (id: string): Promise<{ ok: boolean }> =>
+  authedFetch(`/api/beyond/meetings/${id}`, { method: "DELETE" });
+
+// Pure AI draft — nothing is written. An empty draft means "write it yourself".
+export const wrapUpOutsideMeeting = (id: string, rawNotes: string): Promise<BeyondWrapUpDraft> =>
+  authedFetch(`/api/beyond/meetings/${id}/wrapup`, {
+    method: "POST",
+    body: JSON.stringify({ raw_notes: rawNotes }),
+  });
+
+// The confirmed write, after the manager has reviewed every row.
+export const logOutsideMeeting = (
+  id: string,
+  body: {
+    summary: string;
+    rawNotes: string;
+    meetingDate: string | null;
+    commitments: BeyondDraftCommitment[];
+    checkIns: BeyondDraftCheckIn[];
+    reportNotes: BeyondDraftReportNote[];
+  }
+): Promise<OutsideMeetingDetail> =>
+  authedFetch(`/api/beyond/meetings/${id}/log`, {
+    method: "POST",
+    body: JSON.stringify({
+      summary: body.summary,
+      raw_notes: body.rawNotes,
+      meeting_date: body.meetingDate,
+      commitments: body.commitments,
+      check_ins: body.checkIns,
+      report_notes: body.reportNotes,
+    }),
+  });
+
+// Meetings beyond the team that touched one goal, project or report.
+export const getBeyondLinks = (params: {
+  goalId?: string;
+  projectId?: string;
+  directReportId?: string;
+}): Promise<BeyondLinkHistoryItem[]> => {
+  const q = new URLSearchParams();
+  if (params.goalId) q.set("goal_id", params.goalId);
+  if (params.projectId) q.set("project_id", params.projectId);
+  if (params.directReportId) q.set("direct_report_id", params.directReportId);
+  return authedFetch(`/api/beyond/links?${q.toString()}`);
+};

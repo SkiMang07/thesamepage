@@ -43,6 +43,7 @@ from pydantic import BaseModel, Field
 import context_engine
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
+from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
     ensure_org,
@@ -221,6 +222,7 @@ def _build_prep_prompt(
     context_engine_block: str = "",
     carry_forward_items: list[str] | None = None,
     suggested_topics: list[str] | None = None,
+    secondhand_notes: list[dict] | None = None,
 ) -> str:
     # --- Recency context ---
     if days_since_last is None:
@@ -276,6 +278,24 @@ CURRENT SIGNALS SELECTED FOR THIS 1:1:
 These were assembled from the person's current record and kept by the manager during review. Use them as possible agenda inputs, not as facts beyond what each line states.
 """
 
+    # Beyond the team: things other people said about this report in meetings
+    # outside the team. Secondhand and private to the manager — the report
+    # wasn't in the room, so it shapes what to ask, never what to assert.
+    secondhand_block = ""
+    if secondhand_notes:
+        def _source(n: dict) -> str:
+            parts = [n.get("meeting_date"), n.get("meeting_title")]
+            label = ", ".join(p for p in parts if p) or "a meeting"
+            if n.get("people"):
+                label += f" (with {', '.join(n['people'])})"
+            return label
+        items = "\n".join(f"  • {_source(n)}: {n['note']}" for n in secondhand_notes)
+        secondhand_block = f"""
+SECONDHAND — SAID ABOUT {report_name.upper()} IN MEETINGS OUTSIDE THE TEAM (private to the manager; {report_name} was not there):
+{items}
+Treat each line as someone else's account, not established fact. Use it to decide what to ask about and let {report_name} give their own view. Never attribute a line to the person who said it in a suggested question, and never turn it into feedback unless the manager's own notes back it up.
+"""
+
     return f"""You are a management coach helping a manager prepare for a 1:1 with {report_name}.
 
 Your output must be grounded in the specific details provided. Do not give generic management advice. Every agenda item, question, and talking point must follow from something the manager actually wrote, something in recent history, or an open commitment that needs follow-up.
@@ -289,7 +309,7 @@ RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
 
 OPEN COMMITMENTS (unresolved — each is marked with who owes it):
 {commitments_block}
-{carry_forward_block}{suggested_topics_block}{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
+{carry_forward_block}{suggested_topics_block}{secondhand_block}{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
 MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
 {raw_notes or '(No additional notes were added.)'}
 
@@ -878,6 +898,7 @@ async def prep_one_on_one(
         context_engine_block=context_engine_block,
         carry_forward_items=carry_forward_items,
         suggested_topics=suggested_topics,
+        secondhand_notes=fetch_secondhand_notes(supabase, user_id, body.direct_report_id),
     )
 
     raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)

@@ -259,8 +259,11 @@ create index one_on_ones_upcoming_idx
 -- -------------------------
 -- COMMITMENTS
 -- owner_id = the manager keeping the record (RLS scopes through it).
--- committed_by = who owes the item: the manager or the direct report
--- (both sides of a 1:1 can make commitments — Session 8).
+-- committed_by = who owes the item: the manager, the direct report, or a
+-- 'counterpart' — someone outside the team (Beyond the team). A counterpart
+-- row names that person in outside_person_id and never has a
+-- direct_report_id; the column and the shape check are added in the
+-- BEYOND THE TEAM section, after outside_people exists.
 -- title nullable for MVP (description carries the content).
 -- org_id nullable for MVP.
 -- -------------------------
@@ -276,8 +279,8 @@ create table commitments (
   description         text,
   owner_id            uuid references auth.users(id),
   direct_report_id    uuid references direct_reports(id) on delete cascade,
-  committed_by        text not null default 'manager' check (committed_by in ('manager', 'direct_report')),
-  source_type         text check (source_type in ('one_on_one', 'goal', 'project', 'manual', 'team_meeting')),
+  committed_by        text not null default 'manager' check (committed_by in ('manager', 'direct_report', 'counterpart')),
+  source_type         text check (source_type in ('one_on_one', 'goal', 'project', 'manual', 'team_meeting', 'outside_meeting')),
   source_id           uuid,
   due_date            date,
   status              text not null default 'open' check (status in ('open', 'done', 'dropped')),
@@ -644,6 +647,12 @@ create table check_ins (
   -- status/note ("still blocked on legal") without re-asserting a number.
   progress    integer check (progress >= 0 and progress <= 100),
   note        text,
+  -- Where the check-in came from. Null = entered by hand (every row before
+  -- Beyond the team). 'outside_meeting' = confirmed from a meeting's
+  -- wrap-up; source_id is the outside_meetings row. Same shape as
+  -- commitments.source_type/source_id.
+  source_type text check (source_type in ('manual', 'outside_meeting')),
+  source_id   uuid,
   created_at  timestamptz not null default now(),
   constraint check_ins_exactly_one_parent
     check (num_nonnulls(goal_id, project_id) = 1)
@@ -1265,6 +1274,104 @@ create index document_citations_document_id_idx on document_citations(document_i
 create index document_citations_recency_idx on document_citations(document_id, created_at desc);
 
 -- ============================================================
+-- BEYOND THE TEAM
+-- A manager's meetings outside their own team: boss, skip-level, indirect
+-- reports, peers, cross-functional and project meetings. Spec:
+-- docs/BEYOND_THE_TEAM_SCOPING.md; subsystem doc docs/systems/beyond.md.
+--
+-- All four tables are owner-scoped (owner_id = auth.uid()) and have NO
+-- IC-visible policy. owner_id is denormalized onto the two join tables so
+-- their USING clause stays flat; their WITH CHECK also proves every parent
+-- row belongs to the caller (see the policies below).
+--
+-- Indirect reports are outside_people rows, not links to direct_reports:
+-- their direct_reports row belongs to another manager.
+--
+-- outside_meeting_links records what a meeting touched on the manager's
+-- own team — exactly one of goal / project / direct report per row. A
+-- report link feeds that report's 1:1 prep as secondhand, private context.
+-- ============================================================
+
+create table outside_people (
+  id            uuid primary key default uuid_generate_v4(),
+  org_id        uuid references organizations(id),
+  owner_id      uuid not null references auth.users(id),
+  name          text not null,
+  relationship  text not null default 'other'
+                check (relationship in ('manager', 'skip_level', 'indirect_report', 'peer', 'cross_functional', 'other')),
+  role_title    text,
+  email         text,   -- reserved for notes-ingestion matching
+  notes         text,   -- private
+  archived_at   timestamptz,   -- archive, not delete (same as direct_reports)
+  created_at    timestamptz not null default now()
+);
+
+alter table outside_people enable row level security;
+
+create index outside_people_owner_idx on outside_people (owner_id, archived_at);
+
+create table outside_meetings (
+  id            uuid primary key default uuid_generate_v4(),
+  org_id        uuid references organizations(id),
+  owner_id      uuid not null references auth.users(id),
+  title         text,
+  kind          text not null default 'one_on_one' check (kind in ('one_on_one', 'group')),
+  scheduled_at  timestamptz,   -- noon-UTC meeting date, docs/decisions/meeting-date-is-scheduled-at.md
+  notes         text,          -- raw notes, private
+  summary       text,          -- confirmed write-up; null until logged
+  logged_at     timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+alter table outside_meetings enable row level security;
+
+create index outside_meetings_owner_idx on outside_meetings (owner_id, scheduled_at desc);
+
+create table outside_meeting_people (
+  meeting_id  uuid not null references outside_meetings(id) on delete cascade,
+  person_id   uuid not null references outside_people(id) on delete cascade,
+  owner_id    uuid not null references auth.users(id),
+  primary key (meeting_id, person_id)
+);
+
+alter table outside_meeting_people enable row level security;
+
+create index outside_meeting_people_person_idx on outside_meeting_people (person_id);
+
+create table outside_meeting_links (
+  id                uuid primary key default uuid_generate_v4(),
+  meeting_id        uuid not null references outside_meetings(id) on delete cascade,
+  owner_id          uuid not null references auth.users(id),
+  goal_id           uuid references goals(id) on delete cascade,
+  project_id        uuid references projects(id) on delete cascade,
+  direct_report_id  uuid references direct_reports(id) on delete cascade,
+  note              text,   -- the line that justifies the link
+  created_at        timestamptz not null default now(),
+  constraint outside_meeting_links_exactly_one_target
+    check (num_nonnulls(goal_id, project_id, direct_report_id) = 1)
+);
+
+alter table outside_meeting_links enable row level security;
+
+create index outside_meeting_links_meeting_idx on outside_meeting_links (meeting_id);
+create index outside_meeting_links_report_idx on outside_meeting_links (direct_report_id, created_at desc) where direct_report_id is not null;
+create index outside_meeting_links_goal_idx on outside_meeting_links (goal_id, created_at desc) where goal_id is not null;
+create index outside_meeting_links_project_idx on outside_meeting_links (project_id, created_at desc) where project_id is not null;
+
+-- commitments.outside_person_id lives here, not in the commitments table
+-- above, because outside_people has to exist first. Required on a
+-- 'counterpart' row (what they owe you); optional on a manager-owned row
+-- (who you owe it to).
+alter table commitments
+  add column outside_person_id uuid references outside_people(id) on delete cascade;
+
+alter table commitments
+  add constraint commitments_counterpart_shape
+    check (committed_by <> 'counterpart' or (outside_person_id is not null and direct_report_id is null));
+
+create index commitments_outside_person_idx on commitments (outside_person_id) where outside_person_id is not null;
+
+-- ============================================================
 -- AUTO-CREATE USER PROFILE ON SIGNUP
 -- When someone signs in via magic link for the first time,
 -- Supabase creates an auth.users row. This trigger mirrors it
@@ -1469,6 +1576,34 @@ create policy "projects_all_own_org" on projects
 -- projects rows they annotate
 create policy "check_ins_all_own" on check_ins
   for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- Beyond the team — owner-scoped, no IC policy. The join tables' WITH CHECK
+-- proves the meeting, person, goal, project or report is the caller's own,
+-- so a known UUID of someone else's row can't be linked. None of these
+-- subqueries read public.users, so no recursion risk.
+create policy "outside_people_all_own" on outside_people
+  for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+create policy "outside_meetings_all_own" on outside_meetings
+  for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+create policy "outside_meeting_people_all_own" on outside_meeting_people
+  for all using (owner_id = auth.uid())
+  with check (
+    owner_id = auth.uid()
+    and exists (select 1 from outside_meetings m where m.id = meeting_id and m.owner_id = auth.uid())
+    and exists (select 1 from outside_people p where p.id = person_id and p.owner_id = auth.uid())
+  );
+
+create policy "outside_meeting_links_all_own" on outside_meeting_links
+  for all using (owner_id = auth.uid())
+  with check (
+    owner_id = auth.uid()
+    and exists (select 1 from outside_meetings m where m.id = meeting_id and m.owner_id = auth.uid())
+    and (goal_id is null or exists (select 1 from goals g where g.id = goal_id and g.owner_id = auth.uid()))
+    and (project_id is null or exists (select 1 from projects p where p.id = project_id and p.owner_id = auth.uid()))
+    and (direct_report_id is null or exists (select 1 from direct_reports d where d.id = direct_report_id and d.manager_id = auth.uid()))
+  );
 
 -- team_messages — private to the manager who sent them, same manager-scoped
 -- pattern as one_on_ones/assessments

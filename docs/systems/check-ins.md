@@ -18,6 +18,13 @@ Owner-scoped RLS (`owner_id = auth.uid()`), the same actor as goals and projects
 Endpoints live on the parents: `GET`/`POST /api/goals/{id}/check-ins` and the same
 under `/api/projects`.
 
+`source_type` / `source_id` record where a check-in came from: null (entered by
+hand) or `outside_meeting` (confirmed from a meeting beyond the team — see
+`beyond.md`). `create_check_in()` only sends them when a source is passed, so the
+goals/projects routers insert exactly what they always did. `CheckInPanel`'s
+history can also list the Beyond meetings that touched the item
+(`fetchMeetingLinks`).
+
 ## Write-through
 
 `create_check_in()` inserts the row, then updates the parent's `status` column. So

@@ -17,7 +17,8 @@
 //   3. A lazy-loaded history (fetched on first expand, newest first).
 
 import { useState } from "react";
-import { CheckIn, CheckInIn, CheckInTrend, GoalStatus } from "@/lib/api";
+import Link from "next/link";
+import { BeyondLinkHistoryItem, CheckIn, CheckInIn, CheckInTrend, GoalStatus } from "@/lib/api";
 import { STATUS_BAR, STATUS_DOT } from "@/lib/tokens";
 
 // Past this many days without a check-in, the freshness label turns amber.
@@ -102,6 +103,7 @@ export default function CheckInPanel({
   formHeading,
   notePlaceholder = "One line on where this stands",
   submitLabel = "Log check-in",
+  fetchMeetingLinks,
 }: {
   status: GoalStatus;
   progress: number | null | undefined;
@@ -114,10 +116,15 @@ export default function CheckInPanel({
   formHeading?: string;
   notePlaceholder?: string;
   submitLabel?: string;
+  // Beyond the team: meetings outside the team that touched this item. The
+  // check-in each one produced is already in the history above; this names
+  // the meeting it came from and links to it.
+  fetchMeetingLinks?: () => Promise<BeyondLinkHistoryItem[]>;
 }) {
   const [formOpen, setFormOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<CheckIn[] | null>(null);
+  const [meetingLinks, setMeetingLinks] = useState<BeyondLinkHistoryItem[]>([]);
   const [formStatus, setFormStatus] = useState<GoalStatus>(status);
   const [formProgress, setFormProgress] = useState<string>(progress != null ? String(progress) : "");
   const [formNote, setFormNote] = useState("");
@@ -130,6 +137,10 @@ export default function CheckInPanel({
     const next = !historyOpen;
     setHistoryOpen(next);
     if (next && history === null) {
+      if (fetchMeetingLinks) {
+        // Fails quietly: history must render even if this lookup can't.
+        fetchMeetingLinks().then(setMeetingLinks).catch(() => setMeetingLinks([]));
+      }
       try {
         setHistory(await fetchHistory());
       } catch {
@@ -277,6 +288,23 @@ export default function CheckInPanel({
             ))
           )}
         </ul>
+      )}
+      {historyOpen && meetingLinks.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs font-medium text-ink-muted">From meetings beyond the team</p>
+          <ul className="mt-1 space-y-1">
+            {meetingLinks.map((link) => (
+              <li key={link.id} className="flex items-baseline gap-2 text-xs text-ink-secondary">
+                <span className="shrink-0 text-ink-muted">
+                  {formatDateTime(link.meeting_date ?? link.created_at)}
+                </span>
+                <Link href={`/app/beyond/meetings/${link.meeting_id}`} className="min-w-0 truncate hover:text-ink">
+                  {link.meeting_title || "Untitled meeting"}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

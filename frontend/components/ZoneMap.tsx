@@ -34,6 +34,7 @@ import {
   getProfile,
   getProjects,
   getSetupStatus,
+  getBeyondOverview,
   getTeamAssessments,
   GoalStatus,
   OneOnOneOverviewItem,
@@ -61,6 +62,14 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   oneonones: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+  // Beyond the team — a door opening out of the team.
+  beyond: (
+    <>
+      <path d="M14 3.5H5.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2H14" />
+      <line x1="10" y1="12" x2="21" y2="12" />
+      <polyline points="17 8 21 12 17 16" />
+    </>
+  ),
   assessments: (
     <polygon points="12 2.5 14.9 8.4 21.4 9.3 16.7 13.9 17.8 20.4 12 17.3 6.2 20.4 7.3 13.9 2.6 9.3 9.1 8.4" />
   ),
@@ -211,6 +220,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "team", label: "Team", href: "/app/team", icon: "team" },
       { id: "oneonones", label: "1:1s", href: "/app/1-1s", icon: "oneonones" },
       { id: "assessments", label: "Assessments", href: "/app/assessments", icon: "assessments" },
+      // Meetings outside your own team — boss, skip-level, peers, projects.
+      // A real door, but only its outputs reach the rest of the app; it has
+      // no Mission Control card (docs/systems/beyond.md).
+      { id: "beyond", label: "Beyond the team", href: "/app/beyond", icon: "beyond" },
     ],
   },
   {
@@ -240,6 +253,7 @@ export const SETTINGS_ITEM = NAV_GROUPS.flatMap((group) => group.items).find((it
 const TEAM_GROUP = NAV_GROUPS.find((g) => g.group === "People")!;
 const TEAM_ITEM = TEAM_GROUP.items.find((i) => i.id === "team")!;
 const ASSESSMENTS_ITEM = TEAM_GROUP.items.find((i) => i.id === "assessments")!;
+const BEYOND_ITEM = TEAM_GROUP.items.find((i) => i.id === "beyond")!;
 
 // ---------------------------------------------------------------------------
 // Route -> nav context, for the header breadcrumb + orbit strip.
@@ -264,6 +278,11 @@ export function getNavContext(pathname: string, params: Record<string, string | 
   if (pathname.startsWith("/app/reports/")) {
     const id = typeof params.id === "string" ? params.id : null;
     return { kind: "person", group: TEAM_GROUP, viaItem: TEAM_ITEM, reportId: id };
+  }
+  // Beyond the team's people and meetings are outside people, not reports —
+  // they keep the Beyond door lit rather than the person breadcrumb.
+  if (pathname.startsWith("/app/beyond/")) {
+    return { kind: "item", group: TEAM_GROUP, item: BEYOND_ITEM };
   }
   if (pathname.startsWith("/app/assessments/")) {
     const id = typeof params.reportId === "string" ? params.reportId : null;
@@ -400,9 +419,10 @@ export function useZoneData(): ZoneData {
       getContextCoverage(),
       getProfile(),
       getSetupStatus(),
+      getBeyondOverview(),
     ]).then((results) => {
       if (cancelled) return;
-      const [teamR, assessR, goalsR, projectsR, capR, orgR, ctxR, profR, setupR] = results;
+      const [teamR, assessR, goalsR, projectsR, capR, orgR, ctxR, profR, setupR, beyondR] = results;
       const doorStates: Partial<Record<string, DoorState>> = {};
       let roster: RosterPerson[] = [];
       let profileName: string | null = null;
@@ -428,6 +448,13 @@ export function useZoneData(): ZoneData {
         doorStates.assessments = dates.length
           ? { label: `last ${new Date(dates.reduce((a, b) => (a > b ? a : b))).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` }
           : { label: "no assessments yet" };
+      }
+
+      if (beyondR.status === "fulfilled") {
+        const last = beyondR.value.last_logged;
+        doorStates.beyond = last
+          ? { label: `last ${new Date(last).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` }
+          : { label: "nothing logged yet" };
       }
 
       if (goalsR.status === "fulfilled") {

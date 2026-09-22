@@ -149,9 +149,11 @@ agenda item renders as a collapsible card: rationale as italic subtext, suggeste
 questions as an indented list. **The closing question is mandatory and always the
 last agenda item.**
 
-The prompt is assembled by `_build_prep_prompt()` from, in order: role
-expectations, the Context Engine block (see `context-engine.md`), then the
-manager's raw notes.
+The prompt is assembled by `_build_prep_prompt()` from, in order: history,
+open commitments, carry-forward, selected signals, secondhand notes from
+meetings beyond the team (framed as someone else's account, never fact — see
+`beyond.md`), role expectations, the Context Engine block (see
+`context-engine.md`), then the manager's raw notes.
 
 **Expectations are grounding context, not an agenda.** `_format_expectations_block()`
 explicitly instructs the model *not* to audit every expectation in one 1:1. This

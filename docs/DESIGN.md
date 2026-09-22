@@ -154,7 +154,9 @@ behind the person page's settings drawer — off the main flow, not in Settings.
   for a first pass, "Revise with AI" for existing text. Nothing is AI-gated — a
   blocking draft panel produced a dead end the first time a report had no evidence.
 - **One shared review implementation.** `DraftExpectationRows.tsx` backs both AI
-  draft doors, so they can't drift apart.
+  draft doors, so they can't drift apart. Meeting wrap-ups share
+  `components/team/WrapUpReviewShell.tsx` (summary, commitments, footer); team
+  meetings and meetings beyond the team add their own sections around it.
 - **Scribe drafts** render as in-thread cards: amber "Draft — not saved" badge,
   green resolved-link fields, muted "none yet" optionals, Confirm / Edit details /
   Discard. Confirm calls the same endpoint the forms use, then collapses to a

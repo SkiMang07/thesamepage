@@ -388,6 +388,10 @@ def _load_action_snapshot(user_id: str, supabase, local_date: date) -> tuple[dic
             supabase.table("commitments")
             .select("id,direct_report_id,status,committed_by,due_date,created_at,completed_at,source_type,source_id")
             .eq("owner_id", user_id)
+            # Something an outside person owes you (Beyond the team) is not
+            # yours to act on, and its null direct_report_id would otherwise
+            # read as "the manager's own" (docs/decisions/nullable-commitment-owner.md).
+            .neq("committed_by", "counterpart")
             .order("created_at", desc=True)
             .execute()
             .data

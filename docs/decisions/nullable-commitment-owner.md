@@ -47,6 +47,12 @@ rather than guessing, and UI owner pickers offer "You" as the first option.
   manager-owned team commitment shows under every team — the same convention as
   a null `org_unit_id` row.
 - A 1:1 prep sheet filters by report, so these correctly never appear there.
+- **Refined 2026-09-22 (Beyond the team):** `committed_by = 'counterpart'` rows —
+  something an outside person owes the manager — also have a null
+  `direct_report_id`. So "null report means yours" holds only for
+  `committed_by <> 'counterpart'`, and any reader relying on it must exclude
+  counterpart rows (Mission Control's snapshot does; Away already filters to
+  `manager`). See `docs/systems/beyond.md`.
 
 ## What should reopen this
 

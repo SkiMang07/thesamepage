@@ -215,7 +215,9 @@ re-anchors a series and stays with the agenda edit on `/app/team`.
 
 `POST /meetings/{id}/wrapup` is a pure AI call — **nothing is written**. It
 returns a draft summary, commitments, and carry-forward items;
-`components/team/MeetingWrapUpReview.tsx` is the confirm step, shared by the
+`components/team/MeetingWrapUpReview.tsx` is the confirm step (its summary,
+commitments and footer are `WrapUpReviewShell.tsx`, shared with meetings beyond
+the team — see `beyond.md`), shared by the
 card's quick log and the dedicated meeting screen — and by external-notes
 ingestion when it lands — rather than forked per surface. A second review
 surface would drift from this one on the exact rule that must not drift.

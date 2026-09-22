@@ -53,7 +53,13 @@ def create_check_in(
     parent_fk: str,  # "goal_id" | "project_id"
     parent_id: str,
     body: CheckInIn,
+    source_type: str | None = None,
+    source_id: str | None = None,
 ) -> dict:
+    """source_type/source_id (Beyond the team) record where a check-in came
+    from. Only sent when set, so the goals/projects routers' calls — and any
+    deploy that lands before the 2026-09-22 migration — insert exactly the
+    columns they always did."""
     _validate(body)
     # Ownership check doubles as the 404 (RLS would also block, but a clean
     # 404 beats an opaque FK/RLS error).
@@ -67,20 +73,17 @@ def create_check_in(
     )
     if not parent:
         raise HTTPException(status_code=404, detail=f"{parent_table[:-1].capitalize()} not found")
-    row = (
-        supabase.table("check_ins")
-        .insert(
-            {
-                "owner_id": user_id,
-                parent_fk: parent_id,
-                "status": body.status,
-                "progress": body.progress,
-                "note": body.note,
-            }
-        )
-        .execute()
-        .data[0]
-    )
+    values = {
+        "owner_id": user_id,
+        parent_fk: parent_id,
+        "status": body.status,
+        "progress": body.progress,
+        "note": body.note,
+    }
+    if source_type:
+        values["source_type"] = source_type
+        values["source_id"] = source_id
+    row = supabase.table("check_ins").insert(values).execute().data[0]
     # Write through to the parent so every existing status-reading surface
     # stays correct without knowing check_ins exists.
     supabase.table(parent_table).update({"status": body.status}).eq("id", parent_id).eq(

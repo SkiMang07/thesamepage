@@ -135,7 +135,7 @@ a query or a policy.
 | Model | Predicate | Tables |
 |---|---|---|
 | Manager-scoped | `manager_id = auth.uid()` | direct_reports, one_on_one_series, one_on_ones, commitments, dr_capture_notes, assessments, skill/value_assessments, metric_entries, team_messages, team_meetings, team_meeting_series, team_meeting_agenda_items, team_callouts, team_dev_focus, direct_report_invites, development_plans + dev_plan_*, assistant_messages, mission_control_events, capacity_profiles, time_off_entries, away_periods, away_period_shifts |
-| Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins |
+| Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins, outside_people, outside_meetings, outside_meeting_people, outside_meeting_links |
 | Org-scoped | `org_id = public.current_org_id()` | organizations, users, org_units, role_families, role_levels, *_configs, *_scale_definitions, assessment_levels, capacity_settings, work_unit_configs, documents, document_series, document_scopes, document_citations |
 
 **Naming gotcha:** `goals` and `projects` policies are named `goals_all_own_org` /

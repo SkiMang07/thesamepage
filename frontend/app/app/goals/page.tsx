@@ -45,6 +45,7 @@ import {
   deleteGoal,
   getDirectReports,
   getGoalCheckIns,
+  getBeyondLinks,
   getGoals,
   getOrgUnits,
   getProjects,
@@ -576,6 +577,7 @@ function GoalGrid({
               trend={g.trend}
               lastCheckInAt={g.last_check_in_at}
               fetchHistory={() => getGoalCheckIns(g.id)}
+              fetchMeetingLinks={() => getBeyondLinks({ goalId: g.id })}
               submitCheckIn={(body) => createGoalCheckIn(g.id, body)}
               onCheckedIn={(ci) => onCheckedIn(g.id, ci)}
             />

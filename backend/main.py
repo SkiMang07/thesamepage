@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
-from routes import assessments, assistant, away, capacity, commitments, dashboard, development, direct_reports, documents, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
+from routes import assessments, assistant, away, beyond, capacity, commitments, dashboard, development, direct_reports, documents, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
 from utils import limiter
 
 app = FastAPI(title="The Same Page API")
@@ -48,6 +48,10 @@ app.include_router(assessments.router, prefix="/api/assessments", tags=["assessm
 app.include_router(development.router, prefix="/api/development", tags=["development"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(team.router, prefix="/api/team", tags=["team"])
+# Beyond the team — meetings outside the manager's own team. Its outputs
+# (commitments, check-ins, secondhand prep context) are what reach the rest
+# of the app; it has no Mission Control card. See docs/systems/beyond.md.
+app.include_router(beyond.router, prefix="/api/beyond", tags=["beyond"])
 app.include_router(invites.router, prefix="/api/invites", tags=["invites"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(assistant.router, prefix="/api/assistant", tags=["assistant"])

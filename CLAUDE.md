@@ -53,6 +53,7 @@ check-ins.md        the temporal layer under goals and projects
 capacity.md         supply model, off-days buffer, department rollup
 org-scoping.md      org_units, leader assignment, role-scoped rollups
 brand.md            Current & Carbon — colour roles, ink scale, status vocabulary, logo
+beyond.md           /app/beyond — meetings outside your team, counterpart commitments, routing
 ```
 
 `docs/decisions/` holds one record per durable decision — the cross-subsystem,
@@ -60,7 +61,8 @@ costly-to-reverse choices whose rationale would otherwise be relitigated. Read
 one when you are about to change what it decided.
 
 Pending work that is scoped but not built has its own doc:
-`docs/NOTES_INGESTION_SCOPING.md`. Shipped scoping docs live in
+`docs/NOTES_INGESTION_SCOPING.md`, and `docs/BEYOND_THE_TEAM_SCOPING.md` (Phase 1
+shipped — see `docs/systems/beyond.md`; Phase 2 pending). Shipped scoping docs live in
 `docs/archive/scoping/` — historical, never current intent.
 
 `docs/systems/mission-control-visual-authority.html` is the **approved Mission

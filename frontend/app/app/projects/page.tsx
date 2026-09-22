@@ -27,6 +27,7 @@ import {
   getGoals,
   getOrgUnits,
   getProjectCheckIns,
+  getBeyondLinks,
   getProjects,
   updateProject,
   updateProjectStatus,
@@ -553,6 +554,7 @@ function ProjectWorkspace({
               trend={project.trend}
               lastCheckInAt={project.last_check_in_at}
               fetchHistory={() => getProjectCheckIns(project.id)}
+              fetchMeetingLinks={() => getBeyondLinks({ projectId: project.id })}
               submitCheckIn={(body) => createProjectCheckIn(project.id, body)}
               onCheckedIn={onCheckedIn}
               actionLabel="Record what changed"
