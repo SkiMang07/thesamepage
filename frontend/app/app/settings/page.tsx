@@ -254,6 +254,10 @@ function SettingsFlow() {
     account: accountReady,
   };
   const readyCount = Object.values(readinessBySection).filter(Boolean).length;
+  // Readiness is derived from counts, and an unloaded page looks exactly like
+  // an empty workspace. Every badge stays neutral until all three inputs have
+  // arrived, so nothing flashes amber and then flips to ✓ (N-6).
+  const readinessLoaded = !!profile && !!setupStatus && !!capacitySummary;
 
   return (
     <PageShell maxWidth="7xl">
@@ -267,13 +271,14 @@ function SettingsFlow() {
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
-      <FoundationReadiness readyCount={readyCount} total={FOUNDATIONS.length} loading={!profile || !setupStatus || !capacitySummary} />
+      <FoundationReadiness readyCount={readyCount} total={FOUNDATIONS.length} loading={!readinessLoaded} />
 
       <div className={`${SECTION_GAP} grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]`}>
         <FoundationMap
           selected={section}
           onSelect={selectSection}
           readiness={readinessBySection}
+          loaded={readinessLoaded}
           profile={profile}
           setupStatus={setupStatus}
           roleFamilies={roleFamilies}
@@ -283,7 +288,7 @@ function SettingsFlow() {
         />
 
         <section className={`${CARD} min-w-0 overflow-hidden`}>
-          <FoundationEditorHeader section={section} ready={readinessBySection[section]} profile={profile} setupStatus={setupStatus} />
+          <FoundationEditorHeader section={section} ready={readinessBySection[section]} loaded={readinessLoaded} profile={profile} setupStatus={setupStatus} />
           <div className="p-5 sm:p-6">
             {section === "profile" && profile && (
               <ProfileSection profile={profile} onSaved={setProfile} onError={setError} />
@@ -408,17 +413,19 @@ function FoundationReadiness({ readyCount, total, loading }: { readyCount: numbe
         <h2 className="mt-1 text-lg font-semibold text-ink">
           {loading ? "Checking your management system…" : complete ? "Your management system is ready" : `${total - readyCount} foundation${total - readyCount === 1 ? "" : "s"} need attention`}
         </h2>
-        <p className="mt-1 text-xs text-ink-secondary">
-          {complete
-            ? "People, roles, expectations, and working defaults are connected."
-            : "Finish the amber areas so every downstream workspace has a trustworthy baseline."}
-        </p>
+        {!loading && (
+          <p className="mt-1 text-xs text-ink-secondary">
+            {complete
+              ? "People, roles, expectations, and working defaults are connected."
+              : "Finish the amber areas so every downstream workspace has a trustworthy baseline."}
+          </p>
+        )}
       </div>
       <div className="flex min-w-52 items-center gap-3" aria-label={loading ? "Loading foundation readiness" : `${readyCount} of ${total} foundations ready`}>
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
           <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${loading ? 0 : (readyCount / total) * 100}%` }} />
         </div>
-        <span className={`whitespace-nowrap text-xs font-medium ${complete ? "text-brand-hover" : "text-amber-700"}`}>
+        <span className={`whitespace-nowrap text-xs font-medium ${loading ? "text-ink-muted" : complete ? "text-brand-hover" : "text-amber-700"}`}>
           {loading ? "Checking…" : `${readyCount} of ${total} ready`}
         </span>
       </div>
@@ -455,6 +462,7 @@ function FoundationMap({
   selected,
   onSelect,
   readiness,
+  loaded,
   profile,
   setupStatus,
   roleFamilies,
@@ -465,6 +473,7 @@ function FoundationMap({
   selected: SectionId;
   onSelect: (id: SectionId) => void;
   readiness: Record<SectionId, boolean>;
+  loaded: boolean;
   profile: Profile | null;
   setupStatus: SetupStatus | null;
   roleFamilies: RoleFamily[];
@@ -498,9 +507,15 @@ function FoundationMap({
                 {foundationBlurb(item.id, profile, setupStatus, roleFamilies, roleLevels, capacity, workUnits)}
               </span>
             </span>
-            <span className={`text-xs font-semibold ${ready ? "text-brand-hover" : "text-amber-700"}`} title={ready ? "Ready" : "Needs attention"}>
-              {ready ? "✓" : "!"}
-            </span>
+            {loaded ? (
+              <span className={`text-xs font-semibold ${ready ? "text-brand-hover" : "text-amber-700"}`} title={ready ? "Ready" : "Needs attention"}>
+                {ready ? "✓" : "!"}
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-ink-faint" title="Checking" aria-label="Checking">
+                ·
+              </span>
+            )}
           </button>
         );
       })}
@@ -544,11 +559,13 @@ const EDITOR_COPY: Record<SectionId, { eyebrow: string; title: string; descripti
 function FoundationEditorHeader({
   section,
   ready,
+  loaded,
   profile,
   setupStatus,
 }: {
   section: SectionId;
   ready: boolean;
+  loaded: boolean;
   profile: Profile | null;
   setupStatus: SetupStatus | null;
 }) {
@@ -565,11 +582,15 @@ function FoundationEditorHeader({
           <h2 className="mt-1 text-lg font-semibold text-ink">{copy.title}</h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-secondary">{copy.description}</p>
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${ready ? "bg-teal-50 text-teal-700" : "bg-amber-50 text-amber-700"}`}>
-          {ready ? "✓" : "!"} {statusLabel}
-        </span>
+        {loaded ? (
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${ready ? "bg-teal-50 text-teal-700" : "bg-amber-50 text-amber-700"}`}>
+            {ready ? "✓" : "!"} {statusLabel}
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-muted">Checking…</span>
+        )}
       </div>
-      <div className={`mt-4 rounded-lg px-3 py-2.5 text-xs leading-relaxed ${ready ? "bg-brand-tint text-ink-body" : "bg-amber-50 text-amber-800"}`}>
+      <div className={`mt-4 rounded-lg px-3 py-2.5 text-xs leading-relaxed ${!loaded || ready ? "bg-brand-tint text-ink-body" : "bg-amber-50 text-amber-800"}`}>
         <span className="font-semibold">Scope:</span> {copy.scope}
       </div>
     </div>

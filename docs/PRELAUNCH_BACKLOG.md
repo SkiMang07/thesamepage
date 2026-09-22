@@ -372,11 +372,15 @@ scope here because "production-ready" includes them.
   Returning to the legacy dashboard drops from 18 to 8. Door labels render
   identically. Team's own 13-call load is untouched and is now the largest
   remaining fan-out.
-- [ ] **N-6 · Settings flashes "Needs attention" / amber "!" on all five
+- [x] **N-6 · Settings flashes "Needs attention" / amber "!" on all five
   sections before data arrives.** Observed live: the readiness rail and every
   section badge render the warning state during the loading gap, then flip
   to ✓. `settings/page.tsx` readiness derives from zero counts, and zero is
   what an unloaded state looks like. Gate the badges on `loaded`. Effort S.
+  **Done 2026-09-22.** Readiness banner, rail badges, the editor-header pill and
+  its scope box stay neutral ("Checking…") until profile, setup status and
+  capacity settings have all loaded. A failed load now stays neutral beside the
+  error message instead of claiming every foundation needs attention.
 - [ ] **N-7 · Sixteen surfaces render plain "Loading…" text; none have an
   error boundary.** `grep -rn "Loading…" frontend/app/app` → 16; `error.tsx`
   / `not-found.tsx` → 0 anywhere under `frontend/app`. A thrown render error
