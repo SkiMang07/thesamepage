@@ -156,6 +156,7 @@ import { Icon, SECTION_GAP } from "@/components/ZoneMap";
 import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, ELEVATED, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
 
 import NoteField from "@/components/NoteField";
+import { SkeletonSection } from "@/components/Skeleton";
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-sunken text-ink-secondary",
@@ -573,7 +574,7 @@ export default function TeamPage() {
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
+        <SkeletonSection label="Loading your team" variant="cards" className={SECTION_GAP} />
       ) : (
         <div className={`${SECTION_GAP} space-y-10`}>
           <section id="team-now" aria-labelledby="team-now-heading">

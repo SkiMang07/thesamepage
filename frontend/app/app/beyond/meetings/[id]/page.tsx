@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { BADGE, BTN_GHOST, BTN_PRIMARY_SM, BTN_SECONDARY, CARD_PAD, ERROR_TEXT, EYEBROW, META } from "@/lib/tokens";
 import { RELATIONSHIP_LABEL, longDate, meetingTitle } from "../../shared";
+import { PageSkeleton } from "@/components/Skeleton";
 
 export default function OutsideMeetingPage() {
   const params = useParams();
@@ -77,11 +78,7 @@ export default function OutsideMeetingPage() {
     );
   }
   if (!meeting) {
-    return (
-      <PageShell maxWidth="3xl">
-        <p className={META}>Loading...</p>
-      </PageShell>
-    );
+    return <PageSkeleton label="Loading meeting" variant="list" maxWidth="3xl" />;
   }
 
   if (meeting.status !== "logged") {

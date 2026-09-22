@@ -96,6 +96,7 @@ import {
   orgUnitLabel,
   roleLabel,
 } from "@/components/RolePicker";
+import { SkeletonSection } from "@/components/Skeleton";
 
 // Session 41 (Plan S1, docs/TEAM_SETUP_UX_REVIEW.md §6): "Team" renamed
 // "People" and promoted to right after Profile & Company — the roster-first
@@ -2374,7 +2375,7 @@ function ExpectationsSection({
 
       {view === "grid" || !roleLevelId ? (
         coverageLoading ? (
-          <p className="mt-6 text-sm text-ink-secondary">Loading...</p>
+          <SkeletonSection label="Loading expectation coverage" variant="list" className="mt-6" />
         ) : (
           <CoverageGrid
             roleLevels={roleLevels}
@@ -2630,7 +2631,7 @@ function ExpectationDetail({
       )}
 
       {loading ? (
-        <p className="mt-6 text-sm text-ink-secondary">Loading...</p>
+        <SkeletonSection label="Loading expectations" variant="rows" className="mt-6" />
       ) : (
         <ul className="mt-2 space-y-2">
           {items.map((it) => (
@@ -3522,7 +3523,7 @@ function CapacitySection({
     }
   }
 
-  if (!settings) return <p className="text-ink-secondary">Loading...</p>;
+  if (!settings) return <SkeletonSection label="Loading operating defaults" variant="rows" />;
 
   const roleLevelsWithoutUnit = roleLevels.filter((rl) => !workUnits.some((w) => w.role_level_id === rl.id));
 

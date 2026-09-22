@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { InvitePreview, getInvitePreview } from "@/lib/api";
+import { SkeletonSection } from "@/components/Skeleton";
 
 export default function InvitePage() {
   const params = useParams<{ token: string }>();
@@ -58,7 +59,7 @@ export default function InvitePage() {
       <h1 className="text-2xl font-semibold">You&apos;ve been invited</h1>
 
       {loading ? (
-        <p className="mt-8 text-ink-secondary">Loading...</p>
+        <SkeletonSection label="Loading invitation" variant="rows" className="mt-8" />
       ) : error ? (
         <p className="mt-8 text-sm text-red-700">{error}</p>
       ) : sent ? (

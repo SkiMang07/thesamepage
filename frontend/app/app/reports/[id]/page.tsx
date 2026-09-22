@@ -85,6 +85,7 @@ import {
 import { deriveOneOnOneSuggestions } from "@/lib/one-on-one-workspace";
 
 import NoteField from "@/components/NoteField";
+import { PageSkeleton } from "@/components/Skeleton";
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
   sick: "Sick",
@@ -448,7 +449,7 @@ export default function ReportDetailPage() {
     }
   }
 
-  if (loading) return <p className="p-8 text-ink-secondary">Loading...</p>;
+  if (loading) return <PageSkeleton label="Loading this person" variant="columns" maxWidth="7xl" />;
   if (error && !report) return <p className="p-8 text-red-700">{error}</p>;
   if (!report) return null;
 

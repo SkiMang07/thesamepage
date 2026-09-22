@@ -71,6 +71,7 @@ import {
   META,
   TEXTAREA,
 } from "@/lib/tokens";
+import { PageSkeleton } from "@/components/Skeleton";
 
 // Local (not UTC) YYYY-MM-DD. scheduled_at is a timestamp encoded at noon
 // UTC; parsing a bare date string through new Date() treats it as UTC
@@ -294,11 +295,7 @@ export default function TeamMeetingPage() {
   }
 
   if (loading) {
-    return (
-      <PageShell maxWidth="6xl">
-        <p className="text-ink-secondary">Loading...</p>
-      </PageShell>
-    );
+    return <PageSkeleton label="Loading meeting" variant="columns" maxWidth="6xl" />;
   }
 
   if (loadError || !meeting) {

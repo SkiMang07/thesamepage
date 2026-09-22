@@ -28,6 +28,7 @@ import {
   SELECT,
 } from "@/lib/tokens";
 import { RELATIONSHIP_GROUP, RELATIONSHIP_LABEL, RELATIONSHIP_ORDER, meetingTitle, shortDate } from "./shared";
+import { SkeletonSection } from "@/components/Skeleton";
 
 export default function BeyondPage() {
   const [data, setData] = useState<BeyondOverview | null>(null);
@@ -82,7 +83,7 @@ export default function BeyondPage() {
       {error && <p className={`${ERROR_TEXT} mt-3`}>{error}</p>}
 
       {!data && !error ? (
-        <p className={`${META} mt-5`}>Loading...</p>
+        <SkeletonSection label="Loading meetings beyond your team" variant="columns" className="mt-5" />
       ) : (
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           <section className={CARD_PAD}>

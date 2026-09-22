@@ -36,6 +36,7 @@ import {
   TEXTAREA,
 } from "@/lib/tokens";
 import { RELATIONSHIP_LABEL, RELATIONSHIP_ORDER, longDate, meetingTitle, shortDate } from "../../shared";
+import { PageSkeleton } from "@/components/Skeleton";
 
 export default function OutsidePersonPage() {
   const params = useParams();
@@ -103,9 +104,10 @@ export default function OutsidePersonPage() {
   }
 
   if (!data) {
+    if (!error) return <PageSkeleton label="Loading this person" variant="list" maxWidth="4xl" />;
     return (
       <PageShell maxWidth="4xl">
-        {error ? <p className={ERROR_TEXT}>{error}</p> : <p className={META}>Loading...</p>}
+        <p className={ERROR_TEXT}>{error}</p>
       </PageShell>
     );
   }

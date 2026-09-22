@@ -381,13 +381,18 @@ scope here because "production-ready" includes them.
   its scope box stay neutral ("Checking…") until profile, setup status and
   capacity settings have all loaded. A failed load now stays neutral beside the
   error message instead of claiming every foundation needs attention.
-- [ ] **N-7 · Sixteen surfaces render plain "Loading…" text; none have an
+- [x] **N-7 · Sixteen surfaces render plain "Loading…" text; none have an
   error boundary.** `grep -rn "Loading…" frontend/app/app` → 16; `error.tsx`
   / `not-found.tsx` → 0 anywhere under `frontend/app`. A thrown render error
   in production shows Next's default white "Application error" page with no
   brand and no way back. Add `frontend/app/app/error.tsx` and
   `frontend/app/not-found.tsx` (S), and swap the plain text for the skeleton
   pattern Mission Control and 1:1s already use (S–M).
+  **Done 2026-09-22.** `app/app/error.tsx` (branded, inside the app shell, with
+  Try again and Back to Mission Control) and `app/not-found.tsx` added.
+  Seventeen page- and section-level "Loading..." screens now use
+  `components/Skeleton.tsx`. Four small inline waits stay as text: Settings'
+  archived list and expectation drafts, CheckInPanel history, the Scribe thread.
 - [ ] **N-8 · Legacy marketing routes still ship in the Vercel app.**
   `frontend/app/(marketing)/` still serves `/`, `/pricing` ("$20/month ·
   Start free trial" with no trial mechanics behind it) and `/blog` on the
@@ -529,7 +534,7 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
 - [ ] ✘ Pagination on list endpoints (`docs/ENGINEERING.md` → Open
   questions). Fine at one team; a manager who imports 40 reports and a year
   of 1:1s will feel it. Post-launch is acceptable; note it.
-- [ ] ✘ `frontend/app/app/error.tsx` + `not-found.tsx` (N-7).
+- [x] ✔ `frontend/app/app/error.tsx` + `not-found.tsx` (N-7).
 
 ### G. Verification and release discipline
 

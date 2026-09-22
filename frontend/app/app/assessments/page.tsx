@@ -18,6 +18,7 @@ import Link from "next/link";
 import { getTeamAssessments, TeamAssessmentItem } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
+import { SkeletonSection } from "@/components/Skeleton";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -55,7 +56,7 @@ export default function AssessmentsPage() {
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
       {loading ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
+        <SkeletonSection label="Loading assessments" variant="list" className={SECTION_GAP} />
       ) : team.length === 0 ? (
         <p className={`${SECTION_GAP} text-ink-secondary`}>
           No direct reports yet.{" "}

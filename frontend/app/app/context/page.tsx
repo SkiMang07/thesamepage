@@ -63,6 +63,7 @@ import {
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { INPUT, LABEL, BTN_PRIMARY, HEX } from "@/lib/tokens";
+import { SkeletonSection } from "@/components/Skeleton";
 
 const CATEGORY_LABELS: Record<DocumentCategory, string> = {
   where_we_are_going: "Where we're going",
@@ -263,7 +264,7 @@ export default function ContextEnginePage() {
       </form>
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
+        <SkeletonSection label="Loading knowledge" variant="list" className={SECTION_GAP} />
       ) : (
         <>
           {stuck.length > 0 && (

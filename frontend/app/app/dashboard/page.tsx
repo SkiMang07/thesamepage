@@ -65,6 +65,7 @@ import {
 import { SECTION_GAP, useZoneData, ZoneMap } from "@/components/ZoneMap";
 import PageShell from "@/components/PageShell";
 import { ActionBrief, ActionBriefLoadFailure, ActionBriefLoading } from "@/components/mission-control/ActionBrief";
+import { SkeletonSection } from "@/components/Skeleton";
 
 function daysSince(iso: string) {
   const then = new Date(iso).getTime();
@@ -474,7 +475,7 @@ function LegacyDashboardPage() {
         </div>
       )}
 
-      {loading && <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>}
+      {loading && <SkeletonSection label="Loading dashboard" variant="cards" className={SECTION_GAP} />}
 
       {/* THE GRID — 3 sections across the top. Capacity is deliberately NOT
           a fourth column: it's a snapshot stat per person, not a triage

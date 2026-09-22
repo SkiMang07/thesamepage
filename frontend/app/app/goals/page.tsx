@@ -57,6 +57,7 @@ import { SECTION_GAP } from "@/components/ZoneMap";
 import { INPUT, LABEL, BTN_PRIMARY, HEX, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone } from "@/lib/tokens";
 
 import NoteField from "@/components/NoteField";
+import { SkeletonSection } from "@/components/Skeleton";
 const LEVEL_TABS: { id: GoalLevel; label: string; blurb: string }[] = [
   { id: "individual", label: "Individual", blurb: "Goals for one direct report" },
   { id: "team", label: "Team", blurb: "Goals for your whole team" },
@@ -284,7 +285,7 @@ export default function GoalsPage() {
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
+        <SkeletonSection label="Loading goals" variant="cards" className={SECTION_GAP} />
       ) : (
         <div className={SECTION_GAP}>
           <KpiStrip goals={levelGoals} projects={projects} />

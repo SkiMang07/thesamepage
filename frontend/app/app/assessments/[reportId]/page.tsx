@@ -27,6 +27,7 @@ import {
 import PageShell from "@/components/PageShell";
 
 import NoteField from "@/components/NoteField";
+import { PageSkeleton } from "@/components/Skeleton";
 type SkillValuePending = { evaluation_point: number | null; notes: string };
 type MetricPending = { value: string; period: string; notes: string };
 
@@ -278,7 +279,7 @@ export default function AssessmentScorecardPage() {
     [scorecard]
   );
 
-  if (loading) return <p className="p-8 text-ink-secondary">Loading...</p>;
+  if (loading) return <PageSkeleton label="Loading assessment" variant="list" maxWidth="2xl" />;
   if (error && !scorecard) return <p className="p-8 text-red-700">{error}</p>;
   if (!scorecard) return null;
 

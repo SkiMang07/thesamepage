@@ -49,6 +49,7 @@ import {
   STATUS_GLYPH,
   STATUS_STYLES,
 } from "@/lib/tokens";
+import { SkeletonSection } from "@/components/Skeleton";
 
 const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
   { id: "active", label: "Active" },
@@ -272,7 +273,7 @@ export default function ProjectsPage() {
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
+        <SkeletonSection label="Loading projects" variant="cards" className={SECTION_GAP} />
       ) : (
         <div className={SECTION_GAP}>
           {showForm && (

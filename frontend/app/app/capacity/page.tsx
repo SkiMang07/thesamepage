@@ -45,6 +45,7 @@ import {
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { CARD, EYEBROW, FEATURE_SURFACE } from "@/lib/tokens";
+import { SkeletonSection } from "@/components/Skeleton";
 
 type PeriodKind = "week" | "month" | "quarter";
 
@@ -252,7 +253,7 @@ export default function CapacityPage() {
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
       {loading ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>Loading...</p>
+        <SkeletonSection label="Loading capacity" variant="cards" className={SECTION_GAP} />
       ) : (
         <>
           {overview.length > 0 && (

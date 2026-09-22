@@ -90,6 +90,14 @@ here rather than giving a shell component its own fetch: layout-level components
 never remount on navigation, so a local fetch there goes stale after a write,
 and a page-level copy duplicates the requests.
 
+**Loading and failure.** A page that is waiting on data shows a skeleton from
+`components/Skeleton.tsx` rather than a "Loading..." line: `SkeletonSection` when
+the page's title is already on screen, `PageSkeleton` when the page returns early.
+Mission Control and `/app/1-1s` keep their own page-shaped skeletons. A render
+error on any authenticated page lands in `app/app/error.tsx`, inside the shell, so
+the sidebar and top bar stay usable. Unknown URLs anywhere get `app/not-found.tsx`.
+Small inline waits (one list inside a panel, the Scribe thread) may stay as text.
+
 **Sticky gotcha:** `overflow-x-hidden` in `layout.tsx` wraps only `{children}`,
 never the div that also renders `<AppNav />`. Setting `overflow-x` to anything but
 `visible` makes the browser compute `overflow-y: auto` too, silently turning that
