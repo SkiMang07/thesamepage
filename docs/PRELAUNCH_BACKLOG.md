@@ -554,8 +554,13 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
   thesamepage-production.up.railway.app: 16 `/api/` requests, all 200, done
   2.1 s after navigation. An unset backend variable falls back to
   `localhost:8000` and nothing would load. Supabase auth works through the
-  middleware, which needs both Supabase variables. `app.thesamepage.xyz` does
-  not resolve yet; see the custom-domain item.
+  middleware, which needs both Supabase variables. Confirmed in the Vercel
+  dashboard the same evening. `NEXT_PUBLIC_BACKEND_URL` is set on Production
+  and Preview. `NEXT_PUBLIC_SUPABASE_URL` and `_ANON_KEY` come from the Supabase
+  integration and are Production only, so preview deployments cannot sign in.
+  That's fine for launch; add them to Preview if previews are ever used for
+  testing. Domains: only thesamepage-blush.vercel.app is attached, so
+  `app.thesamepage.xyz` does not resolve yet (see the custom-domain item).
 - [ ] ✘ Pagination on list endpoints (`docs/ENGINEERING.md` → Open
   questions). Fine at one team; a manager who imports 40 reports and a year
   of 1:1s will feel it. Post-launch is acceptable; note it.
