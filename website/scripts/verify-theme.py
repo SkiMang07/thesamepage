@@ -86,9 +86,14 @@ for tf_name in sorted(os.listdir(tpl_dir)):
     # (the annotation, both standard includes, resolvable partials) still
     # applies to them.
     is_blog = "templateType: blog" in tpl
+    # System templates (404, 500) are templateType: error_page. HubSpot renders
+    # them with no page record behind them, so they carry no dnd_area either.
+    is_system = "templateType: error_page" in tpl
     needles=[("standard_header_includes","missing standard_header_includes"),
              ("standard_footer_includes","missing standard_footer_includes")]
-    if not is_blog:
+    if is_system:
+        needles=[("templateType: error_page","missing templateType annotation")]+needles
+    elif not is_blog:
         needles=[("templateType: page","missing templateType annotation")]+needles+[
                  ("dnd_area","missing dnd_area")]
     for needle,msg in needles:

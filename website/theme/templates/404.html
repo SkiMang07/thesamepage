@@ -1,0 +1,36 @@
+<!--
+  templateType: error_page
+  isAvailableForNewContent: false
+  label: 404 — page not found
+-->
+<!doctype html>
+<html lang="{{ html_lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Page not found · The Same Page</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&display=swap">
+  {{ require_css(get_asset_url("../css/main.css")) }}
+  {{ standard_header_includes }}
+</head>
+<body class="body-wrapper">
+  {% include "./partials/header.html" %}
+
+  <main id="main-content">
+    <section class="wrap" style="padding-top:clamp(64px,10vw,128px);padding-bottom:clamp(64px,10vw,128px);max-width:760px">
+      <p class="eyebrow">Page not found</p>
+      <h1 style="margin-top:12px;font-family:var(--display);font-size:clamp(2rem,4vw,2.75rem);line-height:1.1;color:var(--ink)">There's nothing at this address.</h1>
+      <p class="lede" style="margin-top:16px">The link may be old, or the page may have moved.</p>
+      <div style="margin-top:32px;display:flex;flex-wrap:wrap;gap:12px">
+        <a class="btn btn-primary" href="/">Home page</a>
+        <a class="btn btn-ghost" href="/blog">Read the blog</a>
+        <a class="btn btn-ghost" href="https://app.thesamepage.xyz/app/login">Sign in</a>
+      </div>
+    </section>
+  </main>
+
+  {% include "./partials/footer.html" %}
+  {{ standard_footer_includes }}
+</body>
+</html>

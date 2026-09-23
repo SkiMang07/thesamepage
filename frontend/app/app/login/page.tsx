@@ -60,10 +60,10 @@ function LoginForm() {
 
   return (
     <main className="mx-auto max-w-sm px-6 py-24">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
+      <h1 className="text-2xl font-semibold">Sign in or create your account</h1>
       <p className="mt-2 text-ink-secondary">
         {method === "magic-link"
-          ? "We'll send you a magic link — no password needed."
+          ? "We'll email you a login link, no password needed. New here? The same link creates your account."
           : "Use the email and password for your account."}
       </p>
 
