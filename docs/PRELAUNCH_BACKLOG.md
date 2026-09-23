@@ -536,15 +536,14 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
   requests: 1 user 3.5 s → 0.8 s, 3 concurrent users 10 s → 1.0 s, 10 users
   30 s → 1.7 s. `GET /api/setup-status` (7 sequential queries) is now the
   slowest single call on that page.
-- [ ] ◐ Railway: confirm the service is not on a sleeping/hobby plan (cold
+- [x] ✔ Railway: confirm the service is not on a sleeping/hobby plan (cold
   starts read as "the app is broken" to a first-time user); set a
   healthcheck path to `/health` and restart policy.
   **Checked 2026-09-22 in the dashboard (service `thesamepage`, project
   `divine-clarity`).** Serverless (scale-to-zero) is off, so no cold starts.
   Restart policy is On Failure with 10 retries. `/health` answers
-  `{"status":"ok"}` in production. **Remaining:** type `/health` into Settings →
-  Deploy → Healthcheck Path. Left for Andrew because it changes production
-  deploy behaviour.
+  `{"status":"ok"}` in production. Andrew set Healthcheck Path to `/health` the
+  same evening (default 300 s timeout).
 - [x] ✔ Vercel: confirm production env vars (`NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_BACKEND_URL`) are set on the
   Production environment, not only Preview. The backend variable is
