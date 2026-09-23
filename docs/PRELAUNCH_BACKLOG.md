@@ -539,9 +539,23 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
 - [ ] ◐ Railway: confirm the service is not on a sleeping/hobby plan (cold
   starts read as "the app is broken" to a first-time user); set a
   healthcheck path to `/health` and restart policy.
-- [ ] ◐ Vercel: confirm production env vars (`NEXT_PUBLIC_SUPABASE_URL`,
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`) are set on the
-  Production environment, not only Preview.
+  **Checked 2026-09-22 in the dashboard (service `thesamepage`, project
+  `divine-clarity`).** Serverless (scale-to-zero) is off, so no cold starts.
+  Restart policy is On Failure with 10 retries. `/health` answers
+  `{"status":"ok"}` in production. **Remaining:** type `/health` into Settings →
+  Deploy → Healthcheck Path. Left for Andrew because it changes production
+  deploy behaviour.
+- [x] ✔ Vercel: confirm production env vars (`NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_BACKEND_URL`) are set on the
+  Production environment, not only Preview. The backend variable is
+  `NEXT_PUBLIC_BACKEND_URL` (`lib/api.ts`), not `NEXT_PUBLIC_API_URL`.
+  **Verified 2026-09-22 from the live production build**, not the dashboard.
+  Signed-in `/app/team` on thesamepage-blush.vercel.app calls
+  thesamepage-production.up.railway.app: 16 `/api/` requests, all 200, done
+  2.1 s after navigation. An unset backend variable falls back to
+  `localhost:8000` and nothing would load. Supabase auth works through the
+  middleware, which needs both Supabase variables. `app.thesamepage.xyz` does
+  not resolve yet; see the custom-domain item.
 - [ ] ✘ Pagination on list endpoints (`docs/ENGINEERING.md` → Open
   questions). Fine at one team; a manager who imports 40 reports and a year
   of 1:1s will feel it. Post-launch is acceptable; note it.
