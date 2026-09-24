@@ -1411,6 +1411,15 @@ alter table commitments
 
 create index commitments_outside_person_idx on commitments (outside_person_id) where outside_person_id is not null;
 
+-- commitments.org_unit_id (2026-09-24): the team a commitment belongs to, so
+-- /app/team can scope a manager-owned ("You") commitment. Null = no team
+-- recorded; the team page falls back to the assignee's team, and shows a
+-- null-with-no-assignee row only under "All teams".
+alter table commitments
+  add column org_unit_id uuid references org_units(id) on delete set null;
+
+create index commitments_org_unit_idx on commitments (org_unit_id) where org_unit_id is not null;
+
 -- ============================================================
 -- AUTO-CREATE USER PROFILE ON SIGNUP
 -- When someone signs in via magic link for the first time,

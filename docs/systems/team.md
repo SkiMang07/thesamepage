@@ -71,13 +71,15 @@ The dropdown lists `org_units` where `leader_user_id` is the caller (`GET
 /api/org-units/led`) — there is no separate "which team am I a member of"
 concept. **"All teams" is the default.**
 
-Most filtering is free: roster, initiatives, and commitments key off
-`direct_report_id` → `direct_reports.org_unit_id`; goals and projects carry
-`org_unit_id` directly. Only `team_meetings` and `team_callouts` needed a
-real `org_unit_id` column.
+Roster keys off `direct_report_id` → `direct_reports.org_unit_id`; goals,
+projects, `team_meetings`, and `team_callouts` carry `org_unit_id` directly.
+Commitments carry their own `org_unit_id` and fall back to the assignee's team
+when it is null (see Team commitments below).
 
-**A null `org_unit_id` means "applies to all teams"** — such a row shows under
-every specific team's filter, not only under "All teams."
+**A null `org_unit_id` on a goal, meeting, or callout means "applies to all
+teams"** — such a row shows under every specific team's filter, not only under
+"All teams." Commitments are the exception: a commitment with no team of its
+own and no assignee shows only under "All teams."
 
 ### Hierarchy cascade
 
@@ -255,9 +257,17 @@ the team-wide list. Resolving one reuses `PATCH /api/commitments/{id}` unchanged
 
 **`direct_report_id` is optional: a null one is the manager's own** — see
 `docs/decisions/nullable-commitment-owner.md`, which any new commitments surface
-should read before joining on `direct_reports`. A manager-owned team commitment
-has no report to derive a team from, so it shows under every team — same
-convention as a null `org_unit_id` row.
+should read before joining on `direct_reports`.
+
+**A team commitment belongs to a team through `commitments.org_unit_id`.** A
+commitment logged from a team meeting takes the meeting's `org_unit_id`; one
+added from the card takes the team selected on the page, or the assignee's team
+under "All teams." The page and the meeting screen filter on `org_unit_id`,
+falling back to the assignee's `direct_reports.org_unit_id` when it is null. A
+row with neither (a manager-owned commitment added under "All teams," or one
+created before the column existed) shows only under "All teams" and on
+all-teams meetings — never under every team, which is how one team's list used
+to fill with every other team's work.
 
 Commitments extracted from a meeting carry `source_type = 'team_meeting'` and
 `source_id` = the meeting, so each traces back to where it was made.

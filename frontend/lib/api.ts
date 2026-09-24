@@ -217,6 +217,9 @@ export type Commitment = {
   completed_at: string | null;
   direct_report_id: string;
   direct_report_name?: string | null;
+  // Team commitments only (2026-09-24): the team it belongs to. Null means
+  // none recorded — the team page falls back to the assignee's team.
+  org_unit_id?: string | null;
 };
 
 export type AgendaItem = {
@@ -1188,6 +1191,8 @@ export const createTeamCommitment = (body: {
   directReportId: string | null;
   description: string;
   dueDate?: string | null;
+  // The team selected when it was added; null under "All teams".
+  orgUnitId?: string | null;
 }): Promise<TeamCommitment> =>
   authedFetch("/api/team/commitments", {
     method: "POST",
@@ -1195,6 +1200,7 @@ export const createTeamCommitment = (body: {
       direct_report_id: body.directReportId,
       description: body.description,
       due_date: body.dueDate ?? null,
+      org_unit_id: body.orgUnitId ?? null,
     }),
   });
 

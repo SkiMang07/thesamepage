@@ -464,10 +464,13 @@ export default function TeamPage() {
     selectedTeamId === null
       ? commitments
       : commitments.filter(
-          // A manager-owned team commitment (2026-08-24) has no direct report
-          // to derive a team from, so it shows under every team — same
-          // convention as a null org_unit_id callout or meeting.
-          (c) => c.direct_report_id == null || reportOrgUnitId(c.direct_report_id) === selectedTeamId
+          // A commitment's own org_unit_id (2026-09-24) says which team it
+          // belongs to — the meeting it came from, or the team it was added
+          // under. Without one, fall back to the assignee's team. A "You"
+          // commitment with no team recorded shows only under "All teams";
+          // it used to show under every team, which is how one team's list
+          // filled up with every other team's commitments.
+          (c) => (c.org_unit_id ?? reportOrgUnitId(c.direct_report_id)) === selectedTeamId
         );
   const visibleMeetings =
     selectedTeamId === null
@@ -615,6 +618,7 @@ export default function TeamPage() {
               members={visibleMembers}
               commitments={visibleCommitments}
               setCommitments={setCommitments}
+              selectedTeamId={selectedTeamId}
             />
           </section>
 
@@ -900,10 +904,12 @@ function CommitmentsCard({
   members,
   commitments,
   setCommitments,
+  selectedTeamId,
 }: {
   members: TeamMember[];
   commitments: TeamCommitment[];
   setCommitments: React.Dispatch<React.SetStateAction<TeamCommitment[]>>;
+  selectedTeamId: string | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [reportId, setReportId] = useState("");
@@ -933,6 +939,7 @@ function CommitmentsCard({
         directReportId: reportId || null,
         description: description.trim(),
         dueDate: dueDate || null,
+        orgUnitId: selectedTeamId,
       });
       setCommitments((c) => [created, ...c]);
       setDescription("");

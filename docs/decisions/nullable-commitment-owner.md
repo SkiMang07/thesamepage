@@ -43,9 +43,12 @@ rather than guessing, and UI owner pickers offer "You" as the first option.
 - **Any new commitments surface inherits this obligation** — an inner join or a
   bare `{direct_report_name}` render will silently hide or blank the manager's
   own commitments.
-- Team-scoped filtering cannot derive a team from a null report, so a
-  manager-owned team commitment shows under every team — the same convention as
-  a null `org_unit_id` row.
+- Team-scoped filtering cannot derive a team from a null report. **Superseded
+  2026-09-24:** showing such rows under every team leaked one team's work onto
+  every other team's page, so commitments gained their own `org_unit_id` (from
+  the meeting or the team selected when added). A null-report row with no
+  `org_unit_id` now shows only under "All teams." See `docs/systems/team.md` →
+  Team commitments.
 - A 1:1 prep sheet filters by report, so these correctly never appear there.
 - **Refined 2026-09-22 (Beyond the team):** `committed_by = 'counterpart'` rows —
   something an outside person owes the manager — also have a null

@@ -239,15 +239,18 @@ export default function TeamMeetingPage() {
       ? members
       : members.filter((m) => orgUnitById.get(m.id) === meeting.org_unit_id);
 
-  // A null direct_report_id is the manager's own commitment and has no team
-  // to derive, so it shows under every meeting — never filter it out.
+  // A commitment's own org_unit_id (2026-09-24) is its team; without one,
+  // fall back to the assignee's team. A "You" commitment with no team
+  // recorded only shows on an all-teams meeting — it used to show on every
+  // meeting, which leaked other teams' work into this one.
   const openCommitments = commitments
     .filter((c) => c.status === "open")
     .filter(
       (c) =>
         meeting?.org_unit_id == null ||
-        c.direct_report_id == null ||
-        orgUnitById.get(c.direct_report_id) === meeting.org_unit_id
+        (c.org_unit_id ??
+          (c.direct_report_id ? orgUnitById.get(c.direct_report_id) ?? null : null)) ===
+          meeting.org_unit_id
     )
     .sort((a, b) => {
       if (a.due_date === b.due_date) return 0;

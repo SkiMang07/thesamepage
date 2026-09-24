@@ -181,6 +181,9 @@ class TeamCommitmentIn(BaseModel):
     direct_report_id: str | None = None
     description: str
     due_date: str | None = None
+    # The team this commitment belongs to (2026-09-24) — the team selected on
+    # /app/team when it was added. Null falls back to the assignee's team.
+    org_unit_id: str | None = None
 
 
 class TeamCalloutIn(BaseModel):
@@ -991,6 +994,9 @@ def log_team_meeting(
                 {
                     "owner_id": user_id,
                     "direct_report_id": report_id,
+                    # The meeting's team, so a "You" commitment from the
+                    # LATAM GTM meeting stays on LATAM GTM's page.
+                    "org_unit_id": meeting.get("org_unit_id"),
                     "description": description,
                     "due_date": commitment.due_date or None,
                     "committed_by": "manager",
@@ -1128,7 +1134,7 @@ def list_team_commitments(auth=Depends(get_authenticated_client)):
         supabase.table("commitments")
         .select(
             "id,description,due_date,status,committed_by,created_at,completed_at,"
-            "direct_report_id,direct_reports(name)"
+            "direct_report_id,org_unit_id,direct_reports(name)"
         )
         .eq("owner_id", user_id)
         .eq("is_team_commitment", True)
@@ -1158,7 +1164,7 @@ def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authenticate
     if body.direct_report_id:
         rows = (
             supabase.table("direct_reports")
-            .select("id,name")
+            .select("id,name,org_unit_id")
             .eq("id", body.direct_report_id)
             .eq("manager_id", user_id)
             .execute()
@@ -1168,12 +1174,26 @@ def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authenticate
             raise HTTPException(status_code=404, detail="Direct report not found")
         report = rows[0]
 
+    # The team it belongs to: whichever team the manager added it under, else
+    # the assignee's team. Without this a "You" commitment has no team and
+    # shows up on every team's page.
+    org_unit_id = body.org_unit_id
+    if org_unit_id:
+        visible = (
+            supabase.table("org_units").select("id").eq("id", org_unit_id).execute().data
+        )
+        if not visible:
+            raise HTTPException(status_code=404, detail="Team not found")
+    elif report:
+        org_unit_id = report.get("org_unit_id")
+
     result = (
         supabase.table("commitments")
         .insert(
             {
                 "owner_id": user_id,
                 "direct_report_id": body.direct_report_id,
+                "org_unit_id": org_unit_id,
                 "description": description,
                 "due_date": body.due_date,
                 "committed_by": "manager",
