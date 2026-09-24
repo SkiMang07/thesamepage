@@ -150,6 +150,18 @@ Each event carries the `route` tag and the user id, nothing else about the
 person; the Authorization header arrives as `[Filtered]`. Without `SENTRY_DSN`
 on Railway, `init_sentry()` does nothing.
 
+Frontend: `@sentry/nextjs`, Sentry project `thesamepage-frontend`, same rules.
+Settings live in `frontend/lib/sentryOptions.ts` (browser, Node and edge all
+use them): errors only, `sendDefaultPii: false`, console breadcrumbs dropped
+(they could carry note text), and `<SentryUser />` in `app/app/layout.tsx`
+sets the Supabase user id and nothing else. `app/app/error.tsx` and
+`app/global-error.tsx` report what they catch, because a React error boundary
+swallows the error before any global handler sees it. Browser events post to
+`/monitoring` on the app's own domain (the `tunnelRoute` in `next.config.js`),
+so ad blockers don't drop them and the CSP needs no Sentry host. Off until
+`NEXT_PUBLIC_SENTRY_DSN` is set on Vercel. Source maps upload only when
+`SENTRY_AUTH_TOKEN` is set there too; without it, stack traces are minified.
+
 Uptime: Sentry's uptime monitor (the free plan's one) checks
 `https://app.thesamepage.xyz/health` every minute. That path is a rewrite in
 `frontend/next.config.js` to the API's `/health`, because Sentry refuses to
@@ -372,6 +384,8 @@ while Andrew is actively running the backend locally, and it is a separate
 | SMTP app password (`tsp-supabase-smtp-2026-09`) | Google account for ag@thesamepage.xyz → Security → App passwords (needs 2-Step Verification) | Supabase → Auth → Emails → SMTP Settings | sends login email via smtp.gmail.com:465; to rotate, paste the new one, send a test magic link, then revoke the old one in Google |
 | `STRIPE_*` | Stripe | Railway | empty until billing ships |
 | `SENTRY_DSN` | Sentry | Railway | not a secret; leaks only let someone send you errors |
+| `NEXT_PUBLIC_SENTRY_DSN` | Sentry → thesamepage-frontend → Client Keys | Vercel (Config, not Secret) | public by design, ships in the browser bundle |
+| `SENTRY_AUTH_TOKEN` (optional) | Sentry → Settings → Auth Tokens (org token) | Vercel (Secret) | only for source-map upload at build; the build works without it |
 
 **Name keys `tsp-<host>-<yyyy-mm>`** (`tsp-railway-2026-09`), so the dashboard
 shows at a glance which key serves where and how old it is. A key whose host
@@ -452,8 +466,6 @@ Not yet built, deliberately:
 
 ## Open questions
 
-- Error monitoring — the backend reports to Sentry. The frontend has no error
-  reporting yet (`@sentry/nextjs`, same Sentry org).
 - CI doesn't block deploys. Railway and Vercel deploy on push, and CI (above)
   only reports. Making it a gate would mean deploy hooks or GitHub-triggered
   deploys instead of the platforms' own git integrations.

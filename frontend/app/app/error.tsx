@@ -5,6 +5,7 @@
 // manager always has a way back. Without this, a thrown render error showed
 // Next's unbranded white "Application error" page with no navigation.
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 import Link from "next/link";
 import PageShell from "@/components/PageShell";
@@ -12,6 +13,9 @@ import { BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW } from "@/lib/tokens";
 
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
+    // This boundary catches the error before any global handler sees it, so
+    // it has to report to Sentry itself.
+    Sentry.captureException(error);
     console.error(error);
   }, [error]);
 

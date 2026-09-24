@@ -72,4 +72,20 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Sentry (PRELAUNCH_BACKLOG §7 D). Browser events go to /monitoring on this
+// domain and are forwarded to Sentry from there, so ad blockers don't drop
+// them and the CSP needs no Sentry host. Source maps are uploaded (and kept
+// out of the public bundle) only when SENTRY_AUTH_TOKEN is set on Vercel;
+// without it the build still succeeds and stack traces are minified.
+const { withSentryConfig } = require("@sentry/nextjs/config");
+
+module.exports = withSentryConfig(nextConfig, {
+  org: "the-same-page",
+  project: "thesamepage-frontend",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  tunnelRoute: "/monitoring",
+  silent: !process.env.CI,
+  telemetry: false,
+  webpack: { treeshake: { removeDebugLogging: true } },
+});

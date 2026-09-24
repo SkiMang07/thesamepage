@@ -634,7 +634,12 @@ Decided the same day, behind the sentence:
   A deliberate error from a temporary signed-in route (since removed) arrived
   with the `route` tag and the user id only; the Authorization header came
   through `[Filtered]`, and no email, IP, cookie or body was sent. Email alerts
-  go to Andrew. **Left:** `@sentry/nextjs` on the frontend (same org). The `/health`
+  go to Andrew. **Frontend built 2026-09-24:** `@sentry/nextjs`, project
+  `thesamepage-frontend`, same rules (errors only, user id only, console
+  breadcrumbs dropped), sent through `/monitoring` on the app domain.
+  `next build` passes and a local browser run captured a thrown error and
+  posted it to the tunnel. **Left:** see a live event in Sentry after deploy;
+  optionally `SENTRY_AUTH_TOKEN` on Vercel for readable stack traces. The `/health`
   endpoint's own comment records that the first dictation outage was
   "indistinguishable from a vendor outage at the client".
 - [x] ✔ Structured logging. One JSON line per record on stdout
