@@ -9,10 +9,17 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
+from observability import RequestContextMiddleware, configure_logging, init_sentry
 from routes import assessments, assistant, away, beyond, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
+configure_logging()
 logger = logging.getLogger(__name__)
+
+# Before the app is built, so Sentry's FastAPI integration can hook it. A
+# no-op until SENTRY_DSN is set on Railway.
+if init_sentry(settings.SENTRY_DSN, settings.ENVIRONMENT):
+    logger.info("sentry enabled")
 
 app = FastAPI(title="The Same Page API")
 
@@ -92,6 +99,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Outermost, so every log line from any layer below (the gate, the limiter, a
+# route) carries this request's route and, once auth resolves, its user id.
+# Order-neutral otherwise: it only sets a contextvar and passes through.
+app.add_middleware(RequestContextMiddleware)
 
 app.include_router(direct_reports.router, prefix="/api/direct-reports", tags=["direct-reports"])
 app.include_router(away.router, prefix="/api/away", tags=["away"])

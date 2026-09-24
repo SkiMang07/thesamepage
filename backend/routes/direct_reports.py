@@ -27,6 +27,7 @@ a manager now enters/confirms it. No email is sent from the backend; the
 manager copies the returned link and shares it themselves, same
 manual-delivery posture Session 21 chose for team_messages.
 """
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -35,6 +36,8 @@ from pydantic import BaseModel
 
 from config import settings
 from utils import get_authenticated_client, meeting_date_of, meeting_sort_key
+
+logger = logging.getLogger(__name__)
 
 _INVITE_TTL_DAYS = 7
 
@@ -380,7 +383,10 @@ def get_direct_report(report_id: str, auth=Depends(get_authenticated_client)):
             .single()
             .execute()
         )
-    except Exception:
+    except Exception as exc:
+        # .single() raises when no row matches, which is the normal 404. Logged
+        # at info so a real failure (a bad column, Supabase down) is findable.
+        logger.info("lookup failed, answering 404: %s", exc)
         raise HTTPException(status_code=404, detail="Direct report not found")
     if not result.data:
         raise HTTPException(status_code=404, detail="Direct report not found")

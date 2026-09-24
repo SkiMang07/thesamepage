@@ -6,12 +6,52 @@ and response-shape extraction, so a provider outage or API change is a
 one-file fix instead of a grep-and-replace across the codebase.
 """
 import logging
+import time
 import httpx
 from fastapi import HTTPException
 
 from config import settings, AI_DEFAULT_MODEL_HEAVY, AI_DEFAULT_MODEL_LIGHT, AI_TRANSCRIBE_MODEL
 
 logger = logging.getLogger("ai_core")
+
+
+# One "ai_call" log line per provider call: provider, model, call kind,
+# tokens in/out and latency. This is the AI cost ledger until there is a
+# better one (PRELAUNCH_BACKLOG §7 D): filter Railway logs on
+# message="ai_call" and sum the token fields by model. The route and user id
+# are added by observability.py. Never add the prompt or the output here.
+def _log_usage(provider: str, kind: str, model: str, response: dict, started: float) -> None:
+    usage = response.get("usage") or {}
+    fields = {
+        "provider": provider,
+        "kind": kind,
+        "model": response.get("model") or model,
+        "latency_ms": round((time.monotonic() - started) * 1000),
+    }
+    if provider == "anthropic":
+        fields["input_tokens"] = usage.get("input_tokens")
+        fields["output_tokens"] = usage.get("output_tokens")
+        for k in ("cache_read_input_tokens", "cache_creation_input_tokens"):
+            if usage.get(k):
+                fields[k] = usage[k]
+        fields["stop_reason"] = response.get("stop_reason")
+    else:
+        fields["input_tokens"] = usage.get("prompt_tokens", usage.get("input_tokens"))
+        fields["output_tokens"] = usage.get("completion_tokens", usage.get("output_tokens"))
+    logger.info("ai_call", extra={"fields": fields})
+
+
+def _log_failure(provider: str, kind: str, model: str, status, started: float) -> None:
+    logger.warning(
+        "ai_call_failed",
+        extra={"fields": {
+            "provider": provider,
+            "kind": kind,
+            "model": model,
+            "status": status,
+            "latency_ms": round((time.monotonic() - started) * 1000),
+        }},
+    )
 
 _ANTHROPIC_TO_OPENAI = {
     "claude-sonnet-4-6": "gpt-4o",
@@ -20,6 +60,7 @@ _ANTHROPIC_TO_OPENAI = {
 
 
 def _call_anthropic(prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: int = 1500) -> dict:
+    started = time.monotonic()
     try:
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
@@ -37,8 +78,11 @@ def _call_anthropic(prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens
             timeout=60.0,
         )
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        _log_usage("anthropic", "text", model, data, started)
+        return data
     except httpx.HTTPStatusError as e:
+        _log_failure("anthropic", "text", model, e.response.status_code, started)
         if e.response.status_code >= 500 and settings.OPENAI_API_KEY:
             logger.warning("Anthropic 5xx, falling back to OpenAI: %s", e)
             fallback_model = _ANTHROPIC_TO_OPENAI.get(model, "gpt-4o-mini")
@@ -47,6 +91,7 @@ def _call_anthropic(prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens
 
 
 def _call_openai(prompt: str, model: str = "gpt-4o-mini", max_tokens: int = 1500) -> dict:
+    started = time.monotonic()
     resp = httpx.post(
         "https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
@@ -60,8 +105,12 @@ def _call_openai(prompt: str, model: str = "gpt-4o-mini", max_tokens: int = 1500
         },
         timeout=60.0,
     )
+    if resp.is_error:
+        _log_failure("openai", "text", model, resp.status_code, started)
     resp.raise_for_status()
-    return resp.json()
+    data = resp.json()
+    _log_usage("openai", "text", model, data, started)
+    return data
 
 
 def extract_text(provider: str, response: dict) -> str:
@@ -95,6 +144,7 @@ def _call_anthropic_with_document(
     the Claude-native decision (see docs/CONTEXT_ENGINE_BUILD_PLAN.md,
     resolution #1). A 5xx just fails the call; the caller marks the
     document row status='failed' and the user re-uploads."""
+    started = time.monotonic()
     try:
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
@@ -130,8 +180,11 @@ def _call_anthropic_with_document(
             timeout=120.0,
         )
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        _log_usage("anthropic", "document", model, data, started)
+        return data
     except httpx.HTTPStatusError as e:
+        _log_failure("anthropic", "document", model, e.response.status_code, started)
         raise HTTPException(status_code=502, detail=f"AI document call failed: {e}")
 
 
@@ -145,6 +198,7 @@ def call_anthropic_with_tools(
     """Call Anthropic with tool definitions. Returns raw response dict (stop_reason + content).
     No OpenAI fallback — the tool-use message format is Anthropic-specific and has no
     equivalent in the chat-completions shape."""
+    started = time.monotonic()
     try:
         resp = httpx.post(
             "https://api.anthropic.com/v1/messages",
@@ -163,8 +217,11 @@ def call_anthropic_with_tools(
             timeout=60.0,
         )
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        _log_usage("anthropic", "tools", model, data, started)
+        return data
     except httpx.HTTPStatusError as e:
+        _log_failure("anthropic", "tools", model, e.response.status_code, started)
         raise HTTPException(status_code=502, detail=f"AI tool call failed: {e}")
 
 
@@ -243,6 +300,7 @@ def transcribe_audio(
         # shipping arbitrary record content to the transcription vendor.
         data["prompt"] = hint[:400]
 
+    started = time.monotonic()
     try:
         resp = httpx.post(
             _TRANSCRIBE_URL,
@@ -253,6 +311,7 @@ def transcribe_audio(
         )
         resp.raise_for_status()
     except httpx.HTTPStatusError as e:
+        _log_failure("openai", "transcribe", AI_TRANSCRIBE_MODEL, e.response.status_code, started)
         logger.warning("transcription failed: %s %s", e.response.status_code, e.response.text[:300])
         raise HTTPException(status_code=502, detail="Could not transcribe that recording")
     except httpx.RequestError as e:
@@ -260,6 +319,22 @@ def transcribe_audio(
         raise HTTPException(status_code=502, detail="Could not reach the transcription service")
 
     try:
-        return resp.json()["text"].strip()
+        body = resp.json()
+        text = body["text"].strip()
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=502, detail=f"Unexpected transcription response shape: {e}")
+    # Size and usage only: the audio and the transcript are never logged.
+    # The transcription models bill by audio tokens (or seconds on older
+    # models); whichever `usage` shape comes back is logged as-is.
+    usage = body.get("usage") or {}
+    logger.info("ai_call", extra={"fields": {
+        "provider": "openai",
+        "kind": "transcribe",
+        "model": AI_TRANSCRIBE_MODEL,
+        "latency_ms": round((time.monotonic() - started) * 1000),
+        "audio_bytes": len(audio_bytes),
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "audio_seconds": usage.get("seconds"),
+    }})
+    return text

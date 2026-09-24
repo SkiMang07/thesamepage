@@ -29,6 +29,7 @@ is a plain in-memory dict keyed by user_id, same shape as utils.py's
 _token_cache, with a flat TTL (not tied to any specific write path — see
 note on _INSIGHT_CACHE_TTL_SECONDS below for the tradeoff this accepts).
 """
+import logging
 import json
 import time
 import uuid
@@ -50,6 +51,8 @@ from utils import (
     meeting_sort_key,
     resolve_cadence_days,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -216,6 +219,7 @@ def get_dashboard_insight(request: Request, auth=Depends(get_authenticated_clien
     except Exception:
         # AI/network failure — the dashboard should still load with no
         # banner rather than surface a 502 for a nice-to-have.
+        logger.warning("dashboard insight AI call failed; showing no banner", exc_info=True)
         return DashboardInsight()
 
     raw_clean = raw.strip()
@@ -337,6 +341,9 @@ def _safe_call(coverage: dict[str, str], domain: str, fn, fallback):
         coverage[domain] = "ok"
         return value
     except Exception:
+        # The brief still renders with this domain marked unavailable, but a
+        # domain that fails is a bug, so it goes to Sentry.
+        logger.error("mission control domain %s failed to load", domain, exc_info=True)
         coverage[domain] = "unavailable"
         return fallback
 
@@ -773,6 +780,7 @@ Rules:
     try:
         text = generate_text(prompt, model=AI_DEFAULT_MODEL_LIGHT, max_tokens=120).strip()
     except Exception:
+        logger.warning("mission control explain AI call failed", exc_info=True)
         return {"status": "failed", "explanation": None}
     if not text or text.lower() == "null":
         return {"status": "unavailable", "explanation": None}

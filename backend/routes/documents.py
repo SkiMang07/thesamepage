@@ -56,6 +56,7 @@ alongside Session IV's retrieval helper, since both are "how much should we
 trust/weight this document" logic. See that module's docstring.
 --------------------------------------------------------------------------
 """
+import logging
 import base64
 import json
 import shutil
@@ -72,6 +73,8 @@ import context_engine
 from ai_core import generate_text, generate_text_from_document
 from config import AI_DEFAULT_MODEL_HEAVY
 from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -390,6 +393,7 @@ def upload_document(
             {"content-type": file.content_type or "application/octet-stream"},
         )
     except Exception as e:
+        logger.error("storage upload failed", exc_info=True)
         raise HTTPException(status_code=502, detail=f"Storage upload failed: {e}")
 
     # Create the documents row up front (status='processing') so a failure
@@ -431,6 +435,7 @@ def upload_document(
         supabase.table("documents").update({"status": "failed"}).eq("id", document_id).execute()
         raise
     except Exception as e:
+        logger.error("document extraction failed for %s", document_id, exc_info=True)
         supabase.table("documents").update({"status": "failed"}).eq("id", document_id).execute()
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
@@ -597,7 +602,9 @@ def delete_document(document_id: str, auth=Depends(get_authenticated_client)):
     try:
         supabase.storage.from_(_STORAGE_BUCKET).remove([existing[0]["storage_path"]])
     except Exception:
-        pass  # best-effort — see docstring above
+        # Best-effort (see docstring), but an orphaned object costs storage
+        # and holds a manager's file after they deleted it, so leave a trace.
+        logger.warning("storage cleanup failed for document %s", document_id, exc_info=True)
 
     supabase.table("documents").delete().eq("id", document_id).execute()
     return {"deleted": True}

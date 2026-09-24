@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
 
+    # Error monitoring. Empty means Sentry stays off (observability.py).
+    SENTRY_DSN: str = ""
+
     # App
     ENVIRONMENT: str = "development"
     FRONTEND_URL: str = "http://localhost:3000"

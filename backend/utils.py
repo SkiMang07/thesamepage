@@ -27,6 +27,7 @@ from postgrest.utils import SyncClient as PostgrestHttpClient
 from supabase import create_client, Client, SupabaseAuthClient
 
 from config import settings
+from observability import set_request_user
 
 # Shared rate limiter (added Session 20 — flagged Session 19, see
 # foundation_weaknesses project memory note item #4). Lives here rather than
@@ -91,6 +92,8 @@ def _decode_exp_unverified(token: str) -> float | None:
         payload = json.loads(base64.urlsafe_b64decode(padded))
         return payload.get("exp")
     except Exception:
+        # Not logged on purpose: a malformed token just gets the short
+        # 30-second cache TTL below, and Supabase still decides validity.
         return None
 
 
@@ -190,6 +193,7 @@ def get_authenticated_client(authorization: str = Header(None)) -> tuple[str, Cl
     user_id = user_data.get("id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Could not resolve user from token")
+    set_request_user(user_id)
 
     client = _PooledSupabaseClient.create(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
     client.postgrest.auth(token)

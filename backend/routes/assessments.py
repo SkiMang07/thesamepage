@@ -25,6 +25,7 @@ just needs its 5 default rows seeded per org on first use (see
 _ensure_levels below), same idea as ensure_org(). performance_reviews stays
 untouched this pass.
 """
+import logging
 import json
 from datetime import date
 
@@ -35,6 +36,8 @@ from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.direct_reports import fetch_role_expectations
 from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -147,7 +150,10 @@ def _fetch_scorecard(user_id: str, supabase, direct_report_id: str, authorizatio
             .execute()
             .data
         )
-    except Exception:
+    except Exception as exc:
+        # .single() raises when no row matches, which is the normal 404. Logged
+        # at info so a real failure (a bad column, Supabase down) is findable.
+        logger.info("lookup failed, answering 404: %s", exc)
         raise HTTPException(status_code=404, detail="Direct report not found")
     if not report:
         raise HTTPException(status_code=404, detail="Direct report not found")
@@ -577,7 +583,10 @@ def save_assessment(
             .execute()
             .data
         )
-    except Exception:
+    except Exception as exc:
+        # .single() raises when no row matches, which is the normal 404. Logged
+        # at info so a real failure (a bad column, Supabase down) is findable.
+        logger.info("lookup failed, answering 404: %s", exc)
         raise HTTPException(status_code=404, detail="Direct report not found")
     if not report:
         raise HTTPException(status_code=404, detail="Direct report not found")

@@ -20,11 +20,14 @@ so it goes through the normal get_authenticated_client() dependency and
 calls accept_direct_report_invite() — the SECURITY DEFINER function that
 actually claims the direct_reports row.
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import create_client
 
 from config import settings
 from utils import get_authenticated_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -53,5 +56,8 @@ def accept_invite(token: str, auth=Depends(get_authenticated_client)):
     try:
         direct_report_id = supabase.rpc("accept_direct_report_invite", {"p_token": token}).execute().data
     except Exception as e:
+        # The RPC raises for expired, used or mismatched invites (a normal
+        # 400), so info rather than error.
+        logger.info("invite accept refused: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
     return {"direct_report_id": direct_report_id}

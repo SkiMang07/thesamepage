@@ -36,12 +36,15 @@ See database/schema.sql's AWAY PERIODS section and docs/systems/away.md for
 the full design, including why this is a new table pair rather than a
 generalization of time_off_entries.
 """
+import logging
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from utils import get_authenticated_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -193,6 +196,9 @@ def _compute_sweep(user_id: str, supabase, start: date, end: date) -> tuple[int,
             for j in joins:
                 names.setdefault(j["meeting_id"], []).append((j.get("outside_people") or {}).get("name") or "")
     except Exception:
+        # Away still shifts the team's own meetings; only the outside ones are
+        # skipped. That leaves the sweep incomplete, so it is logged as an error.
+        logger.error("away: could not load outside meetings; skipping them", exc_info=True)
         outside, names = [], {}
     for row in outside:
         old_day = datetime.fromisoformat(row["scheduled_at"].replace("Z", "+00:00")).date()

@@ -34,6 +34,7 @@ Capture notes (Session 50, 2026-08-21): a small between-sessions source
 (dr_capture_notes) assembled into the next workspace before /prep synthesis,
 not a status on this table — see the "Capture notes" section near the bottom.
 """
+import logging
 import json
 from datetime import date, datetime, timedelta, timezone
 
@@ -56,6 +57,8 @@ from utils import (
     meeting_sort_key,
     resolve_cadence_days,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -815,7 +818,10 @@ def prep_one_on_one(
             .single()
             .execute()
         )
-    except Exception:
+    except Exception as exc:
+        # .single() raises when no row matches, which is the normal 404. Logged
+        # at info so a real failure (a bad column, Supabase down) is findable.
+        logger.info("lookup failed, answering 404: %s", exc)
         raise HTTPException(status_code=404, detail="Direct report not found")
     if not report_result.data:
         raise HTTPException(status_code=404, detail="Direct report not found")
@@ -1011,7 +1017,10 @@ def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_a
             .single()
             .execute()
         )
-    except Exception:
+    except Exception as exc:
+        # .single() raises when no row matches, which is the normal 404. Logged
+        # at info so a real failure (a bad column, Supabase down) is findable.
+        logger.info("lookup failed, answering 404: %s", exc)
         raise HTTPException(status_code=404, detail="Direct report not found")
     if not report_result.data:
         raise HTTPException(status_code=404, detail="Direct report not found")
@@ -1281,7 +1290,10 @@ def get_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
             .single()
             .execute()
         )
-    except Exception:
+    except Exception as exc:
+        # .single() raises when no row matches, which is the normal 404. Logged
+        # at info so a real failure (a bad column, Supabase down) is findable.
+        logger.info("lookup failed, answering 404: %s", exc)
         raise HTTPException(status_code=404, detail="Session not found")
     if not result.data:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1341,7 +1353,10 @@ def dismiss_session(one_on_one_id: str, auth=Depends(get_authenticated_client)):
             .single()
             .execute()
         )
-    except Exception:
+    except Exception as exc:
+        # .single() raises when no row matches, which is the normal 404. Logged
+        # at info so a real failure (a bad column, Supabase down) is findable.
+        logger.info("lookup failed, answering 404: %s", exc)
         raise HTTPException(status_code=404, detail="Session not found")
     if not result.data:
         raise HTTPException(status_code=404, detail="Session not found")

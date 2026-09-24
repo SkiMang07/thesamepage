@@ -42,6 +42,7 @@ Phase 2 — repeating 1:1s with prep (migration
     commitments between you. Never assessments, 1:1 notes, development
     plans, individual-level goals, or secondhand notes about reports.
 """
+import logging
 import json
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
@@ -54,6 +55,8 @@ from config import AI_DEFAULT_MODEL_HEAVY
 from routes.check_ins import CheckInIn, create_check_in, enrich_with_check_ins
 from routes.team import _encode_meeting_date
 from utils import get_authenticated_client, get_org, limiter, meeting_date_of, meeting_day_of, meeting_sort_key
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -1028,6 +1031,7 @@ def wrap_up_meeting(
     try:
         parsed = _parse_json(generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000))
     except Exception:
+        logger.warning("beyond wrap-up AI call failed; returning an empty draft", exc_info=True)
         return empty
 
     draft = _sanitize_draft(
@@ -1661,6 +1665,7 @@ def prepare_meeting(
     try:
         guide = _clean_prep(_parse_json(generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)))
     except Exception:
+        logger.warning("beyond prep AI call failed", exc_info=True)
         guide = None
     if not guide:
         raise HTTPException(status_code=502, detail="Couldn't prepare this 1:1 — try again")
@@ -1735,6 +1740,8 @@ def fetch_secondhand_notes(supabase, user_id: str, report_id: str, limit: int = 
         joins = _meeting_people(supabase, user_id, list({r["meeting_id"] for r in rows}))
         people = _people_by_id(supabase, user_id) if joins else {}
     except Exception:
+        # Secondhand context is optional in prep; the sheet builds without it.
+        logger.warning("beyond: could not load secondhand notes for prep", exc_info=True)
         return []
     notes: list[dict] = []
     for row in rows:

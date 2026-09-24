@@ -127,6 +127,33 @@ Limiting is **per remote IP**, not per user — slowapi's `key_func` runs before
 `get_authenticated_client()` resolves a `user_id`. Coarser (an office NAT shares
 a bucket) but sufficient against a runaway loop, which is the real risk today.
 
+Every other write (POST/PUT/PATCH/DELETE) gets `DEFAULT_WRITE_LIMIT`, 120/min per
+route per IP, set in `utils.py`. A decorator replaces the default rather than
+adding to it. Reads have no limit. `SlowAPIMiddleware` is registered after the
+read-only gate and before `CORSMiddleware`: its 429 has to carry CORS headers,
+and a throttled write shouldn't cost an entitlement lookup.
+
+### Logging and error monitoring
+
+Use `logger = logging.getLogger(__name__)` in every module; never `print()`
+outside `scripts/`. `observability.py` writes each record as one JSON line and
+adds the request's `route` and `user_id` itself, so a call site only says what
+happened. Pass extra fields as `extra={"fields": {...}}`.
+
+An `except Exception:` must log. Pick the level by what the failure means:
+`info` for an expected outcome dressed as an exception (a `.single()` lookup
+that is really a 404), `warning` for an optional thing that degrades quietly
+(an AI nice-to-have), `error` for a failure that leaves data wrong or
+incomplete. `error` and above, and every unhandled exception, go to Sentry once
+`SENTRY_DSN` is set on Railway; without it `init_sentry()` does nothing.
+
+Never log a prompt, a model's output, note text, a transcript or audio. Ids,
+counts, model names and status codes only. `ai_core.py` logs one `ai_call` line
+per provider call (model, tokens, latency) and is the AI cost ledger.
+
+`RequestContextMiddleware` is registered last, so it is outermost. It only sets
+a contextvar, so it doesn't disturb the gate-before-CORS order above.
+
 ### Frontend → Backend boundary
 
 All calls from Next.js to FastAPI go through `frontend/lib/api.ts`. Components
@@ -320,8 +347,8 @@ Not yet built, deliberately:
 
 ## Open questions
 
-- Error monitoring — `sentry-sdk` is in `requirements.txt`, unused. Same
-  "installed ahead of being wired up" state `slowapi` was in before it got used.
+- Error monitoring — the backend is wired (`observability.py`) but stays off
+  until `SENTRY_DSN` exists on Railway. The frontend has no error reporting.
 - CI — `backend/tests/` runs under `pytest` (from `backend/`), but nothing runs
   it automatically before a push deploys to Railway.
 - Pagination — no list endpoint paginates. Fine at one manager's scale, not at

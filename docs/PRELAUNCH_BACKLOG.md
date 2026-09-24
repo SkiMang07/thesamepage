@@ -590,25 +590,35 @@ Decided the same day, behind the sentence:
 
 ### D. Observability — you cannot see a production failure today
 
-- [ ] ✘ Error monitoring. `sentry-sdk[fastapi]==2.20.0` is in
-  `requirements.txt` and never imported (`grep -rn sentry backend` → 0
-  hits in source). One `sentry_sdk.init()` in `main.py` keyed on
-  `ENVIRONMENT == "production"`; add `@sentry/nextjs` on the frontend. The
-  `/health` endpoint's own comment records that the first dictation outage
-  was "indistinguishable from a vendor outage at the client". Effort S.
-- [ ] ✘ Structured logging. 16 bare `print()` calls in `backend/`; 12
-  `except Exception:` blocks swallow errors silently (`dashboard.py:216,
-  339, 771`, `one_on_ones.py:798, 993, 1263, 1323`, `assessments.py:150,
-  580`, `documents.py:599`, `direct_reports.py:383`, `utils.py:66`). Each
-  bare except should at least log with the route and user id. Effort S–M.
+- [ ] ◐ Error monitoring. **Backend wired:** `init_sentry()` in
+  `observability.py`, called from `main.py`, keyed on `SENTRY_DSN` (not
+  `ENVIRONMENT`), so it does nothing until the variable exists. Errors only,
+  no PII, the user id and route attached to each event. **Left for Andrew:**
+  create the Sentry project and set `SENTRY_DSN` on Railway. `@sentry/nextjs`
+  on the frontend is not done (it wants the same account). The `/health`
+  endpoint's own comment records that the first dictation outage was
+  "indistinguishable from a vendor outage at the client".
+- [x] ✔ Structured logging. One JSON line per record on stdout
+  (`observability.py`); every line carries the request's route and user id
+  through a request-context middleware, with no change at the call site. All
+  silent `except Exception:` blocks in `routes/` now log: info for the
+  `.single()` lookups that are really 404s, warning for optional AI calls,
+  error for failures that leave data incomplete (a Mission Control domain,
+  Away's outside meetings, storage upload, extraction). The `print()` calls
+  were already gone from app code (only `scripts/` prints, as a CLI should).
+  `utils.py`'s JWT-shape fallback stays silent on purpose, with a comment.
 - [ ] ✘ Uptime check on `/health` (Railway, Better Uptime, or a free cron
   pinger) that alerts you, not the customer.
 - [ ] ✘ Product analytics. Nothing in `frontend/` emits an event. Even a
   page-view + "first prep sheet saved" pair tells you whether the golden
   path is being walked. PostHog or Vercel Analytics; one afternoon.
-- [ ] ✘ AI cost visibility. Every Anthropic and OpenAI call goes through
-  `ai_core.py` / `transcribe.py` — log tokens and model per call so the
-  first month's bill is not a surprise.
+- [x] ✔ AI cost visibility. Every provider call in `ai_core.py` (text,
+  document, tools, the OpenAI fallback, and dictation, which
+  `routes/transcribe.py` calls through it) logs one `ai_call` line: provider,
+  kind, model, input/output tokens, latency, plus audio bytes for dictation.
+  Failures log `ai_call_failed` with the status. Filter Railway logs on
+  `ai_call` to see the bill forming. No prompt, transcript or audio is ever
+  logged.
 
 ### E. Data safety
 
