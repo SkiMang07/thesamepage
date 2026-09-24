@@ -9,6 +9,7 @@ Supabase uses) and returns an RLS-scoped client so every DB query
 automatically enforces per-user data isolation. No route should ever use
 the service-role client directly against user data.
 """
+import logging
 import threading
 import time
 import base64
@@ -28,6 +29,8 @@ from supabase import create_client, Client, SupabaseAuthClient
 
 from config import settings
 from observability import set_request_user
+
+_logger = logging.getLogger(__name__)
 
 # Shared rate limiter (added Session 20 — flagged Session 19, see
 # foundation_weaknesses project memory note item #4). Lives here rather than
@@ -166,13 +169,57 @@ _SUPABASE_TRANSPORT = httpx.HTTPTransport(
 )
 
 
+# ---------------------------------------------------------------------------
+# "JWT issued at future" (PRELAUNCH_BACKLOG §7 F, first caught by Sentry on
+# 2026-09-24). Right after the browser refreshes its Supabase session, the new
+# token's `iat` can be a moment ahead of the database's clock, and PostgREST
+# answers 401 "JWT issued at future". The app shell calls /api/entitlement on
+# every load, so a manager whose token had just refreshed got a 500.
+#
+# PostgREST rejects the token before it runs anything, so resending is safe
+# for writes as well as reads. One retry, after a pause long enough to cover
+# the skew; a second failure is returned as-is so a real clock problem still
+# surfaces in Sentry. Wrapping the transport covers every RLS-scoped query and
+# RPC in one place instead of route by route.
+# ---------------------------------------------------------------------------
+_JWT_FUTURE_MARKER = b"JWT issued at future"
+_JWT_FUTURE_RETRY_DELAY_SECONDS = 1.0
+
+
+class _JwtClockSkewRetryTransport(httpx.BaseTransport):
+    def __init__(self, inner: httpx.BaseTransport, delay: float = _JWT_FUTURE_RETRY_DELAY_SECONDS):
+        self._inner = inner
+        self._delay = delay
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        response = self._inner.handle_request(request)
+        if response.status_code != 401:
+            return response
+        response.read()
+        if _JWT_FUTURE_MARKER not in response.content:
+            return response
+        response.close()
+        _logger.warning(
+            "postgrest rejected a just-issued token (JWT issued at future); retrying once",
+            extra={"fields": {"event": "jwt_iat_future_retry", "path": request.url.path}},
+        )
+        time.sleep(self._delay)
+        return self._inner.handle_request(request)
+
+    def close(self) -> None:
+        self._inner.close()
+
+
+_POSTGREST_TRANSPORT = _JwtClockSkewRetryTransport(_SUPABASE_TRANSPORT)
+
+
 class _PooledPostgrestClient(SyncPostgrestClient):
     def create_session(self, base_url, headers, timeout, verify=True, proxy=None):
         return PostgrestHttpClient(
             base_url=base_url,
             headers=headers,
             timeout=timeout,
-            transport=_SUPABASE_TRANSPORT,
+            transport=_POSTGREST_TRANSPORT,
             follow_redirects=True,
         )
 

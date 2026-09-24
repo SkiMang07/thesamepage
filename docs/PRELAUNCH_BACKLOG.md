@@ -694,16 +694,17 @@ Decided the same day, behind the sentence:
 
 ### F. Reliability and performance
 
-- [ ] ✘ **"JWT issued at future" 500s** (Sentry THESAMEPAGE-BACKEND-2, first
-  caught 2026-09-24, minutes after Sentry went live). `get_entitlement()` in
-  `utils.py:249` called `ensure_entitlement` right after the browser had
-  refreshed its Supabase token, and PostgREST rejected the new token because
-  its `iat` was a moment ahead of the database's clock. The app shell calls
-  `/api/entitlement` on every load, so a manager whose token just refreshed
-  gets a 500. Fix: retry once, after about a second, on that exact PostgREST
-  error, in one place that covers every RLS-scoped call rather than just this
-  route. Supabase showed an "investigating a technical issue" banner the same
-  day, so watch whether it recurs before assuming it's constant.
+- [x] ✔ **"JWT issued at future" 500s** (Sentry THESAMEPAGE-BACKEND-2, first
+  caught 2026-09-24, minutes after Sentry went live). Right after the browser
+  refreshed its Supabase token, PostgREST rejected the new token because its
+  `iat` was a moment ahead of the database's clock, and `/api/entitlement`
+  (called by the app shell on every load) returned a 500. **Fixed:** every
+  RLS-scoped query and RPC goes through `_JwtClockSkewRetryTransport` in
+  `utils.py`, which retries that exact 401 once after a second (PostgREST
+  rejects before running anything, so writes are safe to resend) and logs
+  `jwt_iat_future_retry`. `tests/test_jwt_clock_skew.py` pins it. If that log
+  line shows up often, or the issue reappears in Sentry, the skew is bigger
+  than a second.
 
 - [x] ✔ Nav fan-out (N-5) fixed or cached — the app currently does 11+
   round-trips to Railway per page, and Railway's single instance is the

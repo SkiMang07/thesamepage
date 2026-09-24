@@ -73,9 +73,11 @@ def test_per_request_clients_share_the_pool_but_not_the_token(monkeypatch):
     # Storage is built from options.headers, so it must carry the same token.
     assert client_a.options.headers["Authorization"] == "Bearer token-a"
     assert client_b.options.headers["Authorization"] == "Bearer token-b"
-    # Both sessions ride the one shared transport (connection pool + SSL context).
-    assert session_a._transport is utils._SUPABASE_TRANSPORT
-    assert session_b._transport is utils._SUPABASE_TRANSPORT
+    # Both sessions ride the one shared transport (connection pool + SSL context),
+    # through the JWT clock-skew retry wrapper.
+    assert session_a._transport is utils._POSTGREST_TRANSPORT
+    assert session_b._transport is utils._POSTGREST_TRANSPORT
+    assert utils._POSTGREST_TRANSPORT._inner is utils._SUPABASE_TRANSPORT
     assert client_a.auth._http_client._transport is utils._SUPABASE_TRANSPORT
 
 
