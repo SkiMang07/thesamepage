@@ -46,6 +46,10 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
 
+  // PostHog's capture paths end in a slash (/i/v0/e/). Without this, Next
+  // 308-redirects /ingest/i/v0/e/ to the slashless path and events are lost.
+  skipTrailingSlashRedirect: true,
+
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
@@ -55,8 +59,16 @@ const nextConfig = {
   // refuses to monitor *.railway.app (the shared domain hit its per-domain
   // limit), and going through this domain also checks the path a customer's
   // browser takes: Vercel, then Railway.
+  //
+  // Product analytics (same section). PostHog's browser SDK posts to /ingest
+  // on this domain and it is forwarded to PostHog's US cloud, the same idea
+  // as Sentry's /monitoring tunnel: no PostHog host in the CSP, and fewer
+  // events lost to ad blockers. See lib/analytics.ts.
   async rewrites() {
-    return [{ source: "/health", destination: `${BACKEND_URL}/health` }];
+    return [
+      { source: "/health", destination: `${BACKEND_URL}/health` },
+      { source: "/ingest/:path*", destination: "https://us.i.posthog.com/:path*" },
+    ];
   },
 
   // The marketing site is HubSpot (www.thesamepage.xyz). This app serves only

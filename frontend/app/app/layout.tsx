@@ -60,6 +60,7 @@ import DictationHotkey from "@/components/DictationHotkey";
 import EntitlementNotice from "@/components/EntitlementNotice";
 import { ZoneDataProvider } from "@/components/ZoneMap";
 import SentryUser from "@/components/SentryUser";
+import AnalyticsUser from "@/components/AnalyticsUser";
 
 const NO_NAV_PATHS = new Set(["/app/login", "/app/ic"]);
 
@@ -116,6 +117,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
         {showNav && <DictationHotkey />}
         <SentryUser />
+        <AnalyticsUser />
 
         {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
         {showNav && isOpen && (

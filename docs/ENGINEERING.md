@@ -167,6 +167,25 @@ Uptime: Sentry's uptime monitor (the free plan's one) checks
 `frontend/next.config.js` to the API's `/health`, because Sentry refuses to
 monitor `*.railway.app`; it also means one check covers Vercel and Railway.
 
+Product analytics: PostHog Cloud (US), free plan with no card on file, so
+past 1M events a month PostHog drops events rather than billing. The browser
+(`frontend/lib/analytics.ts`, started from `instrumentation-client.ts`) sends
+a `$pageview` on every route change and nothing else: autocapture, session
+replay, heatmaps, surveys, exception capture and PostHog's remote config
+(`advanced_disable_flags`) are all off in code, and replay and autocapture are
+also off in the project settings. `before_send` cuts query strings from every
+URL and replaces the `/invite/<token>` path segment. `<AnalyticsUser />` in
+`app/app/layout.tsx` identifies the manager by Supabase user id only, and resets
+on sign-out. Browser events post to `/ingest` (a rewrite in `next.config.js`,
+which is also why `skipTrailingSlashRedirect` is on), so the CSP needs no
+PostHog host. The one custom event, `prep_sheet_saved` with `is_first` and
+`regenerated` flags, is sent server-side by `backend/analytics.py` from
+`POST /api/one-on-ones/prep` under the same user id, on a background pool that
+never delays or fails the request. The project's "Discard client IP data"
+setting is on. Add an event only with flags, counts or enum values as
+properties, never text a manager typed. Off until `NEXT_PUBLIC_POSTHOG_KEY`
+(Vercel) and `POSTHOG_PROJECT_KEY` (Railway) are set.
+
 Never log a prompt, a model's output, note text, a transcript or audio. Ids,
 counts, model names and status codes only. `ai_core.py` logs one `ai_call` line
 per provider call (model, tokens, latency) and is the AI cost ledger.
@@ -385,6 +404,7 @@ while Andrew is actively running the backend locally, and it is a separate
 | `STRIPE_*` | Stripe | Railway | empty until billing ships |
 | `SENTRY_DSN` | Sentry | Railway | not a secret; leaks only let someone send you errors |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry → thesamepage-frontend → Client Keys | Vercel (Config, not Secret) | public by design, ships in the browser bundle |
+| `NEXT_PUBLIC_POSTHOG_KEY` / `POSTHOG_PROJECT_KEY` | PostHog → Settings → Project → General → Project API key (`phc_`) | Vercel (Config), Railway | same value in both; public by design, ships in the browser bundle; a leak only lets someone send events, and the free plan drops them past 1M |
 | `SENTRY_AUTH_TOKEN` (optional) | Sentry → Settings → Auth Tokens (org token) | Vercel (Secret) | only for source-map upload at build; the build works without it |
 
 **Name keys `tsp-<host>-<yyyy-mm>`** (`tsp-railway-2026-09`), so the dashboard

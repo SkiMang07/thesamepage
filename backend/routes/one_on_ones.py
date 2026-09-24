@@ -41,6 +41,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+import analytics
 import context_engine
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
@@ -750,6 +751,21 @@ def get_open_session(direct_report_id: str, auth=Depends(get_authenticated_clien
     return _serialize_session(row) if row else None
 
 
+def _manager_has_prep_sheet(supabase, user_id: str) -> bool:
+    """Whether this manager has any 1:1 with a prep sheet on it (planned or
+    completed). One indexed row at most; used only for analytics."""
+    rows = (
+        supabase.table("one_on_ones")
+        .select("id")
+        .eq("manager_id", user_id)
+        .not_.is_("prep_guide", "null")
+        .limit(1)
+        .execute()
+        .data
+    )
+    return bool(rows)
+
+
 @router.post("/prep", response_model=PrepResponse)
 @limiter.limit("10/minute")
 def prep_one_on_one(
@@ -957,6 +973,11 @@ def prep_one_on_one(
         # reopen the workspace without losing what produced this agenda.
         "source_notes": body.raw_notes,
     }
+    # Analytics (backend/analytics.py): was there a sheet before this one?
+    # Checked before the write so the answer isn't this sheet itself.
+    regenerated = bool((existing or {}).get("prep_guide"))
+    had_prep_sheet = regenerated or _manager_has_prep_sheet(supabase, user_id)
+
     if existing:
         saved = (
             supabase.table("one_on_ones")
@@ -987,6 +1008,14 @@ def prep_one_on_one(
         scheduled_at,
         recurrence_weeks,
         recurrence_timezone,
+    )
+
+    # The golden-path signal: is_first marks the manager's first saved sheet
+    # ever. Flags only; nothing from the sheet or the notes goes with it.
+    analytics.capture(
+        user_id,
+        "prep_sheet_saved",
+        {"is_first": not had_prep_sheet, "regenerated": regenerated},
     )
 
     return PrepResponse(

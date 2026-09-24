@@ -660,9 +660,15 @@ Decided the same day, behind the sentence:
   Sentry refuses `*.railway.app` (it has hit its per-domain limit), so that
   path rewrites to the API's `/health` (`frontend/next.config.js`), and one
   check covers Vercel and Railway. First check 2026-09-24: 200 in 403 ms.
-- [ ] ✘ Product analytics. Nothing in `frontend/` emits an event. Even a
-  page-view + "first prep sheet saved" pair tells you whether the golden
-  path is being walked. PostHog or Vercel Analytics; one afternoon.
+- [x] ✔ Product analytics. PostHog Cloud free plan (1M events a month, no
+  card, so it drops events instead of billing). Vercel Analytics lost
+  because Hobby has no custom events. The browser sends page views only,
+  through `/ingest` on the app's domain; the backend sends
+  `prep_sheet_saved` (`is_first`, `regenerated`) from the prep route.
+  User id only, no autocapture or replay, query strings and invite tokens
+  cut from URLs, client IPs discarded. See ENGINEERING.md, "Logging and
+  error monitoring". Live once `NEXT_PUBLIC_POSTHOG_KEY` (Vercel) and
+  `POSTHOG_PROJECT_KEY` (Railway) are set.
 - [x] ✔ AI cost visibility. Every provider call in `ai_core.py` (text,
   document, tools, the OpenAI fallback, and dictation, which
   `routes/transcribe.py` calls through it) logs one `ai_call` line: provider,

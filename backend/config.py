@@ -32,6 +32,8 @@ class Settings(BaseSettings):
 
     # Error monitoring. Empty means Sentry stays off (observability.py).
     SENTRY_DSN: str = ""
+    # Product analytics. Empty means no events are sent (analytics.py).
+    POSTHOG_PROJECT_KEY: str = ""
 
     # App
     ENVIRONMENT: str = "development"
