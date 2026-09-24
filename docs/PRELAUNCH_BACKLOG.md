@@ -457,15 +457,22 @@ scope here because "production-ready" includes them.
   "Every figure is dated and linked on our research page." Either build the
   page (and verify each figure against a live source, which was already an
   open item) or cut the sentence.
-- [ ] **N-14 · Login email is Supabase's default.** Subject "Your sign-in
+- [x] **N-14 · Login email is Supabase's default.** Subject "Your sign-in
   link", sender noreply@mail.app.supabase.io, footer "powered by Supabase".
   Brand the template and set a custom SMTP sender (Supabase → Auth → Emails)
   before strangers receive it. The default sender is also rate-limited.
-  **Template half written 2026-09-24, not yet applied:** `docs/auth-emails/`
-  has the Magic Link and Confirm Signup HTML plus subjects. Supabase now locks
-  subject and body while the built-in mailer is in use ("Set up custom SMTP to
-  edit templates"), so both land in one sitting: Andrew sets up SMTP, then pastes
-  the two files (steps in that folder's README).
+  **Done 2026-09-24.** Custom SMTP is on: smtp.gmail.com:465 as
+  ag@thesamepage.xyz, sender name "The Same Page", Google app password
+  `tsp-supabase-smtp-2026-09` (Gmail caps it near 2,000 sends a day). Both
+  templates from `docs/auth-emails/` are applied with their subjects. Verified
+  live: a magic link requested at /app/login arrived in the Gmail inbox (not
+  spam) from ag@thesamepage.xyz as "Sign in to The Same Page", and the link
+  signed in. Supabase's email rate limit stays at 30/hour, enough before
+  launch; raise it under Auth → Rate Limits if sign-ups come in bursts.
+  One oddity: the delivered mail ends with "The Same Page / Manage With
+  Evidence / www.thesamepage.xyz" after the template's own footer. That
+  looks like a Workspace-appended footer (Admin console → Gmail → Compliance
+  → Append footer), and it lands on every login email.
 - [ ] **N-15 · A 2016 portal-wide redirect sends "/" to saturdaycyclers.com**
   (HubSpot → Domains & URLs → URL redirects, from the By 2 Pedals days). Harmless
   while Home is published, since it only fires where no page exists, but it will

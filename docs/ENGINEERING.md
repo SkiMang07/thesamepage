@@ -361,7 +361,7 @@ while Andrew is actively running the backend locally, and it is a separate
 | `OPENAI_API_KEY` | OpenAI → API keys | Railway | transcription only |
 | `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API Keys | Railway, Vercel | public by design; RLS is the guard |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API Keys | Railway | bypasses RLS; no request path uses it |
-| SMTP app password | Google account → App passwords | Supabase → Auth → SMTP | sends login email |
+| SMTP app password (`tsp-supabase-smtp-2026-09`) | Google account for ag@thesamepage.xyz → Security → App passwords (needs 2-Step Verification) | Supabase → Auth → Emails → SMTP Settings | sends login email via smtp.gmail.com:465; to rotate, paste the new one, send a test magic link, then revoke the old one in Google |
 | `STRIPE_*` | Stripe | Railway | empty until billing ships |
 | `SENTRY_DSN` | Sentry | Railway | not a secret; leaks only let someone send you errors |
 

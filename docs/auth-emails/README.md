@@ -8,10 +8,12 @@ The two Supabase Auth emails a manager actually receives, branded. N-14 in
 | Magic link or OTP | `magic-link.html` | Sign in to The Same Page |
 | Confirm sign up | `confirm-signup.html` | Confirm your email for The Same Page |
 
-**Not applied yet.** Supabase locks a template's subject and body while the project
-sends through its built-in mailer ("Set up custom SMTP to edit templates"). Once
-custom SMTP is set (Authentication → Emails → SMTP Settings), paste each file's
-HTML into its template's Source tab, set the subject from the table, and save.
+**Applied 2026-09-24.** Supabase locks a template's subject and body while the
+project sends through its built-in mailer, so custom SMTP (Authentication →
+Emails → SMTP Settings, sending as ag@thesamepage.xyz) went on first. To change
+copy: edit the file here, then paste its HTML (without the leading comment) into
+the template's Source tab, set the subject from the table, and save. The files
+here are the source of truth.
 
 Voice: `gtm/brand/voice-rules.md`. These are transactional, so literal and even:
 what the email is, the one thing to do, and what happens if you didn't ask for it.
