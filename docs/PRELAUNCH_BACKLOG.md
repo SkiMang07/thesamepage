@@ -461,6 +461,11 @@ scope here because "production-ready" includes them.
   link", sender noreply@mail.app.supabase.io, footer "powered by Supabase".
   Brand the template and set a custom SMTP sender (Supabase → Auth → Emails)
   before strangers receive it. The default sender is also rate-limited.
+  **Template half written 2026-09-24, not yet applied:** `docs/auth-emails/`
+  has the Magic Link and Confirm Signup HTML plus subjects. Supabase now locks
+  subject and body while the built-in mailer is in use ("Set up custom SMTP to
+  edit templates"), so both land in one sitting: Andrew sets up SMTP, then pastes
+  the two files (steps in that folder's README).
 - [ ] **N-15 · A 2016 portal-wide redirect sends "/" to saturdaycyclers.com**
   (HubSpot → Domains & URLs → URL redirects, from the By 2 Pedals days). Harmless
   while Home is published, since it only fires where no page exists, but it will
