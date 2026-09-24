@@ -629,19 +629,21 @@ Decided the same day, behind the sentence:
 
 ### D. Observability — you cannot see a production failure today
 
-- [ ] ◐ Error monitoring. **Backend live, verified 2026-09-24:** Sentry org
-  `the-same-page`, project `thesamepage-backend`, `SENTRY_DSN` on Railway.
-  A deliberate error from a temporary signed-in route (since removed) arrived
-  with the `route` tag and the user id only; the Authorization header came
-  through `[Filtered]`, and no email, IP, cookie or body was sent. Email alerts
-  go to Andrew. **Frontend built 2026-09-24:** `@sentry/nextjs`, project
-  `thesamepage-frontend`, same rules (errors only, user id only, console
-  breadcrumbs dropped), sent through `/monitoring` on the app domain.
-  `next build` passes and a local browser run captured a thrown error and
-  posted it to the tunnel. **Left:** see a live event in Sentry after deploy;
-  optionally `SENTRY_AUTH_TOKEN` on Vercel for readable stack traces. The `/health`
-  endpoint's own comment records that the first dictation outage was
-  "indistinguishable from a vendor outage at the client".
+- [x] ✔ Error monitoring, verified live 2026-09-24 on both sides. Sentry
+  org `the-same-page`. **Backend:** project `thesamepage-backend`,
+  `SENTRY_DSN` on Railway; a deliberate error from a temporary signed-in route
+  (since removed) arrived with the `route` tag and the user id only, the
+  Authorization header `[Filtered]`, no email, IP, cookie or body.
+  **Frontend:** `@sentry/nextjs`, project `thesamepage-frontend`,
+  `NEXT_PUBLIC_SENTRY_DSN` on Vercel, events through `/monitoring` on the app
+  domain; a deliberate uncaught error on `/app/dashboard` arrived with the
+  same user id, the release sha, and no console breadcrumbs. Email alerts go
+  to Andrew for high-priority issues on both. Open: Sentry still derives a
+  city from the sender's IP (project → Security & Privacy → "Prevent storing
+  of IP addresses" stops it); `SENTRY_AUTH_TOKEN` on Vercel would make
+  frontend stack traces readable. The `/health` endpoint's own comment
+  records that the first dictation outage was "indistinguishable from a
+  vendor outage at the client".
 - [x] ✔ Structured logging. One JSON line per record on stdout
   (`observability.py`); every line carries the request's route and user id
   through a request-context middleware, with no change at the call site. All
@@ -691,6 +693,17 @@ Decided the same day, behind the sentence:
   four open questions in `gtm/site/legal.md` answered.
 
 ### F. Reliability and performance
+
+- [ ] ✘ **"JWT issued at future" 500s** (Sentry THESAMEPAGE-BACKEND-2, first
+  caught 2026-09-24, minutes after Sentry went live). `get_entitlement()` in
+  `utils.py:249` called `ensure_entitlement` right after the browser had
+  refreshed its Supabase token, and PostgREST rejected the new token because
+  its `iat` was a moment ahead of the database's clock. The app shell calls
+  `/api/entitlement` on every load, so a manager whose token just refreshed
+  gets a 500. Fix: retry once, after about a second, on that exact PostgREST
+  error, in one place that covers every RLS-scoped call rather than just this
+  route. Supabase showed an "investigating a technical issue" banner the same
+  day, so watch whether it recurs before assuming it's constant.
 
 - [x] ✔ Nav fan-out (N-5) fixed or cached — the app currently does 11+
   round-trips to Railway per page, and Railway's single instance is the
