@@ -6,13 +6,13 @@
       <div class="hero-actions">
         <a class="btn btn-primary" href="{{ module.cta_link.url.href }}"
    {% if module.cta_link.open_in_new_tab %}target="_blank"{% endif %}>{{ module.cta_label }}</a>
-        {% if module.cta2_label %}
+        {% if module.cta2_label and module.cta2_link.url.href and module.cta2_link.url.href != "#" %}
         <a class="btn btn-ghost" href="{{ module.cta2_link.url.href }}">{{ module.cta2_label }}</a>
         {% endif %}
       </div>
-      {% if module.places_total %}
+      {% if module.offer_lead %}
       <div class="counter"><span class="dot"></span>
-        <span><b>{{ module.places_left }} of {{ module.places_total }}</b> founding places left · {{ module.counter_note }}</span></div>
+        <span><b>{{ module.offer_lead }}</b> {{ module.offer_note }}</span></div>
       {% endif %}
       {% if module.proof_stats %}
       <div class="hero-proof">

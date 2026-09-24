@@ -36,30 +36,23 @@
     "default": {
       "url": {
         "type": "EXTERNAL",
-        "href": "#"
+        "href": "https://app.thesamepage.xyz/app/login"
       },
       "open_in_new_tab": false,
       "no_follow": false
     }
   },
   {
-    "name": "places_left",
-    "label": "Founding places left",
-    "type": "number",
-    "default": 14,
-    "suffix": ""
-  },
-  {
-    "name": "places_total",
-    "label": "Founding places total",
-    "type": "number",
-    "default": 20,
-    "suffix": ""
-  },
-  {
-    "name": "counter_note",
-    "label": "Counter note",
+    "name": "offer_lead",
+    "label": "Founding offer, bold part",
     "type": "text",
-    "default": "3 months free, and your feedback shapes what gets built"
+    "default": "The first 20 managers",
+    "help_text": "Plain statement of the offer, no live count. Change it the day the 20th manager signs up. Leave empty to hide the line."
+  },
+  {
+    "name": "offer_note",
+    "label": "Founding offer, rest of line",
+    "type": "text",
+    "default": "get 3 months free, and a say in what gets built."
   }
 ]
