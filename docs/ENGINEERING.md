@@ -348,6 +348,62 @@ never 500.
 
 ---
 
+## Rotating secrets
+
+Every production secret lives in exactly one dashboard plus the host that
+reads it. None lives in the Obsidian vault: `backend/.env` holds a key only
+while Andrew is actively running the backend locally, and it is a separate
+`tsp-local` key so the production key never touches the vault.
+
+| Secret | Issued by | Read by | Notes |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | Claude Console → The Same Page Production workspace → API keys | Railway | every AI feature |
+| `OPENAI_API_KEY` | OpenAI → API keys | Railway | transcription only |
+| `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API Keys | Railway, Vercel | public by design; RLS is the guard |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API Keys | Railway | bypasses RLS; no request path uses it |
+| SMTP app password | Google account → App passwords | Supabase → Auth → SMTP | sends login email |
+| `STRIPE_*` | Stripe | Railway | empty until billing ships |
+| `SENTRY_DSN` | Sentry | Railway | not a secret; leaks only let someone send you errors |
+
+**Name keys `tsp-<host>-<yyyy-mm>`** (`tsp-railway-2026-09`), so the dashboard
+shows at a glance which key serves where and how old it is. A key whose host
+you can't name is a key to delete.
+
+**The rotation, for any one secret. New key first, old key last:**
+
+1. **Create** the new key in the issuing dashboard, named as above. In the
+   Claude Console make it a **workspace (service account) key**, not a
+   personal one: a personal key dies with the person's account. Copy it,
+   then close the "save your key" dialog **before** anything else reads that
+   tab: the dialog shows the full key, and any screenshot or AI browser tool
+   that reads the page captures it.
+2. **Paste** it into the host's variable (Railway → `thesamepage` → Variables,
+   or Vercel → Settings → Environment Variables). Railway redeploys on save;
+   Vercel needs a manual redeploy because `NEXT_PUBLIC_*` values are baked in
+   at build.
+3. **Verify** the new key is the one serving: `curl
+   https://thesamepage-production.up.railway.app/health` returns ok, a
+   signed-in page on the Vercel app loads data, and for AI keys the
+   dashboard page makes a light AI call, so the new key shows usage in the
+   issuing console (usage can lag a few minutes).
+4. **Disable or delete** the old key only after step 3 passes. Until then the
+   old key is the rollback: paste it back and redeploy.
+5. **Record** it: one line in the commit or backlog (date, which key).
+
+**When:** immediately on any suspected exposure (pasted in a chat, committed,
+left in a synced file), when someone with access leaves, and otherwise every
+six months.
+
+**Supabase is different.** The legacy `anon`/`service_role` JWTs cannot be
+rotated one at a time: rotating the legacy JWT secret or disabling legacy keys
+kills both. Supabase is retiring them by the end of 2026, so the next Supabase
+rotation is the migration to `sb_publishable_…` / `sb_secret_…` keys, which
+needs `supabase` ≥ 2.16 in `backend/requirements.txt` (2.9.1 rejects any key
+that isn't a JWT). After that migration, each secret key rotates on its own
+with the steps above.
+
+---
+
 ## Scope discipline
 
 The schema is intentionally complete for the full vision (see PRODUCT_VISION.md).

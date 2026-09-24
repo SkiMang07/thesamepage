@@ -578,10 +578,19 @@ Decided the same day, behind the sentence:
   `utils.py`); reads are not throttled. `SlowAPIMiddleware` moved before
   `CORSMiddleware` so its 429 carries CORS headers (it still sits outside the
   read-only gate). Pinned by `tests/test_rate_limits.py`.
-- [ ] ✘ Rotate the `ANTHROPIC_API_KEY` sitting in plaintext in `backend/.env`
-  inside the Obsidian vault (Andrew's own note in `Polish List Before
-  Launch.md`, still open). Same for `OPENAI_API_KEY` and the Supabase
-  service-role key if they are in that file. Then delete the note.
+- [x] ✔ Rotate the `ANTHROPIC_API_KEY` sitting in plaintext in `backend/.env`
+  inside the Obsidian vault. Rotated 2026-09-24: production now runs on one
+  service-account key, `tsp-railway-2026-09b`; the three older keys (including
+  the never-used `tsp-local` that sat in the vault) are deleted and
+  `backend/.env` holds no key. `OPENAI_API_KEY` and the Supabase keys were
+  never in that file (blank locally, Railway only), so no rotation needed.
+  The repeatable process is ENGINEERING.md → Rotating secrets. Andrew still
+  deletes the key note in `Polish List Before Launch.md`.
+- [ ] ✘ Migrate Supabase to `sb_publishable_…` / `sb_secret_…` keys before
+  Supabase retires the legacy `anon`/`service_role` JWTs (end of 2026).
+  Needs `supabase` ≥ 2.16 in `backend/requirements.txt` (2.9.1 rejects
+  non-JWT keys), then Railway + Vercel values, verify, and "Disable JWT-based
+  API keys". Logs nobody out. Steps in ENGINEERING.md → Rotating secrets.
 - [x] ◐ Security headers on the Vercel app. `next.config.js` `headers()` now
   sends HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`,
   `Permissions-Policy` (mic for this origin only) and a CSP. The CSP is
