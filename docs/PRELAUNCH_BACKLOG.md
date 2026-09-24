@@ -609,8 +609,23 @@ Decided the same day, behind the sentence:
 - [x] ✔ `auth/callback/route.ts` only honours a `next` under `/app/` (and
   refuses `//` or a backslash); anything else goes to the dashboard. The
   invite flow's `/app/ic?invite=…` still passes.
-- [ ] ◐ Supabase Auth hardening in the dashboard (not in repo, cannot
-  verify here): magic-link expiry, rate limit on OTP sends, Site URL = the canonical app URL from N-4.
+- [x] ✔ Supabase Auth hardening in the dashboard. Checked 2026-09-24, no
+  changes needed: Site URL is https://app.thesamepage.xyz; magic-link/OTP
+  expiry is 3600 s, which matches the login page's "It expires in 1 hour"
+  (change both together); email sends are capped at 30/hour and sign-in
+  requests at 30 per 5 minutes per IP; sign-ups and confirm-email are on,
+  anonymous sign-ins and manual linking are off; secure email change is on.
+  Password settings (6-character minimum) don't matter yet because the app
+  has no way to set a password. Leaked-password protection is Pro-only.
+- [ ] Optional, post-launch: CAPTCHA (Cloudflare Turnstile) on the login
+  form. Off today. Without it a bot can burn the 30-emails-an-hour cap and
+  lock real users out of sign-in for the hour, and every send spends
+  ag@thesamepage.xyz's Gmail reputation. Needs the widget on
+  `app/app/login/page.tsx` plus the secret in Supabase → Attack Protection.
+  Worth doing if the audit log ever shows bursts of sign-in requests.
+- [ ] Trim the Redirect URLs allow-list: it still carries the Vercel
+  preview wildcards and thesamepage-blush.vercel.app/auth/callback from
+  before N-4. Keep app.thesamepage.xyz/auth/callback and localhost.
 
 ### D. Observability — you cannot see a production failure today
 
@@ -649,6 +664,10 @@ Decided the same day, behind the sentence:
 - [ ] ✘ Supabase backups confirmed. Free tier has none; Pro has daily with
   7-day retention; PITR is an add-on. Decide, enable, and do one restore
   drill into a throwaway project before a customer exists.
+  **Parked 2026-09-24 by Andrew, to come back to.** Still on Free, so no
+  backups exist today. Settle it before the first founding manager puts a
+  real team in; it's the one gap on this list that can't be fixed after
+  the fact.
 - [ ] ✘ Schema drift check. `database/schema.sql` declares 52 tables and
   there are 31 dated migrations; the rule says both move together. Run
   `schema.sql` against `local_verify_stub.sql` once more as a clean gate,
