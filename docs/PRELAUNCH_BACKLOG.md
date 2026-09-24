@@ -686,22 +686,27 @@ Decided the same day, behind the sentence:
 
 - [x] ✔ Tests exist: `backend/tests/` has 8 modules (Scribe, Away, org
   units, Mission Control engine + routes, 1:1s, demo seed). Note
-  `docs/ENGINEERING.md` → Open questions still says "No test files,
-  `tests/` directory, or CI anywhere in the repo" — stale; rewrite that
-  bullet.
-- [ ] ✘ CI. No `.github/workflows/`. One workflow running `pytest` and
-  `tsc --noEmit` on push is the cheapest insurance against the half-committed
-  two-part change that broke main for seven hours
-  (`feedback_verify_clean_checkout`). Effort S.
-- [ ] ✘ Pinned Python deps are a year old (`fastapi==0.109.0`,
-  `pydantic==2.5.3`); `next: ^15.0.0` floats. Not a launch blocker, but run
-  `pip-audit` / `npm audit` once and bump anything with a CVE.
-- [ ] ✘ A written rollback: which Vercel deployment and which Railway
-  deployment to promote if a push breaks production, and who can run a
-  migration down. Half a page in `docs/ENGINEERING.md`.
-- [ ] ✘ Commit this file. `docs/PRELAUNCH_BACKLOG.md` has been untracked
-  since 2026-09-01 (`git status`), along with `Polish List Before Launch.md`
-  and two `gtm/research/` documents.
+  `docs/ENGINEERING.md` → Open questions no longer says there are no tests
+  or CI; that bullet now records that CI reports but doesn't gate deploys.
+- [x] ✔ CI. `.github/workflows/ci.yml` runs `pytest` + `pip-audit` and
+  `tsc --noEmit` + `npm audit` on every push, against a clean checkout, which
+  is exactly what would have caught the half-committed change that broke main
+  for seven hours. It reports; it doesn't block the Railway/Vercel deploys.
+  First run happens on this push; check the Actions tab once.
+- [x] ✔ Dependency audit, 2026-09-24. `pip-audit` flagged fastapi,
+  starlette, python-multipart, python-dotenv, cryptography and pytest; all
+  bumped and now clean. FastAPI stops at 0.136.3, because 0.137 hides routes
+  from slowapi's middleware and the default write limit silently stops
+  (`tests/test_rate_limits.py` catches it). `npm audit` flagged a critical
+  Next.js RCE, sharp and a Next-bundled PostCSS: `next` floor raised to
+  `^15.5.26` and PostCSS forced to 8.5.28 by an override, 0 vulnerabilities, and
+  `next build` passes. Both audits now run in CI.
+- [x] ✔ A written rollback: `docs/ENGINEERING.md` → Rolling back a bad push
+  (Vercel Instant Rollback, Railway rollback, `git revert`, forward-only
+  migrations run by Andrew).
+- [x] ✔ Commit this file. `docs/PRELAUNCH_BACKLOG.md` is tracked.
+  `Polish List Before Launch.md` and the two `gtm/research/` documents are
+  still untracked, deliberately left to Andrew.
 
 ### H. Launch-day mechanics (do the week before)
 

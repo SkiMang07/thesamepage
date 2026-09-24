@@ -298,12 +298,53 @@ Two rules:
   authenticated`, `set_config('app.current_user_id', ...)`) that actually
   exercises the policy or function you changed — including the failure cases.
 
-Device `device_bash` has a ~45s cap, too short for `npm ci` / `next build` /
+Device `device_bash` has a short per-call cap, too short for `npm ci` / `next build` /
 `pip install`. Rebuild in the cloud sandbox from the connected folder instead.
 The usual full pass: `py_compile` on changed files, a real `import main` with
 dummy Supabase env vars (catches import-order bugs and confirms every route
 registers with no path collisions), `tsc --noEmit`, `next build`, plus the
 Postgres run above when schema changed.
+
+---
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and pull request against a clean
+checkout of the commit: `pytest` plus `pip-audit` for the backend, `tsc --noEmit`
+plus `npm audit --audit-level=high` for the frontend. It is an alarm, not a
+gate. Railway and Vercel deploy on push whatever CI says, so a red run means
+"check production now". `frontend/package-lock.json` is gitignored, so CI and
+Vercel both resolve the ranges in `package.json` fresh. That is why the security
+floors (`next ^15.5.26`, the `postcss` override) live there. FastAPI is pinned
+below 0.137; `requirements.txt` says why.
+
+## Rolling back a bad push
+
+Railway and Vercel each keep every past deployment, so rolling back means
+promoting an old build. Nothing needs rebuilding, and the two are independent:
+roll back only the side that broke.
+
+1. **Frontend (Vercel).** Project → Deployments, find the last good
+   Production deployment, then ⋯ → **Promote to Production** (Vercel calls it
+   Instant Rollback). Live in seconds. Vercel stops auto-promoting until you
+   promote a new deployment by hand, so the next push won't silently undo the
+   rollback.
+2. **Backend (Railway).** Service `thesamepage` → Deployments, find the last
+   good one, then ⋯ → **Rollback** (older UIs call it Redeploy). It goes live
+   once `/health` passes the healthcheck. Confirm with `curl https://thesamepage-production.up.railway.app/health`.
+   Railway *does* redeploy on the next push, so step 3 matters here.
+3. **Git.** `git revert <bad sha>` and push, so `main` matches what is running.
+   Don't force-push over history: both platforms deploy from it.
+4. **Database.** Migrations are forward-only (no down files) and Andrew runs
+   them by hand in the Supabase SQL editor; nobody else has access. Undoing
+   one means a new dated migration that reverses it, with the matching
+   `schema.sql` edit (hard rule 4). Almost every migration here only adds
+   (tables, columns, policies), and old code ignores what it doesn't read. So
+   the usual move is to roll back the code and leave the schema alone.
+
+If a backend rollback crosses an entitlement or RLS change, check the read-only
+gate still answers: a write from a signed-in account should get 200 or 402,
+never 500.
 
 ---
 
@@ -349,7 +390,8 @@ Not yet built, deliberately:
 
 - Error monitoring — the backend is wired (`observability.py`) but stays off
   until `SENTRY_DSN` exists on Railway. The frontend has no error reporting.
-- CI — `backend/tests/` runs under `pytest` (from `backend/`), but nothing runs
-  it automatically before a push deploys to Railway.
+- CI doesn't block deploys. Railway and Vercel deploy on push, and CI (above)
+  only reports. Making it a gate would mean deploy hooks or GitHub-triggered
+  deploys instead of the platforms' own git integrations.
 - Pagination — no list endpoint paginates. Fine at one manager's scale, not at
   an org's.
