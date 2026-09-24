@@ -18,6 +18,7 @@ from datetime import date, datetime
 from fastapi import HTTPException, Header
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from slowapi.wrappers import LimitGroup
 import httpx
 from gotrue.http_clients import SyncClient as GoTrueHttpClient
 from postgrest import SyncPostgrestClient
@@ -37,6 +38,22 @@ from config import settings
 # script, which is the actual risk today. Revisit if that coarseness ever
 # causes a real false-positive complaint.
 limiter = Limiter(key_func=get_remote_address)
+
+# Default limit on every write that has no limit of its own (PRELAUNCH_BACKLOG
+# §7 C). The AI routes carry tighter @limiter.limit decorators, which replace
+# this default rather than add to it. Reads are left alone: one page load fans
+# out to a dozen GETs, and the risk this covers is a runaway client POSTing in
+# a loop, not someone clicking around.
+#
+# slowapi's `default_limits=` argument has no way to say "writes only", so the
+# LimitGroup is built by hand with a `methods` list. The bucket is per route
+# per IP (slowapi scopes a default limit to the endpoint). Enforced by
+# SlowAPIMiddleware in main.py; tests/test_rate_limits.py pins both halves.
+DEFAULT_WRITE_LIMIT = "120/minute"
+_WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"]
+limiter._default_limits = [
+    LimitGroup(DEFAULT_WRITE_LIMIT, get_remote_address, None, False, _WRITE_METHODS, None, None, 1, False)
+]
 
 # token -> (user_data, cached_until_epoch_seconds)
 _token_cache: dict[str, tuple[dict, float]] = {}

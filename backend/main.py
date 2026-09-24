@@ -72,6 +72,17 @@ async def read_only_gate(request: Request, call_next):
             return JSONResponse(status_code=402, content={"detail": READ_ONLY_DETAIL})
     return await call_next(request)
 
+# Rate limiting. Per-route @limiter.limit decorators on every AI-calling
+# endpoint, plus a default limit on all other writes (DEFAULT_WRITE_LIMIT in
+# utils.py). Registered BEFORE CORSMiddleware for the same reason as the gate
+# above: a 429 the middleware returns itself must still carry CORS headers,
+# or the browser reports a CORS failure instead of "slow down". Registered
+# AFTER the gate, so it sits outside it: a throttled write never costs an
+# entitlement lookup.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 _ALLOWED_ORIGINS = [settings.FRONTEND_URL, "http://localhost:3000"]
 
 app.add_middleware(
@@ -81,15 +92,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Rate limiting (added Session 20 — see foundation_weaknesses project memory
-# note item #4). `slowapi` was already a dependency, unused, since before
-# this session. Limits are set per-route (see the @limiter.limit decorators
-# on the AI-calling endpoints in routes/one_on_ones.py, routes/assessments.py,
-# and routes/dashboard.py) — nothing else in the app is throttled.
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(direct_reports.router, prefix="/api/direct-reports", tags=["direct-reports"])
 app.include_router(away.router, prefix="/api/away", tags=["away"])

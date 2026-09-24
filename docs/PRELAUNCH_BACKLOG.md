@@ -568,20 +568,23 @@ Decided the same day, behind the sentence:
 - [x] ✔ CORS restricted to `FRONTEND_URL` + localhost (`main.py:15–23`)
 - [x] ✔ Rate limits on every AI-calling route (14 `@limiter.limit`
   decorators; transcribe at 30/min, the rest 10/min)
-- [ ] ◐ Rate limits on non-AI writes: none. One bad client can hammer
-  `POST /api/direct-reports` unbounded. Add a default limit in
-  `SlowAPIMiddleware` (e.g. 120/min) so the AI limits are the exception, not
-  the only rule. Effort S.
+- [x] ✔ Rate limits on non-AI writes. Every POST/PUT/PATCH/DELETE without its
+  own decorator gets `DEFAULT_WRITE_LIMIT` (120/min per route per IP, in
+  `utils.py`); reads are not throttled. `SlowAPIMiddleware` moved before
+  `CORSMiddleware` so its 429 carries CORS headers (it still sits outside the
+  read-only gate). Pinned by `tests/test_rate_limits.py`.
 - [ ] ✘ Rotate the `ANTHROPIC_API_KEY` sitting in plaintext in `backend/.env`
   inside the Obsidian vault (Andrew's own note in `Polish List Before
   Launch.md`, still open). Same for `OPENAI_API_KEY` and the Supabase
   service-role key if they are in that file. Then delete the note.
-- [ ] ✘ Security headers on the Vercel app: only `X-Content-Type-Options`
-  is set. `next.config.js` has no `headers()`; add HSTS,
-  `X-Frame-Options: DENY`, `Referrer-Policy`, and a starter CSP. Effort S.
-- [ ] ✘ `auth/callback/route.ts:8,32` redirects to an unvalidated `next` param.
-  It is prefixed with `origin` so a full off-site redirect is not possible,
-  but restrict it to paths starting with `/app/` anyway. Effort XS.
+- [x] ◐ Security headers on the Vercel app. `next.config.js` `headers()` now
+  sends HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`,
+  `Permissions-Policy` (mic for this origin only) and a CSP. The CSP is
+  **Report-Only** until a signed-in walk (login, prep, dictation) shows no
+  console violations; then rename the header to `Content-Security-Policy`.
+- [x] ✔ `auth/callback/route.ts` only honours a `next` under `/app/` (and
+  refuses `//` or a backslash); anything else goes to the dashboard. The
+  invite flow's `/app/ic?invite=…` still passes.
 - [ ] ◐ Supabase Auth hardening in the dashboard (not in repo, cannot
   verify here): magic-link expiry, rate limit on OTP sends, Site URL = the canonical app URL from N-4.
 
