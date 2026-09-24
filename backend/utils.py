@@ -150,8 +150,20 @@ def verify_token_with_supabase(token: str) -> dict:
 # closes its transport, which here is shared by every request. Nothing in
 # the codebase does today; per-request clients are simply garbage-collected.
 # Storage keeps the library's default (it is only built lazily, on uploads).
+#
+# HTTP/1.1, not HTTP/2. With http2=True every thread multiplexed onto one
+# connection, and when Supabase closed or reset it mid-burst, every in-flight
+# request died with "Server disconnected" -> an unhandled 500 with no CORS
+# headers -> "Failed to fetch" in the browser. The Team page, which fans out
+# 13 GETs at once, hit this on first load. An HTTP/1.1 pool gives each
+# concurrent request its own connection (still pooled, still one SSL
+# context). retries=1 re-dials a connection that fails to open.
 # ---------------------------------------------------------------------------
-_SUPABASE_TRANSPORT = httpx.HTTPTransport(http2=True)
+_SUPABASE_TRANSPORT = httpx.HTTPTransport(
+    http2=False,
+    retries=1,
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=5.0),
+)
 
 
 class _PooledPostgrestClient(SyncPostgrestClient):

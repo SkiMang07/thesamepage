@@ -66,21 +66,35 @@ async function authedFetch(path: string, options: RequestInit = {}) {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
 
-  const res = await fetch(`${BACKEND_URL}${path}`, {
+  const init: RequestInit = {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
       ...options.headers,
     },
-  });
+  };
+  const method = (options.method || "GET").toUpperCase();
+
+  // A network-level failure (fetch throws TypeError: "Failed to fetch") on a
+  // read gets one quiet retry. Pages like /app/team fan out a dozen GETs at
+  // once, and one dropped connection used to blank the whole page until a
+  // manual refresh. Reads only: retrying a write could save it twice.
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}${path}`, init);
+  } catch (e) {
+    if (method !== "GET" || !(e instanceof TypeError)) throw e;
+    await new Promise((r) => setTimeout(r, 400));
+    res = await fetch(`${BACKEND_URL}${path}`, init);
+  }
 
   if (!res.ok) {
     announceReadOnly(res.status);
     throw new ApiError(res.status, await res.text());
   }
   const data = await res.json();
-  announceRecordChange(path, (options.method || "GET").toUpperCase());
+  announceRecordChange(path, method);
   return data;
 }
 
