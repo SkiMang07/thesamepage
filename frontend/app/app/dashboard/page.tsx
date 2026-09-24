@@ -66,6 +66,8 @@ import { SECTION_GAP, useZoneData, ZoneMap } from "@/components/ZoneMap";
 import PageShell from "@/components/PageShell";
 import { ActionBrief, ActionBriefLoadFailure, ActionBriefLoading } from "@/components/mission-control/ActionBrief";
 import { SkeletonSection } from "@/components/Skeleton";
+import PartialLoadNotice from "@/components/PartialLoadNotice";
+import { createSectionLoader } from "@/lib/sectionLoader";
 
 function daysSince(iso: string) {
   const then = new Date(iso).getTime();
@@ -263,6 +265,8 @@ function LegacyDashboardPage() {
   const [capacity, setCapacity] = useState<CapacityOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Sections that failed to load on the last load (lib/sectionLoader.ts).
+  const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [insight, setInsight] = useState<DashboardInsight | null>(null);
   const [insightDismissed, setInsightDismissed] = useState(false);
   // Distinct from `insight === null`, which is the legitimate "nothing to
@@ -286,13 +290,16 @@ function LegacyDashboardPage() {
 
   const loadDashboard = useCallback(() => {
     setLoading(true);
+    // The team overview is the grid's spine and stays essential; the rest
+    // degrade on their own and are named in the notice (lib/sectionLoader.ts).
+    const { optional, failed } = createSectionLoader();
     return Promise.all([
       getTeamOverview(),
-      getOneOnOnesOverview(),
-      getTeamAssessments(),
-      getGoals(),
-      getProjects(),
-      getCapacityOverview(toISODate(weekRange.start), toISODate(weekRange.end)),
+      optional("1:1 cadence", getOneOnOnesOverview(), []),
+      optional("assessments", getTeamAssessments(), []),
+      optional("goals", getGoals(), []),
+      optional("projects", getProjects(), []),
+      optional("capacity", getCapacityOverview(toISODate(weekRange.start), toISODate(weekRange.end)), []),
     ])
       .then(([overview, oneOnOnes, assessments, allGoals, allProjects, capacityRows]) => {
         const ratingByReport = new Map<string, TeamAssessmentItem>(assessments.map((a) => [a.id, a]));
@@ -332,6 +339,7 @@ function LegacyDashboardPage() {
         setProjects(allProjects.filter((p) => ACTIVE_PROJECT_STATUSES.has(p.status)));
         setCapacity(capacityRows);
         setLoadError(null);
+        setLoadFailures(failed());
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -427,6 +435,7 @@ function LegacyDashboardPage() {
       </div>
 
       {loadError && <p className="mt-4 text-sm text-red-700">{loadError}</p>}
+      <PartialLoadNotice failed={loadFailures} className="mt-4" />
 
       {/* Zone map — replaces the old stat ribbon in place (Session 36/37
           decision: the map's door counts already carry the numbers a ribbon

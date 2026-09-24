@@ -24,6 +24,33 @@ if init_sentry(settings.SENTRY_DSN, settings.ENVIRONMENT):
 app = FastAPI(title="The Same Page API")
 
 # ---------------------------------------------------------------------------
+# Unhandled errors come back as a readable 500, not a CORS failure.
+#
+# Starlette turns an uncaught exception into a 500 in ServerErrorMiddleware,
+# which sits OUTSIDE every middleware added here, CORS included. That 500
+# carries no CORS headers, so the browser refuses to show it and fetch()
+# throws "Failed to fetch": the real error is invisible and the frontend
+# can't tell a server bug from a dropped connection. Catching here, inside
+# CORS (this is the first middleware registered, so it is the innermost),
+# gives the browser a normal JSON 500 it can read.
+#
+# HTTPExceptions never reach this: FastAPI turns them into responses inside
+# the router. logger.exception goes to the JSON logs and, at ERROR level,
+# to Sentry (observability.py), so catching here loses no reporting.
+# ---------------------------------------------------------------------------
+UNHANDLED_ERROR_DETAIL = "Something went wrong on our side. Try again in a moment."
+
+
+@app.middleware("http")
+async def unhandled_errors_as_json(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": UNHANDLED_ERROR_DETAIL})
+
+
+# ---------------------------------------------------------------------------
 # Read-only gate (PRELAUNCH_BACKLOG §7 B). When a manager's free clock has run
 # out and they are not 'active', every write under /api/ gets a 402 and the
 # app shows the subscribe banner. Reads still work, so nothing they saved is

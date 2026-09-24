@@ -157,6 +157,8 @@ import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, 
 
 import NoteField from "@/components/NoteField";
 import { SkeletonSection } from "@/components/Skeleton";
+import PartialLoadNotice from "@/components/PartialLoadNotice";
+import { createSectionLoader } from "@/lib/sectionLoader";
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-sunken text-ink-secondary",
@@ -340,6 +342,8 @@ export default function TeamPage() {
   const [devFocuses, setDevFocuses] = useState<TeamDevFocus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Sections that failed to load on this visit (lib/sectionLoader.ts).
+  const [loadFailures, setLoadFailures] = useState<string[]>([]);
 
   // Setup-status visibility on the roster cards (Session 42, Plan S4+S5) —
   // role · team chip + amber "no role" badge. TeamMember (from getTeam())
@@ -361,20 +365,23 @@ export default function TeamPage() {
   const teamMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // No single request is essential here: each card degrades on its own and
+    // is named in the notice (lib/sectionLoader.ts).
+    const { optional, failed } = createSectionLoader();
     Promise.all([
-      getTeam(),
-      getTeamGoals(),
-      getTeamMeetings(),
-      getTeamCommitments(),
-      getProjects(),
-      getTeamCallout(),
-      getTeamDevFocus(),
-      getDirectReports(),
-      getRoleLevels(),
-      getRoleFamilies(),
-      getOrgUnits(),
-      getSetupStatus(),
-      getLedOrgUnits(),
+      optional("team members", getTeam(), []),
+      optional("goals", getTeamGoals(), []),
+      optional("meetings", getTeamMeetings(), []),
+      optional("team commitments", getTeamCommitments(), []),
+      optional("initiatives", getProjects(), []),
+      optional("critical callouts", getTeamCallout(), []),
+      optional("training focus", getTeamDevFocus(), []),
+      optional("people", getDirectReports(), []),
+      optional("role levels", getRoleLevels(), []),
+      optional("role families", getRoleFamilies(), []),
+      optional("teams", getOrgUnits(), []),
+      optional("setup status", getSetupStatus(), null),
+      optional("the teams you lead", getLedOrgUnits(), []),
     ])
       .then(([m, g, n, c, p, calloutRows, devFocusRows, drs, rls, rfs, ous, status, led]) => {
         setMembers(m);
@@ -390,6 +397,7 @@ export default function TeamPage() {
         setOrgUnits(ous);
         setSetupStatus(status);
         setLedOrgUnits(led);
+        setLoadFailures(failed());
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -572,6 +580,7 @@ export default function TeamPage() {
       </p>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+      <PartialLoadNotice failed={loadFailures} className="mt-4" />
 
       {loading ? (
         <SkeletonSection label="Loading your team" variant="cards" className={SECTION_GAP} />

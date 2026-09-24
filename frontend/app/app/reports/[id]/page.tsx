@@ -86,6 +86,8 @@ import { deriveOneOnOneSuggestions } from "@/lib/one-on-one-workspace";
 
 import NoteField from "@/components/NoteField";
 import { PageSkeleton } from "@/components/Skeleton";
+import PartialLoadNotice from "@/components/PartialLoadNotice";
+import { createSectionLoader } from "@/lib/sectionLoader";
 const TIME_OFF_LABELS: Record<TimeOffType, string> = {
   pto: "PTO",
   sick: "Sick",
@@ -259,6 +261,8 @@ export default function ReportDetailPage() {
   const [newCapture, setNewCapture] = useState("");
   const [savingCapture, setSavingCapture] = useState(false);
   const [deletingCaptureId, setDeletingCaptureId] = useState<string | null>(null);
+  // Sections that failed to load on this visit (lib/sectionLoader.ts).
+  const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [activeContext, setActiveContext] = useState<"work" | "growth" | "history" | "private">("history");
 
   // Clear page context when leaving this page so it doesn't bleed into
@@ -270,23 +274,26 @@ export default function ReportDetailPage() {
   useEffect(() => {
     const today = localDateStr();
     const weekEnd = addDaysStr(today, 6);
+    // Only the person record is essential; every other section degrades on
+    // its own and is named in the notice (lib/sectionLoader.ts).
+    const { optional, failed } = createSectionLoader();
     Promise.all([
       getDirectReport(id),
-      getOneOnOneHistory(id),
-      getCommitments({ directReportId: id }),
-      getGoals({ directReportId: id }),
-      getProjects({ directReportId: id }),
-      getCapacityProfile(id),
-      getCapacitySettings(),
-      getCapacityOverview(today, weekEnd),
-      getTimeOff(id),
-      getScorecard(id),
-      getProfile(),
-      getRoleLevels(),
-      getRoleFamilies(),
-      getOrgUnits(),
-      getDevelopmentPlan(id),
-      getCaptureNotes(id),
+      optional("1:1 history", getOneOnOneHistory(id), []),
+      optional("commitments", getCommitments({ directReportId: id }), []),
+      optional("goals", getGoals({ directReportId: id }), []),
+      optional("projects", getProjects({ directReportId: id }), []),
+      optional("capacity", getCapacityProfile(id), null),
+      optional("capacity defaults", getCapacitySettings(), null),
+      optional("this week's capacity", getCapacityOverview(today, weekEnd), []),
+      optional("time off", getTimeOff(id), []),
+      optional("assessments", getScorecard(id), null),
+      optional("your 1:1 cadence default", getProfile(), null),
+      optional("role levels", getRoleLevels(), []),
+      optional("role families", getRoleFamilies(), []),
+      optional("teams", getOrgUnits(), []),
+      optional("development plan", getDevelopmentPlan(id), null),
+      optional("capture notes", getCaptureNotes(id), []),
     ])
       .then(([dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps]) => {
         setReport(dr);
@@ -299,20 +306,23 @@ export default function ReportDetailPage() {
         setCommitments(c);
         setGoals(g);
         setProjects(p);
-        setContractedHours(cp.contracted_hours_per_week?.toString() ?? "");
-        setUtilizationPct(cp.target_utilization_pct?.toString() ?? "");
-        setOffDaysPerYear(cp.off_days_per_year?.toString() ?? "");
+        if (cp) {
+          setContractedHours(cp.contracted_hours_per_week?.toString() ?? "");
+          setUtilizationPct(cp.target_utilization_pct?.toString() ?? "");
+          setOffDaysPerYear(cp.off_days_per_year?.toString() ?? "");
+        }
         setCapacitySettings(cs);
         setCapacityOverview(cov);
         setTimeOff(to);
         setScorecard(sc);
-        setOrgCadenceDays(prof.one_on_one_cadence_days);
+        if (prof) setOrgCadenceDays(prof.one_on_one_cadence_days);
         setCadenceDays(dr.one_on_one_cadence_days != null ? String(dr.one_on_one_cadence_days) : "");
         setRoleLevels(rls);
         setRoleFamilies(rfs);
         setOrgUnits(ous);
         setDevBundle(dev);
         setCaptures(caps);
+        setLoadFailures(failed());
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -570,6 +580,7 @@ export default function ReportDetailPage() {
       </div>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+      <PartialLoadNotice failed={loadFailures} className="mt-4" />
 
       {/* Relationship desk: next conversation + follow-through stay visible;
           the lower context modes separate work, growth, history and private notes. */}

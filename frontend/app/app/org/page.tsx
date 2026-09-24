@@ -8,6 +8,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageShell from "@/components/PageShell";
+import PartialLoadNotice from "@/components/PartialLoadNotice";
+import { createSectionLoader } from "@/lib/sectionLoader";
 import {
   GoalsRollupItem,
   OrgMember,
@@ -156,6 +158,8 @@ export default function OrgPage() {
   const [loading, setLoading] = useState(true);
   const [rollupLoading, setRollupLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Sections that failed to load on this visit (lib/sectionLoader.ts).
+  const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [rollupError, setRollupError] = useState<string | null>(null);
   const [mode, setMode] = useState<PageMode>("overview");
   const [scopeMode, setScopeMode] = useState<ScopeMode>("led");
@@ -185,13 +189,22 @@ export default function OrgPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([getOrgUnits(), getProfile(), getOrgMembers(), getLedOrgUnits()])
+    // The unit tree is essential; the rest degrade on their own and are
+    // named in the notice (lib/sectionLoader.ts).
+    const { optional, failed } = createSectionLoader();
+    Promise.all([
+      getOrgUnits(),
+      optional("company name", getProfile(), null),
+      optional("people", getOrgMembers(), []),
+      optional("the units you lead", getLedOrgUnits(), []),
+    ])
       .then(([orgUnits, profile, orgMembers, led]) => {
         setUnits(orgUnits);
-        setCompanyName(profile.company_name || "Your company");
+        setCompanyName(profile?.company_name || "Your company");
         setMembers(orgMembers);
         setLedUnits(led);
         if (led.length === 0) setScopeMode("all");
+        setLoadFailures(failed());
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Failed to load the organization"))
       .finally(() => setLoading(false));
@@ -319,6 +332,7 @@ export default function OrgPage() {
       </div>
 
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+      <PartialLoadNotice failed={loadFailures} className="mt-4" />
 
       {loading ? (
         <div className="mt-5 rounded-xl border border-hairline bg-surface p-6 text-sm text-ink-secondary">Loading organization…</div>
