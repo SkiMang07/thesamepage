@@ -1155,7 +1155,13 @@ create unique index team_dev_focus_manager_all_teams_uq
 
 -- -------------------------
 -- SUBSCRIPTIONS
--- Written only by the backend service-role client (Stripe webhook).
+-- One row per manager: the free clock and, later, the Stripe subscription.
+-- Written only by ensure_entitlement() (SECURITY DEFINER, creates the row on
+-- first app load) and, once it exists, the Stripe webhook. Select-only to
+-- the owner. founding_number 1-20 = a founding place (90 days); a trialing
+-- row without one got 14 days. 'active' with no Stripe id = comped.
+-- Past trial_ends_at and not 'active' = read-only (backend 402s writes).
+-- See docs/PRELAUNCH_BACKLOG.md §7 B.
 -- -------------------------
 create table subscriptions (
   id                     uuid primary key default uuid_generate_v4(),
@@ -1166,6 +1172,9 @@ create table subscriptions (
   status                 text not null default 'inactive'
                          check (status in ('inactive', 'trialing', 'active', 'past_due', 'canceled')),
   current_period_end     timestamptz,
+  founding_number        integer unique check (founding_number between 1 and 20),
+  trial_ends_at          timestamptz,
+  created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now()
 );
 
@@ -2117,6 +2126,80 @@ $$;
 
 revoke all on function public.accept_direct_report_invite(text) from public;
 grant execute on function public.accept_direct_report_invite(text) to authenticated;
+
+-- ============================================================
+-- ENTITLEMENT (2026-09-24) — founding places and the free clock.
+-- Called by GET /api/entitlement and the backend's read-only gate with the
+-- user's own JWT. Creates the caller's subscriptions row on first call:
+-- founding place (90 days) while fewer than 20 exist, else 14 days.
+-- Invited ICs get no row. See migrations/2026-09-24_founding_entitlement.sql.
+-- ============================================================
+
+create or replace function public.ensure_entitlement()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_email text := lower(coalesce(auth.email(), ''));
+  v_role  text;
+  v_sub   subscriptions%rowtype;
+  v_next  integer;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_sub from subscriptions where user_id = v_uid;
+
+  if not found then
+    select role into v_role from users where id = v_uid;
+    if v_role = 'ic' or exists (
+      select 1 from direct_report_invites
+      where lower(invited_email) = v_email
+        and accepted_at is null
+        and expires_at > now()
+    ) then
+      return jsonb_build_object('status', 'ic', 'read_only', false,
+        'founding_number', null, 'trial_ends_at', null);
+    end if;
+
+    -- One allocator at a time, so two simultaneous sign-ups can't both be #20.
+    perform pg_advisory_xact_lock(hashtext('tsp_founding_places'));
+
+    select * into v_sub from subscriptions where user_id = v_uid;
+    if not found then
+      select coalesce(max(founding_number), 0) + 1 into v_next
+        from subscriptions where founding_number is not null;
+
+      if v_next <= 20 then
+        insert into subscriptions (user_id, plan, status, founding_number, trial_ends_at)
+        values (v_uid, 'manager', 'trialing', v_next, now() + interval '90 days')
+        returning * into v_sub;
+      else
+        insert into subscriptions (user_id, plan, status, trial_ends_at)
+        values (v_uid, 'manager', 'trialing', now() + interval '14 days')
+        returning * into v_sub;
+      end if;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'status',          v_sub.status,
+    'founding_number', v_sub.founding_number,
+    'trial_ends_at',   v_sub.trial_ends_at,
+    'read_only',       not (
+                         v_sub.status = 'active'
+                         or (v_sub.status = 'trialing' and v_sub.trial_ends_at > now())
+                       )
+  );
+end;
+$$;
+
+revoke all on function public.ensure_entitlement() from public;
+grant execute on function public.ensure_entitlement() to authenticated;
 
 -- ============================================================
 -- CONTEXT ENGINE STORAGE (Session 27, 2026-08-12)

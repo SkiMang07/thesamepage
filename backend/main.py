@@ -1,15 +1,76 @@
-from fastapi import FastAPI, Request
+import logging
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
-from routes import assessments, assistant, away, beyond, capacity, commitments, dashboard, development, direct_reports, documents, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
-from utils import limiter
+from routes import assessments, assistant, away, beyond, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
+from utils import get_authenticated_client, get_entitlement, limiter
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="The Same Page API")
+
+# ---------------------------------------------------------------------------
+# Read-only gate (PRELAUNCH_BACKLOG §7 B). When a manager's free clock has run
+# out and they are not 'active', every write under /api/ gets a 402 and the
+# app shows the subscribe banner. Reads still work, so nothing they saved is
+# ever out of reach. One middleware rather than a dependency on every write
+# route, so a new route can't forget it.
+#
+# Registered BEFORE CORSMiddleware on purpose: Starlette wraps later-added
+# middleware around earlier ones, so CORS sits outside this gate and the 402
+# carries CORS headers. The other way round, the browser would see a CORS
+# failure instead of the 402.
+#
+# Fails open. If the entitlement lookup itself errors, the write goes
+# through: a billing check must never be the reason the app is down.
+# ---------------------------------------------------------------------------
+_WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# POSTs that read, not save, plus accepting an invite (an IC has no clock).
+_READ_ONLY_ALLOWED = (
+    "/api/invites/",
+    "/api/dashboard/events",
+    "/api/dashboard/reconcile",
+    "/api/dashboard/explain",
+    "/api/away/preview",
+)
+READ_ONLY_DETAIL = (
+    "Your free period has ended, so your account is read-only. "
+    "Everything you saved is still here."
+)
+
+
+def _entitlement_for(authorization: str) -> dict:
+    user_id, client = get_authenticated_client(authorization)
+    return get_entitlement(user_id, client)
+
+
+@app.middleware("http")
+async def read_only_gate(request: Request, call_next):
+    path = request.url.path
+    authorization = request.headers.get("authorization") or ""
+    if (
+        request.method in _WRITE_METHODS
+        and path.startswith("/api/")
+        and not path.startswith(_READ_ONLY_ALLOWED)
+        and authorization.startswith("Bearer ")
+    ):
+        try:
+            ent = await run_in_threadpool(_entitlement_for, authorization)
+        except HTTPException:
+            ent = None  # bad token: let the route return its own 401
+        except Exception:
+            logger.exception("entitlement check failed; allowing write")
+            ent = None
+        if ent and ent.get("read_only"):
+            return JSONResponse(status_code=402, content={"detail": READ_ONLY_DETAIL})
+    return await call_next(request)
 
 _ALLOWED_ORIGINS = [settings.FRONTEND_URL, "http://localhost:3000"]
 
@@ -57,6 +118,7 @@ app.include_router(documents.router, prefix="/api/documents", tags=["documents"]
 app.include_router(assistant.router, prefix="/api/assistant", tags=["assistant"])
 app.include_router(setup_status.router, prefix="/api/setup-status", tags=["setup-status"])
 app.include_router(transcribe.router, prefix="/api/transcribe", tags=["transcribe"])
+app.include_router(entitlement.router, prefix="/api/entitlement", tags=["entitlement"])
 
 
 # Catch-all OPTIONS handler — belt-and-suspenders for Railway's reverse proxy,

@@ -524,7 +524,7 @@ Decided the same day, behind the sentence:
   toward the 20.
 
 - [x] Billing decision made and written down (P0-1), 2026-09-24.
-- [ ] ✘ **Record founding status and a clock per manager.** Activate the
+- [x] **Record founding status and a clock per manager.** Activate the
   dormant `subscriptions` table (one row per manager, keyed on `user_id`,
   already read-only to the user under RLS, already carrying
   `stripe_customer_id` and `status in (... 'trialing', 'active' ...)`) rather
@@ -539,13 +539,16 @@ Decided the same day, behind the sentence:
   client, so there's no service-role on the request path. Dated migration +
   `schema.sql` edit, verified against `local_verify_stub.sql`, including a
   21-signups concurrency test.
-- [ ] ✘ **Read-only gate.** One FastAPI middleware (not 92 route edits)
+- [x] **Read-only gate.** One FastAPI middleware (not 92 route edits)
   returns 402 on POST/PUT/PATCH/DELETE under `/api/*` when the caller's
   clock has run out. The allowlist is the entitlement endpoint and invite
   accept. `GET /api/entitlement` reports status and days left.
-- [ ] ✘ **Tell the user.** The app shell shows a quiet "N days left" note in
+- [x] **Tell the user.** The app shell shows a quiet "N days left" note in
   the last 7 days and an expired banner with the subscribe path. `api.ts`
   turns a 402 into that banner instead of a generic error.
+  *Built 2026-09-24:* `2026-09-24_founding_entitlement.sql`,
+  `read_only_gate` in `main.py`, `<EntitlementNotice />`. See ENGINEERING.md,
+  "Entitlement and the read-only gate".
 - [ ] ✘ **Stripe before the first trial expires** (earliest: 21st sign-up
   + 14 days). Checkout + webhook write `subscriptions` via the service-role
   client (a webhook is not a user request path). Andrew creates the Stripe

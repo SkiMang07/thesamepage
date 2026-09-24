@@ -38,6 +38,17 @@ function parseDetail(body: string): string {
   return body.slice(0, 200);
 }
 
+// Fired when the backend refuses a write with 402: the manager's free period
+// has ended and the account is read-only. <EntitlementNotice /> listens and
+// shows the banner, so no individual page has to handle it.
+export const READ_ONLY_EVENT = "tsp:read-only";
+
+function announceReadOnly(status: number) {
+  if (status === 402 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(READ_ONLY_EVENT));
+  }
+}
+
 export const RECORDS_CHANGED_EVENT = "tsp:records-changed";
 export const RECORDS_CHANGED_STORAGE_KEY = "tsp:records-changed-at";
 
@@ -64,7 +75,10 @@ async function authedFetch(path: string, options: RequestInit = {}) {
     },
   });
 
-  if (!res.ok) throw new ApiError(res.status, await res.text());
+  if (!res.ok) {
+    announceReadOnly(res.status);
+    throw new ApiError(res.status, await res.text());
+  }
   const data = await res.json();
   announceRecordChange(path, (options.method || "GET").toUpperCase());
   return data;
@@ -86,7 +100,10 @@ async function authedFormFetch(path: string, formData: FormData) {
     body: formData,
   });
 
-  if (!res.ok) throw new ApiError(res.status, await res.text());
+  if (!res.ok) {
+    announceReadOnly(res.status);
+    throw new ApiError(res.status, await res.text());
+  }
   const data = await res.json();
   announceRecordChange(path, "POST");
   return data;
@@ -2559,3 +2576,17 @@ export const getBeyondLinks = (params: {
   if (params.directReportId) q.set("direct_report_id", params.directReportId);
   return authedFetch(`/api/beyond/links?${q.toString()}`);
 };
+
+// ---------------------------------------------------------------------------
+// Entitlement — founding place, 14-day trial, paid, or read-only.
+// The first call creates the manager's row, which starts their clock.
+// ---------------------------------------------------------------------------
+
+export type Entitlement = {
+  status: "trialing" | "active" | "inactive" | "past_due" | "canceled" | "ic";
+  founding_number: number | null;
+  trial_ends_at: string | null;
+  read_only: boolean;
+};
+
+export const getEntitlement = (): Promise<Entitlement> => authedFetch("/api/entitlement");

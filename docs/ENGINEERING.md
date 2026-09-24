@@ -92,6 +92,26 @@ persists. Prompts are also written to permit an honest empty result: an AI that
 returns nothing is correct behavior, not a failure. Do not add an AI path that
 writes directly.
 
+### Entitlement and the read-only gate
+
+Each manager has one `subscriptions` row: a founding place (`founding_number`
+1–20, 90 days), a 14-day trial, `active` (paid, or comped when there's no Stripe
+id), or read-only once `trial_ends_at` passes without `active`. The row is
+created by `ensure_entitlement()`, a SECURITY DEFINER function called with the
+user's own client the first time the app shell loads (`GET /api/entitlement`,
+via `<EntitlementNotice />`). Invited ICs never get a row. Users can read their
+row but never write it.
+
+`read_only_gate` in `main.py` returns 402 on every POST/PUT/PATCH/DELETE under
+`/api/` for a read-only account, except the read-shaped POSTs listed in
+`_READ_ONLY_ALLOWED`. **A new POST that only reads (a preview, an explain) must
+be added to that list**, or read-only managers lose it. The gate is registered
+before `CORSMiddleware` so the 402 carries CORS headers, it fails open if the
+lookup errors, and it caches for 60 seconds per user (`get_entitlement()` in
+`utils.py`). `api.ts` fires `READ_ONLY_EVENT` on any 402, and the notice shows
+the banner. Stripe doesn't exist yet: until it does, a manual flip of `status`
+to `active` in the SQL editor is how someone pays.
+
 ### Rate limiting
 
 Every AI-calling endpoint must be rate-limited. The shared `limiter` lives in

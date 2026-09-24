@@ -190,6 +190,39 @@ def get_authenticated_client(authorization: str = Header(None)) -> tuple[str, Cl
     return user_id, client
 
 
+# ---------------------------------------------------------------------------
+# Entitlement: founding places and the free clock (PRELAUNCH_BACKLOG §7 B).
+#
+# ensure_entitlement() is a SECURITY DEFINER function that creates the
+# caller's subscriptions row on first call and reports whether the account
+# is read-only. It runs with the user's own JWT client, never service-role.
+# Cached per user for a minute because the read-only gate in main.py asks on
+# every write; a clock running out or a manual flip to 'active' shows up
+# within that minute. GET /api/entitlement always asks fresh.
+# ---------------------------------------------------------------------------
+_ENTITLEMENT_TTL_SECONDS = 60
+_entitlement_cache: dict[str, tuple[dict, float]] = {}
+_entitlement_cache_lock = threading.Lock()
+
+
+def get_entitlement(user_id: str, supabase: Client, fresh: bool = False) -> dict:
+    now = time.time()
+    if not fresh:
+        with _entitlement_cache_lock:
+            cached = _entitlement_cache.get(user_id)
+        if cached and cached[1] > now:
+            return cached[0]
+
+    data = supabase.rpc("ensure_entitlement", {}).execute().data
+
+    with _entitlement_cache_lock:
+        expired = [u for u, (_, until) in _entitlement_cache.items() if until <= now]
+        for u in expired:
+            del _entitlement_cache[u]
+        _entitlement_cache[user_id] = (data, now + _ENTITLEMENT_TTL_SECONDS)
+    return data
+
+
 def get_admin_client() -> Client:
     """Service-role client — bypasses RLS. Use ONLY for admin/background jobs,
     never inside a user-facing request path for user data."""

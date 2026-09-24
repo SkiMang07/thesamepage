@@ -57,6 +57,7 @@ import ScribeDrawer from "@/components/ScribeDrawer";
 import AppNav from "@/components/AppNav";
 import Sidebar from "@/components/Sidebar";
 import DictationHotkey from "@/components/DictationHotkey";
+import EntitlementNotice from "@/components/EntitlementNotice";
 import { ZoneDataProvider } from "@/components/ZoneMap";
 
 const NO_NAV_PATHS = new Set(["/app/login", "/app/ic"]);
@@ -108,6 +109,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
             its sticky header/strip resolve against the real page scroll. */}
         <div className="flex-1 min-w-0">
           {showNav && <AppNav />}
+          {showNav && <EntitlementNotice />}
           <div className="overflow-x-hidden">{children}</div>
         </div>
 
