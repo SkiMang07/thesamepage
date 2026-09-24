@@ -467,7 +467,10 @@ scope here because "production-ready" includes them.
   templates from `docs/auth-emails/` are applied with their subjects. Verified
   live: a magic link requested at /app/login arrived in the Gmail inbox (not
   spam) from ag@thesamepage.xyz as "Sign in to The Same Page", and the link
-  signed in. Supabase's email rate limit stays at 30/hour, enough before
+  signed in. A sign-up as andrewgodlew+tspsmtp0924@gmail.com got "Confirm your
+  email for The Same Page" in the inbox, and its link created the account and
+  landed on an empty Mission Control (that test user can be deleted in
+  Supabase → Auth → Users). Supabase's email rate limit stays at 30/hour, enough before
   launch; raise it under Auth → Rate Limits if sign-ups come in bursts.
   One oddity: the delivered mail ends with "The Same Page / Manage With
   Evidence / www.thesamepage.xyz" after the template's own footer. That
