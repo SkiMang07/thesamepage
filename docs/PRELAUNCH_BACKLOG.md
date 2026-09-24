@@ -646,12 +646,13 @@ Decided the same day, behind the sentence:
   Away's outside meetings, storage upload, extraction). The `print()` calls
   were already gone from app code (only `scripts/` prints, as a CLI should).
   `utils.py`'s JWT-shape fallback stays silent on purpose, with a comment.
-- [ ] ◐ Uptime check on `/health` (Railway, Better Uptime, or a free cron
-  pinger) that alerts you, not the customer. Sentry's uptime monitor (one is
-  free on every plan) refuses `*.railway.app`, which has hit its per-domain
-  limit, so `app.thesamepage.xyz/health` now rewrites to the API's `/health`
-  (`frontend/next.config.js`). **Left:** create the monitor on that URL once
-  the rewrite is deployed.
+- [x] ✔ Uptime check on `/health` that alerts you, not the customer. Sentry
+  uptime monitor (one is free on every plan) on `app.thesamepage.xyz/health`,
+  every minute, production environment; 3 failed checks in a row open an
+  issue, and the project's "high priority issues → email" rule mails Andrew.
+  Sentry refuses `*.railway.app` (it has hit its per-domain limit), so that
+  path rewrites to the API's `/health` (`frontend/next.config.js`), and one
+  check covers Vercel and Railway. First check 2026-09-24: 200 in 403 ms.
 - [ ] ✘ Product analytics. Nothing in `frontend/` emits an event. Even a
   page-view + "first prep sheet saved" pair tells you whether the golden
   path is being walked. PostHog or Vercel Analytics; one afternoon.
