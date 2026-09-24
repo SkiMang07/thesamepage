@@ -629,12 +629,12 @@ Decided the same day, behind the sentence:
 
 ### D. Observability — you cannot see a production failure today
 
-- [ ] ◐ Error monitoring. **Backend wired:** `init_sentry()` in
-  `observability.py`, called from `main.py`, keyed on `SENTRY_DSN` (not
-  `ENVIRONMENT`), so it does nothing until the variable exists. Errors only,
-  no PII, the user id and route attached to each event. **Left for Andrew:**
-  create the Sentry project and set `SENTRY_DSN` on Railway. `@sentry/nextjs`
-  on the frontend is not done (it wants the same account). The `/health`
+- [ ] ◐ Error monitoring. **Backend live, verified 2026-09-24:** Sentry org
+  `the-same-page`, project `thesamepage-backend`, `SENTRY_DSN` on Railway.
+  A deliberate error from a temporary signed-in route (since removed) arrived
+  with the `route` tag and the user id only; the Authorization header came
+  through `[Filtered]`, and no email, IP, cookie or body was sent. Email alerts
+  go to Andrew. **Left:** `@sentry/nextjs` on the frontend (same org). The `/health`
   endpoint's own comment records that the first dictation outage was
   "indistinguishable from a vendor outage at the client".
 - [x] ✔ Structured logging. One JSON line per record on stdout
@@ -646,8 +646,12 @@ Decided the same day, behind the sentence:
   Away's outside meetings, storage upload, extraction). The `print()` calls
   were already gone from app code (only `scripts/` prints, as a CLI should).
   `utils.py`'s JWT-shape fallback stays silent on purpose, with a comment.
-- [ ] ✘ Uptime check on `/health` (Railway, Better Uptime, or a free cron
-  pinger) that alerts you, not the customer.
+- [ ] ◐ Uptime check on `/health` (Railway, Better Uptime, or a free cron
+  pinger) that alerts you, not the customer. Sentry's uptime monitor (one is
+  free on every plan) refuses `*.railway.app`, which has hit its per-domain
+  limit, so `app.thesamepage.xyz/health` now rewrites to the API's `/health`
+  (`frontend/next.config.js`). **Left:** create the monitor on that URL once
+  the rewrite is deployed.
 - [ ] ✘ Product analytics. Nothing in `frontend/` emits an event. Even a
   page-view + "first prep sheet saved" pair tells you whether the golden
   path is being walked. PostHog or Vercel Analytics; one afternoon.

@@ -50,6 +50,15 @@ const nextConfig = {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
 
+  // Uptime check (PRELAUNCH_BACKLOG §7 D). Sentry's uptime monitor watches
+  // app.thesamepage.xyz/health, which proxies to the API's /health. Sentry
+  // refuses to monitor *.railway.app (the shared domain hit its per-domain
+  // limit), and going through this domain also checks the path a customer's
+  // browser takes: Vercel, then Railway.
+  async rewrites() {
+    return [{ source: "/health", destination: `${BACKEND_URL}/health` }];
+  },
+
   // The marketing site is HubSpot (www.thesamepage.xyz). This app serves only
   // /app, /auth and /invite. Anything that used to be a marketing page here
   // goes to the real one, so the app domain never shows a second homepage.

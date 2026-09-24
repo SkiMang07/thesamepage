@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -194,11 +194,3 @@ async def health():
         "environment": settings.ENVIRONMENT,
         "dictation": bool(settings.OPENAI_API_KEY),
     }
-
-
-# TEMPORARY (2026-09-24): proves Sentry receives a real unhandled error with
-# the route and user id attached. Signed-in only, so the event carries a user.
-# Remove in the next push once the event has been seen in Sentry.
-@app.get("/api/_sentry-check")
-def sentry_check(auth=Depends(get_authenticated_client)):
-    raise RuntimeError("sentry check: deliberate test error, safe to ignore")

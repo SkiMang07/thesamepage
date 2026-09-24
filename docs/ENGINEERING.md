@@ -144,8 +144,16 @@ An `except Exception:` must log. Pick the level by what the failure means:
 `info` for an expected outcome dressed as an exception (a `.single()` lookup
 that is really a 404), `warning` for an optional thing that degrades quietly
 (an AI nice-to-have), `error` for a failure that leaves data wrong or
-incomplete. `error` and above, and every unhandled exception, go to Sentry once
-`SENTRY_DSN` is set on Railway; without it `init_sentry()` does nothing.
+incomplete. `error` and above, and every unhandled exception, go to Sentry
+(org `the-same-page`, project `thesamepage-backend`, email alerts to Andrew).
+Each event carries the `route` tag and the user id, nothing else about the
+person; the Authorization header arrives as `[Filtered]`. Without `SENTRY_DSN`
+on Railway, `init_sentry()` does nothing.
+
+Uptime: Sentry's uptime monitor (the free plan's one) checks
+`https://app.thesamepage.xyz/health` every minute. That path is a rewrite in
+`frontend/next.config.js` to the API's `/health`, because Sentry refuses to
+monitor `*.railway.app`; it also means one check covers Vercel and Railway.
 
 Never log a prompt, a model's output, note text, a transcript or audio. Ids,
 counts, model names and status codes only. `ai_core.py` logs one `ai_call` line
@@ -444,8 +452,8 @@ Not yet built, deliberately:
 
 ## Open questions
 
-- Error monitoring — the backend is wired (`observability.py`) but stays off
-  until `SENTRY_DSN` exists on Railway. The frontend has no error reporting.
+- Error monitoring — the backend reports to Sentry. The frontend has no error
+  reporting yet (`@sentry/nextjs`, same Sentry org).
 - CI doesn't block deploys. Railway and Vercel deploy on push, and CI (above)
   only reports. Making it a gate would mean deploy hooks or GitHub-triggered
   deploys instead of the platforms' own git integrations.
