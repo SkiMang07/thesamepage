@@ -90,6 +90,11 @@ remove from nav/UI for launch, not delete the code.
   Either build the Stripe path (**L**) or consciously launch free /
   manual-invoice and align the site copy (**S**). **Effort: decision now,
   build varies.**
+  **Decided 2026-09-24 (Andrew):** free beta first, no Stripe before launch.
+  Managers 1–20 get 3 months free; manager 21 onward gets a 14-day trial;
+  when either clock runs out the account goes read-only (everything visible,
+  nothing new saved) until they pay $20/mo. Stripe must be live before the
+  first 14-day trial ends. The build is §7 B; this row closes when §7 B does.
 - [ ] **P0-2 · The rating chip is a secret grade stapled to the person's
   name** — [Pass 2] — `/app/reports/[id]`
   (`frontend/app/app/reports/[id]/page.tsx:511–512`): `{ratingLabel}` (e.g.
@@ -502,22 +507,51 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
 Decided 2026-09-24 (Andrew): **the first 20 managers get 3 months free.**
 The site says exactly that, in four places (homepage hero and closing band,
 both blog templates), as a plain statement with no live counter. Every CTA is
-"Start free" to app.thesamepage.xyz/app/login, so signing up claims it. What
-is still open is everything behind the sentence: nothing records who the
-first 20 are, when their 3 months started, or what happens on day 91, and
-what everyone after the 20th gets (paid at $20/mo per gtm/business-model.md,
-a trial, or a waitlist). The three rows below are the work.
+"Start free" to app.thesamepage.xyz/app/login, so signing up claims it.
 
-- [ ] ✘ Billing decision made and written down (P0-1). Stripe keys exist in
-  `config.py:30–31` and `stripe==10.4.0` is installed; nothing calls either.
-  Magic link creates a full free account with no trial clock.
-- [ ] ✘ If launching free/founding-places: site copy, `/pricing` on Vercel
-  (N-8) and the "$20/mo" positioning aligned to "free for founding members,
-  $20/mo after"; a `users.plan` or `orgs.plan` column so the switch later is
-  a migration, not a rewrite.
-- [ ] ✘ If launching paid: Stripe Checkout + webhook route, an entitlement
-  check in `get_authenticated_client()` or a dependency beside it, and the
-  free trial the Vercel `/pricing` page already promises ("Start free trial"), with a defined length.
+Decided the same day, behind the sentence:
+- **Manager 21 onward:** a 14-day free trial, then $20/mo.
+- **Day 91 (founders) / day 15 (trials):** the account goes **read-only**.
+  They can still see everything, nothing new saves, and a banner asks them to
+  subscribe. No data is deleted or hidden.
+- **Stripe:** not before launch. Launch is a free beta with the clock and
+  the read-only gate enforced. Stripe ships before the first 14-day trial
+  ends. Until it does, the banner's subscribe path is "email Andrew", and he
+  flips the row by hand.
+- **Who counts:** managers only. An invited direct report never takes a
+  founding place or gets a clock. Accounts that exist before the migration
+  (Andrew's and the test accounts) are comped, with no clock, and don't count
+  toward the 20.
+
+- [x] Billing decision made and written down (P0-1), 2026-09-24.
+- [ ] ✘ **Record founding status and a clock per manager.** Activate the
+  dormant `subscriptions` table (one row per manager, keyed on `user_id`,
+  already read-only to the user under RLS, already carrying
+  `stripe_customer_id` and `status in (... 'trialing', 'active' ...)`) rather
+  than adding `orgs.plan`. `organizations_update_own` lets a user write their
+  own org row, so a plan column there would be self-editable. The migration
+  adds `founding_number int unique check (1..20)` and `trial_ends_at
+  timestamptz`, plus a SECURITY DEFINER `ensure_entitlement()` that acts only
+  on `auth.uid()`, skips users with an accepted invite, and on first call
+  takes an advisory lock, hands out the next founding number while fewer
+  than 20 exist (3 months), and otherwise gives 14 days. Existing users are
+  backfilled as `active`/comped. It's called through the user's own JWT
+  client, so there's no service-role on the request path. Dated migration +
+  `schema.sql` edit, verified against `local_verify_stub.sql`, including a
+  21-signups concurrency test.
+- [ ] ✘ **Read-only gate.** One FastAPI middleware (not 92 route edits)
+  returns 402 on POST/PUT/PATCH/DELETE under `/api/*` when the caller's
+  clock has run out. The allowlist is the entitlement endpoint and invite
+  accept. `GET /api/entitlement` reports status and days left.
+- [ ] ✘ **Tell the user.** The app shell shows a quiet "N days left" note in
+  the last 7 days and an expired banner with the subscribe path. `api.ts`
+  turns a 402 into that banner instead of a generic error.
+- [ ] ✘ **Stripe before the first trial expires** (earliest: 21st sign-up
+  + 14 days). Checkout + webhook write `subscriptions` via the service-role
+  client (a webhook is not a user request path). Andrew creates the Stripe
+  product and enters the bank details himself.
+- [ ] Optional copy: the site says nothing about what happens after the
+  first 20. Adding "Everyone else: 14 days free." would make it true for #21.
 
 ### C. Security and data isolation
 
