@@ -435,6 +435,47 @@ scope here because "production-ready" includes them.
   `legal.md` (AI-training clause, Supabase region, governing law). Effort S,
   but it is a truthfulness issue on a page a customer's IT team will read.
 
+### Found while closing Block A (2026-09-23/24)
+
+- [ ] **N-11 · Five of six marketing pages are still drafts.** About, Contact,
+  Legal, Security and Terms have never been published (only Home is, as of
+  2026-09-24). The nav's "Company" dropdown and the footer point at them, so
+  those links render empty or unset until they go live. Legal still carries a
+  "Draft, needs your decision" block (the AI-training clause) that must be
+  answered before it publishes; see N-10 and `gtm/site/legal.md`. Publish as a
+  set once the copy is signed off.
+- [ ] **N-12 · Homepage meta description is the old positioning.** "Define
+  what good looks like for every role, then see who's meeting it... built for
+  the manager, not HR." It is what Google shows under the result. One line in
+  HubSpot page settings; write it from the locked hero copy.
+- [ ] **N-13 · The stats band promises a research page that does not exist.**
+  "Every figure is dated and linked on our research page." Either build the
+  page (and verify each figure against a live source, which was already an
+  open item) or cut the sentence.
+- [ ] **N-14 · Login email is Supabase's default.** Subject "Your sign-in
+  link", sender noreply@mail.app.supabase.io, footer "powered by Supabase".
+  Brand the template and set a custom SMTP sender (Supabase → Auth → Emails)
+  before strangers receive it. The default sender is also rate-limited.
+- [ ] **N-15 · A 2016 portal-wide redirect sends "/" to saturdaycyclers.com**
+  (HubSpot → Domains & URLs → URL redirects, from the By 2 Pedals days). Harmless
+  while Home is published, since it only fires where no page exists, but it will
+  hijack the homepage again if Home is ever unpublished. Delete it, or scope it to
+  www.by2pedals.com. Left in place because deleting is irreversible and
+  Andrew had not said to.
+
+Where things live, learned the hard way:
+- DNS for thesamepage.xyz is at **GoDaddy**, not HubSpot. Record changes need
+  a text-message code to Andrew's phone.
+- The marketing site's HubSpot portal is **583675**, shared with Prism Tree and
+  By 2 Pedals. Per-domain settings (system pages, redirects) live under
+  Settings → Content → Pages with the domain chosen at the top.
+- Theme files can be pushed to HubSpot from a signed-in Chrome session through
+  the CMS source-code API (`PUT /api/cms/v3/source-code/published/content/tsp-theme/<path>`),
+  so a theme fix does not have to wait for `npm run upload` on the Mac.
+- HubSpot lists an `error_page` template in System Pages only when it has
+  `isAvailableForNewContent: true`.
+- The Supabase project is on the **Free** plan (no backups; see section 7 E).
+
 ---
 
 ## 7. Production-readiness checklist
@@ -457,6 +498,15 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
 - [x] ✔ Login page says an account is created, not just "Sign in" (P1-6)
 
 ### B. Money and entitlement
+
+Decided 2026-09-24 (Andrew): **the first 20 managers get 3 months free.**
+The site says exactly that, in four places (homepage hero and closing band,
+both blog templates), as a plain statement with no live counter. Every CTA is
+"Start free" to app.thesamepage.xyz/app/login, so signing up claims it. What
+is still open is everything behind the sentence: nothing records who the
+first 20 are, when their 3 months started, or what happens on day 91, and
+what everyone after the 20th gets (paid at $20/mo per gtm/business-model.md,
+a trial, or a waitlist). The three rows below are the work.
 
 - [ ] ✘ Billing decision made and written down (P0-1). Stripe keys exist in
   `config.py:30–31` and `stripe==10.4.0` is installed; nothing calls either.
