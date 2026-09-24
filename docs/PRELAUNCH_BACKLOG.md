@@ -154,12 +154,13 @@ Naming and trust:
 
 Week-one experience (this IS the product in week one):
 
-- [ ] **P1-6 · The login page only says "Sign in" — a new customer assumes
+- [x] **P1-6 · The login page only says "Sign in" — a new customer assumes
   they need an invite** — [Pass 2] — `/app/login`
   (`frontend/app/app/login/page.tsx:63,66`): "Sign in" / "We'll send you a
   magic link — no password needed." No create-account wording exists anywhere
   under `frontend/app`, even though magic link silently creates the account.
   Say "Sign in or create your account". **Effort S.**
+  **Done 2026-09-23.** "Sign in or create your account".
 - [ ] **P1-7 · The empty dashboard renders two dead cards and an unexplained
   aside under the "start here" card** — [Pass 2] — in empty mode
   `ActionBrief.tsx` still renders "Conversation runway" → "No conversation
@@ -312,7 +313,7 @@ scope here because "production-ready" includes them.
 
 ### Blocking — these are broken today, not merely unpolished
 
-- [ ] **N-1 · The marketing homepage redirects to a cycling club.**
+- [x] **N-1 · The marketing homepage redirects to a cycling club.**
   `https://www.thesamepage.xyz/` and `https://thesamepage.xyz/` both 30x to
   `http://www.saturdaycyclers.com/` (reproduced three times, 2026-09-22;
   the destination itself then errors). `/blog`, `/about` and the posts load
@@ -321,7 +322,12 @@ scope here because "production-ready" includes them.
   currently lands here. **Fix in HubSpot → Settings → Website → Domains &
   URLs → URL redirects; confirm the homepage is published on the primary
   domain.** Effort S once found; P0 by any definition.
-- [ ] **N-2 · The 404 page on thesamepage.xyz is Prism Tree's.**
+  **Done 2026-09-24.** The cause was not a bad rule: no TSP site page had ever been
+  published (all six were drafts), so HubSpot fell through to a portal-wide 2016
+  "/" redirect from the By 2 Pedals days. Home is now published; thesamepage.xyz
+  and www both serve it. The old rule is still in URL redirects and only fires
+  where no page exists. About, Contact, Legal, Security and Terms are still drafts.
+- [x] **N-2 · The 404 page on thesamepage.xyz is Prism Tree's.**
   `www.thesamepage.xyz/pricing` (which does not exist) renders the Prism Tree
   header, footer, "Open the App → app.prismtree.ai", the Prism Tree privacy
   and terms links and the Prism Tree newsletter form. Both sites share one
@@ -329,13 +335,18 @@ scope here because "production-ready" includes them.
   `website/theme/templates/404.html` from `page.html` and set it as the
   system page for the thesamepage.xyz domain (HubSpot → Settings → Website →
   Pages → System pages, per-domain). Effort S.
-- [ ] **N-3 · "Sign in" and "Start free" in the marketing header are dead
+  **Done 2026-09-24.** `templates/404.html` (templateType error_page, must be
+  isAvailableForNewContent: true to be selectable) is the 404 for
+  www.thesamepage.xyz only, set as a per-domain override; Prism Tree keeps its own.
+- [x] **N-3 · "Sign in" and "Start free" in the marketing header are dead
   links.** `website/theme/templates/partials/header.html:8–9` are `href="#"`;
   the live nav's "Login/Sign Up" is a `javascript:;` menu item. The blog
   currently has a working post, a working CTA to a founding-places form, and
   no way to reach the app. Point them at `https://app.thesamepage.xyz/app/login`
   (see N-4). Effort S.
-- [ ] **N-4 · The app has no custom domain in use.** `gtm/`, `website/` and
+  **Done 2026-09-23.** Both header buttons, the HubSpot nav's "Login/Sign Up"
+  menu item, and every homepage and blog CTA go to app.thesamepage.xyz/app/login.
+- [x] **N-4 · The app has no custom domain in use.** `gtm/`, `website/` and
   `docs/` reference `app.thesamepage.xyz` eleven times; the live app is
   `thesamepage-blush.vercel.app` and `app.thesamepage.xyz` does resolve to
   Vercel (`/app/login` loaded there) but nothing links to it, `FRONTEND_URL`
@@ -347,6 +358,10 @@ scope here because "production-ready" includes them.
   before announcing it. (`frontend/app/app/login/page.tsx:49` sends
   `emailRedirectTo` from `window.location.origin`, so a domain not in the
   Supabase allow-list fails silently at the email step.)
+  **Done 2026-09-23.** app.thesamepage.xyz is the one URL: GoDaddy CNAME (DNS is
+  at GoDaddy, not HubSpot), Vercel domain, Railway FRONTEND_URL, Supabase Site URL
+  and /auth/callback allow-list, header.html. thesamepage-blush.vercel.app 307s to
+  it. A magic link sent from it round-tripped to Mission Control with live data.
 
 ### Product polish the first review missed
 
@@ -393,7 +408,7 @@ scope here because "production-ready" includes them.
   Seventeen page- and section-level "Loading..." screens now use
   `components/Skeleton.tsx`. Four small inline waits stay as text: Settings'
   archived list and expectation drafts, CheckInPanel history, the Scribe thread.
-- [ ] **N-8 · Legacy marketing routes still ship in the Vercel app.**
+- [x] **N-8 · Legacy marketing routes still ship in the Vercel app.**
   `frontend/app/(marketing)/` still serves `/`, `/pricing` ("$20/month ·
   Start free trial" with no trial mechanics behind it) and `/blog` on the
   Vercel domain. The real site is HubSpot. Anyone who lands on the Vercel
@@ -401,6 +416,8 @@ scope here because "production-ready" includes them.
   Either redirect `(marketing)` routes to `www.thesamepage.xyz` in
   `next.config.js` or delete them and 301 `/` → `/app/login`. Also add
   `robots.txt` disallowing `/app/` (there is none). Effort S.
+  **Done 2026-09-23.** (marketing) deleted; `/` -> /app/login, /pricing and /blog
+  -> www.thesamepage.xyz; robots.txt disallows the whole app domain.
 - [ ] **N-9 · Blog index copy is HubSpot default filler and the post cards
   show a stale placeholder.** Live `/blog` subtitle: "A blog focused on
   helping managers build high-performing teams provides actionable
@@ -429,15 +446,15 @@ Work the ✘ rows in the order given inside each block; Block A is the gate.
 
 ### A. Front door and identity (gate — nothing else matters if these fail)
 
-- [ ] ✘ Homepage resolves to The Same Page on the primary domain (N-1)
-- [ ] ✘ 404 page is ours, not Prism Tree's (N-2)
-- [ ] ✘ Marketing header "Sign in" / "Start free" reach the app (N-3)
-- [ ] ✘ One canonical app URL, set in Vercel + Railway `FRONTEND_URL` +
+- [x] ✔ Homepage resolves to The Same Page on the primary domain (N-1)
+- [x] ✔ 404 page is ours, not Prism Tree's (N-2)
+- [x] ✔ Marketing header "Sign in" / "Start free" reach the app (N-3)
+- [x] ✔ One canonical app URL, set in Vercel + Railway `FRONTEND_URL` +
   Supabase redirect allow-list + `header.html`; magic link round-trips
   from it (N-4)
-- [ ] ✘ Legacy `(marketing)` routes on the Vercel domain redirected or
+- [x] ✔ Legacy `(marketing)` routes on the Vercel domain redirected or
   removed; `robots.txt` disallows `/app/` (N-8)
-- [ ] ✘ Login page says an account is created, not just "Sign in" (P1-6)
+- [x] ✔ Login page says an account is created, not just "Sign in" (P1-6)
 
 ### B. Money and entitlement
 
