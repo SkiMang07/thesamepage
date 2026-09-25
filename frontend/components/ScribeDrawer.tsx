@@ -37,6 +37,7 @@ import {
 import { DrawerMessage, useDrawer } from "@/lib/drawer-context";
 
 import NoteField from "@/components/NoteField";
+import { NAV_STRIP_HEIGHT } from "@/components/ZoneMap";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -786,8 +787,9 @@ export default function ScribeDrawer() {
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-hairline px-4 py-3">
+      {/* Header — the top bar's fixed height, so this divider continues
+          AppNav's and the Sidebar's in one line across the screen. */}
+      <div className={`flex ${NAV_STRIP_HEIGHT} shrink-0 items-center justify-between border-b border-hairline px-4`}>
         <div className="flex items-center gap-2">
           <span className="text-base font-semibold text-ink">✦</span>
           <span className="text-sm font-medium text-ink-body">The Same Page</span>

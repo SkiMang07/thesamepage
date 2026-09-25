@@ -268,29 +268,6 @@ export function CandidateControls({
 }
 
 /** Page-shaped skeleton for the week-in-focus layout. */
-export function ActionBriefLoading() {
-  return (
-    <PageShell maxWidth="8xl" className="animate-pulse">
-      <div role="status" aria-label="Loading Mission Control">
-        <div className="h-3 w-28 rounded bg-sunken" />
-        <div className="mt-3 h-10 w-80 max-w-full rounded bg-sunken" />
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div>
-            <div className="grid grid-cols-3 gap-4">
-              {[0, 1, 2].map((i) => <div key={i} className="h-20 rounded-lg bg-surface" />)}
-            </div>
-            <div className="mt-8 grid grid-cols-5 gap-1.5">
-              {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-48 rounded-lg bg-surface" />)}
-            </div>
-            <div className="mt-8 h-24 rounded-lg bg-surface" />
-          </div>
-          <div className="hidden h-64 rounded-lg bg-surface lg:block" />
-        </div>
-      </div>
-    </PageShell>
-  );
-}
-
 export function ActionBriefLoadFailure({ onRetry, onLegacy }: { onRetry: () => void; onLegacy: () => void }) {
   return (
     <PageShell maxWidth="7xl">

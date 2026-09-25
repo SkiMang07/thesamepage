@@ -154,6 +154,43 @@ def test_unscheduled_due_excludes_people_with_a_date():
     assert [p["direct_report_id"] for p in week["unscheduled_due"]] == ["r1"]
 
 
+
+def test_other_weeks_keep_today_as_today():
+    """week_of moves the week shown; states are still judged against today."""
+    one_on_ones = [
+        {"id": "past_done", "direct_report_id": "r1", "scheduled_at": _noon("2026-09-15"), "summary": "ok", "prep_guide": None},
+        {"id": "past_open", "direct_report_id": "r2", "scheduled_at": _noon("2026-09-18"), "summary": None, "prep_guide": None},
+        {"id": "next", "direct_report_id": "r3", "scheduled_at": _noon("2026-09-30"), "summary": None, "prep_guide": None},
+    ]
+    commitments = [
+        {"id": "a", "title": "Done last week", "direct_report_id": None, "committed_by": "manager", "status": "done", "due_date": None, "completed_at": "2026-09-16T15:00:00+00:00"},
+        {"id": "b", "title": "Left open last week", "direct_report_id": None, "committed_by": "manager", "status": "open", "due_date": "2026-09-17", "completed_at": None},
+        {"id": "c", "title": "Overdue from August", "direct_report_id": None, "committed_by": "manager", "status": "open", "due_date": "2026-08-20", "completed_at": None},
+        {"id": "d", "title": "Due next week", "direct_report_id": "r2", "committed_by": "direct_report", "status": "open", "due_date": "2026-10-01", "completed_at": None},
+        {"id": "e", "title": "Due this week", "direct_report_id": None, "committed_by": "manager", "status": "open", "due_date": "2026-09-25", "completed_at": None},
+    ]
+    cadence = [{"direct_report_id": "r1", "name": "Beth Cambridge", "is_due": True, "planned_session": None}]
+    snap = _snapshot(one_on_ones=one_on_ones, commitments=commitments, cadence=cadence)
+
+    last = build_week(snap, THU, week_of=date(2026, 9, 16))
+    assert last["week"] == {"start": "2026-09-14", "end": "2026-09-20", "today": "2026-09-24", "is_current": False}
+    states = {c["record_id"]: c["state"] for c in last["conversations"]}
+    assert states == {"past_done": "completed", "past_open": "not_logged"}
+    by_state = {r["id"]: r["state"] for r in last["commitments"]}
+    assert by_state == {"a": "completed", "b": "overdue"}  # August's overdue item belongs to August
+    assert last["unscheduled_due"] == []
+
+    nxt = build_week(snap, THU, week_of=date(2026, 10, 2))
+    assert nxt["week"]["is_current"] is False
+    assert {c["record_id"]: c["state"] for c in nxt["conversations"]} == {"next": "to_prepare"}
+    assert {r["id"]: r["state"] for r in nxt["commitments"]} == {"d": "due"}
+
+    now = build_week(snap, THU, week_of=date(2026, 9, 21))
+    assert now["week"]["is_current"] is True
+    assert {r["id"]: r["state"] for r in now["commitments"]} == {"b": "overdue", "c": "overdue", "e": "due"}
+    assert [p["direct_report_id"] for p in now["unscheduled_due"]] == ["r1"]
+
+
 class _Q:
     def __init__(self, client, name):
         self.client, self.name = client, name
@@ -203,3 +240,20 @@ def test_week_route_is_read_only_and_reports_coverage():
     assert set(result["coverage"].values()) == {"ok"}, result["coverage"]
     assert "commitments" in result and "goals" in result
     assert all(call[0] != "mission_control_events" for call in client.calls)
+
+
+def test_week_route_accepts_week_of_and_bounds_it():
+    import pytest
+    from datetime import timedelta
+    from fastapi import HTTPException
+    from routes.dashboard import get_week_in_focus
+
+    today = date.today()
+    client = _Client({"direct_reports": [], "users": []})
+    result = get_week_in_focus(local_date=today.isoformat(), week_of=(today - timedelta(days=7)).isoformat(), auth=("u1", client))
+    assert result["week"]["today"] == today.isoformat() and result["week"]["is_current"] is False
+    meeting_bounds = [c for c in client.calls if c[0] == "one_on_ones" and c[1] == "gte"]
+    assert meeting_bounds and meeting_bounds[0][2][1] < today.isoformat()
+    for bad in ("nope", (today + timedelta(days=500)).isoformat()):
+        with pytest.raises(HTTPException):
+            get_week_in_focus(local_date=today.isoformat(), week_of=bad, auth=("u1", _Client({})))

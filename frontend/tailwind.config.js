@@ -194,6 +194,14 @@ module.exports = {
       backgroundImage: {
         feature: "linear-gradient(145deg, var(--c-feature-from), var(--c-feature-to))",
       },
+      // The one motion token: a short fade for content that swaps in place
+      // (Mission Control's side column). Pair with motion-reduce:animate-none.
+      keyframes: {
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+      },
+      animation: {
+        "fade-in": "fade-in 120ms ease-out",
+      },
       ringColor: { DEFAULT: v("focus") },
       ringOffsetColor: { DEFAULT: v("canvas") },
     },

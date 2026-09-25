@@ -43,12 +43,17 @@ import {
   BTN_PRIMARY_SM,
   BTN_SECONDARY,
   EYEBROW,
+  IDENTITY_TEXT,
+  IDENTITY_VAR,
   METER_SEGMENT,
   METER_SEGMENT_SELECTED,
   METER_SWATCH,
   STATUS_GLYPH,
+  identityIndex,
 } from "@/lib/tokens";
 import PageShell from "@/components/PageShell";
+import { SkeletonBar } from "@/components/Skeleton";
+import { useZoneData } from "@/components/ZoneMap";
 import {
   CandidateControls,
   CoverageNotice,
@@ -75,6 +80,23 @@ const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) => parseDay(iso).toL
 const shortDate = (iso: string) => fmt(iso, { month: "short", day: "numeric" });
 const longDate = (iso: string) => fmt(iso, { weekday: "long", month: "long", day: "numeric" });
 const dayWithDate = (iso: string) => fmt(iso, { weekday: "short", month: "short", day: "numeric" });
+
+function daysBetween(fromIso: string, toIso: string) {
+  return Math.round((parseDay(toIso).getTime() - parseDay(fromIso).getTime()) / 86_400_000);
+}
+
+// is_current is derived too, so an older backend without it still reads right.
+const isCurrentWeek = (w: WeekData["week"]) => w.is_current ?? (w.start <= w.today && w.today <= w.end);
+
+/** How the page names the week it is showing, in running text. */
+function weekPhrase(w: WeekData["week"]) {
+  if (isCurrentWeek(w)) return "this week";
+  const todayStart = isoOf(addDays(parseDay(w.today), -((parseDay(w.today).getDay() + 6) % 7)));
+  const offset = daysBetween(todayStart, w.start) / 7;
+  if (offset === -1) return "last week";
+  if (offset === 1) return "next week";
+  return `the week of ${shortDate(w.start)}`;
+}
 
 function rangeLabel(start: string, end: string) {
   const a = parseDay(start);
@@ -193,6 +215,27 @@ function useWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
+// ---------------------------------------------------------------------------
+// Person identity. A direct report wears the colour the rest of the app's
+// chrome gives them (the roster AppNav and the person pages read), so the
+// same person is the same colour here. Someone outside the team, who isn't
+// on that roster, gets a stable colour from their name.
+// ---------------------------------------------------------------------------
+
+type ColorFor = (c: WeekConversation) => string | null;
+
+function useIdentityColors(): ColorFor {
+  const { roster } = useZoneData();
+  return useMemo(() => {
+    const byId = new Map(roster.map((p) => [p.id, p.color]));
+    return (c: WeekConversation) => {
+      if (isGroup(c)) return null;
+      if (c.direct_report_id) return byId.get(c.direct_report_id) ?? IDENTITY_VAR[identityIndex(c.direct_report_id)];
+      return IDENTITY_VAR[identityIndex(c.title.toLowerCase())];
+    };
+  }, [roster]);
+}
+
 type Selection =
   | { type: "home" }
   | { type: "conversation"; id: string }
@@ -209,18 +252,24 @@ export function WeekInFocus({
   briefFailed,
   week,
   weekFailed,
+  weekLoading = false,
+  updatedAt = null,
   onRefresh,
   onRetryBrief,
   onRetryWeek,
+  onWeekOf,
   onLegacy,
 }: {
   brief: MissionControlBrief | null;
   briefFailed: boolean;
   week: WeekData | null;
   weekFailed: boolean;
+  weekLoading?: boolean;
+  updatedAt?: Date | null;
   onRefresh: () => void;
   onRetryBrief: () => void;
   onRetryWeek: () => void;
+  onWeekOf?: (day: string | null) => void;
   onLegacy: () => void;
 }) {
   const [rootRef, rootWidth] = useWidth<HTMLDivElement>();
@@ -229,18 +278,24 @@ export function WeekInFocus({
   const [toast, setToast] = useState("");
   const triggerRef = useRef<HTMLElement | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const colorFor = useIdentityColors();
 
   // Two columns once the main column can still hold five ~92px day columns
-  // beside the side panel; below that the side panel moves under the week.
+  // beside the side panel; below that the side panel moves under the counts.
   const twoColumn = rootWidth >= 860;
   const sideWidth = rootWidth >= 1200 ? "20rem" : "17rem";
 
-  // Stale selection after a refresh (a record disappeared) falls back home.
+  // Stale selection after a refresh or a week change (a record disappeared)
+  // falls back home.
   useEffect(() => {
     if (selection.type === "conversation" && week && !week.conversations.some((c) => c.id === selection.id)) {
       setSelection({ type: "home" });
     }
+    if (selection.type === "unscheduled" && week && week.unscheduled_due.length === 0) {
+      setSelection({ type: "home" });
+    }
   }, [week, selection]);
+  useEffect(() => setOpenDay(null), [week?.week.start]);
 
   const select = useCallback((next: Selection, trigger?: HTMLElement | null) => {
     triggerRef.current = trigger ?? (document.activeElement as HTMLElement | null);
@@ -311,12 +366,28 @@ export function WeekInFocus({
 
   const ok = (domain: string) => week?.coverage?.[domain] === "ok";
 
+  // Today, from the payload when it's here (the manager's own date), else
+  // the browser's. The eyebrow is the date, not the page's name: the sidebar
+  // already says where you are.
+  const todayIso = week?.week.today ?? isoOf(new Date());
+
+  // Week arrows move by seven days from the week shown. Back to the current
+  // week sends null, so the page asks for "now" rather than a fixed date.
+  // stepWeek(0) returns to the current week.
+  const stepWeek = (by: number) => {
+    if (!week || !onWeekOf) return;
+    if (by === 0) return onWeekOf(null);
+    const target = isoOf(addDays(parseDay(week.week.start), by * 7));
+    const currentStart = isoOf(addDays(parseDay(week.week.today), -((parseDay(week.week.today).getDay() + 6) % 7)));
+    onWeekOf(target === currentStart ? null : target);
+  };
+
   // The next move / details column. Beside the week in two-column mode; in
   // one column it comes straight after the counts, not below Follow-through,
   // so a narrow window or an open Scribe drawer does not bury it.
   const side = (
     <aside
-      className={twoColumn ? "min-w-0 border-l border-hairline pl-6" : "min-w-0 border-b border-hairline pb-6"}
+      className={twoColumn ? "min-w-0 border-l border-hairline pl-6" : "min-w-0"}
       aria-label="Next move and selected details"
     >
       <div
@@ -327,26 +398,31 @@ export function WeekInFocus({
           if (e.key === "Escape" && selection.type !== "home") closeDetail();
         }}
       >
-        {selection.type === "home" || !week ? (
-          <NextMove
-            brief={brief}
-            briefFailed={briefFailed}
-            impressions={impressions}
-            onDisposed={disposed}
-            onRetry={onRetryBrief}
-            onLegacy={onLegacy}
-            onRefresh={onRefresh}
-            setToast={setToast}
-          />
-        ) : (
-          <Detail
-            week={week}
-            selection={selection}
-            headingRef={detailHeadingRef}
-            onClose={closeDetail}
-            onSelect={select}
-          />
-        )}
+        {/* Keyed on the selection so each swap replays a short fade: the
+            column changes in place, and the fade says it did. */}
+        <div key={selection.type === "home" ? "home" : JSON.stringify(selection)} className="animate-fade-in motion-reduce:animate-none">
+          {selection.type === "home" || !week ? (
+            <NextMove
+              brief={brief}
+              briefFailed={briefFailed}
+              impressions={impressions}
+              onDisposed={disposed}
+              onRetry={onRetryBrief}
+              onLegacy={onLegacy}
+              onRefresh={onRefresh}
+              setToast={setToast}
+            />
+          ) : (
+            <Detail
+              week={week}
+              selection={selection}
+              headingRef={detailHeadingRef}
+              colorFor={colorFor}
+              onClose={closeDetail}
+              onSelect={select}
+            />
+          )}
+        </div>
       </div>
     </aside>
   );
@@ -354,20 +430,37 @@ export function WeekInFocus({
   return (
     <PageShell maxWidth="8xl">
       <div ref={rootRef}>
-        <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <p className={EYEBROW}>Mission Control</p>
+            <p className={EYEBROW}>
+              <time dateTime={todayIso}>{longDate(todayIso)}</time>
+            </p>
             <h1 className="mt-2 font-serif text-[2rem] font-normal leading-[1.14] tracking-[-0.035em] text-ink sm:text-[2.45rem]">
               Your week, in focus.
             </h1>
           </div>
-          <button type="button" onClick={onRefresh} className="mt-1 rounded text-xs text-ink-muted hover:text-ink-secondary">
-            Refresh
-          </button>
+          <p className="mt-0.5 shrink-0 text-right text-2xs text-ink-muted" aria-live="polite">
+            {weekLoading ? (
+              "Updating…"
+            ) : (
+              <>
+                {updatedAt && (
+                  <>
+                    <span className="hidden sm:inline">Updated </span>
+                    {updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    <span aria-hidden="true"> · </span>
+                  </>
+                )}
+                <button type="button" onClick={onRefresh} className="rounded text-ink-secondary hover:text-ink">
+                  Refresh
+                </button>
+              </>
+            )}
+          </p>
         </div>
 
         {stale && (
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-surface px-4 py-3" role="status">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-surface px-4 py-3" role="status">
             <p className="text-sm text-ink-secondary">This brief is more than 24 hours old. Refresh when you want to check for changes.</p>
             <button type="button" onClick={onRefresh} className="text-xs font-medium text-brand hover:text-brand-hover">Refresh brief</button>
           </div>
@@ -376,29 +469,32 @@ export function WeekInFocus({
         {toast && <p className="mb-4 text-sm text-brand" aria-live="polite">{toast}</p>}
 
         <div
-          className="grid gap-6"
+          className="grid gap-8"
           style={{ gridTemplateColumns: twoColumn ? `minmax(0,1fr) ${sideWidth}` : "minmax(0,1fr)" }}
         >
           <div className="min-w-0">
             {weekFailed || !week ? (
               <>
                 <WeekUnavailable onRetry={onRetryWeek} />
-                {!twoColumn && <div className="mt-6">{side}</div>}
+                {!twoColumn && <div className="mt-8">{side}</div>}
               </>
             ) : (
-              <>
+              <div aria-busy={weekLoading} className={`transition-opacity motion-reduce:transition-none ${weekLoading ? "opacity-60" : ""}`}>
                 <Metrics week={week} ok={ok} selection={selection} onSelect={select} stacked={rootWidth < 460} />
-                {!twoColumn && <div className="mb-7">{side}</div>}
+                {!twoColumn && <div className="mb-8 border-b border-hairline pb-8">{side}</div>}
                 <ConversationWeek
                   week={week}
                   ok={ok("one_on_ones") && ok("team_meetings") && ok("outside_meetings")}
                   selection={selection}
                   openDay={openDay}
+                  colorFor={colorFor}
                   onOpenDay={setOpenDay}
                   onSelect={select}
+                  onStepWeek={onWeekOf ? stepWeek : undefined}
+                  stepping={weekLoading}
                 />
                 <FollowThrough week={week} ok={ok("commitments")} selection={selection} onSelect={select} />
-              </>
+              </div>
             )}
           </div>
 
@@ -416,7 +512,7 @@ export function WeekInFocus({
 function WeekUnavailable({ onRetry }: { onRetry: () => void }) {
   return (
     <section className="rounded-lg bg-surface px-5 py-6" role="alert">
-      <h2 className="text-base font-medium text-ink">This week couldn’t be loaded.</h2>
+      <h2 className="text-base font-medium text-ink">The week couldn’t be loaded.</h2>
       <p className="mt-1 text-sm text-ink-secondary">No counts are shown rather than showing zeros that might not be true.</p>
       <button type="button" onClick={onRetry} className={`mt-3 ${BTN_SECONDARY}`}>Try again</button>
     </section>
@@ -445,6 +541,8 @@ function Metrics({
   const completedCommitments = week.commitments.filter((c) => c.state === "completed").length;
   const overdue = week.commitments.filter((c) => c.state === "overdue");
   const overdueOwners = new Set(overdue.map((c) => c.owner_name)).size;
+  const phrase = weekPhrase(week.week);
+  const current = isCurrentWeek(week.week);
 
   const stat = "min-w-0 rounded-md px-1.5 py-1 text-left transition hover:bg-surface aria-pressed:bg-surface";
   const num = "block text-[1.85rem] font-medium leading-tight tracking-[-0.02em] tabular-nums sm:text-[2.1rem]";
@@ -452,7 +550,11 @@ function Metrics({
     selection.type === s.type && (s.type !== "records" || (selection.type === "records" && selection.owner === s.owner && selection.state === s.state));
 
   return (
-    <section aria-label="This week's recorded activity" className={`mb-6 grid gap-3 border-b border-hairline pb-6 ${stacked ? "grid-cols-1" : "grid-cols-3"}`}>
+    <section aria-label={`Recorded activity, ${phrase}`} className="mb-8 border-b border-hairline pb-8">
+      {/* -mx-1.5 cancels each button's px-1.5, so the numbers sit on the
+          column's left edge like every heading below them. On this inner
+          grid, not the section, so the rule underneath stays flush. */}
+      <div className={`-mx-1.5 grid gap-2 ${stacked ? "grid-cols-1" : "grid-cols-3"}`}>
       <button
         type="button"
         className={stat}
@@ -466,7 +568,7 @@ function Metrics({
         </span>
         <span className="mt-1 block text-xs text-ink">Conversations completed</span>
         <span className="mt-0.5 block text-2xs text-ink-muted">
-          {!conversationsOk ? "Couldn’t load" : week.conversations.length ? `of ${week.conversations.length} dated this week` : "Nothing dated this week"}
+          {!conversationsOk ? "Couldn’t load" : week.conversations.length ? `of ${week.conversations.length} dated ${phrase}` : `Nothing dated ${phrase}`}
         </span>
       </button>
       <button
@@ -478,7 +580,7 @@ function Metrics({
       >
         <span className={`${num} text-ink`}>{ok("commitments") ? completedCommitments : "—"}</span>
         <span className="mt-1 block text-xs text-ink">Commitments completed</span>
-        <span className="mt-0.5 block text-2xs text-ink-muted">{ok("commitments") ? "by you and your team this week" : "Couldn’t load"}</span>
+        <span className="mt-0.5 block text-2xs text-ink-muted">{ok("commitments") ? `by you and your team ${phrase}` : "Couldn’t load"}</span>
       </button>
       <button
         type="button"
@@ -492,9 +594,14 @@ function Metrics({
         </span>
         <span className="mt-1 block text-xs text-ink">Overdue commitments</span>
         <span className="mt-0.5 block text-2xs text-ink-muted">
-          {!ok("commitments") ? "Couldn’t load" : overdue.length ? `across ${plural(overdueOwners, "owner")}` : "Nothing overdue"}
+          {!ok("commitments")
+            ? "Couldn’t load"
+            : !overdue.length
+              ? week.week.start <= week.week.today && !current ? `Nothing left open from ${phrase}` : "Nothing overdue"
+              : current ? `across ${plural(overdueOwners, "owner")}` : `still open from ${phrase}`}
         </span>
       </button>
+    </div>
     </section>
   );
 }
@@ -505,8 +612,10 @@ function Metrics({
 
 const VISIBLE_PER_DAY = 4;
 
-function Avatar({ c, size = "sm" }: { c: WeekConversation; size?: "sm" | "md" | "lg" }) {
-  const dims = size === "lg" ? "h-11 w-11 text-sm" : size === "md" ? "h-6 w-6 text-2xs" : "h-5 w-5 text-[9px]";
+function Avatar({ c, color, size = "sm" }: { c: WeekConversation; color: string | null; size?: "sm" | "md" | "lg" }) {
+  // text-2xs (11px) is the floor, so the row avatar is 22px: two 11px
+  // initials overflowed the old 20px circle.
+  const dims = size === "lg" ? "h-11 w-11 text-sm" : size === "md" ? "h-6 w-6 text-2xs" : "h-[22px] w-[22px] text-2xs leading-none tracking-[-0.03em]";
   const group = isGroup(c);
   const text = !group
     ? initialsOf(c.title)
@@ -518,9 +627,12 @@ function Avatar({ c, size = "sm" }: { c: WeekConversation; size?: "sm" | "md" | 
   return (
     <span
       aria-hidden="true"
-      className={`grid shrink-0 place-items-center font-medium ${dims} ${group ? "rounded-md" : "rounded-full"} ${
-        size === "lg" ? "bg-brand-tint text-brand" : "bg-carbon-300 text-ink"
+      // People in their identity colour; groups stay neutral carbon squares,
+      // so a meeting never looks like a person.
+      className={`grid shrink-0 place-items-center font-semibold ${dims} ${group ? "rounded-md" : "rounded-full"} ${
+        color ? IDENTITY_TEXT : "bg-carbon-300 text-ink"
       }`}
+      style={color ? { background: color } : undefined}
     >
       {text}
     </span>
@@ -540,17 +652,24 @@ function ConversationWeek({
   ok,
   selection,
   openDay,
+  colorFor,
   onOpenDay,
   onSelect,
+  onStepWeek,
+  stepping,
 }: {
   week: WeekData;
   ok: boolean;
   selection: Selection;
   openDay: string | null;
+  colorFor: ColorFor;
   onOpenDay: (day: string | null) => void;
   onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
+  onStepWeek?: (by: number) => void;
+  stepping: boolean;
 }) {
   const [gridRef, gridWidth] = useWidth<HTMLDivElement>();
+  const current = isCurrentWeek(week.week);
   const start = parseDay(week.week.start);
   const byDay = useMemo(() => {
     const map = new Map<string, WeekConversation[]>();
@@ -578,15 +697,52 @@ function ConversationWeek({
   const open = openDay ? byDay.get(openDay) ?? [] : [];
 
   return (
-    <section aria-labelledby="conversation-week-heading" className="mb-7">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section aria-labelledby="conversation-week-heading" className="mb-8">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h2 id="conversation-week-heading" className="text-[17px] font-medium text-ink">Your conversation week</h2>
-        <span className="text-2xs text-ink-muted">{rangeLabel(week.week.start, shownEnd)}</span>
+        <div className="flex items-center gap-1 text-2xs text-ink-muted">
+          {onStepWeek && !current && (
+            <button
+              type="button"
+              onClick={() => onStepWeek(0)}
+              disabled={stepping}
+              className="mr-2 rounded text-brand hover:text-brand-hover disabled:opacity-50"
+            >
+              Back to this week
+            </button>
+          )}
+          {onStepWeek && (
+            <button
+              type="button"
+              onClick={() => onStepWeek(-1)}
+              disabled={stepping}
+              aria-label="Previous week"
+              className="grid h-7 w-7 place-items-center rounded-md text-sm text-ink-secondary hover:bg-surface hover:text-ink disabled:opacity-50"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+          )}
+          <span className="min-w-[4.75rem] text-center tabular-nums" aria-live="polite">
+            <span className="sr-only">Showing </span>
+            {rangeLabel(week.week.start, shownEnd)}
+          </span>
+          {onStepWeek && (
+            <button
+              type="button"
+              onClick={() => onStepWeek(1)}
+              disabled={stepping}
+              aria-label="Next week"
+              className="grid h-7 w-7 place-items-center rounded-md text-sm text-ink-secondary hover:bg-surface hover:text-ink disabled:opacity-50"
+            >
+              <span aria-hidden="true">›</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {!ok ? (
         <p className="rounded-lg bg-surface px-4 py-5 text-sm text-ink-secondary">
-          Some meetings couldn’t be loaded, so this week’s calendar isn’t shown.
+          Some meetings couldn’t be loaded, so the calendar isn’t shown.
         </p>
       ) : (
         <>
@@ -606,7 +762,9 @@ function ConversationWeek({
                   key={iso}
                   role="listitem"
                   aria-label={`${longDate(iso)}${isToday ? ", today" : ""}: ${plural(items.length, "conversation")}`}
-                  className={`min-w-0 rounded-lg px-1.5 py-2.5 ${isToday ? "bg-brand-tint" : "bg-surface"}`}
+                  // Today is marked by a teal top rule, not a tinted column:
+                  // a tint read as "selected", and teal fill is reserved for that.
+                  className={`min-w-0 rounded-lg bg-surface px-1.5 py-2.5 ${isToday ? "rounded-t-sm border-t-2 border-brand" : ""}`}
                 >
                   <div className={`mb-1.5 flex items-center justify-between gap-1 border-b border-hairline px-1 pb-2 text-2xs tracking-[0.03em] ${isToday ? "text-brand" : "text-ink-muted"}`}>
                     <time dateTime={iso} className="whitespace-nowrap uppercase">
@@ -617,7 +775,7 @@ function ConversationWeek({
                   </div>
                   {items.length === 0 && <p className="px-1 py-2 text-2xs text-ink-muted">Nothing dated</p>}
                   {items.slice(0, VISIBLE_PER_DAY).map((c) => (
-                    <ConversationRow key={c.id} c={c} name={rowName(c, dupFirstNames)} pressed={selection.type === "conversation" && selection.id === c.id} onSelect={onSelect} />
+                    <ConversationRow key={c.id} c={c} color={colorFor(c)} name={rowName(c, dupFirstNames)} pressed={selection.type === "conversation" && selection.id === c.id} onSelect={onSelect} />
                   ))}
                   {hidden > 0 && (
                     <button
@@ -635,16 +793,18 @@ function ConversationWeek({
             })}
           </div>
 
-          <div className="mb-2 mt-3 flex flex-wrap gap-x-3.5 gap-y-1 text-2xs text-ink-muted" aria-label="Legend">
+          <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 text-2xs text-ink-muted" aria-label="Legend">
             <span><span className="text-brand">✓</span> Completed</span>
             <span>• Prep or agenda saved</span>
             <span><span className="text-amber-600">○</span> To prepare</span>
             {statesPresent.has("not_logged") && <span><span className="text-amber-600">△</span> Date passed, not logged</span>}
-            <span>Meetings are dated by day; times aren’t recorded.</span>
+            {/* Said to screen readers, which hear "Monday" with no time and
+                might wonder; sighted users see no time and don't. */}
+            <span className="sr-only">Meetings are dated by day; times aren’t recorded.</span>
           </div>
 
           {openDay && open.length > 0 && (
-            <div id="day-agenda" className="mb-6 mt-3 rounded-lg bg-surface p-4" aria-live="polite">
+            <div id="day-agenda" className="mt-4 rounded-lg bg-surface p-4" aria-live="polite">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h3 className="text-[15px] font-medium text-ink">{longDate(openDay)}</h3>
                 <button type="button" onClick={() => onOpenDay(null)} aria-label="Close day agenda" className="rounded px-1.5 text-xl leading-none text-ink-muted hover:text-ink">×</button>
@@ -656,7 +816,7 @@ function ConversationWeek({
                   onClick={(e) => onSelect({ type: "conversation", id: c.id }, e.currentTarget)}
                   className="flex w-full items-center gap-2.5 border-t border-divider py-2.5 text-left text-xs hover:bg-sunken/40"
                 >
-                  <Avatar c={c} size="md" />
+                  <Avatar c={c} color={colorFor(c)} size="md" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-ink">{c.title}</span>
                     <span className="block text-2xs text-ink-muted">
@@ -669,10 +829,10 @@ function ConversationWeek({
             </div>
           )}
 
-          {week.unscheduled_due.length > 0 && ok && (
+          {current && week.unscheduled_due.length > 0 && ok && (
             // One line, not a second calendar: the cadence detail for each
             // person opens in the side column like every other drill-down.
-            <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+            <p className="mt-4 text-xs leading-relaxed text-ink-muted">
               <button
                 type="button"
                 aria-pressed={selection.type === "unscheduled"}
@@ -698,11 +858,13 @@ function ConversationWeek({
 
 function ConversationRow({
   c,
+  color,
   name,
   pressed,
   onSelect,
 }: {
   c: WeekConversation;
+  color: string | null;
   name: string;
   pressed: boolean;
   onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
@@ -713,11 +875,11 @@ function ConversationRow({
       aria-pressed={pressed}
       aria-label={`${c.title}, ${KIND_LABEL[c.kind]}, ${longDate(c.date)}, ${stateLong(c)}`}
       onClick={(e) => onSelect({ type: "conversation", id: c.id }, e.currentTarget)}
-      className={`grid min-h-[50px] w-full grid-cols-[20px_minmax(0,1fr)] items-start gap-1.5 rounded-md px-0.5 py-2 text-left transition ${
+      className={`grid min-h-[50px] w-full grid-cols-[22px_minmax(0,1fr)] items-start gap-1.5 rounded-md px-0.5 py-2 text-left transition ${
         pressed ? "bg-brand-tint ring-1 ring-inset ring-brand/50" : "hover:bg-carbon-300/60"
       }`}
     >
-      <Avatar c={c} />
+      <Avatar c={c} color={color} />
       <span className="min-w-0">
         <span className="block truncate text-2xs text-ink">{name}</span>
         <span className={`mt-0.5 block whitespace-nowrap text-2xs ${STATE_TONE[c.state]}`}>
@@ -748,18 +910,22 @@ function FollowThrough({
     { owner: "team", label: "My team", noun: "team" },
   ];
   const undated = week.undated_open_commitments.mine + week.undated_open_commitments.team;
+  const phrase = weekPhrase(week.week);
+  const current = isCurrentWeek(week.week);
 
   return (
     <section aria-labelledby="follow-through-heading">
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h2 id="follow-through-heading" className="text-[17px] font-medium text-ink">Follow-through</h2>
-        <span className="text-2xs text-ink-muted">Done and due this week, plus anything overdue</span>
+        <span className="text-2xs text-ink-muted">
+          {current ? "Done and due this week, plus anything overdue" : `Done or due ${phrase}, as of today`}
+        </span>
       </div>
       {!ok ? (
         <p className="rounded-lg bg-surface px-4 py-5 text-sm text-ink-secondary">Commitments couldn’t be loaded, so no counts are shown.</p>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap gap-x-3.5 gap-y-1 text-2xs text-ink-muted">
+          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-2xs text-ink-muted">
             {STATES.map((s) => (
               <span key={s} className="inline-flex items-center gap-1">
                 <span className={`inline-block h-2 w-2 rounded-[2px] ${METER_SWATCH[s]}`} aria-hidden="true" />
@@ -773,14 +939,14 @@ function FollowThrough({
             ) as Record<WeekCommitmentState, number>;
             const total = counts.completed + counts.due + counts.overdue;
             return (
-              <div key={g.owner} className="my-4">
+              <div key={g.owner} className="mt-4">
                 <div className="mb-2 flex justify-between text-xs">
                   <span className="text-ink">{g.label}</span>
                   <span className="text-2xs text-ink-muted">{plural(total, "commitment")}</span>
                 </div>
                 {total === 0 ? (
                   <p className="rounded-[3px] bg-surface px-3 py-1.5 text-2xs text-ink-muted">
-                    Nothing completed, due, or overdue this week.
+                    Nothing completed, due, or overdue {phrase}.
                   </p>
                 ) : (
                   <div
@@ -809,7 +975,7 @@ function FollowThrough({
               </div>
             );
           })}
-          <p className="text-2xs text-ink-muted">
+          <p className="mt-4 text-2xs text-ink-muted">
             Each bar shows the split within its group. Select a segment to see its commitments.
             {undated > 0 && ` ${plural(undated, "open commitment")} with no due date ${undated === 1 ? "isn’t" : "aren’t"} counted here.`}
           </p>
@@ -883,10 +1049,14 @@ function NextMove({
 
   const primary = brief.primary;
   const watch = brief.secondary.slice(0, 2);
+  const hasMore = watch.length > 0 || !!brief.optional_context;
 
   return (
     <>
-      <div className="border-b border-hairline pb-5">
+      {/* Dividers sit only BETWEEN blocks. The column's own edge (a rule
+          in one-column mode, the border-l beside the week) closes it, so a
+          trailing border here drew a double line. */}
+      <div className={hasMore ? "border-b border-hairline pb-4" : ""}>
         <p className={EYEBROW}>{brief.mode === "empty" ? "Start here" : primary ? "Your next move" : brief.mode === "all_clear" ? "All clear" : "Your next move"}</p>
         {brief.mode === "empty" ? (
           <>
@@ -918,11 +1088,11 @@ function NextMove({
         )}
       </div>
 
-      {(watch.length > 0 || brief.optional_context) && (
-        <div className="pt-5">
+      {hasMore && (
+        <div className="pt-4">
           <p className={EYEBROW}>Keep in view</p>
           {watch.map((candidate) => (
-            <div key={candidate.candidate_key} className="border-b border-hairline py-3.5 text-xs">
+            <div key={candidate.candidate_key} className="border-b border-hairline py-4 text-xs last:border-b-0 last:pb-0">
               <p className="text-ink">{candidate.title}</p>
               {candidate.evidence[0] && (
                 <p className="mt-1 text-2xs text-ink-muted">{candidate.evidence[0].label} · {candidate.evidence[0].freshness}</p>
@@ -938,7 +1108,7 @@ function NextMove({
             </div>
           ))}
           {brief.optional_context && (
-            <div className="border-b border-hairline py-3.5 text-xs">
+            <div className="border-b border-hairline py-4 text-xs last:border-b-0 last:pb-0">
               <p className="text-ink">{brief.optional_context.title}</p>
               <p className="mt-1 text-2xs text-ink-muted">{brief.optional_context.detail}</p>
               <div className="mt-2 flex gap-4">
@@ -976,12 +1146,14 @@ function Detail({
   week,
   selection,
   headingRef,
+  colorFor,
   onClose,
   onSelect,
 }: {
   week: WeekData;
   selection: Exclude<Selection, { type: "home" }>;
   headingRef: React.RefObject<HTMLHeadingElement>;
+  colorFor: ColorFor;
   onClose: () => void;
   onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
 }) {
@@ -997,7 +1169,7 @@ function Detail({
     return (
       <section aria-labelledby="detail-heading" className="text-sm">
         <DetailHead label="Conversation" onClose={onClose} />
-        <div className="mt-5"><Avatar c={c} size="lg" /></div>
+        <div className="mt-4"><Avatar c={c} color={colorFor(c)} size="lg" /></div>
         <h3 id="detail-heading" ref={headingRef} tabIndex={-1} className={h3}>{c.title}</h3>
         <p className="text-xs leading-relaxed text-ink-secondary">
           {longDate(c.date)} · {KIND_LABEL[c.kind]}
@@ -1119,6 +1291,12 @@ function Detail({
   const records = week.commitments.filter(
     (c) => c.state === selection.state && (selection.owner === "all" || c.owner === selection.owner)
   );
+  // Overdue reads oldest first: the longest-waiting promise is the one most
+  // likely to be costing trust. (The payload's order is by due date already;
+  // this makes it a rule of the page rather than an accident of the API.)
+  if (selection.state === "overdue") {
+    records.sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999") || a.title.localeCompare(b.title));
+  }
   const scope = selection.owner === "all" ? "You and your team" : selection.owner === "mine" ? "Your commitments" : "Your team’s commitments";
   return (
     <section aria-labelledby="detail-heading">
@@ -1127,18 +1305,24 @@ function Detail({
       <p className="text-xs text-ink-secondary">{scope} · {plural(records.length, "commitment")}</p>
       {records.length === 0 && <p className="mt-4 text-xs text-ink-muted">None.</p>}
       <ul className="mt-2">
-        {records.map((c) => <RecordRow key={c.id} c={c} />)}
+        {records.map((c) => <RecordRow key={c.id} c={c} today={week.week.today} />)}
       </ul>
     </section>
   );
 }
 
-function RecordRow({ c }: { c: WeekCommitment }) {
+function overdueAge(dueIso: string, todayIso: string) {
+  const days = daysBetween(dueIso, todayIso);
+  if (days >= 14) return `${Math.floor(days / 7)} weeks overdue`;
+  return `${plural(days, "day")} overdue`;
+}
+
+function RecordRow({ c, today }: { c: WeekCommitment; today: string }) {
   const when =
     c.state === "completed" && c.completed_at
       ? `Completed ${dayWithDate(c.completed_at.slice(0, 10))}`
       : c.state === "overdue" && c.due_date
-        ? `Was due ${dayWithDate(c.due_date)}`
+        ? `${overdueAge(c.due_date, today)} · was due ${shortDate(c.due_date)}`
         : c.due_date
           ? `Due ${dayWithDate(c.due_date)}`
           : "";
@@ -1206,7 +1390,7 @@ function GoalsProgress({
   }
 
   return (
-    <section aria-labelledby="goals-heading" className="mt-7 border-t border-hairline pt-6">
+    <section aria-labelledby="goals-heading" className="mt-8 border-t border-hairline pt-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <h2 id="goals-heading" className="text-[17px] font-medium text-ink">Goals &amp; progress</h2>
         {ok && (
@@ -1266,7 +1450,7 @@ function GoalsProgress({
             ))}
           </div>
           {goal && <GoalDetail g={goal} tier={tier} wide={cols > 1} onClose={() => setSelected(null)} />}
-          <p className="mt-3.5 text-2xs text-ink-muted">
+          <p className="mt-4 text-2xs text-ink-muted">
             Latest recorded check-ins · Select a goal for its update and linked work.
             {list.length > shown.length && (
               <>
@@ -1330,7 +1514,7 @@ function GoalCard({ g, pressed, onClick }: { g: WeekGoal; pressed: boolean; onCl
 function GoalDetail({ g, tier, wide, onClose }: { g: WeekGoal; tier: GoalLevel; wide: boolean; onClose: () => void }) {
   const owner = g.direct_report_name ?? g.org_unit_name ?? "You";
   return (
-    <div id="goal-detail" className="mt-3 rounded-[9px] bg-surface p-5" aria-live="polite">
+    <div id="goal-detail" className="mt-4 rounded-[9px] bg-surface p-5" aria-live="polite">
       <div className="flex items-center justify-between">
         <span className={EYEBROW}>{TIER_LABEL[tier]} goal · {owner}</span>
         <button type="button" onClick={onClose} aria-label="Close goal details" className="rounded px-1.5 text-xl leading-none text-ink-muted hover:text-ink">×</button>
@@ -1377,5 +1561,84 @@ function GoalDetail({ g, tier, wide, onClose }: { g: WeekGoal; tier: GoalLevel; 
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Loading: the page's own shape, measured the same way as the page (two
+// columns at 860px of content width), so nothing jumps when data lands.
+// ---------------------------------------------------------------------------
+
+export function WeekInFocusSkeleton() {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const twoColumn = width >= 860;
+  const sideWidth = width >= 1200 ? "20rem" : "17rem";
+  // Same rule as the week grid: columns while five days get 92px each.
+  const mainWidth = twoColumn ? width - (width >= 1200 ? 320 : 272) - 32 : width;
+  const dayColumns = mainWidth >= 92 * 5;
+  const cols = width >= 820 ? 3 : width >= 520 ? 2 : 1;
+
+  const nextMove = (
+    <div className="space-y-3">
+      <SkeletonBar className="h-3 w-24" />
+      <SkeletonBar className="h-5 w-4/5" />
+      <SkeletonBar className="h-3 w-full" />
+      <SkeletonBar className="h-3 w-2/3" />
+    </div>
+  );
+
+  return (
+    <PageShell maxWidth="8xl">
+      <div ref={ref} className="animate-pulse motion-reduce:animate-none" role="status" aria-label="Loading Mission Control">
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <SkeletonBar className="h-3 w-40" />
+            <SkeletonBar className="mt-3 h-9 w-72 max-w-full" />
+          </div>
+          <SkeletonBar className="mt-0.5 h-3 w-24" />
+        </div>
+        <div className="grid gap-8" style={{ gridTemplateColumns: twoColumn ? `minmax(0,1fr) ${sideWidth}` : "minmax(0,1fr)" }}>
+          <div className="min-w-0">
+            <div className={`mb-8 grid gap-2 border-b border-hairline pb-8 ${width < 460 ? "grid-cols-1" : "grid-cols-3"}`}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <SkeletonBar className="h-8 w-12" />
+                  <SkeletonBar className="h-3 w-32 max-w-full" />
+                  <SkeletonBar className="h-2.5 w-24 max-w-full" />
+                </div>
+              ))}
+            </div>
+            {!twoColumn && <div className="mb-8 border-b border-hairline pb-8">{nextMove}</div>}
+            <div className="mb-8">
+              <div className="mb-4 flex justify-between">
+                <SkeletonBar className="h-4 w-44" />
+                <SkeletonBar className="h-3 w-24" />
+              </div>
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: dayColumns ? "repeat(5, minmax(0,1fr))" : "minmax(0,1fr)" }}>
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className={`rounded-lg bg-surface px-2.5 py-2.5 ${dayColumns ? "h-40" : "h-24"}`}>
+                    <SkeletonBar className="h-2.5 w-12" />
+                    <SkeletonBar className="mt-5 h-3 w-3/4" />
+                    <SkeletonBar className="mt-3 h-3 w-2/3" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <SkeletonBar className="mb-4 h-4 w-28" />
+            <div className="space-y-4">
+              <div className="h-7 rounded-[3px] bg-surface" />
+              <div className="h-7 rounded-[3px] bg-surface" />
+            </div>
+          </div>
+          {twoColumn && <div className="border-l border-hairline pl-6">{nextMove}</div>}
+        </div>
+        <div className="mt-8 border-t border-hairline pt-8">
+          <SkeletonBar className="mb-4 h-4 w-36" />
+          <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }}>
+            {Array.from({ length: cols }, (_, i) => <div key={i} className="h-32 rounded-[9px] bg-surface" />)}
+          </div>
+        </div>
+      </div>
+    </PageShell>
   );
 }

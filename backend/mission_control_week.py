@@ -195,13 +195,20 @@ def _commitments(snapshot: dict, week_start: date, week_end: date, today: date) 
     Counterpart commitments (someone outside the team owes the manager) are
     excluded before this function sees them.
 
-    State (mutually exclusive):
+    State (mutually exclusive), for the week containing today:
       completed — status done, completed_at within this week up to today
       overdue   — still open, due date before today
       due       — still open, due today through the end of this week
     Open commitments with no due date, or due after this week, are not in
     the cohort; undated ones are counted so the page can say so.
+
+    For any other week the cohort is that week's own commitments, judged as
+    of today: completed during it, or still open with a due date inside it
+    (overdue if that date has passed, due if it hasn't). "Overdue" never
+    reaches outside the week being shown, so a past week's count is what
+    that week left behind, not every overdue item the manager has.
     """
+    current_week = week_start <= today <= week_end
     reports = {row["id"]: row for row in snapshot.get("reports", [])}
     records: list[dict] = []
     undated = {"mine": 0, "team": 0}
@@ -222,11 +229,11 @@ def _commitments(snapshot: dict, week_start: date, week_end: date, today: date) 
             open_by_report.setdefault(rid, []).append(row)
 
         state = None
-        if status == "done" and completed_day and week_start <= completed_day <= today:
+        if status == "done" and completed_day and week_start <= completed_day <= min(week_end, today):
             state = "completed"
-        elif status == "open" and due and due < today:
+        elif status == "open" and due and due < today and (current_week or week_start <= due <= week_end):
             state = "overdue"
-        elif status == "open" and due and today <= due <= week_end:
+        elif status == "open" and due and max(today, week_start) <= due <= week_end:
             state = "due"
         elif status == "open" and not due:
             undated[owner] += 1
@@ -377,15 +384,21 @@ def _goals(snapshot: dict, today: date) -> list[dict]:
     return result
 
 
-def build_week(snapshot: dict, local_date: date) -> dict:
-    week_start, week_end = week_bounds(local_date)
+def build_week(snapshot: dict, local_date: date, week_of: date | None = None) -> dict:
+    """`local_date` is the manager's today. `week_of` picks a different week
+    to show (any day inside it); today stays today, so a past meeting that
+    wasn't written up reads "not logged" and nothing later reads overdue."""
     today = local_date
+    week_start, week_end = week_bounds(week_of or local_date)
+    current_week = week_start <= today <= week_end
     conversations = _conversations(snapshot, week_start, week_end, today)
     follow = _commitments(snapshot, week_start, week_end, today)
 
     scheduled_ids = {c["direct_report_id"] for c in conversations if c["kind"] == "one_on_one"}
     unscheduled_due = []
-    for row in snapshot.get("cadence", []):
+    # "Due by cadence, no date set" is a statement about now, so it belongs
+    # to the current week only.
+    for row in snapshot.get("cadence", []) if current_week else []:
         if not row.get("is_due"):
             continue
         planned = row.get("planned_session") or {}
@@ -406,6 +419,7 @@ def build_week(snapshot: dict, local_date: date) -> dict:
             "start": week_start.isoformat(),
             "end": week_end.isoformat(),
             "today": today.isoformat(),
+            "is_current": current_week,
         },
         "conversations": conversations,
         "unscheduled_due": unscheduled_due,

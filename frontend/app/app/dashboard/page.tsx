@@ -66,8 +66,8 @@ import {
 } from "@/lib/api";
 import { SECTION_GAP, useZoneData, ZoneMap } from "@/components/ZoneMap";
 import PageShell from "@/components/PageShell";
-import { ActionBriefLoadFailure, ActionBriefLoading } from "@/components/mission-control/ActionBrief";
-import { WeekInFocus } from "@/components/mission-control/WeekInFocus";
+import { ActionBriefLoadFailure } from "@/components/mission-control/ActionBrief";
+import { WeekInFocus, WeekInFocusSkeleton } from "@/components/mission-control/WeekInFocus";
 import { SkeletonSection } from "@/components/Skeleton";
 import PartialLoadNotice from "@/components/PartialLoadNotice";
 import { createSectionLoader } from "@/lib/sectionLoader";
@@ -227,6 +227,11 @@ export default function DashboardPage() {
   const [legacyOverride, setLegacyOverride] = useState(false);
   const [reload, setReload] = useState(0);
   const [weekReload, setWeekReload] = useState(0);
+  // null = the current week. Any other value is a day inside the week the
+  // ‹ › arrows moved to; the backend keeps today as today (week_of).
+  const [weekOf, setWeekOf] = useState<string | null>(null);
+  const [weekLoading, setWeekLoading] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   // Refreshes keep the current content on screen and swap it when the new
   // data lands, so focus and the open selection survive a refresh.
   const refreshBrief = useCallback(() => {
@@ -250,17 +255,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getWeekInFocus()
+    setWeekLoading(true);
+    getWeekInFocus(weekOf)
       .then((result) => {
         if (cancelled) return;
         setWeek(result);
         setWeekFailed(false);
+        setUpdatedAt(new Date());
       })
       .catch(() => {
         if (!cancelled) setWeekFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setWeekLoading(false);
       });
     return () => { cancelled = true; };
-  }, [weekReload]);
+  }, [weekReload, weekOf]);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -281,7 +291,7 @@ export default function DashboardPage() {
   }, [refreshBrief]);
 
   if (legacyOverride || variant?.variant === "legacy") return <LegacyDashboardPage />;
-  if (failed && weekFailed) {
+  if (failed && weekFailed && !week) {
     return (
       <ActionBriefLoadFailure
         onRetry={refreshBrief}
@@ -290,16 +300,19 @@ export default function DashboardPage() {
     );
   }
   // Wait for both to settle so the page doesn't reflow twice on first load.
-  if ((!variant && !failed) || (!week && !weekFailed)) return <ActionBriefLoading />;
+  if ((!variant && !failed) || (!week && !weekFailed)) return <WeekInFocusSkeleton />;
   return (
     <WeekInFocus
       brief={variant && variant.variant === "action_first" ? variant : null}
       briefFailed={failed}
       week={week}
       weekFailed={weekFailed}
+      weekLoading={weekLoading}
+      updatedAt={updatedAt}
       onRefresh={refreshBrief}
       onRetryBrief={() => setReload((value) => value + 1)}
       onRetryWeek={() => setWeekReload((value) => value + 1)}
+      onWeekOf={setWeekOf}
       onLegacy={() => setLegacyOverride(true)}
     />
   );

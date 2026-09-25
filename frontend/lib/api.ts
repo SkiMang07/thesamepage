@@ -991,7 +991,9 @@ export type WeekGoal = {
 };
 
 export type WeekInFocus = {
-  week: { start: string; end: string; today: string };
+  // `today` is always the manager's today; start/end are the week shown.
+  // is_current is false when week_of moved the view to another week.
+  week: { start: string; end: string; today: string; is_current: boolean };
   conversations: WeekConversation[];
   unscheduled_due: {
     direct_report_id: string;
@@ -1009,8 +1011,11 @@ export type WeekInFocus = {
   coverage: Record<string, "ok" | "partial" | "unavailable">;
 };
 
-export const getWeekInFocus = (): Promise<WeekInFocus> =>
-  authedFetch(`/api/dashboard/week?${new URLSearchParams({ local_date: browserLocalDate() })}`);
+/** `weekOf` (any YYYY-MM-DD inside the week) shows another week; today stays today. */
+export const getWeekInFocus = (weekOf?: string | null): Promise<WeekInFocus> =>
+  authedFetch(
+    `/api/dashboard/week?${new URLSearchParams({ local_date: browserLocalDate(), ...(weekOf ? { week_of: weekOf } : {}) })}`
+  );
 
 export type MissionControlEventInput = {
   brief_id: string;

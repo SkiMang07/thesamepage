@@ -82,7 +82,9 @@ the nav, so `/app/login` and `/app/ic` stay light without any override:
   (Dashboard, Goals, Projects, Team). **Never hand-roll a `<main>` wrapper** —
   fourteen of them drifted out of alignment before this existed.
 - **`ScribeDrawer`** — a persistent right drawer, `w-[clamp(400px,30vw,640px)]`,
-  content reflows beside it, thread survives navigation. ⌘J summons focused, Esc
+  content reflows beside it, thread survives navigation. Below `md` it is a
+  full-screen sheet instead. Its header is `NAV_STRIP_HEIGHT`, so its divider
+  continues the top bar's. ⌘J summons focused, Esc
   closes. It sits inside the dark scope like everything else — blue makes it
   recognisable, it does not make it a separate visual system.
 

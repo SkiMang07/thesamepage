@@ -765,17 +765,38 @@ def _load_week_snapshot(user_id: str, supabase, local_date: date) -> dict:
     }
 
 
+WEEK_OF_RANGE_DAYS = 371  # a year either side, plus the partial week
+
+
+def _week_of(raw: str | None, today: date) -> date | None:
+    if not raw:
+        return None
+    try:
+        parsed = date.fromisoformat(raw)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="week_of must be YYYY-MM-DD")
+    if abs((parsed - today).days) > WEEK_OF_RANGE_DAYS:
+        raise HTTPException(status_code=422, detail="week_of is outside the accepted range")
+    return parsed
+
+
 @router.get("/week")
 def get_week_in_focus(
     local_date: str | None = None,
+    week_of: str | None = None,
     auth=Depends(get_authenticated_client),
 ):
     """The week Mission Control shows beside the action brief. Read-only; it
-    never writes a disposition, an event, or a source record."""
+    never writes a disposition, an event, or a source record.
+
+    `local_date` is the manager's today and stays within a day of UTC.
+    `week_of` (optional, any day in the week) moves the week being shown
+    without moving today — see build_week."""
     user_id, supabase = auth
     manager_date = _manager_local_date(local_date)
-    snapshot = _load_week_snapshot(user_id, supabase, manager_date)
-    return build_week(snapshot, manager_date)
+    shown = _week_of(week_of, manager_date)
+    snapshot = _load_week_snapshot(user_id, supabase, shown or manager_date)
+    return build_week(snapshot, manager_date, week_of=shown)
 
 
 @router.post("/events")

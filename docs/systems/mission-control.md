@@ -9,33 +9,41 @@ persistent sidebar owns wayfinding; Mission Control does not duplicate it.
 Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
 (`BUILD_BRIEF.md`, `prototype-source.html`). In order:
 
-1. **Heading.** "Mission Control" eyebrow and the serif "Your week, in focus."
-   No subtitle.
+1. **Heading.** Today's date as the eyebrow and the serif "Your week, in
+   focus." No subtitle. Top right: "Updated <time> · Refresh" (the time the
+   week last loaded; "Updating…" while it reloads).
 2. **Three counts**, each a button that opens its records in the right-hand
    column: conversations completed (of those dated this week), commitments
    completed this week, and overdue commitments (with the number of owners).
 3. **Conversation week.** Monday–Friday columns, plus Saturday/Sunday only when
-   something is dated there. Up to four rows per day, then "View all N (+k)"
-   opens the whole day beneath the week. Rows show initials, a short name
+   something is dated there. ‹ › arrows step a week at a time, with "Back to
+   this week" when another week is shown; today is marked by a teal top rule.
+   Up to four rows per day, then "View all N (+k)"
+   opens the whole day beneath the week. Rows show initials (people in their
+   identity colour, the same one AppNav's roster gives them; groups in
+   neutral squares), a short name
    (first name, or first name + initial when two people share one) and the
    state as glyph + word: ✓ Done, • Prepped / Agenda, ○ To prep / No agenda,
    △ Not logged (the date has passed with nothing written up). Meetings are
-   dated by day, so no times are shown. 1:1s, team meetings (square avatar)
-   and meetings beyond the team all appear. People due by cadence with no
-   date set get one line below the week (names link to prep; the line
+   dated by day, so no times are shown (the legend says so to screen readers
+   only). 1:1s, team meetings (square avatar)
+   and meetings beyond the team all appear. On the current week, people due by
+   cadence with no date set get one line below the week (names link to prep; the line
    opens their cadence detail in the right-hand column). They are not
    calendar events.
 4. **Follow-through.** "Mine" and "My team" bars split into Completed / Due
    this week / Overdue. Each bar shows proportions within its own group.
    Segments are toned at rest and solid when selected (`METER_SEGMENT`, see
-   `brand.md` → Meters). Selecting a segment lists exactly those records.
+   `brand.md` → Meters). Selecting a segment lists exactly those records;
+   overdue lists run oldest first and show each item's age.
 5. **Right-hand column.** By default it shows "Your next move" (the brief's
    primary candidate) and up to two "Keep in view" items (the secondaries),
    each with the quiet variant of the unchanged CTA / Why this? / Addressed /
    Snooze / Not relevant controls. Selecting a conversation, count or
    segment replaces the column with details. In two-column mode the column
    is sticky under the top bar, so details open beside whatever was clicked
-   and focus moves to them without scrolling the page. × or Esc returns
+   and focus moves to them without scrolling the page. Each swap fades in
+   over 120ms (none under reduced motion). × or Esc returns
    focus to whatever opened it.
 6. **Goals & progress**, full width. Company / Team / Individual tabs, plus
    Department only when department goals exist. Individual adds a person
@@ -49,30 +57,40 @@ Layout is measured, not viewport-based: the page switches to one column below
 ~860px of content width and the week to stacked days below ~92px per day, so
 the Scribe drawer reflows it the same way a narrow window does. In one column
 the next move comes straight after the counts, not after Follow-through.
+Sections sit 32px apart, headings 16px above their content, related items 8px.
+The loading skeleton is measured the same way and mirrors this layout.
 
 Counts and goal percentages are set in the sans with tabular figures; the
 serif is for the heading and detail titles only (see `DESIGN.md` → fonts).
 
 ## The week view
 
-`GET /api/dashboard/week?local_date=` (`routes/dashboard.py` →
+`GET /api/dashboard/week?local_date=&week_of=` (`routes/dashboard.py` →
 `mission_control_week.build_week`, pure and clock-injected) is read-only. Each
 domain loads independently and reports coverage. A section whose source
 failed says so instead of showing zeros.
 
-- **Week:** Monday–Sunday containing the manager's local date. Meetings are
+- **Week:** Monday–Sunday containing the manager's local date, or containing
+  `week_of` when the arrows moved it (within a year either side). `local_date`
+  is always today and must be within a day of UTC; `week_of` never moves
+  today, so past meetings read "not logged" and nothing future reads overdue.
+  `week.is_current` says which case applies. Meetings are
   selected by their `scheduled_at` day (noon-UTC dates).
 - **Conversation state:** `summary` → completed. A prep sheet (1:1s, beyond
   the team) or agenda items/note (team meetings) → prepared. A past date with
   neither → not logged. Otherwise → to prepare.
 - **Unscheduled due:** calls `get_one_on_ones_overview()`, the canonical
   "who's due", and keeps people who are due with no dated upcoming occurrence.
+  Current week only.
 - **Commitments:** counterpart rows excluded, archived people excluded.
   Owner is *team* when a direct report committed, otherwise *mine* (a null
   report is the manager's own). State: *completed* means done with
   `completed_at` this week up to today. Dropped does not count. *Overdue*
   means open with a due date before today. *Due* means open and due between
-  today and Sunday. Undated open commitments are counted separately, not
+  today and Sunday. For any other week the cohort is that week's own
+  commitments as of today: completed during it, or open and due inside it
+  (overdue if the date has passed, due if not); overdue never reaches outside
+  the week shown. Undated open commitments are counted separately, not
   placed in a bar. Every displayed count is the length of the returned list.
 - **Goals:** active / on track / at risk only. `progress` is the latest
   recorded percentage and `progress_at` is the date of the check-in that
@@ -86,7 +104,8 @@ failure state with "Open previous dashboard".
 
 Frontend: `frontend/app/app/dashboard/page.tsx`,
 `frontend/components/mission-control/WeekInFocus.tsx` (page) and
-`ActionBrief.tsx` (shared recommendation controls and loading/failure states).
+`ActionBrief.tsx` (shared recommendation controls and the failure state; the
+loading skeleton is `WeekInFocusSkeleton` in `WeekInFocus.tsx`).
 Backend: `backend/routes/dashboard.py`, `backend/mission_control_engine.py`,
 `backend/mission_control_week.py`.
 

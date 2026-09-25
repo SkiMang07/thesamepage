@@ -1,6 +1,6 @@
 // Loading skeletons (N-7). The shape of a page arriving, in place of a bare
 // "Loading..." line. Same visual language as Mission Control's
-// ActionBriefLoading and /app/1-1s's LoadingState: `animate-pulse`, `bg-sunken`
+// WeekInFocusSkeleton and /app/1-1s's LoadingState: `animate-pulse`, `bg-sunken`
 // for text-sized bars, `bg-surface` for card-sized blocks, one role="status"
 // with a label that names what is loading.
 //
@@ -13,13 +13,18 @@ import PageShell, { PageShellMaxWidth } from "@/components/PageShell";
 
 export type SkeletonVariant = "cards" | "columns" | "list" | "rows";
 
-function Bar({ className }: { className: string }) {
+/** A text-sized placeholder line. */
+export function SkeletonBar({ className }: { className: string }) {
   return <div className={`rounded bg-sunken ${className}`} />;
 }
 
-function Block({ className }: { className: string }) {
+/** A card-sized placeholder block. */
+export function SkeletonBlock({ className }: { className: string }) {
   return <div className={`rounded-xl bg-surface ${className}`} />;
 }
+
+const Bar = SkeletonBar;
+const Block = SkeletonBlock;
 
 function Body({ variant }: { variant: SkeletonVariant }) {
   switch (variant) {

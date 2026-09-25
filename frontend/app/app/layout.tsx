@@ -123,11 +123,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <SentryUser />
         <AnalyticsUser />
 
-        {/* Scribe drawer — sticky so it stays in view as the page scrolls */}
+        {/* Scribe drawer — sticky so it stays in view as the page scrolls.
+            Below md it is a full-screen sheet instead: the 400px floor is
+            wider than a phone, so as a flex sibling it pushed the page off
+            screen. z-50 clears AppNav's z-40 header on phones. */}
         {showNav && isOpen && (
           <aside
-            className="sticky top-0 flex h-screen w-[clamp(400px,30vw,640px)] shrink-0 flex-col border-l border-hairline bg-surface shadow-xl"
-            style={{ zIndex: 40 }}
+            aria-label="Scribe"
+            className="fixed inset-0 z-50 flex h-[100dvh] w-full flex-col bg-surface md:sticky md:inset-auto md:top-0 md:z-40 md:h-screen md:w-[clamp(400px,30vw,640px)] md:shrink-0 md:border-l md:border-hairline md:shadow-xl"
           >
             <ScribeDrawer />
           </aside>
