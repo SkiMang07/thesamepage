@@ -1,41 +1,24 @@
 """
-Assessments — the ratings/status layer PRODUCT_VISION.md calls the
-load-bearing piece of "Mission Control": scoring a direct report against
-their role's configured expectations (Settings > Expectations —
-metric/skill/value_configs, Session 6), not just having them on record.
+Assessments — levels, the team list and the per-person scorecard: the
+latest confirmed rating per expectation item plus the latest overall rating.
+These reads are what the person page, Mission Control, Scribe context and
+development suggestions consume.
 
-v1 scope (scoped with Andrew via AskUserQuestion, 2026-08-04):
-- Rolling assessment (assessments + skill_assessments + value_assessments),
-  not performance_reviews (formal periodic) — that table stays dormant.
-- All three expectation types: metrics (metric_entries), skills
-  (skill_assessments), values (value_assessments) — plus an overall
-  level_ordinal snapshot (assessments, scored against assessment_levels).
-- AI-assisted draft, manager reviews before anything saves — same
-  draft-then-review rule as one_on_ones.py's wrapup flow (Session 8). The AI
-  only scores items the evidence actually supports; it does not force-cover
-  every configured expectation, same restraint as the 1:1 prep prompt.
-- Own top-level page (/app/assessments) + a summary section on DR detail.
-
-All 6 base tables (assessment_levels, assessments, skill_assessments,
-value_assessments, metric_entries, performance_reviews) and their RLS
-policies were already present in database/schema.sql from the original
-project scaffold — same "activate a dormant table" pattern as Goals/Org/
-Projects/Capacity. No new migration for table structure; assessment_levels
-just needs its 5 default rows seeded per org on first use (see
-_ensure_levels below), same idea as ensure_org(). performance_reviews stays
-untouched this pass.
+Ratings are written ONLY by completing a period assessment
+(routes/assessment_reviews.py → complete_performance_review()), which
+inserts into the same tables (assessments with source_type
+'performance_review', skill/value_assessments and metric_entries with
+performance_review_id). Earlier rows written by the retired rolling
+scorecard stay as history and still count as the latest rating until a
+completed assessment supersedes them. See docs/systems/assessments.md.
 """
 import logging
-import json
-from datetime import date
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-from ai_core import generate_text
-from config import AI_DEFAULT_MODEL_HEAVY
 from routes.direct_reports import fetch_role_expectations
-from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
+from utils import ensure_org, get_authenticated_client, get_email_from_token
 
 logger = logging.getLogger(__name__)
 
@@ -210,163 +193,11 @@ def _fetch_scorecard(user_id: str, supabase, direct_report_id: str, authorizatio
 
 
 # ---------------------------------------------------------------------------
-# Draft prompt — mirrors the restraint rule already proven in
-# one_on_ones.py's expectations block: only speak to what the evidence
-# supports, never force coverage of every configured item.
-# ---------------------------------------------------------------------------
-
-def _format_items_block(items: list[dict]) -> str:
-    if not items:
-        return "  (none configured for this role)"
-    lines = []
-    for it in items:
-        header = f"  [{it['config_id']}] {it['name']}"
-        if it.get("expectation"):
-            header += f" — expectation: {it['expectation']}"
-        elif it.get("description"):
-            header += f" — {it['description']}"
-        lines.append(header)
-        defs = it.get("scale_definitions") or []
-        if defs:
-            for sd in defs:
-                desc = sd.get("qualitative_output") or sd.get("quantitative_output") or sd.get("description") or ""
-                lines.append(f"      {sd.get('evaluation_point')}: {desc}")
-        else:
-            lines.append(f"      (scale {it.get('scale_min') or 1}-{it.get('scale_max') or 4}, no point definitions configured)")
-    return "\n".join(lines)
-
-
-def _build_draft_prompt(
-    report_name: str,
-    role_label: str | None,
-    levels: list[dict],
-    skills: list[dict],
-    values: list[dict],
-    metrics: list[dict],
-    recent_summaries: list[str],
-    open_commitments: list[dict],
-    done_commitments: list[dict],
-    goals: list[dict],
-    today_iso: str,
-) -> str:
-    levels_block = "\n".join(f"  {lv['ordinal']}: {lv['label']}" for lv in levels)
-    history_block = "\n".join(f"  • {s}" for s in recent_summaries) or "  (no completed 1:1s on record yet)"
-
-    def _commitment_lines(rows: list[dict]) -> str:
-        return "\n".join(
-            f"  • {c['description']} (due: {c.get('due_date') or 'unspecified'})" for c in rows
-        ) or "  (none)"
-
-    goals_block = "\n".join(
-        f"  • {g['title']} — status: {g['status']}"
-        + (f" — measured by: {g['success_metrics']}" if g.get("success_metrics") else "")
-        for g in goals
-    ) or "  (no individual goals on record)"
-
-    return f"""You are helping a manager assess {report_name}'s performance against their role's configured expectations. Today's date: {today_iso}.
-
-Your ONLY source of truth is the evidence below. Do not invent performance you have no evidence for. If there isn't enough signal to judge something, leave it out entirely — an incomplete, honest draft beats a fabricated complete one. The manager reviews and edits everything before it saves.
-
----
-ROLE: {role_label or "No role assigned"}
-
-OVERALL RATING SCALE:
-{levels_block}
-
-SKILLS (score against each skill's own scale):
-{_format_items_block(skills)}
-
-VALUES (score against each value's own scale):
-{_format_items_block(values)}
-
-METRICS (log a value + period only where the notes give a real number):
-{_format_items_block(metrics)}
-
----
-EVIDENCE
-
-Recent 1:1 history (last few meetings, newest first):
-{history_block}
-
-Open commitments:
-{_commitment_lines(open_commitments)}
-
-Recently completed commitments (delivered work — strong signal):
-{_commitment_lines(done_commitments)}
-
-Individual goals:
-{goals_block}
-
----
-Return ONLY valid JSON. No commentary, no markdown, no code fences.
-
-{{
-  "overall": {{"level_ordinal": 3, "notes": "1-3 sentences justifying this rating, grounded in the evidence above"}},
-  "skills": [{{"config_id": "...", "evaluation_point": 3, "notes": "why, grounded in evidence"}}],
-  "values": [{{"config_id": "...", "evaluation_point": 3, "notes": "why, grounded in evidence"}}],
-  "metrics": [{{"config_id": "...", "value": 42, "period": "e.g. Q3 2026 or a specific month", "notes": "where this number came from"}}]
-}}
-
-Set "overall" to null if there truly isn't enough evidence yet. Only include a skill/value/metric entry when the evidence actually supports a specific judgment or number — do not force coverage of every configured item. Empty arrays and a null overall are valid, honest answers when there simply isn't enough to go on."""
-
-
-# ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
 
 class LevelLabelIn(BaseModel):
     label: str
-
-
-class DraftOverall(BaseModel):
-    level_ordinal: int
-    notes: str = ""
-
-
-class DraftSkillValue(BaseModel):
-    config_id: str
-    evaluation_point: int
-    notes: str = ""
-
-
-class DraftMetric(BaseModel):
-    config_id: str
-    value: float
-    period: str | None = None
-    notes: str = ""
-
-
-class AssessmentDraft(BaseModel):
-    """AI-drafted scores for the manager to review — nothing is saved until
-    POST /{direct_report_id}."""
-    overall: DraftOverall | None = None
-    skills: list[DraftSkillValue] = []
-    values: list[DraftSkillValue] = []
-    metrics: list[DraftMetric] = []
-
-
-class SaveOverallIn(BaseModel):
-    level_ordinal: int
-    notes: str | None = None
-
-
-class SaveSkillValueIn(BaseModel):
-    config_id: str
-    evaluation_point: int
-    notes: str | None = None
-
-
-class SaveMetricIn(BaseModel):
-    config_id: str
-    value: float
-    period: str | None = None
-
-
-class SaveAssessmentIn(BaseModel):
-    overall: SaveOverallIn | None = None
-    skills: list[SaveSkillValueIn] = []
-    values: list[SaveSkillValueIn] = []
-    metrics: list[SaveMetricIn] = []
 
 
 # ---------------------------------------------------------------------------
@@ -424,13 +255,14 @@ def list_team_assessments(auth=Depends(get_authenticated_client), authorization:
     )
     latest_rows = (
         supabase.table("assessments")
-        .select("direct_report_id,level_ordinal,created_at")
+        .select("direct_report_id,level_ordinal,created_at,source_type")
         .eq("manager_id", user_id)
         .order("created_at", desc=True)
         .execute()
         .data
     )
     latest_by_report = _latest_by_config(latest_rows, "direct_report_id")
+    reviews = _review_status_by_report(supabase, user_id)
 
     return [
         {
@@ -438,9 +270,42 @@ def list_team_assessments(auth=Depends(get_authenticated_client), authorization:
             "latest_level_ordinal": latest_by_report.get(r["id"], {}).get("level_ordinal"),
             "latest_level_label": label_by_ordinal.get(latest_by_report.get(r["id"], {}).get("level_ordinal")),
             "assessed_at": latest_by_report.get(r["id"], {}).get("created_at"),
+            # True when the latest overall came from a completed period
+            # assessment; false for a legacy rolling rating.
+            "latest_from_review": latest_by_report.get(r["id"], {}).get("source_type") == "performance_review",
+            "last_review": reviews.get(r["id"], {}).get("completed"),
+            "open_review": reviews.get(r["id"], {}).get("draft"),
         }
         for r in reports
     ]
+
+
+def _review_status_by_report(supabase, user_id: str, report_id: str | None = None) -> dict:
+    """report_id -> {"completed": latest completed assessment, "draft": the
+    open draft}. Fails soft to {} so latest-rating readers keep working if
+    the period-assessment migration hasn't run yet."""
+    try:
+        query = (
+            supabase.table("performance_reviews")
+            .select("id,direct_report_id,status,stage,review_period,period_start,period_end,cadence,rating_ordinal,completed_at,updated_at")
+            .eq("manager_id", user_id)
+        )
+        if report_id:
+            query = query.eq("direct_report_id", report_id)
+        rows = query.order("created_at", desc=True).execute().data
+    except Exception:
+        logger.warning("assessments: could not read performance_reviews", exc_info=True)
+        return {}
+    out: dict = {}
+    for row in rows:
+        slot = out.setdefault(row["direct_report_id"], {})
+        if row.get("status") == "draft":
+            slot.setdefault("draft", row)
+        elif row.get("status") == "completed" and row.get("completed_at"):
+            current = slot.get("completed")
+            if not current or row["completed_at"] > current["completed_at"]:
+                slot["completed"] = row
+    return out
 
 
 @router.get("/{direct_report_id}")
@@ -450,203 +315,8 @@ def get_scorecard(
     authorization: str = Header(None),
 ):
     user_id, supabase = auth
-    return _fetch_scorecard(user_id, supabase, direct_report_id, authorization)
-
-
-@router.post("/{direct_report_id}/draft", response_model=AssessmentDraft)
-@limiter.limit("10/minute")
-def draft_assessment(
-    request: Request,
-    direct_report_id: str,
-    auth=Depends(get_authenticated_client),
-    authorization: str = Header(None),
-):
-    """Pure AI-call route — nothing is saved. Manager reviews the draft, then
-    POST /{direct_report_id} writes whatever they keep/edit."""
-    user_id, supabase = auth
     scorecard = _fetch_scorecard(user_id, supabase, direct_report_id, authorization)
-    report = scorecard["direct_report"]
-    role = scorecard["role"]
-    role_label = None
-    if role:
-        role_label = f"{role['job_role']}, level {role['job_level']}"
-        if role.get("functional_team"):
-            role_label += f" ({role['functional_team']})"
-
-    known_skill_ids = {s["config_id"] for s in scorecard["skills"]}
-    known_value_ids = {v["config_id"] for v in scorecard["values"]}
-    known_metric_ids = {m["config_id"] for m in scorecard["metrics"]}
-
-    history_rows = (
-        supabase.table("one_on_ones")
-        .select("summary,created_at")
-        .eq("direct_report_id", direct_report_id)
-        .eq("manager_id", user_id)
-        .not_.is_("summary", "null")
-        .order("created_at", desc=True)
-        .limit(5)
-        .execute()
-        .data
-    )
-    recent_summaries = [r["summary"] for r in history_rows if r.get("summary")]
-
-    commitments = (
-        supabase.table("commitments")
-        .select("description,due_date,status")
-        .eq("direct_report_id", direct_report_id)
-        .eq("owner_id", user_id)
-        .order("created_at", desc=True)
-        .limit(20)
-        .execute()
-        .data
-    )
-    open_commitments = [c for c in commitments if c["status"] == "open"]
-    done_commitments = [c for c in commitments if c["status"] == "done"][:5]
-
-    goals = (
-        supabase.table("goals")
-        .select("title,status,success_metrics")
-        .eq("direct_report_id", direct_report_id)
-        .eq("owner_id", user_id)
-        .execute()
-        .data
-    )
-
-    prompt = _build_draft_prompt(
-        report_name=report["name"],
-        role_label=role_label,
-        levels=scorecard["levels"],
-        skills=scorecard["skills"],
-        values=scorecard["values"],
-        metrics=scorecard["metrics"],
-        recent_summaries=recent_summaries,
-        open_commitments=open_commitments,
-        done_commitments=done_commitments,
-        goals=goals,
-        today_iso=date.today().isoformat(),
-    )
-
-    raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)
-    raw_clean = raw.strip()
-    if raw_clean.startswith("```"):
-        start = raw_clean.find("{")
-        end = raw_clean.rfind("}") + 1
-        raw_clean = raw_clean[start:end] if start != -1 else raw_clean
-
-    try:
-        parsed = json.loads(raw_clean)
-    except json.JSONDecodeError:
-        parsed = {}
-
-    valid_ordinals = {lv["ordinal"] for lv in scorecard["levels"]}
-    overall = None
-    overall_raw = parsed.get("overall")
-    if isinstance(overall_raw, dict) and overall_raw.get("level_ordinal") in valid_ordinals:
-        overall = DraftOverall(level_ordinal=overall_raw["level_ordinal"], notes=overall_raw.get("notes", "") or "")
-
-    def _filter_skill_values(rows, known_ids) -> list[DraftSkillValue]:
-        out = []
-        for r in rows or []:
-            cid = r.get("config_id")
-            point = r.get("evaluation_point")
-            if cid in known_ids and isinstance(point, int):
-                out.append(DraftSkillValue(config_id=cid, evaluation_point=point, notes=r.get("notes", "") or ""))
-        return out
-
-    skills = _filter_skill_values(parsed.get("skills"), known_skill_ids)
-    values = _filter_skill_values(parsed.get("values"), known_value_ids)
-
-    metrics = []
-    for r in parsed.get("metrics") or []:
-        cid = r.get("config_id")
-        val = r.get("value")
-        if cid in known_metric_ids and isinstance(val, (int, float)):
-            metrics.append(DraftMetric(config_id=cid, value=val, period=r.get("period"), notes=r.get("notes", "") or ""))
-
-    return AssessmentDraft(overall=overall, skills=skills, values=values, metrics=metrics)
-
-
-@router.post("/{direct_report_id}")
-def save_assessment(
-    direct_report_id: str,
-    body: SaveAssessmentIn,
-    auth=Depends(get_authenticated_client),
-):
-    user_id, supabase = auth
-    try:
-        report = (
-            supabase.table("direct_reports")
-            .select("id")
-            .eq("id", direct_report_id)
-            .eq("manager_id", user_id)
-            .single()
-            .execute()
-            .data
-        )
-    except Exception as exc:
-        # .single() raises when no row matches, which is the normal 404. Logged
-        # at info so a real failure (a bad column, Supabase down) is findable.
-        logger.info("lookup failed, answering 404: %s", exc)
-        raise HTTPException(status_code=404, detail="Direct report not found")
-    if not report:
-        raise HTTPException(status_code=404, detail="Direct report not found")
-
-    saved: dict = {"overall": None, "skills": [], "values": [], "metrics": []}
-
-    if body.overall:
-        saved["overall"] = (
-            supabase.table("assessments")
-            .insert({
-                "manager_id": user_id,
-                "direct_report_id": direct_report_id,
-                "level_ordinal": body.overall.level_ordinal,
-                "notes": body.overall.notes,
-                "source_type": "manual",
-            })
-            .execute()
-            .data[0]
-        )
-
-    for s in body.skills:
-        saved["skills"].append(
-            supabase.table("skill_assessments")
-            .insert({
-                "direct_report_id": direct_report_id,
-                "skill_config_id": s.config_id,
-                "evaluation_point": s.evaluation_point,
-                "notes": s.notes,
-                "assessed_by": user_id,
-            })
-            .execute()
-            .data[0]
-        )
-
-    for v in body.values:
-        saved["values"].append(
-            supabase.table("value_assessments")
-            .insert({
-                "direct_report_id": direct_report_id,
-                "value_config_id": v.config_id,
-                "evaluation_point": v.evaluation_point,
-                "notes": v.notes,
-                "assessed_by": user_id,
-            })
-            .execute()
-            .data[0]
-        )
-
-    for m in body.metrics:
-        saved["metrics"].append(
-            supabase.table("metric_entries")
-            .insert({
-                "direct_report_id": direct_report_id,
-                "metric_config_id": m.config_id,
-                "value": m.value,
-                "period": m.period,
-                "recorded_by": user_id,
-            })
-            .execute()
-            .data[0]
-        )
-
-    return saved
+    reviews = _review_status_by_report(supabase, user_id, direct_report_id).get(direct_report_id, {})
+    scorecard["last_review"] = reviews.get("completed")
+    scorecard["open_review"] = reviews.get("draft")
+    return scorecard

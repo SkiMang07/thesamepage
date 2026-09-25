@@ -211,8 +211,11 @@ export function AssessmentCard({
     <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Assessment</p>
-        <Link href={`/app/assessments/${reportId}`} className="text-xs text-ink-muted hover:text-ink-secondary">
-          {scorecard?.overall ? "Assess again →" : "Assess now →"}
+        <Link
+          href={scorecard?.open_review ? `/app/assessments/${reportId}/${scorecard.open_review.id}` : `/app/assessments/${reportId}`}
+          className="text-xs text-ink-muted hover:text-ink-secondary"
+        >
+          {scorecard?.open_review ? "Resume assessment →" : "Start assessment →"}
         </Link>
       </div>
       {scorecard?.overall ? (
@@ -238,7 +241,15 @@ export function AssessmentCard({
           </svg>
           <div className="min-w-0">
             <p className="text-sm font-medium text-ink">{label}</p>
-            <p className="text-xs text-ink-muted">Set {formatDate(scorecard.overall.created_at)}</p>
+            <p className="text-xs text-ink-muted">
+              {scorecard.last_review && scorecard.overall.source_type === "performance_review" ? (
+                <Link href={`/app/assessments/${reportId}/${scorecard.last_review.id}`} className="hover:text-ink-secondary">
+                  {scorecard.last_review.review_period.split(" · ")[0]} assessment · {formatDate(scorecard.overall.created_at)}
+                </Link>
+              ) : (
+                <>Set {formatDate(scorecard.overall.created_at)}</>
+              )}
+            </p>
           </div>
         </div>
       ) : (

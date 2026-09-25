@@ -1,7 +1,9 @@
 # The model may draft a rating. It may never save one.
 
 **Status:** Accepted — records and corrects the boundary governing behavior that
-already shipped (`POST /api/assessments/{direct_report_id}/draft`). No code changed.
+already shipped. Since 2026-09-25 the drafting lives in the period-assessment flow
+(`POST /api/assessments/reviews/{id}/draft`, `docs/systems/assessments.md`); the rule
+is unchanged and is what that flow enforces.
 
 ## Context
 
@@ -53,8 +55,11 @@ back instead of a blank scorecard.
   said 2, and "the manager reviews it" is thinner protection than it sounds. The
   mitigation is auditability rather than removal: show the evidence beside each drafted
   score, and surface what the model deliberately left blank instead of omitting it
-  silently. Not yet built.
-- **The draft endpoint has no eval.** Third AI call site to cover, behind wrap-up
+  silently. Built in the period-assessment flow (cited sources and stated limits per
+  proposal, unassessed items listed with reasons, prior judgments shown separately);
+  whether it is enough has not been measured.
+- **The draft call site has no eval** (nor do the picture, discussion and summary calls
+  added with it). Third AI call site to cover, behind wrap-up
   extraction and `/prep`, both of which were flagged first.
 - **A disclosure obligation attaches** once a report-facing view of their own record
   exists. `frontend/app/app/ic/page.tsx` is still a stub.

@@ -1,39 +1,24 @@
 "use client";
 
-// Assessments — the ratings/status layer (Session 16, 2026-08-04). Own
-// top-level page, same reasoning as Goals/Projects/Org/Capacity: this gets
-// written to regularly, not configured once. See docs/SESSION_HISTORY.md
-// and the assessments_scoping project memory note for the scoping
-// conversation with Andrew.
-//
-// This page is the team-wide list — current overall rating per report,
-// click through to /app/assessments/[reportId] for the full scorecard
-// (per-metric/skill/value scores + the AI-draft flow).
-//
-// Session 56 white-space audit — entrance gap now uses the shared
-// SECTION_GAP token (components/ZoneMap.tsx) instead of a bare mt-8.
+// Assessments overview — start, resume or open a period assessment for each
+// person. Quarterly or biannual, or off-cycle when there's a reason; this is
+// not a weekly rating tool, so nothing here goes "stale" and nobody is
+// ranked. A legacy rolling rating shows as context, never as a completed
+// period assessment. See docs/systems/assessments.md.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getTeamAssessments, TeamAssessmentItem } from "@/lib/api";
 import PageShell from "@/components/PageShell";
-import { SECTION_GAP } from "@/components/ZoneMap";
 import { SkeletonSection } from "@/components/Skeleton";
+import { formatDay } from "@/lib/assessment-periods";
+import { BTN_PRIMARY_SM, BTN_SECONDARY } from "@/lib/tokens";
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-// Warmer color the higher the ordinal reads relative to a 1-5 scale — a
-// rough visual cue, not a precise mapping to whatever labels the org set.
-function levelStyle(ordinal: number | null): string {
-  if (ordinal === null) return "bg-sunken text-ink-muted";
-  if (ordinal <= 1) return "bg-red-50 text-red-700";
-  if (ordinal === 2) return "bg-amber-50 text-amber-700";
-  if (ordinal === 3) return "bg-sunken text-ink-secondary";
-  if (ordinal === 4) return "bg-teal-50 text-teal-700";
-  return "bg-brand-tint text-brand";
-}
+const STAGE_LABEL: Record<string, string> = {
+  picture: "checking the picture",
+  draft: "draft & discuss",
+  review: "final review",
+};
 
 export default function AssessmentsPage() {
   const [team, setTeam] = useState<TeamAssessmentItem[]>([]);
@@ -43,22 +28,22 @@ export default function AssessmentsPage() {
   useEffect(() => {
     getTeamAssessments()
       .then(setTeam)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .catch(() => setError("Assessments couldn’t be loaded. This is a connection problem, not an empty team."))
       .finally(() => setLoading(false));
   }, []);
 
   return (
-    <PageShell maxWidth="2xl">
-      <h1 className="text-2xl font-semibold">Assessments</h1>
-      <p className="mt-1 text-sm text-ink-secondary">
-        How each person is doing against their role&apos;s configured expectations — metrics, skills, and values.
+    <PageShell maxWidth="6xl">
+      <h1 className="font-serif text-[2.3rem] font-normal leading-none tracking-[-0.03em] text-ink sm:text-[2.6rem]">Assessments</h1>
+      <p className="mt-2 max-w-2xl text-sm text-ink-secondary">
+        Quarterly or biannual — or off-cycle when there’s a reason. AI brings the period together and drafts against each role’s expectations; you decide every judgment.
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
       {loading ? (
-        <SkeletonSection label="Loading assessments" variant="list" className={SECTION_GAP} />
-      ) : team.length === 0 ? (
-        <p className={`${SECTION_GAP} text-ink-secondary`}>
+        <SkeletonSection label="Loading assessments" variant="list" className="mt-6" />
+      ) : !error && team.length === 0 ? (
+        <p className="mt-6 text-ink-secondary">
           No direct reports yet.{" "}
           <Link href="/app/dashboard" className="underline hover:text-ink-body">
             Add your first one
@@ -66,28 +51,51 @@ export default function AssessmentsPage() {
           .
         </p>
       ) : (
-        <ul className={`${SECTION_GAP} space-y-3`}>
-          {team.map((r) => (
-            <li key={r.id}>
-              <Link
-                href={`/app/assessments/${r.id}`}
-                className="block rounded-lg border border-hairline px-5 py-4 transition-colors hover:border-control hover:bg-canvas"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="font-medium text-ink">{r.name}</p>
-                    {r.role_title && <p className="text-sm text-ink-secondary">{r.role_title}</p>}
-                  </div>
-                  <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${levelStyle(r.latest_level_ordinal)}`}>
-                    {r.latest_level_label ?? "Not yet assessed"}
-                  </span>
+        <ul className="mt-6 divide-y divide-divider rounded-xl border border-hairline bg-surface">
+          {team.map((r) => {
+            const open = r.open_review;
+            const last = r.last_review;
+            return (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+                <div className="min-w-0">
+                  <Link href={`/app/assessments/${r.id}`} className="font-medium text-ink hover:underline">
+                    {r.name}
+                  </Link>
+                  {r.role_title && <p className="text-sm text-ink-secondary">{r.role_title}</p>}
                 </div>
-                {r.assessed_at && (
-                  <p className="mt-2 text-xs text-ink-muted">Last assessed {formatDate(r.assessed_at)}</p>
-                )}
-              </Link>
-            </li>
-          ))}
+                <div className="flex flex-1 flex-wrap items-center justify-end gap-x-6 gap-y-2 text-sm">
+                  <div className="text-right">
+                    {open ? (
+                      <p className="text-amber-700">In progress · {open.review_period.split(" · ")[0]} · {STAGE_LABEL[open.stage] || "draft"}</p>
+                    ) : null}
+                    {last ? (
+                      <p className="text-ink-body">
+                        {last.review_period.split(" · ")[0]}
+                        {r.latest_from_review && r.latest_level_label ? ` · ${r.latest_level_label}` : ""}
+                        <span className="text-ink-muted"> · completed {formatDay(last.completed_at)}</span>
+                      </p>
+                    ) : r.latest_level_label ? (
+                      <p className="text-ink-secondary">
+                        Latest rating {r.latest_level_label}
+                        <span className="text-ink-muted"> · {formatDay(r.assessed_at)} · not a period assessment</span>
+                      </p>
+                    ) : (
+                      !open && <p className="text-ink-muted">No assessments yet</p>
+                    )}
+                  </div>
+                  {open ? (
+                    <Link href={`/app/assessments/${r.id}/${open.id}`} className={BTN_PRIMARY_SM}>
+                      Resume
+                    </Link>
+                  ) : (
+                    <Link href={`/app/assessments/${r.id}`} className={last ? BTN_SECONDARY : BTN_PRIMARY_SM}>
+                      Start assessment
+                    </Link>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </PageShell>

@@ -58,6 +58,9 @@ function announceRecordChange(path: string, method: string) {
   // record changes. Confirmed Scribe drafts use the normal source endpoints and
   // are announced there.
   if (path.startsWith("/api/dashboard/") || path.startsWith("/api/assistant/")) return;
+  // An assessment draft is working state, not a record. Only completing one
+  // writes ratings the rest of the app reads.
+  if (path.startsWith("/api/assessments/reviews") && !path.endsWith("/complete")) return;
   window.dispatchEvent(new Event(RECORDS_CHANGED_EVENT));
   window.localStorage.setItem(RECORDS_CHANGED_STORAGE_KEY, String(Date.now()));
 }
@@ -1982,13 +1985,10 @@ export const assignReportRole = (reportId: string, report: DirectReport, roleLev
 // scoring a direct report against their role's configured expectations
 // (Settings > Expectations), not just having them on record.
 //
-// v1 is the ROLLING assessment (not performance_reviews, which stays
-// dormant): an overall level_ordinal snapshot (assessments, scored against
-// org-configured assessment_levels) plus per-item scores against every
-// configured metric/skill/value. AI can draft scores from recent 1:1s/
-// commitments/goals — draft-then-review, same rule as the wrap-up flow
-// (Session 8): nothing saves until the manager reviews it. Own top-level
-// page (/app/assessments) + a summary on DR detail.
+// Reads: the latest confirmed rating per item and overall (the scorecard),
+// consumed by the person page, Mission Control and development suggestions.
+// Writes happen only by completing a period assessment (PeriodAssessment
+// below, docs/systems/assessments.md).
 // ---------------------------------------------------------------------------
 
 export type AssessmentLevel = {
@@ -2010,6 +2010,9 @@ export type TeamAssessmentItem = {
   latest_level_ordinal: number | null;
   latest_level_label: string | null;
   assessed_at: string | null;
+  latest_from_review?: boolean;
+  last_review?: ReviewSummaryRow | null;
+  open_review?: ReviewSummaryRow | null;
 };
 
 export const getTeamAssessments = (): Promise<TeamAssessmentItem[]> => authedFetch("/api/assessments");
@@ -2057,6 +2060,7 @@ export type OverallAssessment = {
   level_ordinal: number;
   notes: string | null;
   created_at: string;
+  source_type?: string | null;
 };
 
 export type Scorecard = {
@@ -2067,10 +2071,300 @@ export type Scorecard = {
   metrics: ScoredItem[];
   overall: OverallAssessment | null;
   levels: AssessmentLevel[];
+  last_review?: ReviewSummaryRow | null;
+  open_review?: ReviewSummaryRow | null;
 };
 
 export const getScorecard = (directReportId: string): Promise<Scorecard> =>
   authedFetch(`/api/assessments/${directReportId}`);
+
+// ---------------------------------------------------------------------------
+// Period assessments — the AI-led, manager-owned flow (performance_reviews).
+// Check the picture -> Draft & discuss -> Review & complete. Every manager
+// write carries the draft `version` it was based on; a 409 means the draft
+// changed elsewhere and the page should reload it. Nothing is recorded as a
+// rating until completeReview().
+// ---------------------------------------------------------------------------
+
+export type ReviewCadence = "quarterly" | "biannual" | "off_cycle";
+export type ReviewStage = "picture" | "draft" | "review" | "completed";
+
+export type ReviewSummaryRow = {
+  id: string;
+  status: "draft" | "completed";
+  stage: ReviewStage;
+  mode?: "ai" | "manual";
+  cadence: ReviewCadence | null;
+  period_start: string | null;
+  period_end: string | null;
+  review_period: string;
+  rating_ordinal: number | null;
+  summary?: string | null;
+  completed_at: string | null;
+  updated_at: string;
+};
+
+export type EvidenceItem = {
+  id: string;
+  ref: string;
+  kind: string;
+  date: string | null;
+  timing: "in_period" | "context" | "background";
+  title: string;
+  detail: string;
+  attribution: string;
+  private: boolean;
+  href?: string;
+};
+
+export type CoverageRow = {
+  source: string;
+  label: string;
+  status: "included" | "none_found" | "private_off" | "not_inspected" | "failed";
+  in_period: number;
+  background: number;
+  note: string;
+};
+
+export type ReviewPicture = {
+  headline?: string;
+  summary?: string;
+  contributions?: { text: string; sources: string[] }[];
+  impact?: { title: string; text: string } | null;
+  gaps?: string[];
+  questions?: string[];
+  sparse?: boolean;
+  error?: string;
+  generated_at: string | null;
+};
+
+export type ScalePoint = { point: number; meaning: string };
+
+export type Judgment = {
+  point?: number | null;
+  value?: number | null;
+  period?: string | null;
+  reason?: string | null;
+  sources?: string[];
+};
+
+export type ItemDecision = Judgment & {
+  state: "include" | "unassessed";
+  origin: "default" | "ai" | "ai_confirmed" | "manager" | "ai_revision" | "reaffirmed";
+};
+
+export type ItemState = {
+  key: string;
+  kind: "overall" | "skill" | "value" | "metric";
+  proposal: (Judgment & { limitations?: string | null; attention?: string[] }) | null;
+  unassessed_reason: string | null;
+  decision: ItemDecision;
+  revision: (Judgment & { source: "discussion" | "redraft" }) | null;
+  changed_by_redraft: boolean;
+};
+
+export type CatalogItem = {
+  key: string;
+  kind: ItemState["kind"];
+  config_id: string | null;
+  name: string;
+  expectation: string | null;
+  scale: ScalePoint[];
+  measurement_period: string | null;
+  order_type: string | null;
+  prior: (Judgment & { date?: string | null }) | null;
+  state: ItemState;
+  attention: string[];
+};
+
+export type ReviewSummary = {
+  headline?: string | null;
+  overview?: string | null;
+  contributions?: { text: string; sources: string[] }[];
+  strengths?: { text: string; keys: string[] }[];
+  attention?: { text: string; keys: string[] }[];
+  gaps?: string[];
+  discussion?: string | null;
+  origin?: "ai" | "manager";
+};
+
+export type ConversationMessage = {
+  id: string;
+  role: "manager" | "assistant";
+  text: string;
+  item_key: string | null;
+  revision_keys?: string[];
+  error?: boolean;
+  created_at: string;
+};
+
+export type SnapshotSource = {
+  id: string;
+  kind: string;
+  date?: string | null;
+  title: string;
+  detail: string;
+  attribution: string;
+  timing?: string;
+  private?: boolean;
+};
+
+export type SnapshotItem = {
+  key: string;
+  kind: ItemState["kind"];
+  name: string;
+  expectation: string | null;
+  scale: ScalePoint[];
+  prior: (Judgment & { date?: string | null }) | null;
+  origin?: ItemDecision["origin"];
+  reason?: string | null;
+  sources?: SnapshotSource[];
+  point?: number;
+  meaning?: string;
+  value?: number;
+  period?: string;
+  why?: string | null;
+};
+
+export type CompletedSnapshot = {
+  period: { label: string; start: string; end: string; cadence: ReviewCadence | null };
+  person: { id: string; name: string; role: string | null };
+  mode: "ai" | "manual";
+  items: SnapshotItem[];
+  unassessed: SnapshotItem[];
+  summary: ReviewSummary | null;
+  narrative: { headline?: string; overview?: string } | null;
+  manager_context: string | null;
+  picture: ReviewPicture | null;
+  evidence: EvidenceItem[];
+  excluded_count: number;
+  coverage: CoverageRow[];
+  include_private: boolean;
+  levels: ScalePoint[];
+  shared_with_report: false;
+};
+
+export type PeriodAssessment = {
+  id: string;
+  direct_report_id: string;
+  status: "draft" | "completed";
+  stage: ReviewStage;
+  mode: "ai" | "manual";
+  cadence: ReviewCadence | null;
+  period_start: string;
+  period_end: string;
+  review_period: string;
+  version: number;
+  include_private: boolean;
+  manager_context: string | null;
+  excluded_evidence: string[];
+  evidence: { generated_at: string; items: EvidenceItem[]; coverage: CoverageRow[] } | null;
+  picture: ReviewPicture | null;
+  draft: {
+    items?: Record<string, ItemState>;
+    narrative?: { headline?: string; overview?: string; origin?: "ai" | "manager" } | null;
+    generated_at?: string | null;
+    last_error?: string | null;
+    summary?: (ReviewSummary & { generated_at?: string }) | null;
+    summary_error?: string | null;
+  };
+  conversation: ConversationMessage[];
+  catalog: CatalogItem[];
+  flags: { context_changed?: boolean; picture_stale?: boolean; summary_stale?: boolean; orphaned_items?: string[] };
+  person?: { id: string; name: string; role_title: string | null } | null;
+  role_label?: string | null;
+  levels?: AssessmentLevel[];
+  rating_ordinal: number | null;
+  completed_at: string | null;
+  completed_snapshot: CompletedSnapshot | null;
+  resumed?: boolean;
+  already_completed?: boolean;
+};
+
+const R = "/api/assessments/reviews";
+
+export const listReviews = (directReportId: string): Promise<ReviewSummaryRow[]> =>
+  authedFetch(`${R}?direct_report_id=${encodeURIComponent(directReportId)}`);
+
+export const createReview = (body: {
+  direct_report_id: string;
+  cadence: ReviewCadence;
+  period_start: string;
+  period_end: string;
+  mode: "ai" | "manual";
+}): Promise<PeriodAssessment> => authedFetch(R, { method: "POST", body: JSON.stringify(body) });
+
+export const getReview = (id: string): Promise<PeriodAssessment> => authedFetch(`${R}/${id}`);
+
+export const discardReview = (id: string): Promise<{ ok: boolean }> => authedFetch(`${R}/${id}`, { method: "DELETE" });
+
+export const updateReview = (
+  id: string,
+  body: {
+    version: number;
+    period_start?: string;
+    period_end?: string;
+    cadence?: ReviewCadence;
+    manager_context?: string;
+    excluded_evidence?: string[];
+    include_private?: boolean;
+    stage?: "picture" | "draft" | "review";
+    mode?: "ai" | "manual";
+    acknowledge_context_change?: boolean;
+    narrative_overview?: string;
+  },
+): Promise<PeriodAssessment> => authedFetch(`${R}/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const regatherReview = (id: string, version: number): Promise<PeriodAssessment> =>
+  authedFetch(`${R}/${id}/gather`, { method: "POST", body: JSON.stringify({ version }) });
+
+export const buildReviewPicture = (id: string): Promise<PeriodAssessment> =>
+  authedFetch(`${R}/${id}/picture`, { method: "POST" });
+
+export const draftReview = (id: string, version: number): Promise<PeriodAssessment> =>
+  authedFetch(`${R}/${id}/draft`, { method: "POST", body: JSON.stringify({ version }) });
+
+export type ItemAction =
+  | "set"
+  | "unassessed"
+  | "accept_proposal"
+  | "keep_proposal"
+  | "reaffirm_prior"
+  | "apply_revision"
+  | "dismiss_revision";
+
+export const reviewItemAction = (
+  id: string,
+  itemKey: string,
+  body: { version: number; action: ItemAction; point?: number; value?: number; period?: string; reason?: string },
+): Promise<PeriodAssessment> =>
+  authedFetch(`${R}/${id}/items/${encodeURIComponent(itemKey)}`, { method: "POST", body: JSON.stringify(body) });
+
+export const discussReview = (id: string, body: { version: number; message: string; item_key?: string | null }): Promise<PeriodAssessment> =>
+  authedFetch(`${R}/${id}/discuss`, { method: "POST", body: JSON.stringify(body) });
+
+export const writeReviewSummary = (id: string, version: number): Promise<PeriodAssessment> =>
+  authedFetch(`${R}/${id}/summary`, { method: "POST", body: JSON.stringify({ version }) });
+
+export const editReviewSummary = (
+  id: string,
+  body: { version: number; headline?: string; overview?: string; discussion?: string; gaps?: string[] },
+): Promise<PeriodAssessment> => authedFetch(`${R}/${id}/summary`, { method: "PUT", body: JSON.stringify(body) });
+
+export const completeReview = (id: string, body: { version: number; client_request_id: string }): Promise<PeriodAssessment> =>
+  authedFetch(`${R}/${id}/complete`, { method: "POST", body: JSON.stringify(body) });
+
+/** The problems list from a 422 completion refusal, if that's what this is. */
+export function completionProblems(e: unknown): string[] | null {
+  if (!(e instanceof ApiError) || e.status !== 422) return null;
+  try {
+    const body = JSON.parse(e.message.replace(/^API error \d+: /, ""));
+    const problems = body?.detail?.problems;
+    return Array.isArray(problems) ? problems : null;
+  } catch {
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Single-project GET — added Session 32 for the Scribe confirm handler
@@ -2166,28 +2460,6 @@ export const sendAssistantMessage = (
       page_context_entity_id: pageContext?.entity_id ?? null,
     }),
   });
-
-// AI-drafted scores — reviewed/edited by the manager before saveAssessment.
-// Sparse by design: the AI only includes items the evidence supports.
-export type AssessmentDraft = {
-  overall: { level_ordinal: number; notes: string } | null;
-  skills: { config_id: string; evaluation_point: number; notes: string }[];
-  values: { config_id: string; evaluation_point: number; notes: string }[];
-  metrics: { config_id: string; value: number; period: string | null; notes: string }[];
-};
-
-export const draftAssessment = (directReportId: string): Promise<AssessmentDraft> =>
-  authedFetch(`/api/assessments/${directReportId}/draft`, { method: "POST" });
-
-export type SaveAssessmentBody = {
-  overall?: { level_ordinal: number; notes?: string | null } | null;
-  skills?: { config_id: string; evaluation_point: number; notes?: string | null }[];
-  values?: { config_id: string; evaluation_point: number; notes?: string | null }[];
-  metrics?: { config_id: string; value: number; period?: string | null }[];
-};
-
-export const saveAssessment = (directReportId: string, body: SaveAssessmentBody): Promise<unknown> =>
-  authedFetch(`/api/assessments/${directReportId}`, { method: "POST", body: JSON.stringify(body) });
 
 // ---------------------------------------------------------------------------
 // Development plans (Session 47, 2026-08-20) — see the development_scoping

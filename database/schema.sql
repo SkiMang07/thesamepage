@@ -405,20 +405,66 @@ alter table assessments enable row level security;
 -- -------------------------
 -- PERFORMANCE REVIEWS
 -- -------------------------
+-- Activated 2026-09-25 as the PERIOD ASSESSMENT (docs/systems/assessments.md,
+-- migrations/2026-09-25_period_assessments.sql). One row per manager-scoped
+-- assessment of one report over an explicit period. status = 'draft' holds
+-- the resumable work (gathered evidence, AI picture, manager context,
+-- per-item proposals and decisions, the conversation); 'completed' is
+-- written only by complete_performance_review(), which also writes the
+-- confirmed item rows in the same transaction. completed_snapshot freezes the
+-- expectation wording, scale meaning and evidence used at completion.
+-- review_period is the readable period label; reviewed_at is the completion
+-- day (null while a draft). version is the optimistic lock every draft write
+-- and the completion check against. Never shared with the report here:
+-- is_shared_with_report stays false.
 create table performance_reviews (
   id                    uuid primary key default uuid_generate_v4(),
   org_id                uuid references organizations(id),
   direct_report_id      uuid not null references direct_reports(id) on delete cascade,
   manager_id            uuid not null references auth.users(id),
   review_period         text not null,
-  reviewed_at           date not null,
+  reviewed_at           date,
   rating_ordinal        integer,
   summary               text,
   is_shared_with_report boolean default false,
-  created_at            timestamptz not null default now()
+  created_at            timestamptz not null default now(),
+  cadence               text check (cadence in ('quarterly', 'biannual', 'off_cycle')),
+  period_start          date,
+  period_end            date,
+  status                text not null default 'draft',
+  stage                 text not null default 'picture'
+                        check (stage in ('picture', 'draft', 'review', 'completed')),
+  mode                  text not null default 'ai' check (mode in ('ai', 'manual')),
+  include_private       boolean not null default false,
+  evidence              jsonb,
+  picture               jsonb,
+  manager_context       text,
+  excluded_evidence     jsonb not null default '[]'::jsonb,
+  draft                 jsonb not null default '{}'::jsonb,
+  conversation          jsonb not null default '[]'::jsonb,
+  completed_snapshot    jsonb,
+  version               integer not null default 0,
+  completion_request_id uuid,
+  completed_at          timestamptz,
+  updated_at            timestamptz not null default now(),
+  constraint performance_reviews_status_check
+    check (status in ('draft', 'completed')),
+  constraint performance_reviews_period_order
+    check (period_start is null or period_end is null or period_end >= period_start),
+  constraint performance_reviews_conversation_array
+    check (jsonb_typeof(conversation) = 'array'),
+  constraint performance_reviews_excluded_array
+    check (jsonb_typeof(excluded_evidence) = 'array')
 );
 
 alter table performance_reviews enable row level security;
+
+create unique index performance_reviews_one_open_draft
+  on performance_reviews (manager_id, direct_report_id)
+  where status = 'draft';
+
+create index performance_reviews_report_idx
+  on performance_reviews (manager_id, direct_report_id, completed_at desc);
 
 -- ============================================================
 -- METRIC SETTINGS AND SCALE
@@ -463,10 +509,16 @@ create table metric_entries (
   value            numeric,
   period           text,
   recorded_at      timestamptz not null default now(),
-  recorded_by      uuid references auth.users(id)
+  recorded_by      uuid references auth.users(id),
+  -- Set when a period assessment recorded this reading (2026-09-25).
+  performance_review_id uuid references performance_reviews(id) on delete set null,
+  notes            text
 );
 
 alter table metric_entries enable row level security;
+
+create index metric_entries_review_idx on metric_entries (performance_review_id)
+  where performance_review_id is not null;
 
 -- ============================================================
 -- SKILL SETTINGS AND SCALE
@@ -508,10 +560,15 @@ create table skill_assessments (
   evaluation_point integer,
   notes            text,
   assessed_at      timestamptz not null default now(),
-  assessed_by      uuid references auth.users(id)
+  assessed_by      uuid references auth.users(id),
+  -- Set when a period assessment recorded this judgment (2026-09-25).
+  performance_review_id uuid references performance_reviews(id) on delete set null
 );
 
 alter table skill_assessments enable row level security;
+
+create index skill_assessments_review_idx on skill_assessments (performance_review_id)
+  where performance_review_id is not null;
 
 -- ============================================================
 -- VALUE SETTINGS AND SCALE
@@ -552,10 +609,15 @@ create table value_assessments (
   evaluation_point integer,
   notes            text,
   assessed_at      timestamptz not null default now(),
-  assessed_by      uuid references auth.users(id)
+  assessed_by      uuid references auth.users(id),
+  -- Set when a period assessment recorded this judgment (2026-09-25).
+  performance_review_id uuid references performance_reviews(id) on delete set null
 );
 
 alter table value_assessments enable row level security;
+
+create index value_assessments_review_idx on value_assessments (performance_review_id)
+  where performance_review_id is not null;
 
 -- ============================================================
 -- GOALS
@@ -2187,6 +2249,114 @@ $$;
 
 revoke all on function public.record_project_check_in(uuid, text, integer, text, uuid) from public;
 grant execute on function public.record_project_check_in(uuid, text, integer, text, uuid) to authenticated;
+
+-- ============================================================
+-- PERIOD ASSESSMENT COMPLETION — one transaction, retry-safe (2026-09-25)
+-- ============================================================
+-- The only way a period assessment becomes completed. Writes the confirmed
+-- overall (assessments, source_type 'performance_review') and item rows
+-- (skill/value assessments, metric entries, each with performance_review_id)
+-- and marks the assessment completed together. An already completed
+-- assessment is returned unchanged; a stale expected version is refused.
+create or replace function public.complete_performance_review(
+  p_review_id uuid,
+  p_expected_version integer,
+  p_payload jsonb,
+  p_client_request_id uuid default null
+)
+returns setof performance_reviews
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_review performance_reviews%rowtype;
+  v_item jsonb;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  select * into v_review from performance_reviews
+    where id = p_review_id and manager_id = v_uid
+    for update;
+  if not found then
+    raise exception 'Assessment not found' using errcode = 'P0002';
+  end if;
+
+  -- Retry-safe: a completed assessment is returned as it is, never re-written.
+  if v_review.status = 'completed' then
+    return next v_review;
+    return;
+  end if;
+
+  if p_expected_version is distinct from v_review.version then
+    raise exception 'This assessment changed after it was reviewed' using errcode = '40001';
+  end if;
+
+  if p_payload ? 'overall' and jsonb_typeof(p_payload->'overall') = 'object' then
+    if (p_payload->'overall'->>'level_ordinal') is null
+       or (p_payload->'overall'->>'level_ordinal')::int not between 1 and 5 then
+      raise exception 'Overall judgment is outside the level scale' using errcode = '22023';
+    end if;
+    insert into assessments (manager_id, direct_report_id, level_ordinal, notes, source_type, source_id)
+    values (v_uid, v_review.direct_report_id, (p_payload->'overall'->>'level_ordinal')::int,
+            nullif(btrim(p_payload->'overall'->>'notes'), ''), 'performance_review', v_review.id);
+  end if;
+
+  for v_item in select * from jsonb_array_elements(coalesce(p_payload->'skills', '[]'::jsonb)) loop
+    if (v_item->>'evaluation_point') is null then
+      raise exception 'A confirmed skill judgment needs a scale point' using errcode = '22023';
+    end if;
+    insert into skill_assessments (direct_report_id, skill_config_id, evaluation_point, notes, assessed_by, performance_review_id)
+    values (v_review.direct_report_id, (v_item->>'config_id')::uuid, (v_item->>'evaluation_point')::int,
+            nullif(btrim(v_item->>'notes'), ''), v_uid, v_review.id);
+  end loop;
+
+  for v_item in select * from jsonb_array_elements(coalesce(p_payload->'values', '[]'::jsonb)) loop
+    if (v_item->>'evaluation_point') is null then
+      raise exception 'A confirmed value judgment needs a scale point' using errcode = '22023';
+    end if;
+    insert into value_assessments (direct_report_id, value_config_id, evaluation_point, notes, assessed_by, performance_review_id)
+    values (v_review.direct_report_id, (v_item->>'config_id')::uuid, (v_item->>'evaluation_point')::int,
+            nullif(btrim(v_item->>'notes'), ''), v_uid, v_review.id);
+  end loop;
+
+  for v_item in select * from jsonb_array_elements(coalesce(p_payload->'metrics', '[]'::jsonb)) loop
+    if (v_item->>'value') is null or nullif(btrim(v_item->>'period'), '') is null then
+      raise exception 'A metric reading needs a value and its measurement period' using errcode = '22023';
+    end if;
+    if (v_item->>'value')::numeric in ('NaN', 'Infinity', '-Infinity') then
+      raise exception 'A metric reading must be a finite number' using errcode = '22023';
+    end if;
+    insert into metric_entries (direct_report_id, metric_config_id, value, period, notes, recorded_by, performance_review_id)
+    values (v_review.direct_report_id, (v_item->>'config_id')::uuid, (v_item->>'value')::numeric,
+            btrim(v_item->>'period'), nullif(btrim(v_item->>'notes'), ''), v_uid, v_review.id);
+  end loop;
+
+  update performance_reviews
+     set status = 'completed',
+         stage = 'completed',
+         completed_at = now(),
+         reviewed_at = current_date,
+         rating_ordinal = case when jsonb_typeof(p_payload->'overall') = 'object'
+                               then (p_payload->'overall'->>'level_ordinal')::int end,
+         summary = nullif(btrim(p_payload->>'summary'), ''),
+         completed_snapshot = p_payload->'snapshot',
+         completion_request_id = p_client_request_id,
+         is_shared_with_report = false,
+         version = version + 1,
+         updated_at = now()
+   where id = v_review.id
+   returning * into v_review;
+
+  return next v_review;
+end;
+$$;
+
+revoke all on function public.complete_performance_review(uuid, integer, jsonb, uuid) from public;
+grant execute on function public.complete_performance_review(uuid, integer, jsonb, uuid) to authenticated;
 
 -- Once a goal has a recorded reading, what those numbers mean is fixed: the
 -- measure can't be removed and its format/unit can't change. Label wording,

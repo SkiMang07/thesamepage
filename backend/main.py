@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from observability import RequestContextMiddleware, configure_logging, init_sentry
-from routes import assessments, assistant, away, beyond, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
+from routes import assessment_reviews, assessments, assistant, away, beyond, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
 configure_logging()
@@ -146,6 +146,9 @@ app.include_router(roles_import.router, prefix="/api/roles/import", tags=["roles
 app.include_router(capacity.router, prefix="/api/capacity", tags=["capacity"])
 app.include_router(settings_routes.router, prefix="/api/settings", tags=["settings"])
 app.include_router(expectations_ai.router, prefix="/api/expectations", tags=["expectations"])
+# Period assessments are registered before /api/assessments so the
+# /{direct_report_id} scorecard route can never capture "reviews".
+app.include_router(assessment_reviews.router, prefix="/api/assessments/reviews", tags=["assessments"])
 app.include_router(assessments.router, prefix="/api/assessments", tags=["assessments"])
 app.include_router(development.router, prefix="/api/development", tags=["development"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])

@@ -177,7 +177,12 @@ function RelationshipDesk() {
   const [removingCaptureId, setRemovingCaptureId] = useState<string | null>(null);
 
   const [loadFailures, setLoadFailures] = useState<string[]>([]);
-  const [view, setView] = useState<View>("relationship");
+  // ?view=growth (etc.) opens a specific view — the completed assessment
+  // links straight to Growth.
+  const initialView = searchParams.get("view");
+  const [view, setView] = useState<View>(
+    initialView === "work" || initialView === "growth" || initialView === "private" ? initialView : "relationship",
+  );
   const [openConversationId, setOpenConversationId] = useState<string | null>(null);
   const [scrollTarget, setScrollTarget] = useState<string | null>(null);
 

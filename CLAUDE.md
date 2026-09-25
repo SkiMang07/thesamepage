@@ -47,7 +47,7 @@ mission-control.md  /app/dashboard — action brief, ranking, dispositions, roll
 context-engine.md   document ingest, extraction, retrieval, the Brain
 scribe.md           conversational data entry, the agent loop, eval harness
 expectations.md     role ladders, coverage grid, JD import, AI draft
-assessments.md      rolling ratings, AI draft-then-review
+assessments.md      period assessments — evidence, AI-led draft & discussion, manager-owned completion
 development.md      individual plans, team training focus
 check-ins.md        the temporal layer under goals and projects
 goals.md            /app/goals — board, scope, measures and readings, Updates, Review together
@@ -92,6 +92,13 @@ same folder is the superseded first concept. Current behaviour is in
 implemented, with the brief's compact "Portfolio at a glance" added above
 tighter briefs; open it before visual work on that page. Current behaviour is
 in `docs/systems/projects.md`. Its example data is fictional reference content.
+
+`docs/design-proposals/2026-09-25-assessment-directions/ai-led-flow/`
+(`CLAUDE_HANDOFF.md`, `*-v2.png`) is the **selected Assessments direction** —
+implemented as the period-assessment flow; open it before visual work on
+`/app/assessments`. The earlier images and `COMPARISON.md` in the parent folder are
+superseded exploration. Current behaviour is in `docs/systems/assessments.md`. Its
+example data is fictional.
 
 `gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
 the argument behind each marketing page. `website/` stays a build root with its own
