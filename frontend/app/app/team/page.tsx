@@ -378,8 +378,8 @@ export default function TeamPage() {
       optional("goals", getTeamGoals(), []),
       optional("meetings", getTeamMeetings(), []),
       optional("team commitments", getTeamCommitments(), []),
-      optional("initiatives", getProjects(), []),
-      optional("critical callouts", getTeamCallout(), []),
+      optional("projects", getProjects(), []),
+      optional("must-knows", getTeamCallout(), []),
       optional("training focus", getTeamDevFocus(), []),
       optional("people", getDirectReports(), []),
       optional("role levels", getRoleLevels(), []),
@@ -733,7 +733,7 @@ function TeamAttentionBrief({
 
   if (atRiskGoals > 0 || atRiskInitiatives > 0) {
     const workDetail = [
-      atRiskInitiatives > 0 ? `${atRiskInitiatives} initiative${atRiskInitiatives === 1 ? "" : "s"}` : null,
+      atRiskInitiatives > 0 ? `${atRiskInitiatives} project${atRiskInitiatives === 1 ? "" : "s"}` : null,
       atRiskGoals > 0 ? `${atRiskGoals} goal${atRiskGoals === 1 ? "" : "s"}` : null,
     ].filter(Boolean).join(" · ");
     signals.push({
@@ -820,22 +820,22 @@ function InitiativesCard({
   return (
     <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Initiatives</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Projects</p>
         <Link href="/app/projects" className="text-xs text-ink-muted hover:text-ink-secondary">Manage →</Link>
       </div>
       {sorted.length === 0 ? (
-        <p className="text-sm text-ink-muted">No active initiatives.</p>
+        <p className="text-sm text-ink-muted">No active projects.</p>
       ) : (
         <>
           {needsAttention.length > 0 ? (
             <ul className="space-y-2.5">{needsAttention.map(renderInitiative)}</ul>
           ) : (
-            <p className="text-sm text-ink-muted">No initiatives are marked at risk.</p>
+            <p className="text-sm text-ink-muted">No projects are marked at risk.</p>
           )}
           {other.length > 0 && (
             <details className="mt-3 border-t border-divider pt-3">
               <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
-                Show {other.length} other initiative{other.length === 1 ? "" : "s"}
+                Show {other.length} other project{other.length === 1 ? "" : "s"}
               </summary>
               <ul className="mt-3 space-y-2.5">{other.map(renderInitiative)}</ul>
             </details>
@@ -1125,7 +1125,7 @@ function CalloutsPanel({
   return (
     <div className="flex flex-col rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Critical callouts</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Must-knows</p>
         {!editing && (
           <button onClick={startEditing} className="text-xs text-ink-muted hover:text-ink-secondary">
             Edit
@@ -1133,7 +1133,7 @@ function CalloutsPanel({
         )}
       </div>
       <p className="mt-1 text-xs text-ink-muted">
-        Your current must-knows for {scopeLabel}.
+        What you need to keep in mind for {scopeLabel}.
       </p>
 
       {editing ? (
@@ -1142,7 +1142,7 @@ function CalloutsPanel({
             value={draft}
             onChange={setDraft}
             rows={6}
-            placeholder={"One callout per line, e.g.\nEnterprise tier scope is cut this quarter.\nQ3 roadmap draft due Friday."}
+            placeholder={"One per line, e.g.\nEnterprise tier scope is cut this quarter.\nQ3 roadmap draft due Friday."}
             className="w-full text-sm"
           />
           {error && <p className="mt-1 text-xs text-red-700">{error}</p>}

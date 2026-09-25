@@ -276,9 +276,9 @@ def _parse_librarian_response(raw: str) -> dict:
     try:
         parsed = json.loads(raw_clean)
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=502, detail=f"Librarian response was not valid JSON: {e}")
+        raise HTTPException(status_code=502, detail="Couldn't summarise this document. Try uploading it again.")
     if not isinstance(parsed, dict):
-        raise HTTPException(status_code=502, detail="Librarian response was not a JSON object")
+        raise HTTPException(status_code=502, detail="Couldn't summarise this document. Try uploading it again.")
     return parsed
 
 

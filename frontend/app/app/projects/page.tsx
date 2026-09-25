@@ -230,11 +230,11 @@ export default function ProjectsPage() {
     setPageContext(
       selectedProject
         ? {
-            label: `Projects page — selected initiative: ${selectedProject.title}`,
+            label: `Projects page — selected project: ${selectedProject.title}`,
             entity_type: "project",
             entity_id: selectedProject.id,
           }
-        : { label: "Projects page — initiative portfolio" }
+        : { label: "Projects page — project portfolio" }
     );
     return () => setPageContext(null);
   }, [selectedProject, setPageContext]);
@@ -256,7 +256,7 @@ export default function ProjectsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Projects</h1>
           <p className="mt-1 text-sm text-ink-secondary">
-            Keep the initiative portfolio in view while you focus, intervene, and follow through.
+            Keep the project portfolio in view while you focus, intervene, and follow through.
           </p>
         </div>
         <button
@@ -290,7 +290,7 @@ export default function ProjectsPage() {
 
           {projects.length === 0 ? (
             <div className={`${FEATURE_SURFACE} ${SECTION_GAP} p-8 text-center`}>
-              <p className="font-semibold text-ink">No initiatives yet</p>
+              <p className="font-semibold text-ink">No projects yet</p>
               <p className="mt-1 text-sm text-ink-secondary">
                 Add the first consequential piece of work you want to keep in view.
               </p>
@@ -315,7 +315,7 @@ export default function ProjectsPage() {
                       onClick={() => setEditingProjectId(null)}
                       className={`${backVisibility} ${BTN_GHOST} mb-3`}
                     >
-                      ← Back to initiative
+                      ← Back to project
                     </button>
                     <ProjectForm
                       initialProject={selectedProject}
@@ -343,7 +343,7 @@ export default function ProjectsPage() {
               ) : (
                 <div className={`${FEATURE_SURFACE} ${detailEmptyVisibility} min-h-[30rem] items-center justify-center p-10 text-center`}>
                   <div className="max-w-sm">
-                    <p className="text-sm font-semibold text-ink">Choose an initiative to focus</p>
+                    <p className="text-sm font-semibold text-ink">Choose a project to focus</p>
                     <p className="mt-2 text-sm text-ink-secondary">
                       Its owner, outcome, latest change, and check-in history will stay together here.
                     </p>
@@ -388,10 +388,10 @@ function PortfolioIndex({
     <aside className={`${FEATURE_SURFACE} overflow-hidden ${className}`}>
       <div className="border-b border-divider px-4 py-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-semibold text-ink">Initiative portfolio</h2>
+          <h2 className="text-sm font-semibold text-ink">Project portfolio</h2>
           <span className={META}>{total} total</span>
         </div>
-        <p className="mt-1 text-xs text-ink-secondary">Grouped by the managerial response each initiative needs.</p>
+        <p className="mt-1 text-xs text-ink-secondary">Grouped by the managerial response each project needs.</p>
       </div>
 
       <div className="divide-y divide-divider">
@@ -424,7 +424,7 @@ function PortfolioIndex({
                         {project.org_unit_name ? ` · ${project.org_unit_name}` : ""}
                       </p>
                       <p className="mt-1 truncate text-xs text-ink-muted">
-                        {project.goal_title ? `Goal: ${project.goal_title}` : "Standalone initiative"}
+                        {project.goal_title ? `Goal: ${project.goal_title}` : "Standalone project"}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         {project.progress != null && (
@@ -481,14 +481,14 @@ function ProjectWorkspace({
         <div className="p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className={META}>Focused initiative</p>
+              <p className={META}>Focused project</p>
               <h2 className="mt-1 text-xl font-semibold text-ink sm:text-2xl">{project.title}</h2>
             </div>
             <select
               value={project.status}
               onChange={(event) => onSetStatus(project.id, event.target.value as ProjectStatus)}
               className={`${BADGE} border-0 ${STATUS_STYLES[project.status]}`}
-              aria-label="Initiative status"
+              aria-label="Project status"
             >
               {STATUS_OPTIONS.map((status) => (
                 <option key={status.id} value={status.id}>
@@ -521,7 +521,7 @@ function ProjectWorkspace({
             <div className={`rounded-lg border-l-4 p-4 ${project.goal_title ? "border-brand bg-brand-tint" : "border-control bg-sunken"}`}>
               <p className={META}>{project.goal_title ? "Supports goal" : "Goal connection"}</p>
               <p className="mt-1 text-sm font-medium text-ink">
-                {project.goal_title ?? "Standalone initiative"}
+                {project.goal_title ?? "Standalone project"}
               </p>
             </div>
           </div>
@@ -567,7 +567,7 @@ function ProjectWorkspace({
 
           <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-divider pt-4">
             <button type="button" onClick={onEdit} className={BTN_SECONDARY}>
-              Edit initiative
+              Edit project
             </button>
             <button type="button" onClick={onDelete} className={`${BTN_GHOST} text-red-700 hover:text-red-700`}>
               Delete
@@ -670,7 +670,7 @@ function ProjectForm({
         <div className="min-w-0">
           <label className={labelCls}>Assigned to (optional)</label>
           <select value={directReportId} onChange={(e) => setDirectReportId(e.target.value)} className={inputCls}>
-            <option value="">Your initiative</option>
+            <option value="">Your project</option>
             {reports.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}

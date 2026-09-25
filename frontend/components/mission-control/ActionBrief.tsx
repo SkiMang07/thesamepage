@@ -196,7 +196,7 @@ function CandidateControls({
 
       {whyOpen && (
         <div className="mt-4 rounded-lg bg-brand-tint px-4 py-3 text-sm text-ink-body">
-          <h3 className="font-medium text-ink">Why TSP suggested this</h3>
+          <h3 className="font-medium text-ink">Why this was suggested</h3>
           <ul className="mt-2 space-y-2">
             {candidate.evidence.map((item) => (
               <li key={`${item.code}:${item.observed_at ?? "none"}`}>
@@ -372,7 +372,7 @@ function RunwaySupporting({ brief }: { brief: MissionControlBrief }) {
       <section className={`${CARD} p-5`}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-base font-medium text-ink">What has changed</h2>
-          <span className={META}>Recorded in TSP</span>
+          <span className={META}>Recorded in The Same Page</span>
         </div>
         {brief.supporting.changes.length ? (
           <div className="mt-4 grid gap-x-5 gap-y-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -469,7 +469,7 @@ export function ActionBrief({ brief, onRefresh }: { brief: MissionControlBrief; 
         <section className={`${CARD} border-t-4 border-t-brand p-6`}>
           <p className="text-xs font-semibold uppercase tracking-wide text-brand">Start here</p>
           <h2 className="mt-2 text-xl font-medium text-ink">Add your first direct report.</h2>
-          <p className="mt-2 text-sm text-ink-secondary">TSP needs one real working relationship before it can offer a useful management brief.</p>
+          <p className="mt-2 text-sm text-ink-secondary">The Same Page needs one real working relationship before it can offer a useful management brief.</p>
           <button type="button" onClick={openQuickAdd} className={`mt-4 ${BTN_PRIMARY}`}>Add a direct report</button>
         </section>
       ) : brief.primary ? (

@@ -32,7 +32,7 @@ function levelStyle(ordinal: number | null): string {
   if (ordinal === 2) return "bg-amber-50 text-amber-700";
   if (ordinal === 3) return "bg-sunken text-ink-secondary";
   if (ordinal === 4) return "bg-teal-50 text-teal-700";
-  return "bg-blue-50 text-blue-600";
+  return "bg-brand-tint text-brand";
 }
 
 export default function AssessmentsPage() {

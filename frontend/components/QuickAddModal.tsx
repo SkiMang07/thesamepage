@@ -76,7 +76,7 @@ const TYPE_LABELS: Record<QuickAddType, string> = {
 };
 
 const GOAL_LEVELS: { id: GoalLevel; label: string }[] = [
-  { id: "company", label: "Organization" },
+  { id: "company", label: "Company" },
   { id: "department", label: "Department" },
   { id: "team", label: "Team" },
   { id: "individual", label: "Individual" },
@@ -320,7 +320,7 @@ export default function QuickAddModal({
                 onChange={(e) => setDirectReportId(e.target.value)}
                 className="w-full rounded-md border border-control px-3 py-2 text-sm"
               >
-                <option value="">Your own initiative</option>
+                <option value="">Your own project</option>
                 {directReports.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}

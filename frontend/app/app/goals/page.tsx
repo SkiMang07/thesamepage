@@ -54,7 +54,7 @@ import {
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
-import { INPUT, LABEL, BTN_PRIMARY, HEX, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone } from "@/lib/tokens";
+import { INPUT, LABEL, BTN_PRIMARY, HEX, TILE, TILE_TONE, TILE_VALUE, TILE_LABEL, TileTone, STATUS_STYLES as TOKEN_STATUS_STYLES, STATUS_BORDER as TOKEN_STATUS_BORDER } from "@/lib/tokens";
 
 import NoteField from "@/components/NoteField";
 import { SkeletonSection } from "@/components/Skeleton";
@@ -79,7 +79,7 @@ const STATUS_STYLES: Record<GoalStatus, string> = {
   active: "bg-sunken text-ink-secondary",
   on_track: "bg-teal-50 text-teal-700",
   at_risk: "bg-amber-50 text-amber-700",
-  completed: "bg-blue-50 text-blue-600",
+  completed: TOKEN_STATUS_STYLES.completed,
   cancelled: "bg-sunken text-ink-muted",
 };
 
@@ -91,7 +91,7 @@ const STATUS_BORDER: Record<GoalStatus, string> = {
   active: "border-control",
   on_track: "border-brand",
   at_risk: "border-amber-500",
-  completed: "border-blue-300",
+  completed: TOKEN_STATUS_BORDER.completed,
   cancelled: "border-hairline",
 };
 
@@ -402,7 +402,7 @@ function KpiStrip({ goals, projects }: { goals: Goal[]; projects: Project[] }) {
     // "Due this week" was blue, which is Scribe's colour and not a status.
     // A count of upcoming work is neutral information until it is overdue.
     { value: String(dueThisWeek), label: "Due this week", tone: "neutral" },
-    { value: String(noInitiative), label: "No initiative attached", tone: noInitiative > 0 ? "critical" : "neutral" },
+    { value: String(noInitiative), label: "No project attached", tone: noInitiative > 0 ? "critical" : "neutral" },
   ];
 
   return (
@@ -564,7 +564,7 @@ function GoalGrid({
               return (
                 <p className="mt-1 text-xs text-ink-muted">
                   <Link href="/app/projects" className="hover:text-ink-secondary">
-                    {serving.length} initiative{serving.length === 1 ? "" : "s"}
+                    {serving.length} project{serving.length === 1 ? "" : "s"}
                   </Link>
                   {": "}
                   {serving.map((p) => p.title).join(", ")}

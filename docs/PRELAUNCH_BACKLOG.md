@@ -131,40 +131,52 @@ remove from nav/UI for launch, not delete the code.
 
 Naming and trust:
 
-- [ ] **P1-1 · The app calls itself "TSP" to customers** — [Pass 1 + Pass 2] —
+- [x] **P1-1 · The app calls itself "TSP" to customers** — [Pass 1 + Pass 2] —
   `frontend/components/mission-control/ActionBrief.tsx:199, 375, 472` ("Why
   TSP suggested this", "Recorded in TSP", "TSP needs one real working
   relationship…") and `backend/mission_control_engine.py:566` ("TSP has
   limited evidence so far."). The acronym is never introduced anywhere; the
   wordmark says The Same Page. Replace with the product name or "we".
   **Effort S.**
-- [ ] **P1-2 · One feature, four names: Knowledge → The Space → The Brain →
+  *Done 2026-09-24:* "The Same Page" in the brief and engine copy; the
+  explanation heading is "Why this was suggested".
+- [x] **P1-2 · One feature, four names: Knowledge → The Space → The Brain →
   the Librarian** — [Pass 1 + Pass 2] — nav label "Knowledge"
   (`ZoneMap.tsx:232`) opens `/app/context` whose h1 is "The Space"
   (`context/page.tsx:178`), containing section "The Brain" fed by "the
   Librarian" (`context/page.tsx:180,194`). A customer cannot name the feature
   after using it. Pick one customer-facing name and keep the rest internal.
   **Effort S–M.**
-- [ ] **P1-3 · "Projects" vs "initiatives" on the same screen** — [Pass 1 +
+  *Done 2026-09-24:* **Knowledge** everywhere. The coverage section is "What
+  it knows", Librarian lines render with no speaker label. Rule recorded in
+  DESIGN.md.
+- [x] **P1-3 · "Projects" vs "initiatives" on the same screen** — [Pass 1 +
   Pass 2] — nav + h1 say "Projects" (`projects/page.tsx:255`) while the same
   page's copy says "No initiatives yet" (291), "Initiative portfolio" (389),
   "Standalone initiative" (425, 522), and Goals shows a critical-toned "No
   initiative attached" KPI (`goals/page.tsx:403`). A new user assumes
   "initiative" is a different object they haven't found. Pick one word.
   **Effort S.**
-- [ ] **P1-4 · "Critical callouts" is a private note wearing a broadcast
+  *Done 2026-09-24:* "Projects" across Projects, Goals, Mission Control,
+  Team, the person page and Quick add.
+- [x] **P1-4 · "Critical callouts" is a private note wearing a broadcast
   name** — [Pass 2] — "Critical callouts … This view is manager-only."
   (`team/page.tsx:1103,1111`). A "callout" sounds like something the team
   receives; it's private manager writing, which makes the labels harder to
   trust. Rename to something honestly private ("Must-knows"). Same logic
   applies to "Team update record" if CUT-4 doesn't hide it. **Effort S.**
-- [ ] **P1-5 · Blue used as a status colour, violating the locked brand
+  *Done 2026-09-24:* renamed "Must-knows". The page-level "Only you can see
+  this page" line (P0-3) covers privacy. Team update record left for CUT-4.
+- [x] **P1-5 · Blue used as a status colour, violating the locked brand
   rule** — [Pass 1] — `goals/page.tsx:80,92` and `reports/[id]/page.tsx:119`
   render `completed` as blue; `assessments/page.tsx:34` gives the top rating
   `bg-blue-50 text-blue-600`; but `lib/tokens.ts:127` says `completed:
   "bg-brand text-on-brand"` and `docs/systems/brand.md` locks blue to "Scribe,
   AI surfaces, focus rings — nothing else". A completed goal is blue on Goals
   and teal on Team. Point all three files at tokens.ts. **Effort S.**
+  *Done 2026-09-24:* completed is teal on Goals, the person page and Mission
+  Control; the top assessment rating uses brand tint; the rating chip on
+  Mission Control is neutral like the person page's.
 
 Week-one experience (this IS the product in week one):
 
@@ -246,10 +258,11 @@ Judgment surfaces:
   lives in Settings → People" but expectations live under "Roles &
   expectations"; inline role creation silently assigns `job_level: 1`,
   rendering "· L1" everywhere with no chosen ladder. **Effort S.**
-- [ ] **P2-3 · "Organization" vs "Company" for the same goal tier** — [Pass 1 +
+- [x] **P2-3 · "Organization" vs "Company" for the same goal tier** — [Pass 1 +
   Pass 2] — `QuickAddModal.tsx:79` labels the tier "Organization"; the Goals
   page tab is "Company" (`goals/page.tsx:63`). A goal created under one name
   appears under the other. **Effort S.**
+  *Done 2026-09-24:* "Company" in Quick add and Mission Control's filter.
 - [ ] **P2-4 · "Open Relationship Desk →" names a room the destination never
   wears** — [Pass 1 + Pass 2] — `team/page.tsx:2005,2100` and Settings copy
   use "Relationship Desk"; `/app/reports/[id]` never shows the term, and

@@ -3,8 +3,10 @@
 The org's shared document memory: managers upload real artifacts (strategy decks,
 values docs, customer research, pricing), the Librarian extracts and classifies
 them, a manager confirms, and confirmed docs then ground AI answers elsewhere in
-the app. Three named parts — the Space (upload + review UI), the Librarian
-(extraction/classification), the Brain (coverage map).
+the app. Three internal names — the Space (upload + review UI), the Librarian
+(extraction/classification), the Brain (coverage map). None of them reach the
+customer: the page is "Knowledge" in the nav and title, the coverage section is
+"What it knows", and Librarian-voice lines render with no speaker label.
 
 Framework doc: `docs/archive/scoping/CONTEXT_ENGINE.md`.
 Surface: `/app/context`. Backend: `routes/documents.py` + `context_engine.py`.

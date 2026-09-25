@@ -544,14 +544,14 @@ def _truth_signal(snapshot: dict[str, Any], today: date, candidates: list[dict[s
     sessions = [row for row in snapshot.get("sessions", []) if row.get("summary") and (_date(meeting_date_of(row)) or date.min) >= week_start]
     if sessions:
         count = len(sessions)
-        return {"kind": "progress", "title": f"{count} 1:1{'s' if count != 1 else ''} completed this week.", "detail": "Based on conversations recorded in TSP."}
+        return {"kind": "progress", "title": f"{count} 1:1{'s' if count != 1 else ''} completed this week.", "detail": "Based on conversations recorded in The Same Page."}
     resolved = [
         row for row in snapshot.get("commitments", [])
         if row.get("status") in {"done", "dropped"} and (_date(row.get("completed_at")) or date.min) >= week_start
     ]
     if resolved:
         count = len(resolved)
-        return {"kind": "progress", "title": f"{count} commitment{'s' if count != 1 else ''} resolved this week.", "detail": "Based on commitment records in TSP."}
+        return {"kind": "progress", "title": f"{count} commitment{'s' if count != 1 else ''} resolved this week.", "detail": "Based on commitment records in The Same Page."}
     checks = [row for row in snapshot.get("check_ins", []) if (_date(row.get("created_at")) or date.min) >= week_start]
     if checks:
         count = len(checks)
@@ -563,7 +563,7 @@ def _truth_signal(snapshot: dict[str, Any], today: date, candidates: list[dict[s
     if mode == "all_clear":
         return {"kind": "all_clear", "title": "Nothing currently meets the attention rules.", "detail": "Conversations, commitments, goals, and projects were checked."}
     if mode in {"early_use", "empty"}:
-        return {"kind": "limited", "title": "TSP has limited evidence so far.", "detail": "Recommendations become richer as conversations, commitments, and work check-ins are recorded."}
+        return {"kind": "limited", "title": "The Same Page has limited evidence so far.", "detail": "Recommendations become richer as conversations, commitments, and work check-ins are recorded."}
     if mode == "partial":
         return {"kind": "limited", "title": "A complete focus could not be established.", "detail": "Only the sources available right now were considered."}
     reports = snapshot.get("reports", [])

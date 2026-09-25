@@ -176,9 +176,9 @@ export default function ContextEnginePage() {
 
   return (
     <PageShell maxWidth="4xl">
-      <h1 className="text-2xl font-semibold">The Space</h1>
+      <h1 className="text-2xl font-semibold">Knowledge</h1>
       <p className="mt-1 text-sm text-ink-secondary">
-        Teach the Librarian about your team — strategy, values, customers, offerings, career paths.
+        Teach The Same Page about your team — strategy, values, customers, offerings, career paths.
         The more it knows, the better your answers get.
       </p>
 
@@ -192,8 +192,8 @@ export default function ContextEnginePage() {
       {coverage && (
         <div className={SECTION_GAP}>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">The Brain</h2>
-            <p className="text-xs text-ink-muted">What the Librarian knows about your team</p>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">What it knows</h2>
+            <p className="text-xs text-ink-muted">Coverage across the five areas that shape your answers</p>
           </div>
 
           {/* Conflicts (Session VI) — flagged, never auto-resolved, per the
@@ -257,7 +257,7 @@ export default function ContextEnginePage() {
           </button>
           {uploading && (
             <p className="text-xs text-ink-muted">
-              The Librarian is reading it now — this can take up to a minute for a large deck.
+              Reading it now. This can take up to a minute for a large deck.
             </p>
           )}
         </div>
@@ -280,7 +280,7 @@ export default function ContextEnginePage() {
             </h2>
             {pending.length === 0 && failed.length === 0 ? (
               <p className="mt-3 text-sm text-ink-secondary">
-                Nothing waiting on you. Upload a document above to teach the Librarian something new.
+                Nothing waiting on you. Upload a document above to add something new.
               </p>
             ) : (
               <div className="mt-3 space-y-4">
@@ -299,7 +299,7 @@ export default function ContextEnginePage() {
                       <div>
                         <p className="text-sm font-medium text-ink">{doc.title}</p>
                         <p className="mt-0.5 text-xs text-red-700">
-                          This upload failed to process — the file may be unreadable, or the Librarian
+                          This upload failed to process — the file may be unreadable, or reading it
                           hit an error. Discard and try again.
                         </p>
                       </div>
@@ -414,7 +414,6 @@ function ConfirmCard({
 
       {doc.summary_card && (
         <p className="mt-3 rounded-md bg-canvas px-3 py-2 text-sm italic text-ink-secondary">
-          <span className="not-italic font-medium text-ink-secondary">The Librarian: </span>
           {doc.summary_card}
         </p>
       )}
@@ -631,13 +630,11 @@ function BrainDetailPanel({ coverage }: { coverage: CategoryCoverage }) {
 
       {coverage.staleness_prompt && (
         <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm italic text-amber-800">
-          <span className="not-italic font-medium text-amber-700">The Librarian: </span>
           {coverage.staleness_prompt}
         </p>
       )}
 
       <p className="mt-4 rounded-md bg-canvas px-3 py-2 text-sm italic text-ink-secondary">
-        <span className="not-italic font-medium text-ink-secondary">The Librarian: </span>
         {coverage.gap_question}
       </p>
     </div>

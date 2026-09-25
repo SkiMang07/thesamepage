@@ -119,7 +119,7 @@ const STATUS_BORDER: Record<GoalStatus, string> = {
   active: "border-control",
   on_track: "border-brand",
   at_risk: "border-amber-500",
-  completed: "border-blue-300",
+  completed: "border-teal-800",
   cancelled: "border-hairline",
 };
 
@@ -812,7 +812,7 @@ export default function ReportDetailPage() {
           <section className={activeContext === "work" ? "order-6 rounded-xl border border-hairline bg-surface px-4 py-4" : "hidden"}>
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                Initiatives{projects.length > 0 && ` (${projects.length})`}
+                Projects{projects.length > 0 && ` (${projects.length})`}
               </p>
               <Link href="/app/projects" className="text-xs text-ink-muted hover:text-ink-secondary">
                 Manage →
@@ -952,8 +952,8 @@ export default function ReportDetailPage() {
               <p className="text-xs font-medium text-ink-secondary">Work</p>
               <p className="mt-1 text-xs text-ink-muted">
                 {goals.length + activeProjects.length === 0
-                  ? "No goals or initiatives need attention."
-                  : `${goals.length} goal${goals.length === 1 ? "" : "s"} · ${activeProjects.length} active initiative${activeProjects.length === 1 ? "" : "s"}`}
+                  ? "No goals or projects need attention."
+                  : `${goals.length} goal${goals.length === 1 ? "" : "s"} · ${activeProjects.length} active project${activeProjects.length === 1 ? "" : "s"}`}
               </p>
             </div>
             <div className="mt-3 border-t border-divider pt-3">

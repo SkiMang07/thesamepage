@@ -97,7 +97,7 @@ function cadenceSourceLabel(days: number, source: CadenceSource) {
 // hierarchy goal cards, collapsed into one Goals section here. Individual
 // goals stay off Mission Control; they live on the report's own page.
 const GOAL_CARD_LEVELS: { id: GoalLevel; label: string }[] = [
-  { id: "company", label: "Organization" },
+  { id: "company", label: "Company" },
   { id: "department", label: "Department" },
   { id: "team", label: "Team" },
 ];
@@ -124,7 +124,7 @@ const DOT_STYLES: Record<GoalStatus, string> = {
   active: "bg-ink-muted",
   on_track: "bg-brand",
   at_risk: "bg-amber-500",
-  completed: "bg-blue-500",
+  completed: "bg-teal-800",
   cancelled: "bg-carbon-300",
 };
 
@@ -375,7 +375,7 @@ function LegacyDashboardPage() {
         const stale = staleReason(g.last_check_in_at);
         if (stale) reasons.push(stale);
         // A "what" with no "how" — the one goal-only smell.
-        if (!projects.some((p) => p.goal_id === g.id)) reasons.push({ label: "No initiative", severe: false });
+        if (!projects.some((p) => p.goal_id === g.id)) reasons.push({ label: "No project", severe: false });
         return {
           id: g.id,
           title: g.title,
@@ -402,7 +402,7 @@ function LegacyDashboardPage() {
           return {
             id: p.id,
             title: p.title,
-            subtitle: p.direct_report_name ?? "Your initiative",
+            subtitle: p.direct_report_name ?? "Your project",
             status: p.status,
             progress: p.progress,
             trend: p.trend,
@@ -525,7 +525,7 @@ function LegacyDashboardPage() {
 
           {/* Key Initiatives — exception-first (Session 26) */}
           <TriageCard
-            title="Key Initiatives"
+            title="Key Projects"
             href="/app/projects"
             linkLabel="View all"
             total={projects.length}
@@ -646,7 +646,7 @@ function IndividualPerformanceCard({
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-sm font-medium text-ink">{r.name}</p>
                 {r.latest_level_label && (
-                  <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">
+                  <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-body">
                     {r.latest_level_label}
                   </span>
                 )}
