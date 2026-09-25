@@ -1,0 +1,73 @@
+# Product analytics
+
+What we measure about how managers use the app, how it is collected, and the rules any new event has to follow. The goal is to answer behaviour questions ("do new managers get to a first prep sheet?") without collecting anything a manager typed.
+
+## Stack
+
+- **PostHog Cloud, US region**, project `627412` ("Default project"), free plan with no card on file. 1M events a month are free; past that PostHog drops events instead of billing, so the cost ceiling is $0.
+- Vercel Analytics was considered and rejected: on Hobby it records page views only, and custom events need Pro.
+- Keys: `NEXT_PUBLIC_POSTHOG_KEY` (Vercel, Config type) and `POSTHOG_PROJECT_KEY` (Railway) hold the same `phc_` project key. It is public by design. See ENGINEERING.md, "Rotating secrets". With either key unset, that side sends nothing.
+
+## How events are collected
+
+**Browser (`frontend/lib/analytics.ts`).** Started from `instrumentation-client.ts`. Sends `$pageview` on every route change (`capture_pageview: "history_change"`) and nothing else. `<AnalyticsUser />` in `app/app/layout.tsx` calls `identify(<Supabase user id>)` on sign-in and `reset()` on sign-out.
+
+- Off in code: autocapture, rage/dead clicks, heatmaps, session replay, surveys, product tours, web experiments, exception capture (Sentry covers errors), performance capture, page-leave events.
+- `advanced_disable_flags: true`: the SDK never fetches PostHog's remote config, so a toggle flipped in the PostHog UI cannot switch any of the above back on. Feature flags are therefore unavailable until this is revisited.
+- `disable_external_dependency_loading: true`: PostHog loads no extra scripts.
+- `before_send` cuts the query string and fragment from every URL-valued property, and replaces the `/invite/<token>` path segment with `/invite/[token]`.
+- Events post to `/ingest` on the app's own domain; `next.config.js` rewrites that to `us.i.posthog.com`. So the CSP needs no PostHog host and ad blockers drop fewer events. `skipTrailingSlashRedirect: true` is required for this (PostHog's paths end in `/`).
+- The first page view of a load is only recorded once the tab is visible. A page opened in a background tab records its page view when it is brought forward. Route changes are recorded either way.
+
+**Backend (`backend/analytics.py`).** `capture(user_id, event, properties)` posts to PostHog on a two-thread background pool and returns immediately. A failure is logged at `warning` and never reaches the request. Every server event carries `environment`, `$lib: tsp-backend` and `$geoip_disable: true`. Server-side is the default for anything the backend already knows (the first save of something, a count), because ad blockers can't drop it.
+
+**Identity.** One id everywhere: the Supabase user id, the same one Sentry uses. A manager's page views and server events join on it. No email, name or org name is ever sent as an event or person property.
+
+**Project settings (PostHog UI).** "Discard client IP data" on; session replay off; autocapture off. The code enforces the same things, so these settings are a second layer, not the only one.
+
+## Privacy rules for any event
+
+1. Properties are flags, counts, ids or fixed enum values. Never free text: no note, prompt, transcript, agenda item, name or email.
+2. No URLs with query strings, and no tokens in paths. `before_send` handles this for the browser; a backend event should not carry a URL at all.
+3. Prefer a server event to a browser event when the backend can see the moment.
+4. If a new event needs anything beyond rule 1, write down why here first.
+
+## Event catalog
+
+|Event|Sent from|When|Properties|
+|---|---|---|---|
+|`$pageview`|browser|every route change in the app, `/auth` and `/invite`|PostHog defaults, URLs scrubbed as above|
+|`$identify`|browser|first time a signed-in session is tied to the user id|none of ours|
+|`prep_sheet_saved`|`POST /api/one-on-ones/prep`|every time a prep sheet is generated and saved|`is_first` (bool): no sheet existed for this manager before this one. `regenerated` (bool): this 1:1 already had a sheet and it was replaced|
+
+`is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
+
+## Pathways
+
+### Golden path: new manager to first prep sheet
+
+The one behaviour that says the product is working for a new user: they get in, find prep, and leave with a saved sheet for a real 1:1.
+
+- **Saved insight:** "Golden path: new manager to first prep sheet" (`us.posthog.com/project/627412/insights/wyddMxdR`). It is a funnel of unique users, a 30-day conversion window, showing the last 30 days.
+- **Steps:**
+    1. Opened the app: `$pageview`, current URL contains `/app/dashboard`.
+    2. Opened a prep sheet: `$pageview`, current URL contains `/prep`.
+    3. Saved first prep sheet: `prep_sheet_saved` where `is_first = true`.
+- **Reading it:** the drop between 1 and 2 is discovery (can they find prep?). The drop between 2 and 3 is the prep page itself (did generation work, was it worth saving?).
+- **Known gaps:** existing managers never reach step 3, so the funnel only means something for people who signed up inside the window. Step 1 misses a manager whose first page wasn't the dashboard (an invite that lands elsewhere).
+
+### Next pathways (not built)
+
+Add a row here when one is decided, then add its events to the catalog above. Candidates so far:
+
+- **Prep to logged 1:1.** Does a saved sheet turn into a logged meeting? Needs a server event on `POST /api/one-on-ones` (`was_prepped` flag).
+- **Weekly return.** Does a manager come back the following week? PostHog retention on `$pageview` is enough; no new event.
+- **Team setup completion.** Share of new managers who add at least one direct report. Needs a server event when the first report is created.
+- **Dictation use.** Share of saved sheets that used the mic. Needs a flag the frontend already knows, passed on the prep request.
+
+## Adding an event
+
+1. Decide whether the browser or the server sees the moment; prefer the server.
+2. Server: `analytics.capture(user_id, "<noun>_<past_verb>", {flags})` after the write succeeds. Browser: `posthog.capture(...)` through a helper in `lib/analytics.ts`, never directly from a component.
+3. Add a row to the event catalog, and a pathway if it feeds one.
+4. Add a unit test next to `backend/tests/test_analytics.py` for any logic that decides a flag.

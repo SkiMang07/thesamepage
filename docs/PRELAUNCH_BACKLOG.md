@@ -666,8 +666,9 @@ Decided the same day, behind the sentence:
   through `/ingest` on the app's domain; the backend sends
   `prep_sheet_saved` (`is_first`, `regenerated`) from the prep route.
   User id only, no autocapture or replay, query strings and invite tokens
-  cut from URLs, client IPs discarded. See ENGINEERING.md, "Logging and
-  error monitoring". Live once `NEXT_PUBLIC_POSTHOG_KEY` (Vercel) and
+  cut from URLs, client IPs discarded. First pathway saved in PostHog:
+  the golden-path funnel, new manager to first prep sheet. Event catalog,
+  privacy rules and pathways: `docs/systems/product-analytics.md`. Live once `NEXT_PUBLIC_POSTHOG_KEY` (Vercel) and
   `POSTHOG_PROJECT_KEY` (Railway) are set.
 - [x] ✔ AI cost visibility. Every provider call in `ai_core.py` (text,
   document, tools, the OpenAI fallback, and dictation, which

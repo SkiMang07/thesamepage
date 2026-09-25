@@ -169,22 +169,14 @@ monitor `*.railway.app`; it also means one check covers Vercel and Railway.
 
 Product analytics: PostHog Cloud (US), free plan with no card on file, so
 past 1M events a month PostHog drops events rather than billing. The browser
-(`frontend/lib/analytics.ts`, started from `instrumentation-client.ts`) sends
-a `$pageview` on every route change and nothing else: autocapture, session
-replay, heatmaps, surveys, exception capture and PostHog's remote config
-(`advanced_disable_flags`) are all off in code, and replay and autocapture are
-also off in the project settings. `before_send` cuts query strings from every
-URL and replaces the `/invite/<token>` path segment. `<AnalyticsUser />` in
-`app/app/layout.tsx` identifies the manager by Supabase user id only, and resets
-on sign-out. Browser events post to `/ingest` (a rewrite in `next.config.js`,
-which is also why `skipTrailingSlashRedirect` is on), so the CSP needs no
-PostHog host. The one custom event, `prep_sheet_saved` with `is_first` and
-`regenerated` flags, is sent server-side by `backend/analytics.py` from
-`POST /api/one-on-ones/prep` under the same user id, on a background pool that
-never delays or fails the request. The project's "Discard client IP data"
-setting is on. Add an event only with flags, counts or enum values as
-properties, never text a manager typed. Off until `NEXT_PUBLIC_POSTHOG_KEY`
-(Vercel) and `POSTHOG_PROJECT_KEY` (Railway) are set.
+(`frontend/lib/analytics.ts`) sends page views only, through `/ingest` on the
+app's own domain; the backend (`backend/analytics.py`) sends custom events on a
+background pool that never delays or fails the request. Identity is the
+Supabase user id only, and event properties are flags, counts, ids or enum
+values, never text a manager typed. Off until `NEXT_PUBLIC_POSTHOG_KEY`
+(Vercel) and `POSTHOG_PROJECT_KEY` (Railway) are set. The collection details,
+privacy rules, event catalog, the golden-path funnel and how to add an event
+live in `docs/systems/product-analytics.md`.
 
 Never log a prompt, a model's output, note text, a transcript or audio. Ids,
 counts, model names and status codes only. `ai_core.py` logs one `ai_call` line

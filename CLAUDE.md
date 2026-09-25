@@ -54,6 +54,7 @@ capacity.md         supply model, off-days buffer, department rollup
 org-scoping.md      org_units, leader assignment, role-scoped rollups
 brand.md            Current & Carbon — colour roles, ink scale, status vocabulary, logo
 beyond.md           /app/beyond — meetings outside your team, counterpart commitments, routing
+product-analytics.md  PostHog — what we collect, privacy rules, event catalog, pathways
 ```
 
 `docs/decisions/` holds one record per durable decision — the cross-subsystem,
