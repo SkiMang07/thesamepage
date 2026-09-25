@@ -153,7 +153,7 @@ import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWra
 import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
 import { Icon, SECTION_GAP } from "@/components/ZoneMap";
-import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, FEATURE_SURFACE, EYEBROW, ELEVATED, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
+import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, identityIndex, FEATURE_SURFACE, EYEBROW, ELEVATED, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
 
 import NoteField from "@/components/NoteField";
 import { SkeletonSection } from "@/components/Skeleton";
@@ -212,14 +212,16 @@ function memberIndex(memberId: string | null | undefined, members: TeamMember[])
   return members.findIndex((m) => m.id === memberId);
 }
 
+// Same rule as everywhere else: the colour follows the person's id
+// (identityIndex), not their position in this list.
 function avatarColor(memberId: string | null | undefined, members: TeamMember[]) {
-  const idx = memberIndex(memberId, members);
-  return AVATAR_PALETTE[idx >= 0 ? idx % AVATAR_PALETTE.length : 0];
+  if (memberIndex(memberId, members) < 0) return AVATAR_PALETTE[0];
+  return AVATAR_PALETTE[identityIndex(memberId!)];
 }
 
 function borderColor(memberId: string | null | undefined, members: TeamMember[]) {
-  const idx = memberIndex(memberId, members);
-  return AVATAR_BORDER_PALETTE[idx >= 0 ? idx % AVATAR_BORDER_PALETTE.length : 0];
+  if (memberIndex(memberId, members) < 0) return AVATAR_BORDER_PALETTE[0];
+  return AVATAR_BORDER_PALETTE[identityIndex(memberId!)];
 }
 
 function initials(name: string) {

@@ -23,7 +23,7 @@
 // is_due field rather than each re-deriving it.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { IDENTITY_HEX } from "@/lib/tokens";
+import { IDENTITY_VAR, identityIndex } from "@/lib/tokens";
 import Link from "next/link";
 import {
   getCapacityOverview,
@@ -338,9 +338,10 @@ const TONE_TEXT: Record<Tone, string> = {
   setup: "text-ink-faint italic",
 };
 
-// Person-identity colours. Drawn only from the brand families so a roster
-// of avatars reads as one system; every entry clears 4.5:1 with white text.
-const AVATAR_COLORS = IDENTITY_HEX;
+// Person-identity colour: one rule app-wide, identityIndex(direct report id)
+// (lib/tokens.ts). Keyed on the id, not the roster position, so a person
+// keeps their colour when someone joins or leaves, and every page that
+// draws them (this roster, Mission Control, 1:1s, Team) agrees.
 
 function initialsOf(name: string) {
   return name
@@ -460,12 +461,12 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
     doorStates.team = { label: `${team.length} ${team.length === 1 ? "person" : "people"}` };
     const dueCount = team.filter((r) => r.is_due).length;
     doorStates.oneonones = dueCount > 0 ? { label: `${dueCount} due`, tone: "warn" } : { label: "up to date" };
-    roster = team.map((r, i) => ({
+    roster = team.map((r) => ({
       id: r.direct_report_id,
       name: r.name,
       firstName: r.name.split(" ")[0],
       initials: initialsOf(r.name),
-      color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+      color: IDENTITY_VAR[identityIndex(r.direct_report_id)],
       due: r.is_due,
     }));
   }

@@ -730,17 +730,22 @@ export default function ScribeDrawer() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-focus composer when drawer opens
+  // Auto-focus composer when drawer opens. preventScroll: the drawer is
+  // sticky, so the composer is already on screen; a plain focus() scrolled
+  // the page behind it (the heading slid under the top bar).
   useEffect(() => {
     if (isOpen) {
-      const t = setTimeout(() => composerRef.current?.focus(), 60);
+      const t = setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 60);
       return () => clearTimeout(t);
     }
   }, [isOpen]);
 
-  // Scroll to the bottom of the thread on new messages
+  // Scroll to the bottom of the thread on new messages. Scrolls the thread
+  // box itself: scrollIntoView() also scrolled the page behind the drawer,
+  // so opening Scribe pushed the page's heading up under the top bar.
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const thread = threadEndRef.current?.parentElement;
+    thread?.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   // Resolve page context: drawer context override takes priority, then path label

@@ -317,6 +317,11 @@ Every combination clears 5.6:1.
 as `IDENTITY_HEX` for older call sites) is `rgb(var(--c-id-N))` strings for
 inline styles and SVG fills, so those follow the theme too.
 
+Which colour a person gets has one rule: `identityIndex(direct_report_id)`. It
+is keyed on the id, not a list position, so a person keeps their colour as the
+roster changes, and the AppNav roster, Mission Control, 1:1s and Team agree.
+Someone outside the team (no report id) is keyed on their name.
+
 ---
 
 ## The safety net
