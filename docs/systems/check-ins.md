@@ -4,7 +4,8 @@ The temporal layer under goals and projects. Without it, goal and initiative car
 are inert: no computable progress signal and no freshness/trend signal.
 
 Backend: `routes/check_ins.py` — **shared helpers, not a router**. Frontend:
-`components/CheckInPanel.tsx` (project cards; goal updates use `components/goals/`).
+goal updates use `components/goals/`, project updates `components/projects/`
+(see `projects.md`); `components/CheckInPanel.tsx` remains for Mission Control.
 
 ## One shared table for both parents
 
@@ -21,17 +22,19 @@ under `/api/projects`.
 `source_type` / `source_id` record where a check-in came from: null (entered by
 hand) or `outside_meeting` (confirmed from a meeting beyond the team — see
 `beyond.md`). `create_check_in()` only sends them when a source is passed, so the
-goals/projects routers insert exactly what they always did. `CheckInPanel`'s
-history can also list the Beyond meetings that touched the item
-(`fetchMeetingLinks`).
+goals/projects routers insert exactly what they always did. Goal and project
+history responses include both columns, so a record entry can link the meeting
+it came from.
 
 ## Write-through
 
 Goal check-ins from `/app/goals` go through `record_goal_check_in()`, which does
 the insert and the status write-through in one transaction and is retry-safe via
-`client_request_id` (see `goals.md`). Project check-ins and confirmed Beyond
-check-ins use `create_check_in()`, which inserts the row, then updates the
-parent's `status` column. So
+`client_request_id` (see `goals.md`). Project check-ins from `/app/projects`
+(and the Scribe) go through `record_project_check_in()`, the same pattern
+without a measured value (see `projects.md`). Confirmed Beyond check-ins still
+use `create_check_in()`, which inserts the row, then updates the parent's
+`status` column. So
 status-reading surfaces such as the team KPI strip, org-unit rollup SQL, and
 person-page sections stay current. Mission Control also reads the timestamped rows
 for goal/project eligibility, freshness evidence, conflicts, and the weekly truth
@@ -64,5 +67,6 @@ alone.
 
 ## Constants
 
-`STALE_CHECK_IN_DAYS = 14` in `CheckInPanel.tsx`, deliberately shorter than the
+`STALE_CHECK_IN_DAYS = 14` in `CheckInPanel.tsx` (and `STALE_DAYS` in
+`lib/goals.ts` / `lib/projects.ts`), deliberately shorter than the
 21-day 1:1 cadence. `DUE_SOON_DAYS = 14` for dashboard triage.

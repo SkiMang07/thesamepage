@@ -497,7 +497,12 @@ export const createGoalCheckIn = (goalId: string, body: GoalCheckInIn): Promise<
 export const getProjectCheckIns = (projectId: string): Promise<CheckIn[]> =>
   authedFetch(`/api/projects/${projectId}/check-ins`);
 
-export const createProjectCheckIn = (projectId: string, body: CheckInIn): Promise<CheckIn> =>
+// `client_request_id` (optional) makes a retried submit return the row the
+// first attempt may already have written, same as goal updates.
+export const createProjectCheckIn = (
+  projectId: string,
+  body: CheckInIn & { client_request_id?: string | null },
+): Promise<CheckIn> =>
   authedFetch(`/api/projects/${projectId}/check-ins`, { method: "POST", body: JSON.stringify(body) });
 
 export type GoalIn = {
@@ -594,7 +599,23 @@ export type Project = {
   org_unit_id: string | null;
   org_unit_name?: string | null;
   created_at: string;
+  // The manager's own OPEN next move on this project (list endpoint only).
+  // next_move_available is false when it couldn't be read — unknown, not none.
+  next_move?: ProjectFollowThrough | null;
+  next_move_available?: boolean;
 } & CheckInDerived;
+
+// A private next move the manager records for themselves on a project. One
+// open per project; completed ones are kept. Never assigned or sent.
+export type ProjectFollowThrough = {
+  id: string;
+  project_id: string;
+  body: string;
+  status: "open" | "done";
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type ProjectIn = {
   title: string;
@@ -627,6 +648,18 @@ export const updateProjectStatus = (id: string, status: ProjectStatus): Promise<
 
 export const deleteProject = (id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/projects/${id}`, { method: "DELETE" });
+
+export const getProjectFollowThrough = (projectId: string): Promise<ProjectFollowThrough[]> =>
+  authedFetch(`/api/projects/${projectId}/follow-through`);
+
+export const createProjectFollowThrough = (projectId: string, body: string): Promise<ProjectFollowThrough> =>
+  authedFetch(`/api/projects/${projectId}/follow-through`, { method: "POST", body: JSON.stringify({ body }) });
+
+export const updateProjectFollowThrough = (
+  id: string,
+  patch: { body?: string; status?: "open" | "done" },
+): Promise<ProjectFollowThrough> =>
+  authedFetch(`/api/projects/follow-through/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 
 // ---------------------------------------------------------------------------
 // Org units (Session 11) — team/department entities with parent/child

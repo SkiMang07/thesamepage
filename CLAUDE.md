@@ -51,6 +51,7 @@ assessments.md      rolling ratings, AI draft-then-review
 development.md      individual plans, team training focus
 check-ins.md        the temporal layer under goals and projects
 goals.md            /app/goals — board, scope, measures and readings, Updates, Review together
+projects.md         /app/projects — portfolio at a glance, briefs, updates, private next moves, review
 capacity.md         supply model, off-days buffer, department rollup
 org-scoping.md      org_units, leader assignment, role-scoped rollups
 brand.md            Current & Carbon — colour roles, ink scale, status vocabulary, logo
@@ -85,6 +86,12 @@ fictional reference content.
 implemented; open it before visual work on that page. `prototype.html` in the
 same folder is the superseded first concept. Current behaviour is in
 `docs/systems/goals.md`. Its example data is fictional reference content.
+
+`docs/design-proposals/2026-09-25-projects-in-motion/` (`BUILD_BRIEF.md`,
+`prototype.html`) is the **selected Projects design** for `/app/projects` —
+implemented, with the brief's compact "Portfolio at a glance" added above
+tighter briefs; open it before visual work on that page. Current behaviour is
+in `docs/systems/projects.md`. Its example data is fictional reference content.
 
 `gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
 the argument behind each marketing page. `website/` stays a build root with its own

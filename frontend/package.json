@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:projects": "node --experimental-strip-types --test lib/projects.test.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.3",

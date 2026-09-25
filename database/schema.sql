@@ -698,6 +698,35 @@ create index check_ins_project_idx on check_ins (project_id, created_at desc);
 create unique index check_ins_owner_request_idx on check_ins (owner_id, client_request_id)
   where client_request_id is not null;
 
+-- ============================================================
+-- PROJECT FOLLOW-THROUGH (2026-09-25, docs/systems/projects.md)
+-- The manager's own private "next move" on a project. At most one open move
+-- per project; completed moves are kept so replacing one never erases it.
+-- Independent of projects.status. Not a commitments row: commitments feed
+-- Mission Control, Team, 1:1 prep, Away and report pages, and a private
+-- project next move must not surface there.
+-- ============================================================
+
+create table project_follow_throughs (
+  id            uuid primary key default uuid_generate_v4(),
+  owner_id      uuid not null references auth.users(id) on delete cascade,
+  project_id    uuid not null references projects(id) on delete cascade,
+  body          text not null check (char_length(btrim(body)) between 1 and 1000),
+  status        text not null default 'open' check (status in ('open', 'done')),
+  completed_at  timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  constraint project_follow_throughs_done_shape
+    check ((status = 'done') = (completed_at is not null))
+);
+
+create unique index project_follow_throughs_one_open
+  on project_follow_throughs (owner_id, project_id) where status = 'open';
+create index project_follow_throughs_owner_idx
+  on project_follow_throughs (owner_id, status, created_at desc);
+
+alter table project_follow_throughs enable row level security;
+
 alter table check_ins enable row level security;
 
 -- ============================================================
@@ -1662,6 +1691,15 @@ create policy "projects_all_own_org" on projects
 create policy "check_ins_all_own" on check_ins
   for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
+-- project_follow_throughs — owner-scoped; WITH CHECK also proves the project
+-- is the caller's own.
+create policy "project_follow_throughs_all_own" on project_follow_throughs
+  for all using (owner_id = auth.uid())
+  with check (
+    owner_id = auth.uid()
+    and exists (select 1 from projects p where p.id = project_id and p.owner_id = auth.uid())
+  );
+
 -- Beyond the team — owner-scoped, no IC policy. The join tables' WITH CHECK
 -- proves the meeting, person, goal, project or report is the caller's own,
 -- so a known UUID of someone else's row can't be linked. None of these
@@ -1999,8 +2037,8 @@ grant execute on function public.org_unit_goals_rollup() to authenticated;
 -- so a reported success can never be half a write. A client_request_id that
 -- already produced a row returns that row, so a retried submit does not
 -- duplicate. SECURITY INVOKER: RLS applies exactly as it does to the plain
--- table writes it replaces. Project check-ins and confirmed Beyond check-ins
--- still use routes/check_ins.py's create_check_in().
+-- table writes it replaces. Project check-ins use record_project_check_in();
+-- confirmed Beyond check-ins still use routes/check_ins.py's create_check_in().
 create or replace function public.record_goal_check_in(
   p_goal_id uuid,
   p_status text,
@@ -2077,6 +2115,78 @@ $$;
 
 revoke all on function public.record_goal_check_in(uuid, text, integer, numeric, text, uuid) from public;
 grant execute on function public.record_goal_check_in(uuid, text, integer, numeric, text, uuid) to authenticated;
+
+-- ============================================================
+-- PROJECT CHECK-INS — one transaction, retry-safe (2026-09-25)
+-- ============================================================
+-- record_project_check_in() is the project check-in write path, same shape
+-- as record_goal_check_in() without a measured value. Confirmed Beyond
+-- check-ins still use routes/check_ins.py's create_check_in().
+create or replace function public.record_project_check_in(
+  p_project_id uuid,
+  p_status text,
+  p_progress integer default null,
+  p_note text default null,
+  p_client_request_id uuid default null
+)
+returns setof check_ins
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row check_ins%rowtype;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  if p_client_request_id is not null then
+    select * into v_row from check_ins
+      where owner_id = v_uid and client_request_id = p_client_request_id;
+    if found then
+      if v_row.project_id is distinct from p_project_id then
+        raise exception 'This update key was already used for another record' using errcode = '22023';
+      end if;
+      return next v_row;
+      return;
+    end if;
+  end if;
+
+  perform 1 from projects where id = p_project_id and owner_id = v_uid for update;
+  if not found then
+    raise exception 'Project not found' using errcode = 'P0002';
+  end if;
+  if p_status is null or p_status not in ('active', 'on_track', 'at_risk', 'completed', 'cancelled') then
+    raise exception 'Unknown status' using errcode = '22023';
+  end if;
+  if p_progress is not null and (p_progress < 0 or p_progress > 100) then
+    raise exception 'Completion must be a whole number from 0 to 100' using errcode = '22023';
+  end if;
+
+  begin
+    insert into check_ins (owner_id, project_id, status, progress, note, client_request_id)
+    values (v_uid, p_project_id, p_status, p_progress, nullif(btrim(p_note), ''), p_client_request_id)
+    returning * into v_row;
+  exception when unique_violation then
+    -- A concurrent submit with the same key won the race: return its row.
+    select * into v_row from check_ins
+      where owner_id = v_uid and client_request_id = p_client_request_id;
+    if v_row.project_id is distinct from p_project_id then
+      raise exception 'This update key was already used for another record' using errcode = '22023';
+    end if;
+    return next v_row;
+    return;
+  end;
+
+  update projects set status = p_status where id = p_project_id and owner_id = v_uid;
+  return next v_row;
+end;
+$$;
+
+revoke all on function public.record_project_check_in(uuid, text, integer, text, uuid) from public;
+grant execute on function public.record_project_check_in(uuid, text, integer, text, uuid) to authenticated;
 
 -- Once a goal has a recorded reading, what those numbers mean is fixed: the
 -- measure can't be removed and its format/unit can't change. Label wording,

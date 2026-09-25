@@ -1,24 +1,26 @@
 "use client";
 
-// This page is an Initiative Desk, not a project-management surface. Its job
-// is to help a manager scan consequential work, focus on one initiative with
-// its owner/outcome context intact, and record meaningful changes. Execution
-// coordination — tasks, dependencies, workflow stages, comments, files, and
-// scheduling machinery — remains deliberately out of scope.
+// Projects — keep things moving. The page answers "what's going on across the
+// work?" first (Portfolio at a glance: factual counts and a short scan,
+// exceptions first), then gives each project a compact brief that keeps its
+// purpose and latest recorded situation together, with updates, the dated
+// record, your private next move and edits opening in place.
+//
+// Deliberately NOT project management: no tasks, dependencies, assignments,
+// reminders or workflow. Design authority:
+// docs/design-proposals/2026-09-25-projects-in-motion/BUILD_BRIEF.md.
+// Behaviour: docs/systems/projects.md.
 
-import { useEffect, useMemo, useState } from "react";
-import CheckInPanel, {
-  ProgressBar,
-  TrendArrow,
-  freshnessLabel,
-  isStale,
-} from "@/components/CheckInPanel";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ApiError,
   CheckIn,
   DirectReport,
   Goal,
   OrgUnit,
   Project,
+  ProjectFollowThrough,
+  ProjectIn,
   ProjectStatus,
   createProject,
   createProjectCheckIn,
@@ -26,105 +28,69 @@ import {
   getDirectReports,
   getGoals,
   getOrgUnits,
-  getProjectCheckIns,
-  getBeyondLinks,
   getProjects,
   updateProject,
+  updateProjectFollowThrough,
   updateProjectStatus,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
-import { SECTION_GAP } from "@/components/ZoneMap";
-import { useDrawer } from "@/lib/drawer-context";
-import NoteField from "@/components/NoteField";
-import {
-  BADGE,
-  BTN_GHOST,
-  BTN_PRIMARY,
-  BTN_SECONDARY,
-  FEATURE_SURFACE,
-  INPUT,
-  LABEL,
-  META,
-  STATUS_BORDER,
-  STATUS_GLYPH,
-  STATUS_STYLES,
-} from "@/lib/tokens";
+import PartialLoadNotice from "@/components/PartialLoadNotice";
 import { SkeletonSection } from "@/components/Skeleton";
+import { useDrawer } from "@/lib/drawer-context";
+import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL } from "@/lib/tokens";
+import {
+  AttentionFilter,
+  OwnerKey,
+  PROJECT_STATUS_LABEL,
+  PROJECT_STATUS_ORDER,
+  applyAttention,
+  compareProjects,
+  formatDay,
+  formatMoment,
+  isClosed,
+  matchesScope,
+  overview,
+  ownerKey,
+  ownerName,
+} from "@/lib/projects";
+import { newRequestId } from "@/lib/goals";
+import Dialog from "@/components/goals/Dialog";
+import ProjectBrief, { Panel } from "@/components/projects/ProjectBrief";
+import ProjectForm from "@/components/projects/ProjectForm";
+import ProjectRecord from "@/components/projects/ProjectRecord";
+import ProjectUpdateForm, { UpdateDraft, isUpdateDirty } from "@/components/projects/ProjectUpdateForm";
+import FollowThroughPanel from "@/components/projects/FollowThroughPanel";
+import { OverviewBand, PortfolioScan } from "@/components/projects/PortfolioOverview";
+import { ReviewPlan, ReviewPresentation, ReviewSetup } from "@/components/projects/ProjectReview";
+import { StatusChip } from "@/components/projects/StatusChip";
 
-const STATUS_OPTIONS: { id: ProjectStatus; label: string }[] = [
-  { id: "active", label: "Active" },
-  { id: "on_track", label: "On track" },
-  { id: "at_risk", label: "At risk" },
-  { id: "completed", label: "Completed" },
-  { id: "cancelled", label: "Cancelled" },
-];
+type View = "open" | "mine" | "closed";
+type Receipt = { projectId: string | null; text: string; warning?: string } | null;
 
-// Local aliases so this file's existing call sites keep working; the value
-// itself is the shared token, so restyling happens in one place.
-const inputCls = INPUT;
-const labelCls = LABEL;
-const primaryBtnCls = BTN_PRIMARY;
-
-type ProjectFormValues = {
-  title: string;
-  description: string;
-  directReportId: string;
-  goalId: string;
-  orgUnitId: string;
-  status: ProjectStatus;
-  dueDate: string;
-};
-
-function formatDate(iso: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+/** A 4xx carries the server's reason; a 5xx or network failure gets the
+ *  plain fallback (a gateway page is not a message for a manager). */
+function errorText(e: unknown, fallback: string) {
+  if (e instanceof ApiError && e.status < 500) return e.detail || fallback;
+  return fallback;
 }
 
-// Local (not UTC) YYYY-MM-DD keeps overdue grouping aligned with the date the
-// manager sees rather than letting UTC move an initiative a day early.
-function localDateStr(d: Date = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+/** Content width, so layout follows the space the page actually has — it
+ *  reflows when the Scribe drawer opens, not only on viewport changes. */
+function useWidth() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(1200);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, width };
 }
 
-function isOverdue(project: Project) {
-  return !!project.due_date && project.due_date < localDateStr();
-}
-
-function compareProjects(a: Project, b: Project) {
-  if (a.due_date && b.due_date && a.due_date !== b.due_date) return a.due_date.localeCompare(b.due_date);
-  if (a.due_date && !b.due_date) return -1;
-  if (!a.due_date && b.due_date) return 1;
-  return a.title.localeCompare(b.title);
-}
-
-function projectOwner(project: Project) {
-  return project.direct_report_name ?? "You";
-}
-
-function attentionReasons(project: Project) {
-  const reasons: string[] = [];
-  if (project.status === "at_risk") reasons.push("At risk");
-  if (isOverdue(project)) reasons.push(`Due ${formatDate(project.due_date!)}`);
-  if (isStale(project.last_check_in_at)) reasons.push(freshnessLabel(project.last_check_in_at));
-  return reasons;
-}
-
-function toProjectPayload(input: ProjectFormValues) {
-  return {
-    title: input.title.trim(),
-    description: input.description.trim() || undefined,
-    status: input.status,
-    due_date: input.dueDate || undefined,
-    direct_report_id: input.directReportId || undefined,
-    goal_id: input.goalId || undefined,
-    org_unit_id: input.orgUnitId || undefined,
-  };
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
 export default function ProjectsPage() {
@@ -133,599 +99,788 @@ export default function ProjectsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const { isOpen: scribeOpen, setPageContext } = useDrawer();
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [partial, setPartial] = useState<string[]>([]);
 
+  const [view, setView] = useState<View>("open");
+  const [owner, setOwner] = useState<OwnerKey>("all");
+  const [query, setQuery] = useState("");
+  const [attention, setAttention] = useState<AttentionFilter>("all");
+  const [showAll, setShowAll] = useState(false);
+
+  const [panels, setPanels] = useState<Record<string, Panel | null>>({});
+  const [updateDrafts, setUpdateDrafts] = useState<Record<string, UpdateDraft>>({});
+  const [followDrafts, setFollowDrafts] = useState<Record<string, string>>({});
+  const [creating, setCreating] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [recordVersion, setRecordVersion] = useState<Record<string, number>>({});
+  const [receipt, setReceipt] = useState<Receipt>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Project | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [reviewSetup, setReviewSetup] = useState(false);
+  const [review, setReview] = useState<ReviewPlan | null>(null);
+  const [busyStatus, setBusyStatus] = useState<string | null>(null);
+
+  const headings = useRef(new Map<string, HTMLHeadingElement>());
+  const reviewButton = useRef<HTMLButtonElement>(null);
+  const { ref: widthRef, width } = useWidth();
+  const { setPageContext } = useDrawer();
+  const wide = width >= 780;
+  const scanWide = width >= 860;
+
+  // --- load ------------------------------------------------------------------
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    const [p, r, g, ou] = await Promise.allSettled([getProjects(), getDirectReports(), getGoals(), getOrgUnits()]);
+    if (p.status === "rejected") {
+      setLoadError(errorText(p.reason, "Check your connection and try again."));
+      setLoading(false);
+      return;
+    }
+    setProjects(p.value);
+    const failed: string[] = [];
+    if (r.status === "fulfilled") setReports(r.value);
+    else failed.push("your reports (owner choices)");
+    if (g.status === "fulfilled") setGoals(g.value);
+    else failed.push("goals (goal choices)");
+    if (ou.status === "fulfilled") setOrgUnits(ou.value);
+    else failed.push("teams (team choices)");
+    setPartial(failed);
+    setLoading(false);
+  }, []);
   useEffect(() => {
-    Promise.all([getProjects(), getDirectReports(), getGoals(), getOrgUnits()])
-      .then(([p, r, g, ou]) => {
-        setProjects(p);
-        setReports(r);
-        setGoals(g);
-        setOrgUnits(ou);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+    void load();
+  }, [load]);
+
+  /** Re-read the list after a confirmed write. Returns false on failure so
+   *  the caller can say the page may be behind — never re-send the write. */
+  const refresh = useCallback(async () => {
+    try {
+      setProjects(await getProjects());
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
-  async function addProject(input: ProjectFormValues) {
-    const created = await createProject(toProjectPayload(input));
-    setProjects((ps) => [created, ...ps]);
-    setError(null);
-    setShowForm(false);
-    setSelectedProjectId(created.id);
-  }
+  const vocabulary = useMemo(() => reports.map((r) => r.name).join(", "), [reports]);
 
-  async function saveEdit(projectId: string, input: ProjectFormValues) {
-    const updated = await updateProject(projectId, toProjectPayload(input));
-    setProjects((ps) => ps.map((p) => (p.id === projectId ? updated : p)));
-    setError(null);
-    setEditingProjectId(null);
-  }
+  // --- unsaved edits ---------------------------------------------------------
+  const hasUnsaved =
+    formDirty ||
+    Object.entries(updateDrafts).some(([id, d]) => {
+      const p = projects.find((x) => x.id === id);
+      return p ? isUpdateDirty(d, p) : false;
+    }) ||
+    Object.values(followDrafts).some((t) => t.trim() !== "");
+  useEffect(() => {
+    if (!hasUnsaved) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [hasUnsaved]);
 
-  async function setStatus(projectId: string, status: ProjectStatus) {
-    try {
-      const updated = await updateProjectStatus(projectId, status);
-      setProjects((ps) => ps.map((p) => (p.id === projectId ? { ...p, ...updated } : p)));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update status");
-    }
-  }
-
-  // Mirror a logged check-in's server-side write-through in portfolio state.
-  function applyCheckIn(projectId: string, ci: CheckIn) {
-    setProjects((ps) =>
-      ps.map((p) => {
-        if (p.id !== projectId) return p;
-        const next = { ...p, status: ci.status, last_check_in_at: ci.created_at, last_check_in_note: ci.note };
-        if (ci.progress != null) {
-          const prev = p.progress;
-          next.progress = ci.progress;
-          next.trend = prev == null ? p.trend : ci.progress > prev ? "up" : ci.progress < prev ? "down" : "flat";
-        }
-        return next;
-      })
-    );
-  }
-
-  async function removeProject(projectId: string) {
-    try {
-      await deleteProject(projectId);
-      setProjects((ps) => ps.filter((p) => p.id !== projectId));
-      setEditingProjectId((id) => (id === projectId ? null : id));
-      setSelectedProjectId((id) => (id === projectId ? null : id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete project");
-    }
-  }
-
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId]
+  // --- derived ---------------------------------------------------------------
+  const scoped = useMemo(() => projects.filter((p) => matchesScope(p, owner, query)), [projects, owner, query]);
+  const counts = useMemo(() => overview(scoped), [scoped]);
+  const openScoped = useMemo(() => scoped.filter((p) => !isClosed(p)).sort((a, b) => compareProjects(a, b)), [scoped]);
+  const openShown = useMemo(() => applyAttention(openScoped, attention), [openScoped, attention]);
+  const closedShown = useMemo(
+    () => scoped.filter(isClosed).sort((a, b) => (b.last_check_in_at ?? b.created_at).localeCompare(a.last_check_in_at ?? a.created_at)),
+    [scoped],
   );
-
-  const portfolio = useMemo(() => {
-    const open = projects.filter((project) => project.status !== "completed" && project.status !== "cancelled");
-    const closed = projects
-      .filter((project) => project.status === "completed" || project.status === "cancelled")
-      .sort(compareProjects);
-    const needsDecision = open
-      .filter((project) => project.status === "at_risk" || isOverdue(project))
-      .sort(compareProjects);
-    const decisionIds = new Set(needsDecision.map((project) => project.id));
-    const needsUpdate = open
-      .filter((project) => !decisionIds.has(project.id) && isStale(project.last_check_in_at))
-      .sort(compareProjects);
-    const updateIds = new Set(needsUpdate.map((project) => project.id));
-    const moving = open
-      .filter((project) => !decisionIds.has(project.id) && !updateIds.has(project.id))
-      .sort(compareProjects);
-    return { needsDecision, needsUpdate, moving, closed };
+  const mineShown = useMemo(
+    () =>
+      scoped
+        .filter((p) => p.next_move?.status === "open")
+        .sort((a, b) => Number(isClosed(a)) - Number(isClosed(b)) || compareProjects(a, b)),
+    [scoped],
+  );
+  const nextMovesUnknown = scoped.some((p) => p.next_move_available === false);
+  const ownerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const p of projects) seen.set(ownerKey(p), ownerName(p));
+    return [...seen.entries()].sort((a, b) => (a[0] === "you" ? -1 : b[0] === "you" ? 1 : a[1].localeCompare(b[1])));
   }, [projects]);
+  const briefs = view === "open" ? openShown : view === "closed" ? closedShown : [];
+  const scopeActive = owner !== "all" || query.trim() !== "" || attention !== "all";
+  const ownerLabel = owner === "all" ? null : ownerOptions.find(([k]) => k === owner)?.[1] ?? "Unknown owner";
+  const focused = projects.find((p) => p.id === focusedId) ?? null;
 
   useEffect(() => {
     setPageContext(
-      selectedProject
-        ? {
-            label: `Projects page — selected project: ${selectedProject.title}`,
-            entity_type: "project",
-            entity_id: selectedProject.id,
-          }
-        : { label: "Projects page — project portfolio" }
+      focused
+        ? { label: `Projects page — selected project: ${focused.title}`, entity_type: "project", entity_id: focused.id }
+        : { label: "Projects page — project portfolio" },
     );
-    return () => setPageContext(null);
-  }, [selectedProject, setPageContext]);
+  }, [focused, setPageContext]);
+  useEffect(() => () => setPageContext(null), [setPageContext]);
 
-  const deskGrid = scribeOpen
-    ? "grid-cols-1 2xl:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.55fr)]"
-    : "grid-cols-1 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.55fr)]";
-  const portfolioVisibility = selectedProject
-    ? scribeOpen
-      ? "hidden 2xl:block"
-      : "hidden xl:block"
-    : "block";
-  const detailEmptyVisibility = scribeOpen ? "hidden 2xl:flex" : "hidden xl:flex";
-  const backVisibility = scribeOpen ? "2xl:hidden" : "xl:hidden";
+  // --- navigation -------------------------------------------------------------
+  function resetScope() {
+    setOwner("all");
+    setQuery("");
+    setAttention("all");
+  }
 
-  return (
-    <PageShell maxWidth="8xl">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+  function setPanel(id: string, panel: Panel | null) {
+    setPanels((cur) => ({ ...cur, [id]: panel }));
+    if (panel) setFocusedId(id);
+    if (panel === "update") {
+      setUpdateDrafts((cur) => {
+        if (cur[id]) return cur;
+        const p = projects.find((x) => x.id === id);
+        return p ? { ...cur, [id]: { status: p.status, completion: "", note: "", requestId: newRequestId() } } : cur;
+      });
+    }
+  }
+
+  const goToBrief = useCallback((id: string, panel?: Panel) => {
+    setFocusedId(id);
+    if (panel) setPanels((cur) => ({ ...cur, [id]: panel }));
+    // Two frames: a view or panel change must commit before the brief exists.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const heading = headings.current.get(id);
+        if (!heading) return;
+        heading.closest("article")?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+        heading.focus({ preventScroll: true });
+      }),
+    );
+  }, []);
+
+  /** From My follow-through (or a receipt): open the project where it lives. */
+  function openProject(p: Project, panel: Panel = "follow") {
+    resetScope();
+    setView(isClosed(p) ? "closed" : "open");
+    goToBrief(p.id, panel);
+  }
+
+  function flash(id: string) {
+    setSavedId(id);
+    window.setTimeout(() => setSavedId((cur) => (cur === id ? null : cur)), 1400);
+  }
+
+  // --- writes -----------------------------------------------------------------
+  async function saveUpdate(p: Project, parsed: { status: ProjectStatus; progress: number | null; note: string | null }) {
+    const draft = updateDrafts[p.id];
+    let saved: CheckIn;
+    try {
+      saved = await createProjectCheckIn(p.id, { ...parsed, client_request_id: draft?.requestId ?? newRequestId() });
+    } catch (e) {
+      // A 4xx wrote nothing, so the next try is a new request. A network
+      // failure or 5xx might have saved: keep the key so a retry returns it.
+      if (e instanceof ApiError && e.status < 500) {
+        setUpdateDrafts((cur) => (cur[p.id] ? { ...cur, [p.id]: { ...cur[p.id], requestId: newRequestId() } } : cur));
+      }
+      throw new Error(errorText(e, "The update wasn't saved. Your entries are still here — check your connection and try again."));
+    }
+    // Saved. From here on a failure is a refresh failure — never re-send.
+    setUpdateDrafts((cur) => {
+      const next = { ...cur };
+      delete next[p.id];
+      return next;
+    });
+    setPanels((cur) => ({ ...cur, [p.id]: "record" }));
+    setRecordVersion((cur) => ({ ...cur, [p.id]: (cur[p.id] ?? 0) + 1 }));
+    const bits = ["Update saved to the record."];
+    if (saved.progress != null) bits.push(`${saved.progress}% completion recorded.`);
+    if (saved.status !== p.status) bits.push(`Status is now ${PROJECT_STATUS_LABEL[saved.status].toLowerCase()}.`);
+    const ok = await refresh();
+    if (!ok) {
+      setProjects((cur) =>
+        cur.map((x) =>
+          x.id === p.id
+            ? {
+                ...x,
+                status: saved.status,
+                last_check_in_at: saved.created_at,
+                last_check_in_note: saved.note,
+                last_check_in_status: saved.status,
+                ...(saved.progress != null ? { progress: saved.progress, progress_at: saved.created_at } : {}),
+              }
+            : x,
+        ),
+      );
+    }
+    if (isClosed({ status: saved.status }) !== isClosed(p)) setView(isClosed({ status: saved.status }) ? "closed" : "open");
+    setReceipt({
+      projectId: p.id,
+      text: `${p.title}: ${bits.join(" ")} Nothing was sent.`,
+      warning: ok ? undefined : "The page couldn’t refresh, so some counts may be behind. The update is saved — don’t record it again. Reload to catch up.",
+    });
+    flash(p.id);
+    goToBrief(p.id);
+  }
+
+  async function setStatusOnly(p: Project, status: ProjectStatus) {
+    if (status === p.status) return;
+    setBusyStatus(p.id);
+    setPageError(null);
+    try {
+      const updated = await updateProjectStatus(p.id, status);
+      // PATCH returns base columns; keep the enrichment already loaded.
+      setProjects((cur) => cur.map((x) => (x.id === p.id ? { ...x, status: updated.status } : x)));
+      setReceipt({ projectId: p.id, text: `${p.title}: status set to ${PROJECT_STATUS_LABEL[updated.status].toLowerCase()}. No dated update was added.` });
+      if (isClosed(updated) !== isClosed(p)) {
+        setView(isClosed(updated) ? "closed" : "open");
+        goToBrief(p.id, "details");
+      }
+    } catch (e) {
+      setPageError(errorText(e, "The status wasn't changed. Try again."));
+    } finally {
+      setBusyStatus(null);
+    }
+  }
+
+  async function submitProject(body: ProjectIn, existing?: Project) {
+    const saved = existing ? await updateProject(existing.id, body) : await createProject(body);
+    const ok = await refresh();
+    if (!ok) {
+      // Keep enrichment (latest update, next move) that the base row lacks.
+      setProjects((cur) =>
+        existing ? cur.map((x) => (x.id === saved.id ? { ...x, ...saved } : x)) : [{ ...saved, next_move: null, next_move_available: true }, ...cur],
+      );
+    }
+    setFormDirty(false);
+    if (existing) setPanels((cur) => ({ ...cur, [saved.id]: "details" }));
+    else setCreating(false);
+    resetScope();
+    setView(isClosed(saved) ? "closed" : "open");
+    setReceipt({
+      projectId: saved.id,
+      text: existing ? `${saved.title}: changes saved. No dated update was added.` : `${saved.title} created. Record an update whenever there’s news.`,
+      warning: ok ? undefined : "The page couldn’t refresh. Your project is saved — reload to see everything current.",
+    });
+    flash(saved.id);
+    goToBrief(saved.id);
+  }
+
+  async function runDelete() {
+    const p = confirmDelete;
+    if (!p || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteProject(p.id);
+      setProjects((cur) => cur.filter((x) => x.id !== p.id));
+      setUpdateDrafts((cur) => {
+        const next = { ...cur };
+        delete next[p.id];
+        return next;
+      });
+      setFollowDrafts((cur) => {
+        const next = { ...cur };
+        delete next[p.id];
+        return next;
+      });
+      setFocusedId((id) => (id === p.id ? null : id));
+      setConfirmDelete(null);
+      setReceipt({ projectId: null, text: `${p.title} was deleted, with its updates and your next moves.` });
+    } catch (e) {
+      setDeleteError(errorText(e, "The project wasn't deleted. Try again."));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function applyFollow(p: Project, open: ProjectFollowThrough | null, text: string) {
+    setProjects((cur) => cur.map((x) => (x.id === p.id ? { ...x, next_move: open, next_move_available: true } : x)));
+    setReceipt({ projectId: p.id, text: `${p.title}: ${text}` });
+  }
+
+  async function markDoneFromList(p: Project) {
+    if (!p.next_move) return;
+    setPageError(null);
+    try {
+      await updateProjectFollowThrough(p.next_move.id, { status: "done" });
+      applyFollow(p, null, "next move marked done. Project status is unchanged.");
+    } catch (e) {
+      setPageError(errorText(e, "That wasn't marked done. Try again."));
+    }
+  }
+
+  const onFormDirty = useCallback((d: boolean) => setFormDirty(d), []);
+
+  // --- render helpers -----------------------------------------------------------
+  function panelContent(p: Project, panel: Panel) {
+    if (panel === "update") {
+      const draft = updateDrafts[p.id] ?? { status: p.status, completion: "", note: "", requestId: newRequestId() };
+      return (
+        <ProjectUpdateForm
+          project={p}
+          draft={draft}
+          onDraftChange={(d) => setUpdateDrafts((cur) => ({ ...cur, [p.id]: d }))}
+          onSubmit={(parsed) => saveUpdate(p, parsed)}
+          onCancel={() => setPanel(p.id, null)}
+          vocabulary={vocabulary}
+        />
+      );
+    }
+    if (panel === "record") {
+      return (
         <div>
-          <h1 className="text-2xl font-semibold">Projects</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Keep the project portfolio in view while you focus, intervene, and follow through.
-          </p>
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-semibold text-ink">The record</h3>
+            <span className="text-xs text-ink-muted">Newest first · exact notes and the status recorded with each</span>
+          </div>
+          <ProjectRecord projectId={p.id} version={recordVersion[p.id] ?? 0} />
         </div>
-        <button
-          onClick={() => {
-            setEditingProjectId(null);
-            setShowForm((shown) => !shown);
-          }}
-          className={primaryBtnCls}
-        >
-          {showForm ? "Cancel" : "+ New project"}
-        </button>
-      </div>
-
-      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
-
-      {loading ? (
-        <SkeletonSection label="Loading projects" variant="cards" className={SECTION_GAP} />
-      ) : (
-        <div className={SECTION_GAP}>
-          {showForm && (
-            <ProjectForm
-              reports={reports}
-              goals={goals}
-              orgUnits={orgUnits}
-              onCancel={() => setShowForm(false)}
-              onSubmit={addProject}
-              submitLabel="Add project"
-              savingLabel="Adding..."
-            />
+      );
+    }
+    if (panel === "follow") {
+      return (
+        <FollowThroughPanel
+          project={p}
+          draft={followDrafts[p.id]}
+          onDraftChange={(t) =>
+            setFollowDrafts((cur) => {
+              const next = { ...cur };
+              if (t === undefined) delete next[p.id];
+              else next[p.id] = t;
+              return next;
+            })
+          }
+          onChanged={(open, text) => applyFollow(p, open, text)}
+          onClose={() => setPanel(p.id, null)}
+          vocabulary={vocabulary}
+        />
+      );
+    }
+    if (panel === "edit") {
+      return (
+        <div>
+          <button type="button" onClick={() => setPanel(p.id, "details")} className="text-sm text-brand hover:text-brand-hover">
+            ← Back to details
+          </button>
+          <h3 className="mb-3 mt-2 text-sm font-semibold text-ink">Edit project</h3>
+          <ProjectForm
+            project={p}
+            reports={reports}
+            goals={goals}
+            orgUnits={orgUnits}
+            vocabulary={vocabulary}
+            onSubmit={(body) => submitProject(body, p)}
+            onCancel={() => setPanel(p.id, "details")}
+            onDirtyChange={onFormDirty}
+          />
+        </div>
+      );
+    }
+    // details
+    return (
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
+          <dt className="text-ink-muted">Owner</dt>
+          <dd className="text-ink-body">{ownerName(p)}</dd>
+          <dt className="text-ink-muted">Team</dt>
+          <dd className="text-ink-body">{p.org_unit_name ?? "No team assigned"}</dd>
+          <dt className="text-ink-muted">Goal</dt>
+          <dd className="text-ink-body">{p.goal_id ? p.goal_title ?? "A goal you can’t see here" : "Standalone — no goal required"}</dd>
+          <dt className="text-ink-muted">Due</dt>
+          <dd className="text-ink-body">{p.due_date ? formatDay(p.due_date) : "No due date"}</dd>
+          <dt className="text-ink-muted">Created</dt>
+          <dd className="text-ink-body">{formatMoment(p.created_at)}</dd>
+          {p.description && (
+            <>
+              <dt className="text-ink-muted">Purpose</dt>
+              <dd className="whitespace-pre-wrap break-words text-ink-body">{p.description}</dd>
+            </>
           )}
-
-          {projects.length === 0 ? (
-            <div className={`${FEATURE_SURFACE} ${SECTION_GAP} p-8 text-center`}>
-              <p className="font-semibold text-ink">No projects yet</p>
-              <p className="mt-1 text-sm text-ink-secondary">
-                Add the first consequential piece of work you want to keep in view.
-              </p>
-            </div>
-          ) : (
-            <div className={`grid items-start gap-5 ${showForm ? SECTION_GAP : ""} ${deskGrid}`}>
-              <PortfolioIndex
-                portfolio={portfolio}
-                selectedProjectId={selectedProjectId}
-                onSelect={(projectId) => {
-                  setEditingProjectId(null);
-                  setSelectedProjectId(projectId);
-                }}
-                className={portfolioVisibility}
-              />
-
-              {selectedProject ? (
-                editingProjectId === selectedProject.id ? (
-                  <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => setEditingProjectId(null)}
-                      className={`${backVisibility} ${BTN_GHOST} mb-3`}
-                    >
-                      ← Back to project
-                    </button>
-                    <ProjectForm
-                      initialProject={selectedProject}
-                      reports={reports}
-                      goals={goals}
-                      orgUnits={orgUnits}
-                      onCancel={() => setEditingProjectId(null)}
-                      onSubmit={(input) => saveEdit(selectedProject.id, input)}
-                      submitLabel="Save changes"
-                      savingLabel="Saving..."
-                      flush
-                    />
-                  </div>
-                ) : (
-                  <ProjectWorkspace
-                    project={selectedProject}
-                    backVisibility={backVisibility}
-                    onBack={() => setSelectedProjectId(null)}
-                    onSetStatus={setStatus}
-                    onEdit={() => setEditingProjectId(selectedProject.id)}
-                    onDelete={() => removeProject(selectedProject.id)}
-                    onCheckedIn={(checkIn) => applyCheckIn(selectedProject.id, checkIn)}
-                  />
-                )
-              ) : (
-                <div className={`${FEATURE_SURFACE} ${detailEmptyVisibility} min-h-[30rem] items-center justify-center p-10 text-center`}>
-                  <div className="max-w-sm">
-                    <p className="text-sm font-semibold text-ink">Choose a project to focus</p>
-                    <p className="mt-2 text-sm text-ink-secondary">
-                      Its owner, outcome, latest change, and check-in history will stay together here.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </PageShell>
-  );
-}
-
-type Portfolio = {
-  needsDecision: Project[];
-  needsUpdate: Project[];
-  moving: Project[];
-  closed: Project[];
-};
-
-function PortfolioIndex({
-  portfolio,
-  selectedProjectId,
-  onSelect,
-  className,
-}: {
-  portfolio: Portfolio;
-  selectedProjectId: string | null;
-  onSelect: (projectId: string) => void;
-  className: string;
-}) {
-  const sections = [
-    { id: "decision", label: "Needs a decision", projects: portfolio.needsDecision },
-    { id: "update", label: "Needs an update", projects: portfolio.needsUpdate },
-    { id: "moving", label: "Moving", projects: portfolio.moving },
-    { id: "closed", label: "Closed", projects: portfolio.closed },
-  ];
-  const total = sections.reduce((count, section) => count + section.projects.length, 0);
-
-  return (
-    <aside className={`${FEATURE_SURFACE} overflow-hidden ${className}`}>
-      <div className="border-b border-divider px-4 py-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-semibold text-ink">Project portfolio</h2>
-          <span className={META}>{total} total</span>
-        </div>
-        <p className="mt-1 text-xs text-ink-secondary">Grouped by the managerial response each project needs.</p>
-      </div>
-
-      <div className="divide-y divide-divider">
-        {sections.map((section) =>
-          section.projects.length > 0 ? (
-            <section key={section.id} className="py-3">
-              <div className="flex items-center justify-between px-4 pb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{section.label}</h3>
-                <span className="text-xs text-ink-muted">{section.projects.length}</span>
-              </div>
-              <div className="space-y-1 px-2">
-                {section.projects.map((project) => {
-                  const reasons = section.id === "moving" || section.id === "closed" ? [] : attentionReasons(project);
-                  const selected = project.id === selectedProjectId;
-                  return (
-                    <button
-                      key={project.id}
-                      type="button"
-                      onClick={() => onSelect(project.id)}
-                      className={`w-full rounded-lg border-l-4 px-3 py-3 text-left transition-colors ${STATUS_BORDER[project.status]} ${
-                        selected ? "bg-brand-tint" : "hover:bg-canvas"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 text-sm font-medium text-ink">{project.title}</p>
-                        <span className="shrink-0 text-xs text-ink-muted">{STATUS_GLYPH[project.status]}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-ink-secondary">
-                        {projectOwner(project)}
-                        {project.org_unit_name ? ` · ${project.org_unit_name}` : ""}
-                      </p>
-                      <p className="mt-1 truncate text-xs text-ink-muted">
-                        {project.goal_title ? `Goal: ${project.goal_title}` : "Standalone project"}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {project.progress != null && (
-                          <span className={`${BADGE} bg-sunken text-ink-secondary`}>{project.progress}%</span>
-                        )}
-                        <TrendArrow trend={project.trend} />
-                        {reasons.map((reason) => (
-                          <span key={reason} className={`${BADGE} bg-amber-50 text-amber-800`}>
-                            {reason}
-                          </span>
-                        ))}
-                        {reasons.length === 0 && project.due_date && (
-                          <span className="text-xs text-ink-muted">Due {formatDate(project.due_date)}</span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ) : null
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function ProjectWorkspace({
-  project,
-  backVisibility,
-  onBack,
-  onSetStatus,
-  onEdit,
-  onDelete,
-  onCheckedIn,
-}: {
-  project: Project;
-  backVisibility: string;
-  onBack: () => void;
-  onSetStatus: (id: string, status: ProjectStatus) => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onCheckedIn: (checkIn: CheckIn) => void;
-}) {
-  const stale = isStale(project.last_check_in_at);
-
-  return (
-    <div className="min-w-0">
-      <button type="button" onClick={onBack} className={`${backVisibility} ${BTN_GHOST} mb-3`}>
-        ← Portfolio
-      </button>
-
-      <article className={`${FEATURE_SURFACE} overflow-hidden`}>
-        <div className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className={META}>Focused project</p>
-              <h2 className="mt-1 text-xl font-semibold text-ink sm:text-2xl">{project.title}</h2>
-            </div>
+        </dl>
+        <div className="flex flex-col gap-3 sm:w-56">
+          <div>
+            <label htmlFor={`project-${p.id}-status-only`} className={LABEL}>
+              Status · changes it without a dated update
+            </label>
             <select
-              value={project.status}
-              onChange={(event) => onSetStatus(project.id, event.target.value as ProjectStatus)}
-              className={`${BADGE} border-0 ${STATUS_STYLES[project.status]}`}
-              aria-label="Project status"
+              id={`project-${p.id}-status-only`}
+              value={p.status}
+              disabled={busyStatus === p.id}
+              onChange={(e) => setStatusOnly(p, e.target.value as ProjectStatus)}
+              className={INPUT}
             >
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status.id} value={status.id}>
-                  {status.label}
+              {PROJECT_STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {PROJECT_STATUS_LABEL[s]}
                 </option>
               ))}
             </select>
           </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <ContextField label="Owner" value={projectOwner(project)} />
-            <ContextField label="Team" value={project.org_unit_name ?? "No team assigned"} />
-            <ContextField label="Due" value={project.due_date ? formatDate(project.due_date) : "No due date"} />
-            <ContextField
-              label="Freshness"
-              value={freshnessLabel(project.last_check_in_at)}
-              attention={stale}
-            />
-          </div>
+          <button type="button" onClick={() => setPanel(p.id, "edit")} className={BTN_SECONDARY}>
+            Edit project
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteError(null);
+              setConfirmDelete(p);
+            }}
+            className="text-left text-sm text-red-700 hover:underline"
+          >
+            Delete project…
+          </button>
         </div>
-
-        <div className="border-t border-divider bg-surface p-5 sm:p-6">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(230px,0.72fr)]">
-            <div>
-              <p className={META}>Purpose</p>
-              <p className="mt-2 text-sm leading-6 text-ink-secondary">
-                {project.description || "No purpose statement has been added yet."}
-              </p>
-            </div>
-            <div className={`rounded-lg border-l-4 p-4 ${project.goal_title ? "border-brand bg-brand-tint" : "border-control bg-sunken"}`}>
-              <p className={META}>{project.goal_title ? "Supports goal" : "Goal connection"}</p>
-              <p className="mt-1 text-sm font-medium text-ink">
-                {project.goal_title ?? "Standalone project"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-xl border border-divider bg-canvas p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-sm font-semibold text-ink">Current signal</p>
-              <span className={`${BADGE} ${STATUS_STYLES[project.status]}`}>
-                {STATUS_GLYPH[project.status]} {STATUS_OPTIONS.find((status) => status.id === project.status)?.label}
-              </span>
-              {project.progress == null && <span className="text-xs text-ink-muted">No progress asserted yet</span>}
-            </div>
-            {project.progress != null && (
-              <div className="mt-3 flex items-center gap-3">
-                <ProgressBar progress={project.progress} status={project.status} />
-                <TrendArrow trend={project.trend} />
-              </div>
-            )}
-            {project.last_check_in_note && (
-              <div className="mt-4 rounded-lg bg-sunken px-4 py-3">
-                <p className={META}>Latest change</p>
-                <p className="mt-1 text-sm text-ink-secondary">{project.last_check_in_note}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-5">
-            <CheckInPanel
-              status={project.status}
-              progress={project.progress}
-              trend={project.trend}
-              lastCheckInAt={project.last_check_in_at}
-              fetchHistory={() => getProjectCheckIns(project.id)}
-              fetchMeetingLinks={() => getBeyondLinks({ projectId: project.id })}
-              submitCheckIn={(body) => createProjectCheckIn(project.id, body)}
-              onCheckedIn={onCheckedIn}
-              actionLabel="Record what changed"
-              formHeading="Record what changed"
-              notePlaceholder="What changed, what is blocked, or what needs a decision?"
-              submitLabel="Record change"
-            />
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-divider pt-4">
-            <button type="button" onClick={onEdit} className={BTN_SECONDARY}>
-              Edit project
-            </button>
-            <button type="button" onClick={onDelete} className={`${BTN_GHOST} text-red-700 hover:text-red-700`}>
-              Delete
-            </button>
-          </div>
-        </div>
-      </article>
-    </div>
-  );
-}
-
-function ContextField({ label, value, attention = false }: { label: string; value: string; attention?: boolean }) {
-  return (
-    <div>
-      <p className={META}>{label}</p>
-      <p className={`mt-1 text-sm font-medium ${attention ? "text-amber-800" : "text-ink"}`}>{value}</p>
-    </div>
-  );
-}
-
-function ProjectForm({
-  initialProject,
-  reports,
-  goals,
-  orgUnits,
-  onCancel,
-  onSubmit,
-  submitLabel,
-  savingLabel,
-  flush = false,
-}: {
-  initialProject?: Project | null;
-  reports: DirectReport[];
-  goals: Goal[];
-  orgUnits: OrgUnit[];
-  onCancel: () => void;
-  onSubmit: (input: ProjectFormValues) => Promise<void>;
-  submitLabel: string;
-  savingLabel: string;
-  flush?: boolean;
-}) {
-  const [title, setTitle] = useState(initialProject?.title ?? "");
-  const [description, setDescription] = useState(initialProject?.description ?? "");
-  const [directReportId, setDirectReportId] = useState(initialProject?.direct_report_id ?? "");
-  const [goalId, setGoalId] = useState(initialProject?.goal_id ?? "");
-  const [orgUnitId, setOrgUnitId] = useState(initialProject?.org_unit_id ?? "");
-  const [status, setStatus] = useState<ProjectStatus>(initialProject?.status ?? "active");
-  const [dueDate, setDueDate] = useState(initialProject?.due_date ?? "");
-  const [saving, setSaving] = useState(false);
-
-  const isEdit = !!initialProject;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim() || saving) return;
-    setSaving(true);
-    try {
-      await onSubmit({ title, description, directReportId, goalId, orgUnitId, status, dueDate });
-      if (!isEdit) {
-        setTitle("");
-        setDescription("");
-        setDirectReportId("");
-        setGoalId("");
-        setOrgUnitId("");
-        setStatus("active");
-        setDueDate("");
-      }
-    } finally {
-      setSaving(false);
-    }
+      </div>
+    );
   }
 
+  const tabs: { id: View; label: string; count: number | null }[] = [
+    { id: "open", label: "Open projects", count: null },
+    { id: "mine", label: "My follow-through", count: nextMovesUnknown ? null : mineShown.length },
+    { id: "closed", label: "Closed", count: closedShown.length },
+  ];
+  const filterLabel =
+    attention === "attention" ? "At risk / past due" : attention === "missing" ? "Missing a recent update" : "All open projects";
+  const reviewChoices = view === "mine" ? mineShown : briefs;
+
+  // --- render -------------------------------------------------------------------
   return (
-    <form
-      onSubmit={handleSubmit}
-      className={`${flush ? "" : "mt-4"} space-y-3 rounded-lg border border-dashed border-control p-4`}
-    >
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_9rem_10rem]">
-        <div className="min-w-0">
-          <label className={labelCls}>Title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} placeholder="e.g. Migrate onboarding to new flow" />
+    <PageShell maxWidth="8xl">
+      <div ref={widthRef} className="mx-auto max-w-[1400px]">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          <div>
+            <h1 className="font-serif text-[2.3rem] font-normal leading-none tracking-[-0.03em] text-ink sm:text-[2.6rem]">Projects</h1>
+            <p className="mt-2 text-sm text-ink-secondary">Keep things moving — what matters, what’s changed, your next move.</p>
+          </div>
+          {!loading && !loadError && (
+            <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+              {projects.length > 0 && (
+              <button
+                ref={reviewButton}
+                type="button"
+                onClick={() => (reviewChoices.length ? setReviewSetup(true) : setPageError("There are no projects in this view to review."))}
+                className={`${BTN_SECONDARY} py-2`}
+              >
+                Prepare a review
+              </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setCreating(true);
+                  setFocusedId(null);
+                  requestAnimationFrame(() => document.getElementById("project-new")?.scrollIntoView({ block: "start" }));
+                }}
+                className={BTN_PRIMARY}
+              >
+                + New project
+              </button>
+            </div>
+          )}
         </div>
-        <div className="min-w-0">
-          <label className={labelCls}>Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)} className={inputCls}>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+
+        {pageError && (
+          <p role="alert" className="mt-4 flex flex-wrap items-baseline gap-3 text-sm text-red-700">
+            {pageError}
+            <button type="button" onClick={() => setPageError(null)} className="text-xs text-ink-muted underline">
+              Dismiss
+            </button>
+          </p>
+        )}
+        <PartialLoadNotice failed={partial} className="mt-4" />
+        <div aria-live="polite">
+          {receipt && (
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-lg border-l-2 border-brand bg-brand-tint px-4 py-2.5 text-sm text-ink-body animate-fade-in motion-reduce:animate-none">
+              <div className="min-w-0">
+                <p>{receipt.text}</p>
+                {receipt.warning && <p className="mt-1 text-amber-700">{receipt.warning}</p>}
+              </div>
+              <button type="button" onClick={() => setReceipt(null)} className="text-xs text-ink-muted hover:text-ink">
+                Dismiss
+              </button>
+            </div>
+          )}
         </div>
-        <div className="min-w-0">
-          <label className={labelCls}>Due date (optional)</label>
-          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
-        </div>
+
+        {loading ? (
+          <SkeletonSection label="Loading projects" variant="cards" className="mt-6" />
+        ) : loadError ? (
+          <div role="alert" className="mt-6 rounded-xl bg-surface p-6">
+            <h2 className="font-serif text-2xl text-ink">Projects couldn’t be loaded.</h2>
+            <p className="mt-2 text-sm text-ink-secondary">This is a connection problem, not an empty portfolio. Nothing was changed. {loadError}</p>
+            <button type="button" onClick={() => void load()} className={`${BTN_SECONDARY} mt-4`}>
+              Try again
+            </button>
+          </div>
+        ) : (
+          <>
+            {creating && (
+              <section id="project-new" aria-labelledby="project-new-title" className="mt-5 scroll-mt-24 rounded-xl border border-hairline bg-surface p-5">
+                <h2 id="project-new-title" className="mb-4 font-serif text-[1.6rem] font-normal text-ink">
+                  A project worth keeping in view
+                </h2>
+                <ProjectForm
+                  reports={reports}
+                  goals={goals}
+                  orgUnits={orgUnits}
+                  vocabulary={vocabulary}
+                  onSubmit={(body) => submitProject(body)}
+                  onCancel={() => {
+                    setCreating(false);
+                    setFormDirty(false);
+                  }}
+                  onDirtyChange={onFormDirty}
+                />
+              </section>
+            )}
+
+            {projects.length === 0 ? (
+              !creating && (
+                <div className="mt-6 rounded-xl border border-hairline bg-surface p-8">
+                  <h2 className="font-serif text-2xl text-ink">Start with work worth keeping in view.</h2>
+                  <p className="mt-2 max-w-xl text-sm text-ink-secondary">
+                    Keep each project’s purpose and latest situation together. A project can stand on its own — a goal connection is optional.
+                  </p>
+                  <button type="button" onClick={() => setCreating(true)} className={`${BTN_PRIMARY} mt-4`}>
+                    + New project
+                  </button>
+                </div>
+              )
+            ) : (
+              <>
+                {/* View + scope */}
+                <div className="mt-6 flex flex-col gap-3 border-b border-hairline md:flex-row md:items-end md:justify-between">
+                  <nav aria-label="Project view" className="-mb-px flex gap-5 overflow-x-auto">
+                    {tabs.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed={view === t.id}
+                        onClick={() => setView(t.id)}
+                        className={`shrink-0 border-b-2 pb-2.5 text-[0.92rem] ${
+                          view === t.id ? "border-brand text-brand" : "border-transparent text-ink-secondary hover:text-ink"
+                        }`}
+                      >
+                        {t.label}
+                        {t.count != null && <span className="ml-1.5 text-xs text-ink-muted">{t.count}</span>}
+                      </button>
+                    ))}
+                  </nav>
+                  <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                    <label htmlFor="projects-search" className="sr-only">
+                      Find a project
+                    </label>
+                    <input
+                      id="projects-search"
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Find a project…"
+                      className={`${INPUT} w-full py-1.5 text-xs sm:w-48`}
+                    />
+                    <label htmlFor="projects-owner" className="sr-only">
+                      Project owner
+                    </label>
+                    <select
+                      id="projects-owner"
+                      value={owner}
+                      onChange={(e) => setOwner(e.target.value)}
+                      className={`${INPUT} w-full py-1.5 text-xs sm:w-44`}
+                    >
+                      <option value="all">All owners</option>
+                      {ownerOptions.map(([k, name]) => (
+                        <option key={k} value={k}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {scopeActive && (
+                  <p className="mt-2.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
+                    <span>
+                      Showing{ownerLabel ? ` ${ownerLabel}’s projects` : " all owners"}
+                      {query.trim() ? ` matching “${query.trim()}”` : ""}
+                      {view === "open" && attention !== "all" ? ` · ${filterLabel.toLowerCase()}` : ""}
+                    </span>
+                    <button type="button" onClick={resetScope} className="font-medium text-brand hover:text-brand-hover">
+                      Reset
+                    </button>
+                  </p>
+                )}
+
+                {view === "open" && (
+                  <>
+                    <OverviewBand
+                      counts={counts}
+                      filter={attention}
+                      width={width}
+                      onFilter={(f) => {
+                        setAttention(f);
+                        setShowAll(false);
+                      }}
+                      onNextMoves={() => setView("mine")}
+                    />
+                    {(width < 520 || (counts.attention > 0 && counts.missing > 0)) && (
+                      <p className="mt-1.5 text-2xs text-ink-muted">
+                        {width < 520 ? "Missing an update: none yet, or none in 14 days — missing context, not risk. " : ""}
+                        {counts.attention > 0 && counts.missing > 0 ? "Counts can overlap — one project can be at risk and missing an update." : ""}
+                      </p>
+                    )}
+                    <PortfolioScan
+                      rows={openShown}
+                      total={openScoped.length}
+                      showAll={showAll}
+                      onShowAll={setShowAll}
+                      onGo={(id) => goToBrief(id)}
+                      wide={scanWide}
+                      filterLabel={filterLabel}
+                    />
+                  </>
+                )}
+
+                {view === "mine" && (
+                  <section aria-labelledby="mine-title" className="mt-5">
+                    <h2 id="mine-title" className="text-sm font-semibold text-ink">
+                      {nextMovesUnknown ? "Your open next moves" : `${mineShown.length} open next move${mineShown.length === 1 ? "" : "s"}`}
+                      <span className="font-normal text-ink-muted"> · private to you, never assigned or sent</span>
+                    </h2>
+                    {nextMovesUnknown && (
+                      <p role="alert" className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                        Your next moves couldn’t be loaded, so this list may be incomplete.{" "}
+                        <button type="button" onClick={() => void refresh()} className="underline">
+                          Try again
+                        </button>
+                      </p>
+                    )}
+                    {mineShown.length === 0 ? (
+                      !nextMovesUnknown && (
+                        <p className="mt-3 rounded-xl border border-hairline bg-surface p-6 text-sm text-ink-secondary">
+                          Nothing waiting on you here. Only next moves you record yourself appear — an empty list doesn’t mean every project is healthy.
+                        </p>
+                      )
+                    ) : (
+                      <ul className="mt-3 divide-y divide-divider overflow-hidden rounded-xl border border-hairline bg-surface">
+                        {mineShown.map((p) => (
+                          <li key={p.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                            <div className="min-w-0">
+                              <p className="break-words text-sm font-medium text-ink">{p.next_move!.body}</p>
+                              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
+                                <span>
+                                  For <span className="text-ink-body">{p.title}</span> · owner {ownerName(p)}
+                                </span>
+                                {isClosed(p) && <StatusChip status={p.status} />}
+                                {isClosed(p) && <span>Project closed</span>}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 gap-2">
+                              <button type="button" onClick={() => openProject(p)} className={BTN_SECONDARY}>
+                                Open project
+                              </button>
+                              <button type="button" onClick={() => void markDoneFromList(p)} className={BTN_SECONDARY}>
+                                Mark done
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
+
+                {view !== "mine" && (
+                  <section aria-labelledby="briefs-title" className="mt-6">
+                    <h2 id="briefs-title" className="mb-2.5 text-sm font-semibold text-ink">
+                      {view === "closed"
+                        ? `${briefs.length} closed project${briefs.length === 1 ? "" : "s"}`
+                        : `Project briefs · ${briefs.length}`}
+                      {view === "open" && attention !== "all" && <span className="font-normal text-ink-muted"> · {filterLabel.toLowerCase()}</span>}
+                    </h2>
+                    {briefs.length === 0 ? (
+                      <div className="rounded-xl border border-hairline bg-surface p-6 text-sm text-ink-secondary">
+                        {view === "closed" ? "No closed projects in this view." : "No open projects match."}{" "}
+                        {scopeActive && (
+                          <button type="button" onClick={resetScope} className="font-medium text-brand hover:text-brand-hover">
+                            Reset filters
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {briefs.map((p) => {
+                          const panel = panels[p.id] ?? null;
+                          const draft = updateDrafts[p.id];
+                          return (
+                            <ProjectBrief
+                              key={p.id}
+                              ref={(el) => {
+                                if (el) headings.current.set(p.id, el);
+                                else headings.current.delete(p.id);
+                              }}
+                              project={p}
+                              panel={panel}
+                              wide={wide}
+                              justSaved={savedId === p.id}
+                              hasDraft={!!draft && isUpdateDirty(draft, p)}
+                              onPanel={(next) => setPanel(p.id, next)}
+                            >
+                              {panel ? panelContent(p, panel) : null}
+                            </ProjectBrief>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                )}
+              </>
+            )}
+            <p className="mt-8 text-2xs text-ink-muted">Private manager workspace · Saving never sends, shares or notifies anyone.</p>
+          </>
+        )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="min-w-0">
-          <label className={labelCls}>Assigned to (optional)</label>
-          <select value={directReportId} onChange={(e) => setDirectReportId(e.target.value)} className={inputCls}>
-            <option value="">Your project</option>
-            {reports.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="min-w-0">
-          <label className={labelCls}>Supports goal (optional)</label>
-          <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className={inputCls}>
-            <option value="">Standalone — no goal</option>
-            {goals.map((g) => (
-              <option key={g.id} value={g.id}>
-                [{g.level}] {g.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      {confirmDelete && (
+        <Dialog title="Delete this project?" onClose={() => !deleting && setConfirmDelete(null)}>
+          <p className="text-sm text-ink-body">{confirmDelete.title}</p>
+          <p className="mt-2 text-sm text-ink-secondary">Its dated updates and your next moves on it are deleted too. This can’t be undone.</p>
+          <div role="alert">{deleteError && <p className="mt-3 text-sm text-red-700">{deleteError}</p>}</div>
+          <div className="mt-5 flex items-center gap-3">
+            <button type="button" onClick={() => void runDelete()} disabled={deleting} className={BTN_DANGER}>
+              {deleting ? "Deleting..." : "Delete project"}
+            </button>
+            <button type="button" onClick={() => setConfirmDelete(null)} disabled={deleting} className="text-sm text-ink-secondary hover:text-ink" data-autofocus>
+              Keep project
+            </button>
+          </div>
+        </Dialog>
+      )}
 
-      <div>
-        <label className={labelCls}>Team (optional)</label>
-        <select value={orgUnitId} onChange={(e) => setOrgUnitId(e.target.value)} className={inputCls}>
-          <option value="">No team assigned</option>
-          {orgUnits.map((ou) => (
-            <option key={ou.id} value={ou.id}>
-              {ou.name} ({ou.unit_type})
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-ink-muted">
-          Drives which team page this shows up on under /app/team — a parent team&apos;s page also shows
-          this project.
-        </p>
-      </div>
-
-      <div>
-        <label className={labelCls}>Description (optional)</label>
-        <NoteField
-          value={description}
-          onChange={setDescription}
-          rows={2}
-          baseClassName={inputCls}
-          placeholder="What this project is and how it ties back to the goal"
+      {reviewSetup && (
+        <ReviewSetup
+          choices={reviewChoices}
+          scopeName={[
+            view === "open" ? filterLabel : view === "closed" ? "Closed projects" : "Projects with your open next moves",
+            ownerLabel ? `owner ${ownerLabel}` : null,
+            query.trim() ? `matching “${query.trim()}”` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          onCancel={() => setReviewSetup(false)}
+          onStart={(plan) => {
+            setReviewSetup(false);
+            setReview(plan);
+          }}
         />
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button type="submit" disabled={saving} className={primaryBtnCls}>
-          {saving ? savingLabel : submitLabel}
-        </button>
-        <button type="button" onClick={onCancel} className="text-sm text-ink-secondary hover:text-ink">
-          Cancel
-        </button>
-      </div>
-    </form>
+      )}
+      {review && (
+        <ReviewPresentation
+          projects={projects}
+          plan={review}
+          onExit={() => {
+            setReview(null);
+            requestAnimationFrame(() => reviewButton.current?.focus());
+          }}
+        />
+      )}
+    </PageShell>
   );
 }

@@ -32,6 +32,9 @@ _CHECK_IN_COLUMNS = "id,goal_id,project_id,status,progress,note,created_at"
 # Goal check-ins also carry a measured reading (2026-09-25 goal measures) and
 # where they came from. Projects keep the narrower column list.
 GOAL_CHECK_IN_COLUMNS = _CHECK_IN_COLUMNS + ",measured_value,source_type,source_id"
+# Project check-ins carry their source too, so the project record can link a
+# confirmed Beyond meeting. Never a measured value.
+PROJECT_CHECK_IN_COLUMNS = _CHECK_IN_COLUMNS + ",source_type,source_id"
 
 # How many recent readings a goal list row carries for the board's plot. The
 # full history is fetched lazily from GET /api/goals/{id}/check-ins.
@@ -100,7 +103,7 @@ def create_check_in(
 
 
 def _columns_for(parent_fk: str) -> str:
-    return GOAL_CHECK_IN_COLUMNS if parent_fk == "goal_id" else _CHECK_IN_COLUMNS
+    return GOAL_CHECK_IN_COLUMNS if parent_fk == "goal_id" else PROJECT_CHECK_IN_COLUMNS
 
 
 def list_check_ins(supabase, user_id: str, parent_fk: str, parent_id: str) -> list[dict]:
