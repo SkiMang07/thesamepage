@@ -197,7 +197,8 @@ type Selection =
   | { type: "home" }
   | { type: "conversation"; id: string }
   | { type: "records"; owner: WeekCommitmentOwner | "all"; state: WeekCommitmentState }
-  | { type: "completed_conversations" };
+  | { type: "completed_conversations" }
+  | { type: "unscheduled" };
 
 // ---------------------------------------------------------------------------
 // Page
@@ -231,8 +232,8 @@ export function WeekInFocus({
 
   // Two columns once the main column can still hold five ~92px day columns
   // beside the side panel; below that the side panel moves under the week.
-  const twoColumn = rootWidth >= 700;
-  const sideWidth = rootWidth >= 1200 ? "20rem" : rootWidth >= 900 ? "17rem" : "13.5rem";
+  const twoColumn = rootWidth >= 860;
+  const sideWidth = rootWidth >= 1200 ? "20rem" : "17rem";
 
   // Stale selection after a refresh (a record disappeared) falls back home.
   useEffect(() => {
@@ -310,6 +311,46 @@ export function WeekInFocus({
 
   const ok = (domain: string) => week?.coverage?.[domain] === "ok";
 
+  // The next move / details column. Beside the week in two-column mode; in
+  // one column it comes straight after the counts, not below Follow-through,
+  // so a narrow window or an open Scribe drawer does not bury it.
+  const side = (
+    <aside
+      className={twoColumn ? "min-w-0 border-l border-hairline pl-6" : "min-w-0 border-b border-hairline pb-6"}
+      aria-label="Next move and selected details"
+    >
+      <div
+        // Sticky in two-column mode so a drill-down opened from low on the
+        // page (Follow-through) shows its details beside the click.
+        className={twoColumn ? "sticky top-[72px] -ml-1 max-h-[calc(100vh-88px)] overflow-y-auto pl-1 pr-1" : undefined}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && selection.type !== "home") closeDetail();
+        }}
+      >
+        {selection.type === "home" || !week ? (
+          <NextMove
+            brief={brief}
+            briefFailed={briefFailed}
+            impressions={impressions}
+            onDisposed={disposed}
+            onRetry={onRetryBrief}
+            onLegacy={onLegacy}
+            onRefresh={onRefresh}
+            setToast={setToast}
+          />
+        ) : (
+          <Detail
+            week={week}
+            selection={selection}
+            headingRef={detailHeadingRef}
+            onClose={closeDetail}
+            onSelect={select}
+          />
+        )}
+      </div>
+    </aside>
+  );
+
   return (
     <PageShell maxWidth="8xl">
       <div ref={rootRef}>
@@ -340,10 +381,14 @@ export function WeekInFocus({
         >
           <div className="min-w-0">
             {weekFailed || !week ? (
-              <WeekUnavailable onRetry={onRetryWeek} />
+              <>
+                <WeekUnavailable onRetry={onRetryWeek} />
+                {!twoColumn && <div className="mt-6">{side}</div>}
+              </>
             ) : (
               <>
                 <Metrics week={week} ok={ok} selection={selection} onSelect={select} stacked={rootWidth < 460} />
+                {!twoColumn && <div className="mb-7">{side}</div>}
                 <ConversationWeek
                   week={week}
                   ok={ok("one_on_ones") && ok("team_meetings") && ok("outside_meetings")}
@@ -357,40 +402,7 @@ export function WeekInFocus({
             )}
           </div>
 
-          <aside
-            className={twoColumn ? "min-w-0 border-l border-hairline pl-6" : "min-w-0 border-t border-hairline pt-6"}
-            aria-label="Next move and selected details"
-          >
-            <div
-              // Sticky in two-column mode so a drill-down opened from low on the
-              // page (Follow-through) shows its details beside the click.
-              className={twoColumn ? "sticky top-[72px] -ml-1 max-h-[calc(100vh-88px)] overflow-y-auto pl-1 pr-1" : undefined}
-              onKeyDown={(e) => {
-                if (e.key === "Escape" && selection.type !== "home") closeDetail();
-              }}
-            >
-              {selection.type === "home" || !week ? (
-                <NextMove
-                  brief={brief}
-                  briefFailed={briefFailed}
-                  impressions={impressions}
-                  onDisposed={disposed}
-                  onRetry={onRetryBrief}
-                  onLegacy={onLegacy}
-                  onRefresh={onRefresh}
-                  setToast={setToast}
-                />
-              ) : (
-                <Detail
-                  week={week}
-                  selection={selection}
-                  headingRef={detailHeadingRef}
-                  onClose={closeDetail}
-                  onSelect={select}
-                />
-              )}
-            </div>
-          </aside>
+          {twoColumn && side}
         </div>
 
         {week && !weekFailed && (
@@ -435,7 +447,7 @@ function Metrics({
   const overdueOwners = new Set(overdue.map((c) => c.owner_name)).size;
 
   const stat = "min-w-0 rounded-md px-1.5 py-1 text-left transition hover:bg-surface aria-pressed:bg-surface";
-  const num = "block font-serif text-[2.1rem] font-normal leading-tight sm:text-[2.45rem]";
+  const num = "block text-[1.85rem] font-medium leading-tight tracking-[-0.02em] tabular-nums sm:text-[2.1rem]";
   const pressed = (s: Selection) =>
     selection.type === s.type && (s.type !== "records" || (selection.type === "records" && selection.owner === s.owner && selection.state === s.state));
 
@@ -453,7 +465,7 @@ function Metrics({
           {conversationsOk && completedConversations > 0 && <span className="ml-1 font-sans text-xl text-brand" aria-hidden="true">✓</span>}
         </span>
         <span className="mt-1 block text-xs text-ink">Conversations completed</span>
-        <span className="mt-0.5 block text-[11px] text-ink-muted">
+        <span className="mt-0.5 block text-2xs text-ink-muted">
           {!conversationsOk ? "Couldn’t load" : week.conversations.length ? `of ${week.conversations.length} dated this week` : "Nothing dated this week"}
         </span>
       </button>
@@ -466,7 +478,7 @@ function Metrics({
       >
         <span className={`${num} text-ink`}>{ok("commitments") ? completedCommitments : "—"}</span>
         <span className="mt-1 block text-xs text-ink">Commitments completed</span>
-        <span className="mt-0.5 block text-[11px] text-ink-muted">{ok("commitments") ? "by you and your team this week" : "Couldn’t load"}</span>
+        <span className="mt-0.5 block text-2xs text-ink-muted">{ok("commitments") ? "by you and your team this week" : "Couldn’t load"}</span>
       </button>
       <button
         type="button"
@@ -479,7 +491,7 @@ function Metrics({
           {ok("commitments") ? overdue.length : "—"}
         </span>
         <span className="mt-1 block text-xs text-ink">Overdue commitments</span>
-        <span className="mt-0.5 block text-[11px] text-ink-muted">
+        <span className="mt-0.5 block text-2xs text-ink-muted">
           {!ok("commitments") ? "Couldn’t load" : overdue.length ? `across ${plural(overdueOwners, "owner")}` : "Nothing overdue"}
         </span>
       </button>
@@ -494,7 +506,7 @@ function Metrics({
 const VISIBLE_PER_DAY = 4;
 
 function Avatar({ c, size = "sm" }: { c: WeekConversation; size?: "sm" | "md" | "lg" }) {
-  const dims = size === "lg" ? "h-11 w-11 text-sm" : size === "md" ? "h-6 w-6 text-[10px]" : "h-5 w-5 text-[9px]";
+  const dims = size === "lg" ? "h-11 w-11 text-sm" : size === "md" ? "h-6 w-6 text-2xs" : "h-5 w-5 text-[9px]";
   const group = isGroup(c);
   const text = !group
     ? initialsOf(c.title)
@@ -569,7 +581,7 @@ function ConversationWeek({
     <section aria-labelledby="conversation-week-heading" className="mb-7">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 id="conversation-week-heading" className="text-[17px] font-medium text-ink">Your conversation week</h2>
-        <span className="text-[11px] text-ink-muted">{rangeLabel(week.week.start, shownEnd)}</span>
+        <span className="text-2xs text-ink-muted">{rangeLabel(week.week.start, shownEnd)}</span>
       </div>
 
       {!ok ? (
@@ -596,14 +608,14 @@ function ConversationWeek({
                   aria-label={`${longDate(iso)}${isToday ? ", today" : ""}: ${plural(items.length, "conversation")}`}
                   className={`min-w-0 rounded-lg px-1.5 py-2.5 ${isToday ? "bg-brand-tint" : "bg-surface"}`}
                 >
-                  <div className={`mb-1.5 flex items-center justify-between gap-1 border-b border-hairline px-1 pb-2 text-[10px] tracking-[0.03em] ${isToday ? "text-brand" : "text-ink-muted"}`}>
+                  <div className={`mb-1.5 flex items-center justify-between gap-1 border-b border-hairline px-1 pb-2 text-2xs tracking-[0.03em] ${isToday ? "text-brand" : "text-ink-muted"}`}>
                     <time dateTime={iso} className="whitespace-nowrap uppercase">
                       {fmt(iso, { weekday: "short" })} {parseDay(iso).getDate()}
                       {isToday && <span className="sr-only">, today</span>}
                     </time>
                     <span aria-hidden="true">{items.length}</span>
                   </div>
-                  {items.length === 0 && <p className="px-1 py-2 text-[10px] text-ink-muted">Nothing dated</p>}
+                  {items.length === 0 && <p className="px-1 py-2 text-2xs text-ink-muted">Nothing dated</p>}
                   {items.slice(0, VISIBLE_PER_DAY).map((c) => (
                     <ConversationRow key={c.id} c={c} name={rowName(c, dupFirstNames)} pressed={selection.type === "conversation" && selection.id === c.id} onSelect={onSelect} />
                   ))}
@@ -613,7 +625,7 @@ function ConversationWeek({
                       aria-expanded={openDay === iso}
                       aria-controls="day-agenda"
                       onClick={() => onOpenDay(openDay === iso ? null : iso)}
-                      className="mt-1 w-full rounded border-t border-hairline px-0.5 py-2 text-left text-[10px] text-brand hover:text-brand-hover"
+                      className="mt-1 w-full rounded border-t border-hairline px-0.5 py-2 text-left text-2xs text-brand hover:text-brand-hover"
                     >
                       View all {items.length} (+{hidden})
                     </button>
@@ -623,7 +635,7 @@ function ConversationWeek({
             })}
           </div>
 
-          <div className="mb-2 mt-3 flex flex-wrap gap-x-3.5 gap-y-1 text-[10px] text-ink-muted" aria-label="Legend">
+          <div className="mb-2 mt-3 flex flex-wrap gap-x-3.5 gap-y-1 text-2xs text-ink-muted" aria-label="Legend">
             <span><span className="text-brand">✓</span> Completed</span>
             <span>• Prep or agenda saved</span>
             <span><span className="text-amber-600">○</span> To prepare</span>
@@ -647,7 +659,7 @@ function ConversationWeek({
                   <Avatar c={c} size="md" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-ink">{c.title}</span>
-                    <span className="block text-[11px] text-ink-muted">
+                    <span className="block text-2xs text-ink-muted">
                       {KIND_LABEL[c.kind]} · <span className={STATE_TONE[c.state]}>{STATE_GLYPH[c.state]}</span> {stateLong(c)}
                     </span>
                   </span>
@@ -658,23 +670,25 @@ function ConversationWeek({
           )}
 
           {week.unscheduled_due.length > 0 && ok && (
-            <div className="mt-3 rounded-lg border border-dashed border-hairline px-3.5 py-3">
-              <p className="text-xs text-ink-body">
-                Due by cadence, no date set
-                <span className="text-ink-muted"> · not on the calendar until a date is chosen</span>
-              </p>
-              <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-                {week.unscheduled_due.map((p) => (
-                  <li key={p.direct_report_id} className="text-xs">
-                    <Link href={p.href} className="text-brand hover:text-brand-hover">{p.name}</Link>
-                    <span className="ml-1 text-[11px] text-ink-muted">
-                      {p.days_since_last === null ? "no 1:1 yet" : `${p.days_since_last} days since last 1:1`}
-                      {p.cadence_days ? ` · every ${p.cadence_days} days${p.cadence_source === "custom" ? " (custom)" : p.cadence_source === "org" ? " (org default)" : " (default)"}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            // One line, not a second calendar: the cadence detail for each
+            // person opens in the side column like every other drill-down.
+            <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+              <button
+                type="button"
+                aria-pressed={selection.type === "unscheduled"}
+                onClick={(e) => onSelect({ type: "unscheduled" }, e.currentTarget)}
+                className="rounded text-ink-body underline decoration-control underline-offset-4 hover:text-ink"
+              >
+                {plural(week.unscheduled_due.length, "person", "people")} due by cadence, no date set
+              </button>
+              {": "}
+              {week.unscheduled_due.map((p, i) => (
+                <span key={p.direct_report_id}>
+                  {i > 0 && ", "}
+                  <Link href={p.href} className="text-brand hover:text-brand-hover">{p.name}</Link>
+                </span>
+              ))}
+            </p>
           )}
         </>
       )}
@@ -699,12 +713,14 @@ function ConversationRow({
       aria-pressed={pressed}
       aria-label={`${c.title}, ${KIND_LABEL[c.kind]}, ${longDate(c.date)}, ${stateLong(c)}`}
       onClick={(e) => onSelect({ type: "conversation", id: c.id }, e.currentTarget)}
-      className={`grid min-h-[50px] w-full grid-cols-[20px_minmax(0,1fr)] items-start gap-1.5 rounded-md px-0.5 py-2 text-left transition hover:bg-elevated ${pressed ? "bg-elevated" : ""}`}
+      className={`grid min-h-[50px] w-full grid-cols-[20px_minmax(0,1fr)] items-start gap-1.5 rounded-md px-0.5 py-2 text-left transition ${
+        pressed ? "bg-brand-tint ring-1 ring-inset ring-brand/50" : "hover:bg-carbon-300/60"
+      }`}
     >
       <Avatar c={c} />
       <span className="min-w-0">
-        <span className="block truncate text-[11px] text-ink">{name}</span>
-        <span className={`mt-0.5 block whitespace-nowrap text-[10px] ${STATE_TONE[c.state]}`}>
+        <span className="block truncate text-2xs text-ink">{name}</span>
+        <span className={`mt-0.5 block whitespace-nowrap text-2xs ${STATE_TONE[c.state]}`}>
           {STATE_GLYPH[c.state]} {stateShort(c)}
         </span>
       </span>
@@ -737,13 +753,13 @@ function FollowThrough({
     <section aria-labelledby="follow-through-heading">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 id="follow-through-heading" className="text-[17px] font-medium text-ink">Follow-through</h2>
-        <span className="text-[11px] text-ink-muted">This week’s commitments</span>
+        <span className="text-2xs text-ink-muted">Done and due this week, plus anything overdue</span>
       </div>
       {!ok ? (
         <p className="rounded-lg bg-surface px-4 py-5 text-sm text-ink-secondary">Commitments couldn’t be loaded, so no counts are shown.</p>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap gap-x-3.5 gap-y-1 text-[10px] text-ink-muted">
+          <div className="mb-4 flex flex-wrap gap-x-3.5 gap-y-1 text-2xs text-ink-muted">
             {STATES.map((s) => (
               <span key={s} className="inline-flex items-center gap-1">
                 <span className={`inline-block h-2 w-2 rounded-[2px] ${METER_SWATCH[s]}`} aria-hidden="true" />
@@ -760,10 +776,10 @@ function FollowThrough({
               <div key={g.owner} className="my-4">
                 <div className="mb-2 flex justify-between text-xs">
                   <span className="text-ink">{g.label}</span>
-                  <span className="text-[11px] text-ink-muted">{plural(total, "commitment")}</span>
+                  <span className="text-2xs text-ink-muted">{plural(total, "commitment")}</span>
                 </div>
                 {total === 0 ? (
-                  <p className="rounded-[3px] bg-surface px-3 py-1.5 text-[11px] text-ink-muted">
+                  <p className="rounded-[3px] bg-surface px-3 py-1.5 text-2xs text-ink-muted">
                     Nothing completed, due, or overdue this week.
                   </p>
                 ) : (
@@ -782,7 +798,7 @@ function FollowThrough({
                           aria-label={`View ${counts[s]} ${g.noun} ${COMMITMENT_STATE_LABEL[s].toLowerCase()} commitment${counts[s] === 1 ? "" : "s"}`}
                           onClick={(e) => onSelect({ type: "records", owner: g.owner, state: s }, e.currentTarget)}
                           style={{ flexGrow: counts[s], flexBasis: 0 }}
-                          className={`min-w-[22px] rounded-[3px] text-[11px] font-medium transition-colors ${active ? METER_SEGMENT_SELECTED[s] : METER_SEGMENT[s]}`}
+                          className={`min-w-[22px] rounded-[3px] text-2xs font-medium transition-colors ${active ? METER_SEGMENT_SELECTED[s] : METER_SEGMENT[s]}`}
                         >
                           {counts[s]}
                         </button>
@@ -793,7 +809,7 @@ function FollowThrough({
               </div>
             );
           })}
-          <p className="text-[11px] text-ink-muted">
+          <p className="text-2xs text-ink-muted">
             Each bar shows the split within its group. Select a segment to see its commitments.
             {undated > 0 && ` ${plural(undated, "open commitment")} with no due date ${undated === 1 ? "isn’t" : "aren’t"} counted here.`}
           </p>
@@ -909,7 +925,7 @@ function NextMove({
             <div key={candidate.candidate_key} className="border-b border-hairline py-3.5 text-xs">
               <p className="text-ink">{candidate.title}</p>
               {candidate.evidence[0] && (
-                <p className="mt-1 text-[11px] text-ink-muted">{candidate.evidence[0].label} · {candidate.evidence[0].freshness}</p>
+                <p className="mt-1 text-2xs text-ink-muted">{candidate.evidence[0].label} · {candidate.evidence[0].freshness}</p>
               )}
               <CandidateControls
                 key={candidate.candidate_key}
@@ -924,7 +940,7 @@ function NextMove({
           {brief.optional_context && (
             <div className="border-b border-hairline py-3.5 text-xs">
               <p className="text-ink">{brief.optional_context.title}</p>
-              <p className="mt-1 text-[11px] text-ink-muted">{brief.optional_context.detail}</p>
+              <p className="mt-1 text-2xs text-ink-muted">{brief.optional_context.detail}</p>
               <div className="mt-2 flex gap-4">
                 <Link href={brief.optional_context.href} className="text-xs font-medium text-brand hover:text-brand-hover">Add role →</Link>
                 <button type="button" onClick={dismissOptionalContext} className="text-xs text-ink-muted hover:text-ink-secondary">Dismiss for today</button>
@@ -951,7 +967,7 @@ function TrailItem({ label, children }: { label: string; children: React.ReactNo
     <div className="relative mb-5 text-xs">
       <span aria-hidden="true" className="absolute -left-[20px] top-1 h-[9px] w-[9px] rounded-full bg-brand" />
       <p className="text-ink">{label}</p>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-ink-muted">{children}</div>
+      <div className="mt-1.5 text-2xs leading-relaxed text-ink-muted">{children}</div>
     </div>
   );
 }
@@ -1047,6 +1063,31 @@ function Detail({
     );
   }
 
+  if (selection.type === "unscheduled") {
+    return (
+      <section aria-labelledby="detail-heading">
+        <DetailHead label="Due by cadence" onClose={onClose} />
+        <h3 id="detail-heading" ref={headingRef} tabIndex={-1} className={h3}>No date set</h3>
+        <p className="text-xs text-ink-secondary">
+          Due for a 1:1 by their cadence, with no upcoming date. They join the calendar once a date is chosen.
+        </p>
+        <ul className="mt-2">
+          {week.unscheduled_due.map((p) => (
+            <li key={p.direct_report_id} className="border-b border-hairline py-3 text-xs">
+              <Link href={p.href} className="text-ink hover:text-brand">{p.name}</Link>
+              <span className="mt-1 block text-2xs text-ink-muted">
+                {p.days_since_last === null ? "No 1:1 yet" : `${p.days_since_last} days since last 1:1`}
+                {p.cadence_days
+                  ? ` · every ${p.cadence_days} days${p.cadence_source === "custom" ? " (custom)" : p.cadence_source === "org" ? " (org default)" : " (default)"}`
+                  : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
   if (selection.type === "completed_conversations") {
     const done = week.conversations.filter((c) => c.state === "completed");
     return (
@@ -1067,7 +1108,7 @@ function Detail({
               >
                 {c.title} →
               </button>
-              <span className="mt-1 block text-[11px] text-ink-muted">{dayWithDate(c.date)} · {KIND_LABEL[c.kind]}</span>
+              <span className="mt-1 block text-2xs text-ink-muted">{dayWithDate(c.date)} · {KIND_LABEL[c.kind]}</span>
             </li>
           ))}
         </ul>
@@ -1104,7 +1145,7 @@ function RecordRow({ c }: { c: WeekCommitment }) {
   return (
     <li className="border-b border-hairline py-3 text-xs">
       <Link href={c.href} className="text-ink hover:text-brand">{c.title}</Link>
-      <span className="mt-1 block text-[11px] text-ink-muted">
+      <span className="mt-1 block text-2xs text-ink-muted">
         {c.owner_name}
         {c.about_name && ` · with ${c.about_name}`}
         {when && ` · `}
@@ -1225,7 +1266,7 @@ function GoalsProgress({
             ))}
           </div>
           {goal && <GoalDetail g={goal} tier={tier} wide={cols > 1} onClose={() => setSelected(null)} />}
-          <p className="mt-3.5 text-[11px] text-ink-muted">
+          <p className="mt-3.5 text-2xs text-ink-muted">
             Latest recorded check-ins · Select a goal for its update and linked work.
             {list.length > shown.length && (
               <>
@@ -1259,21 +1300,21 @@ function GoalCard({ g, pressed, onClick }: { g: WeekGoal; pressed: boolean; onCl
       onClick={onClick}
       className={`min-w-0 rounded-[9px] border bg-surface p-4 text-left transition hover:bg-elevated ${pressed ? "border-brand" : "border-transparent"}`}
     >
-      <span className="mb-4 line-clamp-2 block min-h-[2.6rem] text-sm leading-snug text-ink">{g.title}</span>
+      <span className={`line-clamp-2 block text-sm leading-snug text-ink ${g.progress !== null ? "mb-4 min-h-[2.6rem]" : "mb-3"}`}>{g.title}</span>
       {g.progress !== null ? (
         <>
-          <span className="mb-2.5 block font-serif text-[1.8rem] leading-tight text-ink">
-            {g.progress}% <span className="font-sans text-[11px] text-ink-muted">complete</span>
+          <span className="mb-2.5 block text-[1.6rem] font-medium leading-tight tracking-[-0.02em] tabular-nums text-ink">
+            {g.progress}% <span className="font-sans text-2xs text-ink-muted">complete</span>
           </span>
           <span className="mb-3.5 block h-[5px] overflow-hidden rounded bg-sunken" role="img" aria-label={`${g.progress} percent complete, recorded ${shortDate(g.progress_at!)}`}>
             <span className={`block h-full rounded ${g.status === "at_risk" ? "bg-amber-500" : "bg-brand"}`} style={{ width: `${g.progress}%` }} />
           </span>
         </>
       ) : (
-        <span className="mb-3.5 flex min-h-[3.2rem] items-center text-xs text-ink-muted">Progress not recorded</span>
+        <span className="mb-2 block text-xs text-ink-muted">Progress not recorded</span>
       )}
-      <span className="block text-[11px] text-ink-muted">{freshnessText(g)}</span>
-      <span className="mt-1.5 block text-[11px]">
+      <span className="block text-2xs text-ink-muted">{freshnessText(g)}</span>
+      <span className="mt-1.5 block text-2xs">
         <span className={STATUS_TONE[g.status]}>
           <span aria-hidden="true">{STATUS_GLYPH[g.status]} </span>{STATUS_LABEL[g.status]}
         </span>

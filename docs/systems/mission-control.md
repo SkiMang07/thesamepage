@@ -22,7 +22,8 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
    △ Not logged (the date has passed with nothing written up). Meetings are
    dated by day, so no times are shown. 1:1s, team meetings (square avatar)
    and meetings beyond the team all appear. People due by cadence with no
-   date set are listed below the week, linking to prep. They are not
+   date set get one line below the week (names link to prep; the line
+   opens their cadence detail in the right-hand column). They are not
    calendar events.
 4. **Follow-through.** "Mine" and "My team" bars split into Completed / Due
    this week / Overdue. Each bar shows proportions within its own group.
@@ -45,8 +46,12 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
    goal-sourced commitments.
 
 Layout is measured, not viewport-based: the page switches to one column below
-~700px of content width and the week to stacked days below ~92px per day, so
-the Scribe drawer reflows it the same way a narrow window does.
+~860px of content width and the week to stacked days below ~92px per day, so
+the Scribe drawer reflows it the same way a narrow window does. In one column
+the next move comes straight after the counts, not after Follow-through.
+
+Counts and goal percentages are set in the sans with tabular figures; the
+serif is for the heading and detail titles only (see `DESIGN.md` → fonts).
 
 ## The week view
 

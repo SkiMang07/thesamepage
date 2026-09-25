@@ -28,8 +28,13 @@ recorded, including superseded ones — is `docs/archive/DESIGN_ARCHIVE.md`.
 - **Layout tokens live in `ZoneMap.tsx`**: `NAV_GROUPS`, `ZONE_STYLE`,
   `TONE_TEXT`, `NAV_STRIP_HEIGHT`, `SECTION_GAP`. Import from there rather than
   redefining a value locally — that drift is what these tokens exist to stop.
-- **Icons and fonts:** not yet decided. The wordmark currently sets in the
-  default sans; a pairing for the editorial T10-C mark is still open.
+- **Icons and fonts:** icons not yet decided. `font-sans` is the system stack;
+  `font-serif` is named explicitly as Georgia (`tailwind.config.js`) so the
+  editorial headings render the same in every browser. Numbers are never set
+  in the serif: Georgia's old-style figures misalign in a row of counts, so
+  counts use `font-sans tabular-nums`. `text-2xs` (11px) is the smallest text
+  size in the app. The wordmark sets in the default sans; a pairing for the
+  T10-C mark is still open.
 
 ---
 
@@ -68,7 +73,9 @@ the nav, so `/app/login` and `/app/ic` stay light without any override:
   which matches the top bar's height and hairline so one rule runs across the
   top of the app. The collapse control sits in the footer under Settings.
   Collapses to a 56px icon-only rail with native `title` tooltips; the
-  collapse state persists to `localStorage`.
+  collapse state persists to `localStorage`. Below `md` the rail is hidden and
+  opens as a slide-over from a menu button in the top bar (which also shows
+  the mark there, and drops the Quick add / Scribe labels to their icons).
 - **`PageShell`** — owns every page's container
   (`mx-auto max-w-{size} px-6 py-8 sm:px-8`). A `maxWidth` prop keeps each page's
   own width; `8xl` (`max-w-[1600px]`) is reserved for the four grid-heavy pages

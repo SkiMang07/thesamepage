@@ -175,6 +175,18 @@ module.exports = {
           "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto",
           "Helvetica Neue", "Arial", "sans-serif",
         ],
+        // The editorial serif (Mission Control's heading, detail titles).
+        // Named explicitly: Tailwind's default starts with ui-serif, which
+        // Safari renders as New York and Chrome ignores (falling to Georgia),
+        // so the same page looked different per browser. Numbers are NOT
+        // set in this face: Georgia has old-style figures (a 9 drops below
+        // the baseline), so counts use font-sans tabular-nums.
+        serif: ["Georgia", "Cambria", "\"Times New Roman\"", "Times", "serif"],
+      },
+      // One small step below text-xs, and the floor for readable text:
+      // nothing in the app goes below 11px.
+      fontSize: {
+        "2xs": ["11px", { lineHeight: "16px" }],
       },
       // The one gradient the system spends: a deep teal-into-carbon feature
       // surface, for identity bands and hero summaries only. Everything else

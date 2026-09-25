@@ -14,12 +14,17 @@ const STORAGE_KEY = "tsp:sidebar-collapsed";
 type SidebarContextType = {
   collapsed: boolean;
   toggle: () => void;
+  /** Below md the rail is hidden and opens as a slide-over from AppNav's
+   *  menu button. Per-visit state, never persisted. */
+  mobileOpen: boolean;
+  setMobileOpen: (open: boolean) => void;
 };
 
 const SidebarContext = createContext<SidebarContextType | null>(null);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     if (localStorage.getItem(STORAGE_KEY) === "true") setCollapsed(true);
@@ -31,7 +36,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 
   const toggle = useCallback(() => setCollapsed((c) => !c), []);
 
-  return <SidebarContext.Provider value={{ collapsed, toggle }}>{children}</SidebarContext.Provider>;
+  return <SidebarContext.Provider value={{ collapsed, toggle, mobileOpen, setMobileOpen }}>{children}</SidebarContext.Provider>;
 }
 
 export function useSidebar() {

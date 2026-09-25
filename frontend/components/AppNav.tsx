@@ -35,6 +35,8 @@ import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { useDrawer } from "@/lib/drawer-context";
 import { useQuickAdd } from "@/lib/quick-add-context";
+import { useSidebar } from "@/lib/sidebar-context";
+import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase";
 import { Icon, NAV_STRIP_HEIGHT, getNavContext, useZoneData } from "@/components/ZoneMap";
 import QuickAddModal from "@/components/QuickAddModal";
@@ -57,6 +59,7 @@ export default function AppNav() {
   const { isOpen: drawerOpen, toggle: toggleDrawer } = useDrawer();
   const { isOpen: quickAddOpen, open: openQuickAdd, close: closeQuickAdd } = useQuickAdd();
   const zone = useZoneData();
+  const { setMobileOpen } = useSidebar();
   // Andrew flagged (2026-08-17): clicking the avatar badge did nothing — it
   // was a plain <span>, no menu ever built. Wired up here: name/email +
   // Settings + Sign out for quick access from anywhere. Settings also exposes
@@ -105,13 +108,28 @@ export default function AppNav() {
           nav it names, so this bar carries only the global actions. */}
       <header className="sticky top-0 z-40 border-b border-hairline bg-canvas/85 backdrop-blur">
         <div className={`flex ${NAV_STRIP_HEIGHT} items-center gap-3 px-6 sm:px-8`}>
+          {/* Below md the Sidebar is hidden: a menu button and the mark stand in for it. */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+            className="-ml-1 flex h-8 w-8 items-center justify-center rounded-md text-ink-secondary hover:bg-sunken hover:text-ink md:hidden"
+          >
+            <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+              <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+            </svg>
+          </button>
+          <Link href="/app/dashboard" className="md:hidden" aria-label="The Same Page — Mission Control">
+            <Logo className="h-[22px] w-auto text-brand" />
+          </Link>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
               onClick={openQuickAdd}
               className={BTN_TOPBAR_NEUTRAL}
             >
               <span aria-hidden className="text-ink-muted">+</span>
-              Quick add
+              <span className="hidden sm:inline">Quick add</span>
+              <span className="sr-only sm:hidden">Quick add</span>
             </button>
             <button
               onClick={toggleDrawer}
@@ -123,8 +141,9 @@ export default function AppNav() {
               className={drawerOpen ? BTN_TOPBAR_SCRIBE_OPEN : BTN_TOPBAR_SCRIBE}
             >
               <span aria-hidden>✦</span>
-              <span>Scribe</span>
-              <kbd className={`font-sans text-[11px] ${drawerOpen ? "text-on-info/70" : "text-blue-700/70"}`}>⌘J</kbd>
+              <span className="hidden sm:inline">Scribe</span>
+              <span className="sr-only sm:hidden">Scribe</span>
+              <kbd className={`hidden font-sans text-[11px] sm:inline ${drawerOpen ? "text-on-info/70" : "text-blue-700/70"}`}>⌘J</kbd>
             </button>
             <div className="relative" ref={avatarMenuRef}>
               <button

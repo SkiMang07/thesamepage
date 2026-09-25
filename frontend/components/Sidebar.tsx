@@ -27,6 +27,7 @@
 // between-section one, and the two aren't redundant with each other the
 // way the old chip + breadcrumb were.
 
+import { useEffect } from "react";
 import { usePathname, useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -44,7 +45,19 @@ import Logo from "@/components/Logo";
 export default function Sidebar() {
   const pathname = usePathname();
   const params = useParams<Record<string, string | string[] | undefined>>();
-  const { collapsed, toggle } = useSidebar();
+  const { collapsed: collapsedPref, toggle, mobileOpen, setMobileOpen } = useSidebar();
+  // The slide-over is always the full rail; the collapse preference is a
+  // desktop choice.
+  const collapsed = collapsedPref && !mobileOpen;
+
+  // Close the slide-over on navigation and on Escape.
+  useEffect(() => { setMobileOpen(false); }, [pathname, setMobileOpen]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMobileOpen(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen, setMobileOpen]);
 
   const ctx = getNavContext(pathname ?? "", params ?? {});
   if (ctx.kind === "none") return null;
@@ -53,13 +66,19 @@ export default function Sidebar() {
   const activeItemId = ctx.kind === "item" ? ctx.item.id : ctx.kind === "person" ? ctx.viaItem.id : null;
 
   return (
+    <>
+    {mobileOpen && <div className="fixed inset-0 z-50 bg-black/55 md:hidden" aria-hidden onClick={() => setMobileOpen(false)} />}
     <div
+      // Below md the rail is hidden; AppNav's menu button opens it as a
+      // slide-over (always full width, never collapsed).
       // The rail and AppNav's header are one coordinated shell: both sit on
       // `canvas` (a shade BELOW the cards they frame), separated from the
       // content column by a single structural hairline. Hardcoded #DDE0E3 /
       // #F5F8FA replaced with the tokens so the rail follows the theme.
-      className={`sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto border-r border-hairline bg-canvas transition-[width] duration-150 ${
-        collapsed ? "w-14" : "w-[190px]"
+      className={`h-screen shrink-0 flex-col overflow-y-auto border-r border-hairline bg-canvas transition-[width] duration-150 ${
+        mobileOpen
+          ? "fixed inset-y-0 left-0 z-[60] flex w-[240px] shadow-xl"
+          : `sticky top-0 hidden md:flex ${collapsed ? "w-14" : "w-[190px]"}`
       }`}
     >
       {/* Top row — the logo, top-left, above the nav it names (it used to
@@ -146,17 +165,18 @@ export default function Sidebar() {
             {!collapsed && <span className="truncate">{SETTINGS_ITEM.label}</span>}
           </Link>
           <button
-            onClick={toggle}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={mobileOpen ? () => setMobileOpen(false) : toggle}
+            title={mobileOpen ? "Close menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={`mt-0.5 flex items-center gap-2.5 rounded-lg text-[13px] text-ink-muted transition hover:bg-sunken hover:text-ink ${
               collapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
             }`}
           >
             <Icon name="back" className={`h-4 w-4 shrink-0 transition-transform ${collapsed ? "rotate-180" : ""}`} />
-            {!collapsed && <span className="truncate">Collapse</span>}
+            {!collapsed && <span className="truncate">{mobileOpen ? "Close" : "Collapse"}</span>}
           </button>
         </div>
       </nav>
     </div>
+    </>
   );
 }

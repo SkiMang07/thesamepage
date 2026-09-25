@@ -99,6 +99,18 @@ def _fingerprint(facts: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 
+def _due_phrase(count: int, soonest: date, today: date, noun: str = "commitment") -> str:
+    """Evidence wording for a set of dated commitments: tense follows the
+    date, and the date is written the way the rest of the product writes
+    dates (Aug 28), never ISO. The age is already in the evidence's
+    freshness, so it is not repeated here."""
+    plural = count != 1
+    when = soonest.strftime("%b %-d")
+    if soonest < today:
+        return f"{count} {noun}{'s' if plural else ''}, overdue since {when}"
+    return f"{count} {noun}{'s are' if plural else ' is'} due by {when}"
+
+
 def _evidence(code: str, label: str, source: str, observed_at: Any, today: date) -> dict[str, Any]:
     return {
         "code": code,
@@ -344,7 +356,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
             compatible = due_commitments.get(report_id, [])
             if compatible:
                 soonest = min(_date(row["due_date"]) for row in compatible)
-                evidence.append(_evidence("due_commitments", f"{len(compatible)} commitment{'s are' if len(compatible) != 1 else ' is'} due by {soonest.isoformat()}", "Commitment record", soonest, today))
+                evidence.append(_evidence("due_commitments", _due_phrase(len(compatible), soonest, today), "Commitment record", soonest, today))
             components.extend(_corroboration_components(len(evidence)))
             components.append({"code": "actionability", "label": "Resume the exact prep", "points": 5})
             candidates.append(
@@ -431,7 +443,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
             evidence = [
                 _evidence(
                     "due_commitments",
-                    f"{len(due_rows)} open commitment{'s are' if len(due_rows) != 1 else ' is'} due by {soonest.isoformat()}",
+                    _due_phrase(len(due_rows), soonest, today, "open commitment"),
                     "Commitment record",
                     soonest,
                     today,
