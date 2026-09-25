@@ -100,6 +100,47 @@ export const BTN_SCRIBE =
   "rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-on-info " +
   "hover:bg-blue-500 disabled:opacity-50";
 
+/** Top-bar controls (AppNav). One height (32px), one radius, so Quick add,
+ *  Scribe and the avatar read as a single row of chrome. Neither action is
+ *  a saturated fill at rest: the page's own actions are the primary ones,
+ *  and blue stays narrow. Scribe goes solid only while its drawer is open,
+ *  because "Scribe is open" is the state worth signalling. */
+export const BTN_TOPBAR =
+  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition";
+export const BTN_TOPBAR_NEUTRAL =
+  `${BTN_TOPBAR} border border-control bg-surface text-ink-body hover:bg-sunken hover:text-ink`;
+export const BTN_TOPBAR_SCRIBE =
+  `${BTN_TOPBAR} bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/40 hover:bg-blue-100`;
+export const BTN_TOPBAR_SCRIBE_OPEN =
+  `${BTN_TOPBAR} bg-blue-600 text-on-info hover:bg-blue-500`;
+
+// --- meters -----------------------------------------------------------------
+/** Segmented meters (Mission Control's follow-through bars). At rest every
+ *  segment is TONED: a 300-step tint, a 500-step inset hairline and a 900-step
+ *  number, the same tint-plus-ink logic as the status badges. Overdue is told
+ *  apart by hue and its hairline, not by being the brightest slab on the page.
+ *  Selecting a segment makes it solid, which replaces the old white ring.
+ *  Numbers measure 6.5-6.9:1 in dark and 6.5-9.0:1 in light; each segment's
+ *  hairline clears 3:1 against the canvas. Existing ramp steps only, so both
+ *  themes are covered with no new values in globals.css. */
+export type MeterState = "completed" | "due" | "overdue";
+export const METER_SEGMENT: Record<MeterState, string> = {
+  completed: "bg-teal-300 text-teal-900 ring-1 ring-inset ring-teal-500/60 hover:ring-teal-500",
+  due: "bg-carbon-300 text-ink-body ring-1 ring-inset ring-carbon-500 hover:ring-carbon-600",
+  overdue: "bg-amber-300 text-amber-900 ring-1 ring-inset ring-amber-500/60 hover:ring-amber-500",
+};
+export const METER_SEGMENT_SELECTED: Record<MeterState, string> = {
+  completed: "bg-brand text-on-brand",
+  due: "bg-carbon-600 text-carbon-50",
+  overdue: "bg-amber-500 text-on-attention",
+};
+/** Legend swatch: the same toned treatment as the segment it names. */
+export const METER_SWATCH: Record<MeterState, string> = {
+  completed: "bg-teal-300 ring-1 ring-inset ring-teal-500",
+  due: "bg-carbon-300 ring-1 ring-inset ring-carbon-500",
+  overdue: "bg-amber-300 ring-1 ring-inset ring-amber-500",
+};
+
 // --- feedback ---------------------------------------------------------------
 export const ERROR_TEXT = "text-sm text-red-700";
 export const SUCCESS_TEXT = "text-sm text-brand";

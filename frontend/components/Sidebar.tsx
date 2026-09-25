@@ -39,6 +39,7 @@ import {
   getNavContext,
 } from "@/components/ZoneMap";
 import { useSidebar } from "@/lib/sidebar-context";
+import Logo from "@/components/Logo";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -61,23 +62,26 @@ export default function Sidebar() {
         collapsed ? "w-14" : "w-[190px]"
       }`}
     >
-      {/* Top row — shares AppNav's header height via NAV_STRIP_HEIGHT
-          (Session 55 follow-up) so the rail and header read as one
-          coordinated strip instead of two independently-padded rows that
-          happened to look close. Previously py-3, whose height fell out of
-          padding + the collapse button's own h-7 rather than matching the
-          header on purpose. */}
-      <div className={`flex ${NAV_STRIP_HEIGHT} items-center ${collapsed ? "justify-center" : "justify-end px-2"}`}>
-        <button
-          onClick={toggle}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-sunken hover:text-ink-body"
-        >
-          <Icon name="back" className={`h-[15px] w-[15px] transition-transform ${collapsed ? "rotate-180" : ""}`} />
-        </button>
+      {/* Top row — the logo, top-left, above the nav it names (it used to
+          sit in AppNav's bar, where it floated off the content grid). The
+          border-b wrapper mirrors AppNav's <header> exactly (NAV_STRIP_HEIGHT
+          inner + 1px rule), so one hairline runs across the whole top of the
+          app. pl-[18px] lines the mark up with the nav icons below (nav px-2
+          + item px-2.5). The collapse control lives in the footer. */}
+      <div className="shrink-0 border-b border-hairline">
+        <div className={`flex ${NAV_STRIP_HEIGHT} items-center ${collapsed ? "justify-center" : "pl-[18px] pr-4"}`}>
+          <Link
+            href={HOME_ITEM.href}
+            title="The Same Page"
+            className="flex min-w-0 items-center gap-2 rounded-md text-[14.5px] font-semibold text-ink"
+          >
+            <Logo className="h-[22px] w-auto shrink-0 text-brand" />
+            {!collapsed && <span className="truncate">The Same Page</span>}
+          </Link>
+        </div>
       </div>
 
-      <nav className={`flex flex-1 flex-col gap-0.5 pb-4 ${collapsed ? "items-center px-2" : "px-2"}`}>
+      <nav className={`flex flex-1 flex-col gap-0.5 pb-4 pt-3 ${collapsed ? "items-center px-2" : "px-2"}`}>
         <Link
           href={HOME_ITEM.href}
           title={HOME_ITEM.label}
@@ -141,6 +145,16 @@ export default function Sidebar() {
             <Icon name={SETTINGS_ITEM.icon} className="h-4 w-4 shrink-0" />
             {!collapsed && <span className="truncate">{SETTINGS_ITEM.label}</span>}
           </Link>
+          <button
+            onClick={toggle}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={`mt-0.5 flex items-center gap-2.5 rounded-lg text-[13px] text-ink-muted transition hover:bg-sunken hover:text-ink ${
+              collapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
+            }`}
+          >
+            <Icon name="back" className={`h-4 w-4 shrink-0 transition-transform ${collapsed ? "rotate-180" : ""}`} />
+            {!collapsed && <span className="truncate">Collapse</span>}
+          </button>
         </div>
       </nav>
     </div>

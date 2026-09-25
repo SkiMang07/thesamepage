@@ -54,15 +54,21 @@ on** — a single `theme-dark` class, applied on the same condition that renders
 the nav, so `/app/login` and `/app/ic` stay light without any override:
 
 - **`AppNav`** — a static top bar on every page, on `canvas` with a single
-  hairline under it so it and the rail read as one shell. Contains the global
-  "+ Quick add" (`BTN_PRIMARY`), the Scribe toggle (a filled blue "✦ Scribe ⌘J"
-  pill that flips to a quiet blue-tinted chip when the drawer is open, so
-  "Scribe is open" doesn't read as "primary action"), and the avatar dropdown
+  hairline under it so it and the rail read as one shell. It carries only the
+  global actions, right-aligned and anchored to the content column's edges
+  (`px-6 sm:px-8`, no centred max width, because pages use different max
+  widths). All three controls share one 32px height (`BTN_TOPBAR*` in
+  `lib/tokens.ts`): "+ Quick add" as a neutral secondary button (the page's
+  own actions are the primary ones), the Scribe toggle as a blue-tinted chip
+  that goes solid blue only while the drawer is open, and the avatar dropdown
   (Settings + Sign out — the app's only sign-out control; no "switch org",
   there's no multi-org concept).
 - **`Sidebar`** — a persistent left rail on **every** authenticated page, built from
-  `ZoneMap.tsx`'s `NAV_GROUPS`. Collapses to a 56px icon-only rail with native
-  `title` tooltips; the collapse state persists to `localStorage`.
+  `ZoneMap.tsx`'s `NAV_GROUPS`. The logo and wordmark sit in its top cell,
+  which matches the top bar's height and hairline so one rule runs across the
+  top of the app. The collapse control sits in the footer under Settings.
+  Collapses to a 56px icon-only rail with native `title` tooltips; the
+  collapse state persists to `localStorage`.
 - **`PageShell`** — owns every page's container
   (`mx-auto max-w-{size} px-6 py-8 sm:px-8`). A `maxWidth` prop keeps each page's
   own width; `8xl` (`max-w-[1600px]`) is reserved for the four grid-heavy pages

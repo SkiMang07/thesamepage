@@ -107,12 +107,16 @@ function AppShell({ children }: { children: React.ReactNode }) {
         {showNav && <Sidebar />}
 
         {/* Main content — flex-1 so it gives up space to the sidebar/drawer.
-            AppNav lives outside the overflow-x-hidden div (see note above) so
+            AppNav lives outside the overflow-x-clip div (see note above) so
             its sticky header/strip resolve against the real page scroll. */}
         <div className="flex-1 min-w-0">
           {showNav && <AppNav />}
           {showNav && <EntitlementNotice />}
-          <div className="overflow-x-hidden">{children}</div>
+          {/* overflow-x-clip, not -hidden: `hidden` makes this div a scroll
+              container (see the sticky-nav note above), which also broke
+              sticky elements INSIDE pages, like Mission Control's side
+              column. `clip` crops horizontal overflow without doing that. */}
+          <div className="overflow-x-clip">{children}</div>
         </div>
 
         {showNav && <DictationHotkey />}

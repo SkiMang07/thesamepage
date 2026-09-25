@@ -26,13 +26,16 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
    calendar events.
 4. **Follow-through.** "Mine" and "My team" bars split into Completed / Due
    this week / Overdue. Each bar shows proportions within its own group.
-   Selecting a segment lists exactly those records.
+   Segments are toned at rest and solid when selected (`METER_SEGMENT`, see
+   `brand.md` → Meters). Selecting a segment lists exactly those records.
 5. **Right-hand column.** By default it shows "Your next move" (the brief's
    primary candidate) and up to two "Keep in view" items (the secondaries),
    each with the quiet variant of the unchanged CTA / Why this? / Addressed /
    Snooze / Not relevant controls. Selecting a conversation, count or
-   segment replaces the column with details. × or Esc returns focus to
-   whatever opened it.
+   segment replaces the column with details. In two-column mode the column
+   is sticky under the top bar, so details open beside whatever was clicked
+   and focus moves to them without scrolling the page. × or Esc returns
+   focus to whatever opened it.
 6. **Goals & progress**, full width. Company / Team / Individual tabs, plus
    Department only when department goals exist. Individual adds a person
    picker. Default is the first tier that has goals. Up to six cards,

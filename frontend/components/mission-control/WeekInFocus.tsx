@@ -39,7 +39,15 @@ import {
   reconcileMissionControlOutcomes,
   recordMissionControlEvents,
 } from "@/lib/api";
-import { BTN_PRIMARY_SM, BTN_SECONDARY, EYEBROW, STATUS_GLYPH } from "@/lib/tokens";
+import {
+  BTN_PRIMARY_SM,
+  BTN_SECONDARY,
+  EYEBROW,
+  METER_SEGMENT,
+  METER_SEGMENT_SELECTED,
+  METER_SWATCH,
+  STATUS_GLYPH,
+} from "@/lib/tokens";
 import PageShell from "@/components/PageShell";
 import {
   CandidateControls,
@@ -140,16 +148,6 @@ const COMMITMENT_STATE_LABEL: Record<WeekCommitmentState, string> = {
   completed: "Completed",
   due: "Due this week",
   overdue: "Overdue",
-};
-const SEGMENT_STYLE: Record<WeekCommitmentState, string> = {
-  completed: "bg-brand text-on-brand",
-  due: "bg-carbon-600 text-carbon-50",
-  overdue: "bg-amber-500 text-on-attention",
-};
-const SEGMENT_DOT: Record<WeekCommitmentState, string> = {
-  completed: "bg-brand",
-  due: "bg-carbon-600",
-  overdue: "bg-amber-500",
 };
 const STATES: WeekCommitmentState[] = ["completed", "due", "overdue"];
 
@@ -257,7 +255,9 @@ export function WeekInFocus({
   }, []);
 
   useEffect(() => {
-    if (selection.type !== "home") detailHeadingRef.current?.focus();
+    // preventScroll: the column is sticky, so the details are already in view
+    // beside whatever was clicked. A plain focus() scrolled the page to the top.
+    if (selection.type !== "home") detailHeadingRef.current?.focus({ preventScroll: true });
   }, [selection]);
 
   // Brief impressions + downstream reconciliation — unchanged semantics from
@@ -362,6 +362,9 @@ export function WeekInFocus({
             aria-label="Next move and selected details"
           >
             <div
+              // Sticky in two-column mode so a drill-down opened from low on the
+              // page (Follow-through) shows its details beside the click.
+              className={twoColumn ? "sticky top-[72px] -ml-1 max-h-[calc(100vh-88px)] overflow-y-auto pl-1 pr-1" : undefined}
               onKeyDown={(e) => {
                 if (e.key === "Escape" && selection.type !== "home") closeDetail();
               }}
@@ -493,7 +496,13 @@ const VISIBLE_PER_DAY = 4;
 function Avatar({ c, size = "sm" }: { c: WeekConversation; size?: "sm" | "md" | "lg" }) {
   const dims = size === "lg" ? "h-11 w-11 text-sm" : size === "md" ? "h-6 w-6 text-[10px]" : "h-5 w-5 text-[9px]";
   const group = isGroup(c);
-  const text = group ? (c.kind === "team_meeting" ? initialsOf(c.subtitle || "Team") : String(Math.min(c.participants.length, 9))) : initialsOf(c.title);
+  const text = !group
+    ? initialsOf(c.title)
+    : c.kind === "team_meeting"
+      ? initialsOf(c.subtitle || "Team")
+      : c.participants.length > 0
+        ? String(Math.min(c.participants.length, 9))
+        : initialsOf(c.title);
   return (
     <span
       aria-hidden="true"
@@ -737,7 +746,7 @@ function FollowThrough({
           <div className="mb-4 flex flex-wrap gap-x-3.5 gap-y-1 text-[10px] text-ink-muted">
             {STATES.map((s) => (
               <span key={s} className="inline-flex items-center gap-1">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${SEGMENT_DOT[s]}`} aria-hidden="true" />
+                <span className={`inline-block h-2 w-2 rounded-[2px] ${METER_SWATCH[s]}`} aria-hidden="true" />
                 {COMMITMENT_STATE_LABEL[s]}
               </span>
             ))}
@@ -773,7 +782,7 @@ function FollowThrough({
                           aria-label={`View ${counts[s]} ${g.noun} ${COMMITMENT_STATE_LABEL[s].toLowerCase()} commitment${counts[s] === 1 ? "" : "s"}`}
                           onClick={(e) => onSelect({ type: "records", owner: g.owner, state: s }, e.currentTarget)}
                           style={{ flexGrow: counts[s], flexBasis: 0 }}
-                          className={`min-w-[22px] rounded-[3px] text-[11px] font-medium transition hover:brightness-110 ${SEGMENT_STYLE[s]} ${active ? "ring-2 ring-ink ring-offset-2 ring-offset-canvas" : ""}`}
+                          className={`min-w-[22px] rounded-[3px] text-[11px] font-medium transition-colors ${active ? METER_SEGMENT_SELECTED[s] : METER_SEGMENT[s]}`}
                         >
                           {counts[s]}
                         </button>

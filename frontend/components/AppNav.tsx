@@ -7,8 +7,9 @@
 // other — see the nav_redesign_options_v2 project memory note and the "Top
 // Nav Options" design canvas Andrew approved. Fix, approved as a combined
 // approach across three mockup passes in that canvas:
-//   - The top bar is now pure, invariant chrome — logo, a global "+ Quick
-//     add" (moved here from the dashboard-only button), Scribe, avatar.
+//   - The top bar is now pure, invariant chrome — a global "+ Quick add"
+//     (moved here from the dashboard-only button), Scribe, avatar. The logo
+//     sits at the top of the Sidebar, above the nav it names.
 //     It never shows a page name or breadcrumb, on any page.
 //   - Section-to-section navigation ("which zone am I in") moved to a
 //     persistent left rail — components/Sidebar.tsx — whose highlighted
@@ -37,8 +38,7 @@ import { useQuickAdd } from "@/lib/quick-add-context";
 import { createClient } from "@/lib/supabase";
 import { Icon, NAV_STRIP_HEIGHT, getNavContext, useZoneData } from "@/components/ZoneMap";
 import QuickAddModal from "@/components/QuickAddModal";
-import Logo from "@/components/Logo";
-import { BTN_PRIMARY, ELEVATED } from "@/lib/tokens";
+import { BTN_TOPBAR_NEUTRAL, BTN_TOPBAR_SCRIBE, BTN_TOPBAR_SCRIBE_OPEN, ELEVATED } from "@/lib/tokens";
 
 function initialsOf(name: string | null) {
   if (!name) return "—";
@@ -97,38 +97,34 @@ export default function AppNav() {
 
   return (
     <>
-      {/* Header — invariant chrome, every page. Bar spans full width; inner
-          wrapper (mx-auto max-w-7xl) aligns the actual content with the
-          page's own <main> below it. */}
+      {/* Header — invariant chrome, every page. Anchored to the content
+          column's edges with the same px-6 sm:px-8 as PageShell, NOT centred
+          on a max width: pages use different max widths (2xl to 8xl), so a
+          centred max-w-7xl bar drifted ~128px off the 8xl pages' content on
+          wide screens. The logo lives at the top of the Sidebar, above the
+          nav it names, so this bar carries only the global actions. */}
       <header className="sticky top-0 z-40 border-b border-hairline bg-canvas/85 backdrop-blur">
-        <div className={`mx-auto flex ${NAV_STRIP_HEIGHT} max-w-7xl items-center gap-3 px-6 sm:px-8`}>
-          <Link href="/app/dashboard" className="flex shrink-0 items-center gap-2 text-[14.5px] font-semibold text-ink">
-            <Logo className="h-[22px] w-auto text-brand" />
-            The Same Page
-          </Link>
-
+        <div className={`flex ${NAV_STRIP_HEIGHT} items-center gap-3 px-6 sm:px-8`}>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
               onClick={openQuickAdd}
-              className={BTN_PRIMARY}
+              className={BTN_TOPBAR_NEUTRAL}
             >
-              + Quick add
+              <span aria-hidden className="text-ink-muted">+</span>
+              Quick add
             </button>
             <button
               onClick={toggleDrawer}
               title={drawerOpen ? "Close Scribe (⌘J)" : "Open Scribe (⌘J)"}
-              // Scribe keeps its blue identity — the one product area allowed
-              // to. Open state flips to a quiet blue-tinted chip rather than
-              // teal, so "Scribe is open" doesn't read as "primary action".
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                drawerOpen
-                  ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-300"
-                  : "bg-blue-600 text-on-info hover:bg-blue-500"
-              }`}
+              // Scribe keeps its blue identity, the one product area allowed
+              // to. A tinted chip at rest (a solid blue pill was the loudest
+              // thing on every page); solid only while the drawer is open.
+              aria-pressed={drawerOpen}
+              className={drawerOpen ? BTN_TOPBAR_SCRIBE_OPEN : BTN_TOPBAR_SCRIBE}
             >
               <span aria-hidden>✦</span>
               <span>Scribe</span>
-              <span className={`text-xs ${drawerOpen ? "text-blue-700/70" : "text-on-info/70"}`}>⌘J</span>
+              <kbd className={`font-sans text-[11px] ${drawerOpen ? "text-on-info/70" : "text-blue-700/70"}`}>⌘J</kbd>
             </button>
             <div className="relative" ref={avatarMenuRef}>
               <button
@@ -136,7 +132,7 @@ export default function AppNav() {
                 title={zone.profileName ?? undefined}
                 aria-haspopup="menu"
                 aria-expanded={avatarMenuOpen}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-identity-1 text-[11px] font-semibold text-on-identity transition hover:ring-2 hover:ring-brand/40"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-identity-1 text-[11px] font-semibold text-on-identity transition hover:ring-2 hover:ring-brand/40"
               >
                 {initialsOf(zone.profileName)}
               </button>
@@ -144,7 +140,7 @@ export default function AppNav() {
               {avatarMenuOpen && (
                 <div
                   role="menu"
-                  className={`absolute right-0 top-9 z-50 w-56 overflow-hidden ${ELEVATED}`}
+                  className={`absolute right-0 top-10 z-50 w-56 overflow-hidden ${ELEVATED}`}
                 >
                   <div className="border-b border-divider px-3 py-2.5">
                     <p className="truncate text-sm font-medium text-ink">{zone.profileName || "—"}</p>
@@ -185,7 +181,7 @@ export default function AppNav() {
           token rather than something to measure). */}
       {ctx.kind === "person" && (
         <div className="sticky top-14 z-30 border-b border-hairline bg-canvas/85 backdrop-blur">
-          <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-6 py-2 sm:px-8">
+          <div className="flex items-center gap-2 overflow-x-auto px-6 py-2 sm:px-8">
             {zone.roster.map((p) => {
               const active = p.id === ctx.reportId;
               return (

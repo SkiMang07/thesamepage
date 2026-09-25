@@ -254,6 +254,24 @@ page (`atRisk > 0 ? "attention" : "neutral"`), not baked into the tile.
 
 ---
 
+## Meters
+
+Segmented bars (Mission Control's follow-through) are **toned at rest**:
+a 300-step tint, a 500-step inset hairline and a 900-step number —
+`METER_SEGMENT` in `lib/tokens.ts`. Overdue is told apart by hue and its
+hairline, not by being the brightest slab on the page; a solid 500 fill
+there outweighed everything else, including the recommendation the page
+is meant to keep quiet. Selecting a segment makes it solid
+(`METER_SEGMENT_SELECTED`), which is also the selected-state signal.
+Legend swatches (`METER_SWATCH`) use the same treatment as the segment
+they name.
+
+Numbers measure 6.5–6.9:1 in dark and 6.5–9.0:1 in light, and each
+segment's hairline clears 3:1 against the canvas. These are existing ramp
+steps, so the pairing follows the theme with no new values.
+
+---
+
 ## Controls
 
 `INPUT` / `TEXTAREA` are **recessed** (`bg-sunken`), not flush with the card.
