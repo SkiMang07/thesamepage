@@ -544,32 +544,58 @@ def _fetch_meeting(supabase, user_id: str, meeting_id: str) -> dict:
     return rows[0]
 
 
-def _replace_agenda_items(
-    supabase, user_id: str, meeting_id: str, items: list[str], carried_from: list[str | None] | None = None
-) -> None:
-    """Agenda edits replace the item set wholesale.
+# The most items one agenda holds. _clean_items caps an edited agenda at the
+# same number, so an append past it would be silently cut by the next edit.
+_AGENDA_LIMIT = 20
 
-    Per-item notes only exist after a meeting is logged, and a logged meeting's
-    agenda is never edited, so nothing typed can be destroyed by this.
+
+def _replace_agenda_items(supabase, user_id: str, meeting_id: str, items: list[str]) -> None:
+    """Set a planned meeting's agenda to exactly `items`, in order.
+
+    Reconciled against the existing rows by text rather than deleted and
+    re-inserted: a line the manager did not change keeps its row, so it keeps
+    its id and its carried_from_item_id lineage. The meeting screen keys the
+    manager's in-progress notes (held in their browser) by item id, so a
+    wholesale replace would orphan them every time the plan was edited.
+
+    Per-item notes on the SERVER only exist after a meeting is logged, and a
+    logged meeting's agenda is never edited (update_team_meeting refuses).
     """
-    supabase.table("team_meeting_agenda_items").delete().eq("meeting_id", meeting_id).eq(
-        "manager_id", user_id
-    ).execute()
-    cleaned = _clean_items(items)
-    if not cleaned:
-        return
-    lineage = carried_from or []
-    payload = [
-        {
-            "meeting_id": meeting_id,
-            "manager_id": user_id,
-            "position": index,
-            "item": text,
-            "carried_from_item_id": lineage[index] if index < len(lineage) else None,
-        }
-        for index, text in enumerate(cleaned)
-    ]
-    supabase.table("team_meeting_agenda_items").insert(payload).execute()
+    existing = _fetch_agenda_items(supabase, user_id, meeting_id)
+    by_text: dict[str, dict] = {}
+    for row in existing:
+        by_text.setdefault((row.get("item") or "").strip().lower(), row)
+
+    keep: set[str] = set()
+    new_rows: list[dict] = []
+    for index, text in enumerate(_clean_items(items, limit=_AGENDA_LIMIT)):
+        row = by_text.pop(text.lower(), None)
+        if row is None:
+            new_rows.append(
+                {"meeting_id": meeting_id, "manager_id": user_id, "position": index, "item": text}
+            )
+            continue
+        keep.add(row["id"])
+        if row.get("position") != index or row.get("item") != text:
+            (
+                supabase.table("team_meeting_agenda_items")
+                .update({"position": index, "item": text})
+                .eq("id", row["id"])
+                .eq("manager_id", user_id)
+                .execute()
+            )
+
+    removed = [row["id"] for row in existing if row["id"] not in keep]
+    if removed:
+        (
+            supabase.table("team_meeting_agenda_items")
+            .delete()
+            .in_("id", removed)
+            .eq("manager_id", user_id)
+            .execute()
+        )
+    if new_rows:
+        supabase.table("team_meeting_agenda_items").insert(new_rows).execute()
 
 
 def _meeting_day(scheduled_at: str | None) -> date | None:
@@ -792,6 +818,54 @@ def delete_team_meeting(meeting_id: str, auth=Depends(get_authenticated_client))
     return {"ok": True}
 
 
+class AgendaItemIn(BaseModel):
+    item: str
+
+
+@router.post("/meetings/{meeting_id}/agenda-items")
+def add_team_meeting_agenda_item(
+    meeting_id: str, body: AgendaItemIn, auth=Depends(get_authenticated_client)
+):
+    """Add ONE item to the end of a planned meeting's agenda.
+
+    The inline "Add something to discuss" capture. Deliberately not the PATCH
+    above: that sets the whole agenda, and a capture should never touch the
+    items already there — their ids key the manager's in-progress notes.
+
+    A logged meeting's agenda is frozen (409), same rule as PATCH. A line that
+    is already on the agenda is not added twice; the existing row comes back
+    with created = false so the UI can say so instead of claiming a new save.
+    """
+    user_id, supabase = auth
+    meeting = _fetch_meeting(supabase, user_id, meeting_id)
+    if meeting.get("summary"):
+        raise HTTPException(status_code=409, detail="A logged meeting's agenda can't be changed")
+
+    text = (body.item or "").strip()[:500]
+    if not text:
+        raise HTTPException(status_code=422, detail="Agenda item cannot be empty")
+
+    existing = _fetch_agenda_items(supabase, user_id, meeting_id)
+    for row in existing:
+        if (row.get("item") or "").strip().lower() == text.lower():
+            return {"item": row, "created": False}
+    if len(existing) >= _AGENDA_LIMIT:
+        raise HTTPException(
+            status_code=422, detail=f"An agenda holds up to {_AGENDA_LIMIT} items"
+        )
+
+    position = max((row.get("position") or 0 for row in existing), default=-1) + 1
+    created = (
+        supabase.table("team_meeting_agenda_items")
+        .insert(
+            {"meeting_id": meeting_id, "manager_id": user_id, "position": position, "item": text}
+        )
+        .execute()
+        .data[0]
+    )
+    return {"item": created, "created": True}
+
+
 def _build_team_wrapup_prompt(
     agenda_items: list[dict], roster: list[dict], raw_notes: str, today_iso: str
 ) -> str:
@@ -932,15 +1006,46 @@ def log_team_meeting(
 
     Everything here is manager-confirmed — the AI draft from /wrapup has been
     through the review screen by the time this runs.
+
+    Returns what was actually written — the logged meeting, the commitments
+    created from it (with owner names), the carry-forward items, and the next
+    occurrence they landed on — so the page can show a receipt built from the
+    saved records rather than from the draft it sent.
     """
     user_id, supabase = auth
     meeting = _fetch_meeting(supabase, user_id, meeting_id)
     summary = body.summary.strip()
     if not summary:
         raise HTTPException(status_code=422, detail="Summary cannot be empty")
+    if meeting.get("summary"):
+        raise HTTPException(status_code=409, detail="This meeting is already logged")
+
+    # Validate every commitment BEFORE anything is written, so a bad owner id
+    # can't leave a meeting half-logged.
+    roster_names = {
+        person["id"]: person.get("name")
+        for person in (
+            supabase.table("direct_reports")
+            .select("id,name")
+            .eq("manager_id", user_id)
+            .execute()
+            .data
+        )
+    }
+    to_create: list[TeamWrapUpCommitment] = []
+    for commitment in body.commitments:
+        if not commitment.description.strip():
+            continue
+        if commitment.direct_report_id and commitment.direct_report_id not in roster_names:
+            raise HTTPException(status_code=404, detail="Direct report not found")
+        to_create.append(commitment)
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    (
+    # The write is claimed conditionally (summary still null), so a retry, a
+    # double submit, or a second tab that got here first gets a 409 instead of
+    # inserting every commitment and carry-forward item a second time. The
+    # caller shows what was actually saved rather than saving again.
+    claimed = (
         supabase.table("team_meetings")
         .update(
             {
@@ -951,10 +1056,15 @@ def log_team_meeting(
         )
         .eq("id", meeting_id)
         .eq("manager_id", user_id)
+        .is_("summary", "null")
         .execute()
+        .data
     )
+    if not claimed:
+        raise HTTPException(status_code=409, detail="This meeting is already logged")
 
-    owned_items = {item["id"] for item in _fetch_agenda_items(supabase, user_id, meeting_id)}
+    agenda_items = _fetch_agenda_items(supabase, user_id, meeting_id)
+    owned_items = {item["id"] for item in agenda_items}
     for outcome in body.agenda_outcomes:
         if outcome.id not in owned_items:
             continue
@@ -971,33 +1081,18 @@ def log_team_meeting(
             .execute()
         )
 
-    roster_ids = {
-        person["id"]
-        for person in (
-            supabase.table("direct_reports")
-            .select("id")
-            .eq("manager_id", user_id)
-            .execute()
-            .data
-        )
-    }
-    for commitment in body.commitments:
-        description = commitment.description.strip()
-        if not description:
-            continue
-        report_id = commitment.direct_report_id
-        if report_id and report_id not in roster_ids:
-            raise HTTPException(status_code=404, detail="Direct report not found")
-        (
+    created_commitments: list[dict] = []
+    for commitment in to_create:
+        row = (
             supabase.table("commitments")
             .insert(
                 {
                     "owner_id": user_id,
-                    "direct_report_id": report_id,
+                    "direct_report_id": commitment.direct_report_id,
                     # The meeting's team, so a "You" commitment from the
                     # LATAM GTM meeting stays on LATAM GTM's page.
                     "org_unit_id": meeting.get("org_unit_id"),
-                    "description": description,
+                    "description": commitment.description.strip(),
                     "due_date": commitment.due_date or None,
                     "committed_by": "manager",
                     "source_type": "team_meeting",
@@ -1007,21 +1102,37 @@ def log_team_meeting(
                 }
             )
             .execute()
+            .data[0]
         )
+        # None, not "You" — who the manager is called is the frontend's business.
+        row["direct_report_name"] = roster_names.get(row.get("direct_report_id"))
+        created_commitments.append(row)
 
     carried = _clean_items(body.carry_forward_items)
-    next_meeting = _roll_forward(supabase, user_id, meeting, carried)
+    # A carried line that IS one of this meeting's agenda items keeps its
+    # lineage (carried_from_item_id), which is what lets the next meeting's
+    # preparation say where it came from. A line typed fresh during the
+    # review has no source item, and is not given one.
+    lineage = {}
+    for item in agenda_items:
+        lineage.setdefault((item.get("item") or "").strip().lower(), item["id"])
+    next_meeting = _roll_forward(supabase, user_id, meeting, carried, lineage)
 
     return {
         "meeting": _serialize_meeting(
-            {**meeting, "summary": summary, "logged_at": now_iso},
+            {**meeting, "summary": summary, "raw_notes": (body.raw_notes or "").strip() or None,
+             "logged_at": now_iso},
             {meeting_id: _fetch_agenda_items(supabase, user_id, meeting_id)},
         ),
         "next_meeting": next_meeting,
+        "commitments": created_commitments,
+        "carried_forward": carried,
     }
 
 
-def _roll_forward(supabase, user_id: str, meeting: dict, carried: list[str]) -> dict | None:
+def _roll_forward(
+    supabase, user_id: str, meeting: dict, carried: list[str], lineage: dict[str, str] | None = None
+) -> dict | None:
     """Create or top up the next occurrence.
 
     Three cases, in order:
@@ -1063,7 +1174,7 @@ def _roll_forward(supabase, user_id: str, meeting: dict, carried: list[str]) -> 
     if same_team:
         target = same_team[0]
         if carried:
-            _append_agenda_items(supabase, user_id, target["id"], carried)
+            _append_agenda_items(supabase, user_id, target["id"], carried, lineage)
         return _serialize_meeting(
             target, {target["id"]: _fetch_agenda_items(supabase, user_id, target["id"])}
         )
@@ -1090,7 +1201,7 @@ def _roll_forward(supabase, user_id: str, meeting: dict, carried: list[str]) -> 
         .data[0]
     )
     if carried:
-        _append_agenda_items(supabase, user_id, created["id"], carried)
+        _append_agenda_items(supabase, user_id, created["id"], carried, lineage)
     return _serialize_meeting(
         {
             **created,
@@ -1102,22 +1213,28 @@ def _roll_forward(supabase, user_id: str, meeting: dict, carried: list[str]) -> 
     )
 
 
-def _append_agenda_items(supabase, user_id: str, meeting_id: str, items: list[str]) -> None:
+def _append_agenda_items(
+    supabase, user_id: str, meeting_id: str, items: list[str], lineage: dict[str, str] | None = None
+) -> None:
     """Add items after whatever is already on that agenda, skipping duplicates
-    so an item carried twice doesn't appear twice on the same agenda."""
+    so an item carried twice doesn't appear twice on the same agenda.
+
+    `lineage` maps an item's lowercased text to the agenda item it was carried
+    from; a match sets carried_from_item_id, anything else is left unlinked."""
     existing = _fetch_agenda_items(supabase, user_id, meeting_id)
     existing_text = {row["item"].strip().lower() for row in existing}
     start = max((row["position"] for row in existing), default=-1) + 1
     payload = []
-    for offset, text in enumerate(_clean_items(items)):
+    for text in _clean_items(items):
         if text.lower() in existing_text:
             continue
         payload.append(
             {
                 "meeting_id": meeting_id,
                 "manager_id": user_id,
-                "position": start + offset,
+                "position": start + len(payload),
                 "item": text,
+                "carried_from_item_id": (lineage or {}).get(text.lower()),
             }
         )
     if payload:
@@ -1134,7 +1251,7 @@ def list_team_commitments(auth=Depends(get_authenticated_client)):
         supabase.table("commitments")
         .select(
             "id,description,due_date,status,committed_by,created_at,completed_at,"
-            "direct_report_id,org_unit_id,direct_reports(name)"
+            "direct_report_id,org_unit_id,source_type,source_id,direct_reports(name)"
         )
         .eq("owner_id", user_id)
         .eq("is_team_commitment", True)

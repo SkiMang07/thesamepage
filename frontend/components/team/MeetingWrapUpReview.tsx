@@ -24,8 +24,10 @@
 import { useState } from "react";
 import WrapUpReviewShell, { ReviewCommitment } from "@/components/team/WrapUpReviewShell";
 import {
+  ApiError,
   TeamAgendaItem,
   TeamMeeting,
+  TeamMeetingLogResult,
   TeamMeetingWrapUpDraft,
   logTeamMeeting,
 } from "@/lib/api";
@@ -33,7 +35,9 @@ import { BTN_GHOST, BTN_SECONDARY, EYEBROW, INPUT, META } from "@/lib/tokens";
 
 export type AgendaOutcome = { id: string; covered: boolean; notes: string };
 
-export type WrapUpResult = { meeting: TeamMeeting; next_meeting: TeamMeeting | null };
+// What the server saved — the caller builds its receipt from this, never from
+// the draft below.
+export type WrapUpResult = TeamMeetingLogResult;
 
 // The summary, commitments and footer are the shared WrapUpReviewShell; this
 // component adds what only a team meeting has — carry-forward into the next
@@ -46,6 +50,7 @@ export default function MeetingWrapUpReview({
   outcomes,
   onBack,
   onSaved,
+  onAlreadyLogged,
 }: {
   meeting: TeamMeeting;
   members: { id: string; name: string }[];
@@ -54,6 +59,10 @@ export default function MeetingWrapUpReview({
   outcomes: AgendaOutcome[];
   onBack: () => void;
   onSaved: (result: WrapUpResult) => void;
+  /** The server refused because this meeting is already logged — a retry
+   *  after a lost response, or another tab. Nothing was saved a second time;
+   *  the caller should load and show what the first save stored. */
+  onAlreadyLogged?: () => void;
 }) {
   const [summary, setSummary] = useState(draft.summary);
   // Owner key is the direct report id, "" for the manager.
@@ -95,7 +104,19 @@ export default function MeetingWrapUpReview({
       });
       onSaved(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save meeting");
+      if (e instanceof ApiError && e.status === 409 && onAlreadyLogged) {
+        onAlreadyLogged();
+        return;
+      }
+      // The draft stays exactly as it is, so confirming again is one click.
+      // Honest about the unknown: a lost response can hide a save that did
+      // happen. Trying again is safe — the server refuses a second log (409)
+      // and the caller then shows what the first one stored.
+      setError(
+        e instanceof ApiError && e.status < 500
+          ? `Couldn't save the meeting: ${e.detail}. Your review is still here.`
+          : "The save couldn't be confirmed. Your review is still here — try again; the meeting won't be saved twice."
+      );
     } finally {
       setSaving(false);
     }

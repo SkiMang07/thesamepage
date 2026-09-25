@@ -1,136 +1,43 @@
 "use client";
 
-// Team Mission Control (Session 22, 2026-08-08) — expands Team View
-// (Session 21, that session's roster-only /app/team) into a multi-surface
-// page, reworked in place at the same route/nav item per Andrew's explicit
-// call. See docs/SESSION_HISTORY.md and the team_mission_control project
-// memory note for the scoping conversation.
+// ---------------------------------------------------------------------------
+// /app/team — the team as a unit: prepare and run collective conversations,
+// see shared work and who owns it, and carry decisions into follow-through.
 //
-// Session 23 (2026-08-09) follow-up: meeting-notes agenda surfacing
-// (meeting_date-derived "next meeting" hero) + past-meeting card/detail UI +
-// team-level commitments (commitments.is_team_commitment).
+// Composition (selected 2026-09-25, docs/design-proposals/2026-09-25-team-
+// overview/): an editorial heading with the selected scope, the manager-only
+// line and the people up front; in-page links; the team meeting card beside
+// quiet Must-knows and Training focus; Shared work beside Commitments; then
+// the full roster. docs/systems/team.md is the current-state reference.
 //
-// Session 24 (2026-08-09) — full visual layout rework, Andrew's explicit
-// call after dogfooding the 3-column grid (see the team_page_redesign_brief
-// and team_page_redesign_options project memory notes for the scoping +
-// mockup-review conversation). New structure, top to bottom:
-//   1. A KPI strip — goals on track, active initiatives, commitments due
-//      this week, days until the next meeting.
-//   2. A "this week's focus" row pairing Initiatives (team-wide active
-//      projects, same active/on_track/at_risk framing as Mission Control's
-//      Key Initiatives card — see dashboard.py), Goals, and Commitments —
-//      goals+commitments paired was the one explicit structural ask in the
-//      brief; Initiatives joining them was Andrew's addition once he saw the
-//      first round of mockups.
-//   3. A Critical callouts + Meetings row. Callouts is "key updates" — the
-//      manager-authored broadcast idea scoped and then explicitly deferred
-//      in Sessions 22 and 23 — revived here deliberately small (one
-//      overwritten text block, not a dated log; see lib/api.ts's
-//      TeamCallout comment and team.py's get_team_callout/update_team_callout).
-//      Meetings keeps a hero card + a carousel of logged meetings, though
-//      what sits behind it was rebuilt on 2026-08-24 — see below.
-//   4. The team roster, now a row of compact cards at the very bottom
-//      (previously a left column) — click a card to expand priorities,
-//      projects, log-update, and invite actions in a detail panel below the
-//      row. Same data/actions as before, just relocated.
+// Everything is manager-only. Nothing here is sent to or visible to reports.
 //
-// Scoping for this pass (AskUserQuestion round before the mockups, another
-// before writing the callouts migration): write access stays
-// manager-authored with the team just viewing — no new IC-facing write UI
-// here, matching where IC login actually is today (auth primitives only,
-// see direct_report_invites). Visual style leans more colorful/engaging
-// than the rest of the app on purpose, Andrew's explicit call over the
-// safer close-to-today option.
+// Scope: which records belong to the selected team is decided in one place,
+// components/team/scope.ts, shared with the meeting screen. Switching team
+// filters data already on the page — no refetch.
 //
-// Session 45 (2026-08-19) — team switcher. A manager/director who leads more
-// than one org_unit had no way to tell which team they were looking at; the
-// page always showed every direct report combined. Now the header carries a
-// contextual team menu (options = getLedOrgUnits(), plus "All teams" as the
-// default, matching today's combined view). Selecting a team filters
-// everything on the page: roster, initiatives, goals, commitments, meeting
-// notes, and callouts. Roster/initiatives/goals/commitments filter
-// client-side off data that already exists (direct_reports.org_unit_id /
-// goals.org_unit_id — no backend change); meeting notes and callouts gained
-// a real org_unit_id column since neither had any per-team signal before
-// (null = "applies to all teams", same treatment as a company-level goal).
-// See the team_dropdown_scoping project memory note for the scoping
-// conversation.
-//
-// Session 46 (2026-08-20) — goal/project team hierarchy. Andrew wanted a
-// team's goals and initiatives to also include anything attached to a
-// PARENT org_unit (a department's goal should show on every team beneath
-// it), and wanted projects attachable to a team directly instead of only
-// via their assignee. ancestorChain() (below) walks org_units'
-// parent_unit_id upward from the selected team, client-side, off the
-// already-fetched orgUnits list — goals/initiatives now filter against that
-// whole chain instead of an exact org_unit_id match. Projects gained a real
-// org_unit_id column (projects.py, Session 46) — the assignee-proxy
-// filtering Session 45 used as a stand-in is gone. See the
-// team_project_goal_hierarchy project memory note for the scoping
-// conversation.
-//
-// 2026-08-24 — team meetings (see the team_meetings_scoping project memory
-// note). The old panel showed the agenda you planned and, underneath it, a
-// "Log a past meeting" box that wrote a completely unrelated row: the agenda
-// and the write-up were two team_meeting_notes rows with nothing joining
-// them, so there was no way to log notes against the meeting on screen, one
-// meeting rendered as two cards, and the hero stuck all day after the
-// meeting had been held. Now a meeting is one row plus structured agenda
-// items, on an optional 1-4 week series, and:
-//   - deriveNextMeeting() keys off `status` (derived from summary on the
-//     backend), never off whether the date has passed. Logging is what
-//     closes a meeting.
-//   - Quick log gives each agenda item its own notes box; anything left
-//     unticked is offered as carry-forward into the next meeting.
-//   - "Wrap up & log" runs an AI draft and hands it to
-//     components/team/MeetingWrapUpReview.tsx. NOTHING IS WRITTEN until the
-//     manager confirms there — same locked rule as the 1:1 wrap-up. That
-//     component is shared on purpose: the dedicated meeting screen
-//     (/app/team/meetings/[id]) reuses it rather than forking a second
-//     review surface.
-//   - Extracted commitments may be the manager's own (null
-//     direct_report_id), which is why the owner picker offers "You".
-//
-// 2026-08-24 evolutionary alignment — the KPI-first structure above is now
-// superseded. The page leads with factual attention beside the active meeting,
-// keeps commitments continuously visible, collapses healthy work behind an
-// explicit disclosure, groups callouts + development as Team context, and
-// makes the Relationship Desk the roster's primary person destination. The
-// underlying meeting, commitment, callout, development, update, and invite
-// workflows are unchanged.
-//
-// Session 56 white-space audit — widened to PageShell's new `8xl` tier
-// (this is a wide multi-section page, one of the ones the audit flagged as
-// most starved for width on a wide monitor) and the entrance gap (subtitle
-// -> first section) now uses the shared SECTION_GAP token instead of a
-// bare mt-8. The page keeps that shared entrance gap and one `space-y-10`
-// rhythm between its major operating sections.
+// Layout is measured, not viewport-based: the Scribe drawer narrows the
+// content column without changing the viewport, so the page reflows to the
+// width it actually has (same approach as Mission Control).
+// ---------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   DirectReport,
   OrgUnit,
   Project,
-  RoleFamily,
   RoleLevel,
   SetupStatus,
   TeamCallout,
   TeamCommitment,
   TeamDevFocus,
   TeamGoal,
-  TeamMember,
-  TeamMessage,
   TeamMeeting,
-  TeamMeetingWrapUpDraft,
-  createTeamCommitment,
-  createTeamMeeting,
-  deleteTeamMeeting,
+  TeamMember,
   getDirectReports,
   getLedOrgUnits,
   getOrgUnits,
   getProjects,
-  getRoleFamilies,
   getRoleLevels,
   getSetupStatus,
   getTeam,
@@ -138,199 +45,55 @@ import {
   getTeamCommitments,
   getTeamDevFocus,
   getTeamGoals,
-  getTeamMessages,
   getTeamMeetings,
-  inviteDirectReport,
-  sendTeamMessage,
-  updateCommitment,
-  updateTeamCallout,
-  updateTeamDevFocus,
-  updateTeamMeeting,
-  updateTeamMeetingSummary,
-  wrapUpTeamMeeting,
 } from "@/lib/api";
-import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWrapUpReview";
-import { roleLabel } from "@/components/RolePicker";
 import PageShell from "@/components/PageShell";
-import { Icon, SECTION_GAP } from "@/components/ZoneMap";
-import { IDENTITY_BG, IDENTITY_BORDER, IDENTITY_TEXT, identityIndex, FEATURE_SURFACE, EYEBROW, ELEVATED, BTN_PRIMARY_SM, BTN_SECONDARY, BTN_GHOST, INPUT, SELECT, LABEL, META, ERROR_TEXT } from "@/lib/tokens";
-
-import NoteField from "@/components/NoteField";
+import { Icon } from "@/components/ZoneMap";
+import { ELEVATED } from "@/lib/tokens";
 import { SkeletonSection } from "@/components/Skeleton";
 import PartialLoadNotice from "@/components/PartialLoadNotice";
 import { createSectionLoader } from "@/lib/sectionLoader";
+import PersonAvatar from "@/components/team/PersonAvatar";
+import TeamMeetingsSection from "@/components/team/TeamMeetingsSection";
+import TeamContext from "@/components/team/TeamContext";
+import { SharedWork, TeamCommitments } from "@/components/team/TeamWork";
+import TeamPeople from "@/components/team/TeamPeople";
+import {
+  inScopeCommitment,
+  inScopeGoal,
+  inScopeMeeting,
+  inScopeMember,
+  inScopeProject,
+  makeScope,
+} from "@/components/team/scope";
 
-// Hidden for launch (PRELAUNCH_BACKLOG CUT-1): there is no IC experience yet,
-// so inviting a report would only show them a placeholder page. The invite
-// backend and /app/ic stay in place; flip this back on when the IC view ships.
-const IC_INVITES_ENABLED = false;
-// Same status vocabulary as Goals/Projects.
-const STATUS_STYLES: Record<string, string> = {
-  active: "bg-sunken text-ink-secondary",
-  on_track: "bg-teal-50 text-teal-700",
-  at_risk: "bg-amber-50 text-amber-700",
-  completed: "bg-brand text-on-brand",
-  cancelled: "bg-sunken text-ink-muted",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  active: "Active",
-  on_track: "On track",
-  at_risk: "At risk",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
-
-// Left-border accent per status — Initiatives/Goals lean on this for the
-// more colorful Session 24 treatment; STATUS_STYLES pills stay too since
-// they still carry the text label.
-const STATUS_BORDER: Record<string, string> = {
-  active: "border-control",
-  on_track: "border-brand",
-  at_risk: "border-amber-500",
-  completed: "border-teal-800",
-  cancelled: "border-hairline",
-};
-
-// Same subset Mission Control's Key Initiatives card uses (dashboard.py) —
-// "what's currently happening," full history stays on /app/projects.
+// Same subset Mission Control's Key Initiatives card uses — "what's
+// currently happening". Completed and cancelled work stays on /app/projects.
 const ACTIVE_STATUSES = new Set(["active", "on_track", "at_risk"]);
 
-// A small fixed palette cycled by roster order, so a person's avatar color
-// on the roster row matches their commitment/initiative accent color
-// elsewhere on the page. Purely a display convenience — not stored anywhere.
-// Session 58: these were an off-system rainbow (indigo/rose/teal/amber/
-// violet/cyan) and, worse, CARD_ACCENTS below was a five-item copy of this
-// six-item list, so a person's avatar and their card accent desynchronised
-// past index 4. Both now read the one brand-derived identity palette in
-// lib/tokens.ts.
-const AVATAR_PALETTE = IDENTITY_BG;
-const AVATAR_BORDER_PALETTE = IDENTITY_BORDER;
-
-function memberIndex(memberId: string | null | undefined, members: TeamMember[]) {
-  if (!memberId) return -1;
-  return members.findIndex((m) => m.id === memberId);
+function useMeasuredWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(1200);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => setWidth(entries[0].contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
 }
 
-// Same rule as everywhere else: the colour follows the person's id
-// (identityIndex), not their position in this list.
-function avatarColor(memberId: string | null | undefined, members: TeamMember[]) {
-  if (memberIndex(memberId, members) < 0) return AVATAR_PALETTE[0];
-  return AVATAR_PALETTE[identityIndex(memberId!)];
-}
-
-function borderColor(memberId: string | null | undefined, members: TeamMember[]) {
-  if (memberIndex(memberId, members) < 0) return AVATAR_BORDER_PALETTE[0];
-  return AVATAR_BORDER_PALETTE[identityIndex(memberId!)];
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  const first = parts[0][0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return (first + last).toUpperCase();
-}
-
-function timeAgo(iso: string) {
-  const ms = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  return `${days} days ago`;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-// Local (not UTC) YYYY-MM-DD — meeting_date/due_date are date-only columns;
-// parsing via new Date(dateStr) treats them as UTC midnight, which reads as
-// "yesterday" in any timezone west of UTC. Everything below that touches a
-// bare date string goes through these helpers instead.
-function localDateStr(d: Date = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function addDaysStr(dateStr: string, days: number) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + days);
-  return localDateStr(dt);
-}
-
-function formatMeetingDate(dateStr: string) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function snippet(text: string, max = 110) {
-  const trimmed = text.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max).trimEnd()}…` : trimmed;
-}
-
-// The meeting the page is "on": the soonest one that hasn't been logged.
-// Shared by the attention brief and the Meetings panel so both answer the
-// question the same way. Note what it does NOT do — it never looks at whether the date
-// has passed. Logging is what closes a meeting, so an unlogged meeting from
-// last Monday stays here (as "needs logging") instead of vanishing, and a
-// meeting logged at 3pm today drops out immediately instead of sitting in the
-// slot until midnight. Undated meetings (carry-forward with no series) sort
-// last, so a real upcoming date always wins the hero.
-function deriveNextMeeting(meetings: TeamMeeting[]): TeamMeeting | null {
-  const open = meetings
-    .filter((m) => m.status !== "logged")
-    .sort((a, b) => {
-      if (!a.scheduled_at) return 1;
-      if (!b.scheduled_at) return -1;
-      return a.scheduled_at < b.scheduled_at ? -1 : 1;
-    });
-  return open[0] ?? null;
-}
-
-// scheduled_at is a timestamp encoded at noon UTC; the local calendar date is
-// what every display helper here expects.
-function isoToDateStr(iso: string) {
-  return localDateStr(new Date(iso));
-}
-
-function repeatLabel(weeks: number) {
-  return weeks === 1 ? "repeats weekly" : `repeats every ${weeks} weeks`;
-}
-
-// One agenda item per line, the way the manager typed it.
-function splitAgenda(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-// Session 46 (team_project_goal_hierarchy project memory note): the set of
-// org_unit ids "relevant to" a selected team — itself plus every ancestor
-// walking up parent_unit_id, so a department's goal/project also shows on
-// every team beneath it. Capped at 20 hops as a cycle guard: org_units.py
-// only blocks a unit being its own DIRECT parent, not a deeper cycle (see
-// its module docstring), so an unguarded walk on bad data could loop
-// forever.
-function ancestorChain(orgUnitId: string, orgUnits: OrgUnit[]): Set<string> {
-  const byId = new Map(orgUnits.map((u) => [u.id, u]));
-  const chain = new Set<string>();
-  let current: string | null | undefined = orgUnitId;
-  let hops = 0;
-  while (current && !chain.has(current) && hops < 20) {
-    chain.add(current);
-    current = byId.get(current)?.parent_unit_id;
-    hops++;
-  }
-  return chain;
+// Content-width tiers. "wide" ≈ a desktop with the rail; "medium" ≈ 1024px or
+// a wide screen with Scribe open; "split" keeps the meeting beside its
+// context but stacks work over commitments; "stack" is one column.
+type Tier = "wide" | "medium" | "split" | "stack";
+function tierFor(width: number): Tier {
+  if (width >= 1000) return "wide";
+  if (width >= 740) return "medium";
+  if (width >= 600) return "split";
+  return "stack";
 }
 
 export default function TeamPage() {
@@ -338,42 +101,26 @@ export default function TeamPage() {
   const [goals, setGoals] = useState<TeamGoal[]>([]);
   const [meetings, setMeetings] = useState<TeamMeeting[]>([]);
   const [commitments, setCommitments] = useState<TeamCommitment[]>([]);
-  const [initiatives, setInitiatives] = useState<Project[]>([]);
-  // Session 45: every callout row for this manager (one per led team that's
-  // ever had one saved, plus at most one org_unit_id-null "all teams" row) —
-  // see lib/api.ts's TeamCallout comment. The row shown/edited is derived
-  // below from selectedTeamId, not stored separately.
+  const [projects, setProjects] = useState<Project[]>([]);
   const [callouts, setCallouts] = useState<TeamCallout[]>([]);
-  // Session 47: same list-of-rows shape as callouts above, for the
-  // "training focus" panel — see lib/api.ts's TeamDevFocus comment.
   const [devFocuses, setDevFocuses] = useState<TeamDevFocus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  // Sections that failed to load on this visit (lib/sectionLoader.ts).
-  const [loadFailures, setLoadFailures] = useState<string[]>([]);
-
-  // Setup-status visibility on the roster cards (Session 42, Plan S4+S5) —
-  // role · team chip + amber "no role" badge. TeamMember (from getTeam())
-  // only carries the legacy role_title, so role_level_id/org_unit_id come
-  // from getDirectReports() and get joined client-side by person id; names
-  // resolve against getRoleLevels()/getRoleFamilies()/getOrgUnits(). Reuses
-  // getSetupStatus() for the has_role flag rather than recomputing it here.
   const [directReports, setDirectReports] = useState<DirectReport[]>([]);
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
-  const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
-
-  // Session 45: which led org_unit is selected. null = "All teams" (today's
-  // combined view, and the default) — see this file's header comment.
   const [ledOrgUnits, setLedOrgUnits] = useState<OrgUnit[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [teamMenuOpen, setTeamMenuOpen] = useState(false);
-  const teamMenuRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadFailures, setLoadFailures] = useState<string[]>([]);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+
+  const [rootRef, width] = useMeasuredWidth<HTMLDivElement>();
+  const tier = tierFor(width);
 
   useEffect(() => {
-    // No single request is essential here: each card degrades on its own and
-    // is named in the notice (lib/sectionLoader.ts).
+    // No single request is essential: each section degrades on its own and
+    // is named in the notice (lib/sectionLoader.ts), so an empty section is
+    // never passed off as "no data".
     const { optional, failed } = createSectionLoader();
     Promise.all([
       optional("team members", getTeam(), []),
@@ -385,1887 +132,277 @@ export default function TeamPage() {
       optional("training focus", getTeamDevFocus(), []),
       optional("people", getDirectReports(), []),
       optional("role levels", getRoleLevels(), []),
-      optional("role families", getRoleFamilies(), []),
       optional("teams", getOrgUnits(), []),
       optional("setup status", getSetupStatus(), null),
       optional("the teams you lead", getLedOrgUnits(), []),
     ])
-      .then(([m, g, n, c, p, calloutRows, devFocusRows, drs, rls, rfs, ous, status, led]) => {
+      .then(([m, g, n, c, p, calloutRows, devFocusRows, drs, rls, ous, status, led]) => {
         setMembers(m);
         setGoals(g);
         setMeetings(n);
         setCommitments(c);
-        setInitiatives(p.filter((proj) => ACTIVE_STATUSES.has(proj.status)));
+        setProjects(p.filter((proj) => ACTIVE_STATUSES.has(proj.status)));
         setCallouts(calloutRows);
         setDevFocuses(devFocusRows);
         setDirectReports(drs);
         setRoleLevels(rls);
-        setRoleFamilies(rfs);
         setOrgUnits(ous);
         setSetupStatus(status);
         setLedOrgUnits(led);
         setLoadFailures(failed());
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (!teamMenuOpen) return;
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setTeamMenuOpen(false);
+  // Re-read the records a logged meeting changes, so counts and the receipt
+  // reflect what the server holds. A failed refresh keeps what's on screen
+  // (already merged from the save response) and says so.
+  const refreshRecords = useCallback(async () => {
+    try {
+      const [n, c] = await Promise.all([getTeamMeetings(), getTeamCommitments()]);
+      setMeetings(n);
+      setCommitments(c);
+      setRefreshFailed(false);
+    } catch {
+      setRefreshFailed(true);
     }
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (teamMenuRef.current && !teamMenuRef.current.contains(event.target as Node)) {
-        setTeamMenuOpen(false);
-      }
-    }
-    document.addEventListener("keydown", closeOnEscape);
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    return () => {
-      document.removeEventListener("keydown", closeOnEscape);
-      document.removeEventListener("mousedown", closeOnOutsideClick);
-    };
-  }, [teamMenuOpen]);
+  }, []);
 
-  // Team-scoping (Session 45): everything below filters off data already on
-  // the page — no re-fetch on team switch. direct_reports.org_unit_id is the
-  // one source of truth for "which team is this report on"; commitments key
-  // off a direct_report_id, goals/initiatives carry org_unit_id directly
-  // (initiatives as of Session 46 — see below), and meeting notes/callouts
-  // carry their own org_unit_id column (Session 45). null org_unit_id on a
-  // goal/note/callout means "applies to all teams," so it stays visible
-  // under every specific team's filter, not just "All teams."
-  const directReportById = new Map(directReports.map((dr) => [dr.id, dr]));
-  const reportOrgUnitId = (reportId: string | null | undefined): string | null =>
-    reportId ? (directReportById.get(reportId)?.org_unit_id ?? null) : null;
+  const scope = makeScope(selectedTeamId, orgUnits, directReports);
+  const visibleMembers = members.filter((m) => inScopeMember(scope, m));
+  const visibleGoals = goals.filter((g) => inScopeGoal(scope, g));
+  const visibleProjects = projects.filter((p) => inScopeProject(scope, p));
+  const visibleCommitments = commitments.filter((c) => inScopeCommitment(scope, c));
+  const visibleMeetings = meetings.filter((m) => inScopeMeeting(scope, m));
 
-  // Session 46 (team_project_goal_hierarchy project memory note): goals and
-  // initiatives now also inherit down from a selected team's PARENT
-  // org_units — a department's goal shows on every team beneath it, not
-  // just an exact org_unit_id match. ancestorChain() walks parent_unit_id
-  // upward from the selected team using the already-fetched orgUnits list,
-  // so this stays client-side like the rest of Session 45's filtering.
-  const ancestorIds = selectedTeamId ? ancestorChain(selectedTeamId, orgUnits) : null;
+  const blank = (id: string | null) => ({ message: "", updated_at: null, org_unit_id: id });
+  const activeCallout: TeamCallout = callouts.find((c) => c.org_unit_id === selectedTeamId) ?? blank(selectedTeamId);
+  const activeDevFocus: TeamDevFocus = devFocuses.find((d) => d.org_unit_id === selectedTeamId) ?? blank(selectedTeamId);
 
-  const visibleMembers =
-    selectedTeamId === null
-      ? members
-      : members.filter((m) => reportOrgUnitId(m.id) === selectedTeamId);
-  // Initiatives no longer proxy through the assignee's org_unit_id (that was
-  // a Session 45 stand-in for projects having no team of their own) —
-  // projects.py now carries a real org_unit_id (Session 46), so a project
-  // with none set is simply unassigned, same posture as an unassigned
-  // direct report.
-  const visibleInitiatives =
-    selectedTeamId === null
-      ? initiatives
-      : initiatives.filter((p) => p.org_unit_id != null && (ancestorIds?.has(p.org_unit_id) ?? false));
-  const visibleGoals =
-    selectedTeamId === null
-      ? goals
-      : goals.filter(
-          (g) => g.level === "company" || (g.org_unit_id != null && (ancestorIds?.has(g.org_unit_id) ?? false))
-        );
-  const visibleCommitments =
-    selectedTeamId === null
-      ? commitments
-      : commitments.filter(
-          // A commitment's own org_unit_id (2026-09-24) says which team it
-          // belongs to — the meeting it came from, or the team it was added
-          // under. Without one, fall back to the assignee's team. A "You"
-          // commitment with no team recorded shows only under "All teams";
-          // it used to show under every team, which is how one team's list
-          // filled up with every other team's commitments.
-          (c) => (c.org_unit_id ?? reportOrgUnitId(c.direct_report_id)) === selectedTeamId
-        );
-  const visibleMeetings =
-    selectedTeamId === null
-      ? meetings
-      : meetings.filter((m) => m.org_unit_id === null || m.org_unit_id === selectedTeamId);
-  const activeCallout: TeamCallout =
-    callouts.find((c) => c.org_unit_id === selectedTeamId) ?? {
-      message: "",
-      updated_at: null,
-      org_unit_id: selectedTeamId,
-    };
-
-  function upsertCallout(updated: TeamCallout) {
-    setCallouts((cs) => {
-      const idx = cs.findIndex((c) => c.org_unit_id === updated.org_unit_id);
-      if (idx === -1) return [...cs, updated];
-      const copy = [...cs];
-      copy[idx] = updated;
-      return copy;
-    });
+  function upsert<T extends { org_unit_id: string | null }>(rows: T[], updated: T): T[] {
+    const idx = rows.findIndex((r) => r.org_unit_id === updated.org_unit_id);
+    if (idx === -1) return [...rows, updated];
+    const copy = [...rows];
+    copy[idx] = updated;
+    return copy;
   }
 
-  const activeDevFocus: TeamDevFocus =
-    devFocuses.find((d) => d.org_unit_id === selectedTeamId) ?? {
-      message: "",
-      updated_at: null,
-      org_unit_id: selectedTeamId,
-    };
-
-  function upsertDevFocus(updated: TeamDevFocus) {
-    setDevFocuses((ds) => {
-      const idx = ds.findIndex((d) => d.org_unit_id === updated.org_unit_id);
-      if (idx === -1) return [...ds, updated];
-      const copy = [...ds];
-      copy[idx] = updated;
-      return copy;
-    });
-  }
-
+  const unitName = (id: string | null) => (id ? orgUnits.find((u) => u.id === id)?.name ?? "Team" : "All teams");
   const selectedTeamName =
-    selectedTeamId === null
-      ? "All teams"
-      : (ledOrgUnits.find((u) => u.id === selectedTeamId)?.name ?? "Team");
+    selectedTeamId === null ? "All teams" : ledOrgUnits.find((u) => u.id === selectedTeamId)?.name ?? "Team";
+
+  const prepUnavailable = loadFailures.filter((f) => ["goals", "projects", "team commitments", "meetings"].includes(f));
+
+  const upperCols =
+    tier === "wide" ? "grid-cols-[minmax(0,1fr)_280px] gap-8" : tier === "stack" ? "grid-cols-1 gap-8" : tier === "medium" ? "grid-cols-[minmax(0,1fr)_230px] gap-6" : "grid-cols-[minmax(0,1fr)_220px] gap-6";
+  const workCols =
+    tier === "wide" ? "grid-cols-[minmax(0,1fr)_340px] gap-8" : tier === "medium" ? "grid-cols-[minmax(0,1fr)_285px] gap-6" : "grid-cols-1 gap-8";
 
   return (
     <PageShell maxWidth="8xl">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">Team</h1>
-        {ledOrgUnits.length > 0 && (
-          <div className="relative" ref={teamMenuRef}>
-            <button
-              type="button"
-              onClick={() => setTeamMenuOpen((open) => !open)}
-              aria-haspopup="menu"
-              aria-expanded={teamMenuOpen}
-              aria-controls="team-context-menu"
-              className="inline-flex h-9 max-w-64 items-center gap-2 rounded-lg border border-control bg-surface px-3 text-sm font-medium text-ink-body shadow-sm hover:border-ink-muted hover:bg-sunken hover:text-ink"
-            >
-              <Icon name="team" className="h-4 w-4 shrink-0 text-brand" />
-              <span className="truncate">{selectedTeamName}</span>
-              <Icon
-                name="chevron"
-                className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${teamMenuOpen ? "rotate-180" : ""}`}
+      <div ref={rootRef}>
+        <header>
+          <p className="text-2xs font-medium uppercase tracking-[0.16em] text-ink-muted">Team</p>
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+            <h1 className="min-w-0 font-serif text-[2.1rem] font-normal leading-[1.12] tracking-[-0.035em] text-ink sm:text-[2.6rem]">
+              {selectedTeamName}
+            </h1>
+            {ledOrgUnits.length > 0 && (
+              <ScopePicker
+                led={ledOrgUnits}
+                selectedTeamId={selectedTeamId}
+                selectedName={selectedTeamName}
+                onSelect={setSelectedTeamId}
               />
-            </button>
-
-            {teamMenuOpen && (
-              <div
-                id="team-context-menu"
-                role="menu"
-                aria-label="Switch team"
-                className={`absolute left-0 top-11 z-30 w-64 p-1.5 ${ELEVATED}`}
-              >
-                <p className="px-2.5 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                  Switch team
-                </p>
-                {[{ id: null, name: "All teams" }, ...ledOrgUnits.map((unit) => ({ id: unit.id, name: unit.name }))].map((team) => {
-                  const selected = team.id === selectedTeamId;
-                  return (
-                    <button
-                      key={team.id ?? "all"}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={selected}
-                      onClick={() => {
-                        setSelectedTeamId(team.id);
-                        setTeamMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm ${
-                        selected
-                          ? "bg-brand-tint font-medium text-brand"
-                          : "text-ink-body hover:bg-sunken hover:text-ink"
-                      }`}
-                    >
-                      <Icon name={team.id === null ? "map" : "team"} className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{team.name}</span>
-                      <span className={`shrink-0 text-sm ${selected ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
-                        ✓
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
             )}
           </div>
+          <p className="mt-2 text-xs text-ink-muted">Only you can see this page. Nothing here is shared with your team.</p>
+          {!loading && visibleMembers.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-1.5">
+              {visibleMembers.slice(0, 8).map((m) => (
+                <span key={m.id} title={m.name}>
+                  <PersonAvatar id={m.id} name={m.name} size="sm" />
+                  <span className="sr-only">{m.name}</span>
+                </span>
+              ))}
+              {visibleMembers.length > 8 && (
+                <span className="inline-grid h-7 min-w-7 place-items-center rounded-full bg-sunken px-1.5 text-2xs text-ink-muted">
+                  +{visibleMembers.length - 8}
+                </span>
+              )}
+              <a href="#team-people" className="ml-2 text-xs text-brand hover:text-brand-hover">
+                {visibleMembers.length} direct report{visibleMembers.length === 1 ? "" : "s"} →
+              </a>
+            </div>
+          )}
+        </header>
+
+        <nav aria-label="On this page" className="mt-6 flex flex-wrap gap-x-6 gap-y-1 border-b border-hairline pb-3 text-xs">
+          {[
+            ["#team-meetings", "Meetings"],
+            ["#team-work", "Shared work"],
+            ["#team-commitments", "Commitments"],
+            ["#team-people", "People"],
+          ].map(([href, label]) => (
+            <a key={href} href={href} className="py-1 text-ink-secondary hover:text-brand">
+              {label}
+            </a>
+          ))}
+        </nav>
+
+        <PartialLoadNotice failed={loadFailures} className="mt-4" />
+        {refreshFailed && (
+          <p className="mt-4 text-sm text-amber-700" role="status">
+            Your meeting was saved, but the page couldn&apos;t refresh. Reload to see the latest records.
+          </p>
+        )}
+
+        {loading ? (
+          <SkeletonSection label="Loading your team" variant="cards" className="mt-8" />
+        ) : (
+          <>
+            <div className={`mt-8 grid ${upperCols}`}>
+              <TeamMeetingsSection
+                meetings={visibleMeetings}
+                allMeetings={meetings}
+                setMeetings={setMeetings}
+                commitments={commitments}
+                setCommitments={setCommitments}
+                goals={goals}
+                projects={projects}
+                members={visibleMembers}
+                directReports={directReports}
+                orgUnits={orgUnits}
+                selectedTeamId={selectedTeamId}
+                unavailable={prepUnavailable}
+                onRefresh={refreshRecords}
+                narrow={tier !== "wide"}
+              />
+              <aside
+                aria-label="Team context"
+                className={tier === "stack" ? "border-t border-hairline pt-6" : "pt-1.5"}
+              >
+                <TeamContext
+                  callout={activeCallout}
+                  devFocus={activeDevFocus}
+                  scopeLabel={selectedTeamName}
+                  onCalloutSaved={(row) => setCallouts((rows) => upsert(rows, row))}
+                  onDevFocusSaved={(row) => setDevFocuses((rows) => upsert(rows, row))}
+                />
+              </aside>
+            </div>
+
+            <div className={`mt-10 grid border-t border-hairline pt-8 ${workCols}`}>
+              <SharedWork
+                goals={visibleGoals}
+                projects={visibleProjects}
+                commitments={visibleCommitments}
+                scope={scope}
+                unitName={unitName}
+              />
+              <div className={tier === "wide" || tier === "medium" ? "" : "border-t border-hairline pt-8"}>
+                <TeamCommitments
+                  commitments={visibleCommitments}
+                  setCommitments={setCommitments}
+                  members={visibleMembers}
+                  selectedTeamId={selectedTeamId}
+                  meetings={meetings}
+                  goals={goals}
+                  projects={projects}
+                  twoColumn={tier === "split"}
+                />
+              </div>
+            </div>
+
+            <div className="mt-10 border-t border-hairline pt-8">
+              <TeamPeople
+                members={visibleMembers}
+                setMembers={setMembers}
+                directReports={directReports}
+                roleLevels={roleLevels}
+                orgUnits={orgUnits}
+                setupStatus={setupStatus}
+                columns={tier === "wide" ? 3 : tier === "stack" ? 1 : 2}
+              />
+            </div>
+          </>
         )}
       </div>
-      <p className="mt-1 text-sm text-ink-secondary">
-        What this team is moving, and where you need to help.
-      </p>
-      <p className="mt-1 text-xs text-ink-muted">
-        Only you can see this page. Nothing here is shared with your team.
-      </p>
-
-      {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
-      <PartialLoadNotice failed={loadFailures} className="mt-4" />
-
-      {loading ? (
-        <SkeletonSection label="Loading your team" variant="cards" className={SECTION_GAP} />
-      ) : (
-        <div className={`${SECTION_GAP} space-y-10`}>
-          <section id="team-now" aria-labelledby="team-now-heading">
-            <h2 id="team-now-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Now
-            </h2>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(20rem,.85fr)_minmax(0,1.5fr)]">
-              <TeamAttentionBrief
-                goals={visibleGoals}
-                initiatives={visibleInitiatives}
-                commitments={visibleCommitments}
-                meetings={visibleMeetings}
-              />
-              <MeetingsPanel
-                meetings={visibleMeetings}
-                setMeetings={setMeetings}
-                members={visibleMembers}
-                orgUnitId={selectedTeamId}
-                orgUnits={orgUnits}
-              />
-            </div>
-          </section>
-
-          <section id="team-follow-through" aria-labelledby="team-follow-through-heading">
-            <h2 id="team-follow-through-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Live follow-through
-            </h2>
-            <CommitmentsCard
-              members={visibleMembers}
-              commitments={visibleCommitments}
-              setCommitments={setCommitments}
-              selectedTeamId={selectedTeamId}
-            />
-          </section>
-
-          <section id="team-operating-work" aria-labelledby="team-operating-work-heading">
-            <h2 id="team-operating-work-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Operating work
-            </h2>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <InitiativesCard initiatives={visibleInitiatives} selectedTeamId={selectedTeamId} />
-              <GoalsCard goals={visibleGoals} selectedTeamId={selectedTeamId} />
-            </div>
-          </section>
-
-          <section id="team-context" aria-labelledby="team-context-heading">
-            <h2 id="team-context-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Team context
-            </h2>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <CalloutsPanel
-                callout={activeCallout}
-                scopeLabel={selectedTeamName}
-                onSaved={upsertCallout}
-              />
-              <DevFocusPanel
-                devFocus={activeDevFocus}
-                scopeLabel={selectedTeamName}
-                onSaved={upsertDevFocus}
-              />
-            </div>
-          </section>
-
-          <RosterRow
-            members={visibleMembers}
-            setMembers={setMembers}
-            directReports={directReports}
-            roleLevels={roleLevels}
-            roleFamilies={roleFamilies}
-            orgUnits={orgUnits}
-            setupStatus={setupStatus}
-          />
-        </div>
-      )}
     </PageShell>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Team attention brief — a factual projection of the current records, not a
-// second Mission Control and never a synthesized team-health score.
-// ---------------------------------------------------------------------------
-
-function TeamAttentionBrief({
-  goals,
-  initiatives,
-  commitments,
-  meetings,
-}: {
-  goals: TeamGoal[];
-  initiatives: Project[];
-  commitments: TeamCommitment[];
-  meetings: TeamMeeting[];
-}) {
-  const today = localDateStr();
-  const weekOut = addDaysStr(today, 7);
-  const openCommitments = commitments.filter((c) => c.status === "open");
-  const overdue = openCommitments.filter((c) => c.due_date && c.due_date < today).length;
-  const dueThisWeek = openCommitments.filter(
-    (c) => c.due_date && c.due_date >= today && c.due_date <= weekOut
-  ).length;
-  const nextMeeting = deriveNextMeeting(meetings);
-  const atRiskGoals = goals.filter((g) => g.status === "at_risk").length;
-  const atRiskInitiatives = initiatives.filter((p) => p.status === "at_risk").length;
-
-  const signals: { key: string; title: string; detail: string; href: string }[] = [];
-
-  if (nextMeeting?.status === "needs_log") {
-    signals.push({
-      key: "meeting-needs-log",
-      title: "Team meeting needs logging",
-      detail: "Review what happened, confirm follow-through, and carry unresolved agenda items forward.",
-      href: "#team-meeting",
-    });
-  } else if (nextMeeting && !nextMeeting.scheduled_at) {
-    signals.push({
-      key: "meeting-needs-date",
-      title: "Next meeting needs a date",
-      detail: "Carried agenda items are safe, but the next occurrence is not scheduled yet.",
-      href: "#team-meeting",
-    });
-  }
-
-  if (overdue > 0 || dueThisWeek > 0) {
-    const dueDetail = [
-      overdue > 0 ? `${overdue} overdue` : null,
-      dueThisWeek > 0 ? `${dueThisWeek} due within 7 days` : null,
-    ].filter(Boolean).join(" · ");
-    signals.push({
-      key: "commitments",
-      title: `${overdue + dueThisWeek} commitment${overdue + dueThisWeek === 1 ? "" : "s"} need follow-through`,
-      detail: dueDetail,
-      href: "#team-follow-through",
-    });
-  }
-
-  if (atRiskGoals > 0 || atRiskInitiatives > 0) {
-    const workDetail = [
-      atRiskInitiatives > 0 ? `${atRiskInitiatives} project${atRiskInitiatives === 1 ? "" : "s"}` : null,
-      atRiskGoals > 0 ? `${atRiskGoals} goal${atRiskGoals === 1 ? "" : "s"}` : null,
-    ].filter(Boolean).join(" · ");
-    signals.push({
-      key: "at-risk-work",
-      title: "Work is marked at risk",
-      detail: workDetail,
-      href: "#team-operating-work",
-    });
-  }
-
-  return (
-    <div className={`rounded-xl border px-5 py-4 ${signals.length > 0 ? "border-amber-500/40 bg-amber-50/70" : "border-teal-800/50 bg-brand-tint/50"}`}>
-      <p className={`text-xs font-semibold uppercase tracking-wide ${signals.length > 0 ? "text-amber-700" : "text-brand"}`}>
-        {signals.length > 0 ? "Needs you now" : "Current records"}
-      </p>
-      {signals.length === 0 ? (
-        <div className="mt-3">
-          <p className="text-sm font-medium text-ink-body">Nothing here currently needs intervention.</p>
-          <p className="mt-1 text-xs leading-5 text-ink-muted">
-            This reflects meeting state, dated commitments, and work explicitly marked at risk—not a score for the team.
-          </p>
-        </div>
-      ) : (
-        <ul className="mt-2 divide-y divide-amber-500/20">
-          {signals.map((signal) => (
-            <li key={signal.key} className="py-3 first:pt-1 last:pb-0">
-              <a href={signal.href} className="group flex items-start gap-3">
-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-ink-body group-hover:text-ink">{signal.title}</span>
-                  <span className="mt-0.5 block text-xs leading-5 text-ink-muted">{signal.detail}</span>
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Operating work — exceptions first, with healthy/neutral inventory available
-// on demand rather than competing with the work that needs intervention.
-// ---------------------------------------------------------------------------
-
-function InitiativesCard({
-  initiatives,
+// The scope menu: All teams (the default) plus the teams the caller leads.
+function ScopePicker({
+  led,
   selectedTeamId,
+  selectedName,
+  onSelect,
 }: {
-  initiatives: Project[];
+  led: OrgUnit[];
   selectedTeamId: string | null;
+  selectedName: string;
+  onSelect: (id: string | null) => void;
 }) {
-  const sorted = [...initiatives].sort((a, b) => {
-    if (a.status === "at_risk" && b.status !== "at_risk") return -1;
-    if (b.status === "at_risk" && a.status !== "at_risk") return 1;
-    if (!a.due_date && !b.due_date) return 0;
-    if (!a.due_date) return 1;
-    if (!b.due_date) return -1;
-    return a.due_date < b.due_date ? -1 : 1;
-  });
-  const needsAttention = sorted.filter((p) => p.status === "at_risk");
-  const other = sorted.filter((p) => p.status !== "at_risk");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  function renderInitiative(p: Project) {
-    const inherited = selectedTeamId != null && p.org_unit_id !== selectedTeamId && p.org_unit_name;
-    return (
-      <li key={p.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[p.status]}`}>
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm text-ink-body">{p.title}</span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
-            {STATUS_LABELS[p.status]}
-          </span>
-        </div>
-        <p className="text-xs text-ink-muted">
-          {p.direct_report_name ?? "You"}
-          {p.due_date ? ` · Due ${formatDate(p.due_date)}` : ""}
-          {inherited ? ` · From ${p.org_unit_name}` : ""}
-        </p>
-      </li>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Projects</p>
-        <Link href="/app/projects" className="text-xs text-ink-muted hover:text-ink-secondary">Manage →</Link>
-      </div>
-      {sorted.length === 0 ? (
-        <p className="text-sm text-ink-muted">No active projects.</p>
-      ) : (
-        <>
-          {needsAttention.length > 0 ? (
-            <ul className="space-y-2.5">{needsAttention.map(renderInitiative)}</ul>
-          ) : (
-            <p className="text-sm text-ink-muted">No projects are marked at risk.</p>
-          )}
-          {other.length > 0 && (
-            <details className="mt-3 border-t border-divider pt-3">
-              <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
-                Show {other.length} other project{other.length === 1 ? "" : "s"}
-              </summary>
-              <ul className="mt-3 space-y-2.5">{other.map(renderInitiative)}</ul>
-            </details>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function GoalsCard({ goals, selectedTeamId }: { goals: TeamGoal[]; selectedTeamId: string | null }) {
-  const sorted = [...goals].sort((a, b) => {
-    if (a.status === "at_risk" && b.status !== "at_risk") return -1;
-    if (b.status === "at_risk" && a.status !== "at_risk") return 1;
-    return a.level === b.level ? 0 : a.level === "company" ? -1 : 1;
-  });
-  const needsAttention = sorted.filter((g) => g.status === "at_risk");
-  const other = sorted.filter((g) => g.status !== "at_risk");
-
-  function renderGoal(g: TeamGoal) {
-    const sourceLabel =
-      selectedTeamId == null || g.org_unit_id === selectedTeamId
-        ? null
-        : g.level === "company"
-          ? "Company"
-          : g.org_unit_name;
-    return (
-      <li key={g.id} className={`border-l-4 py-0.5 pl-2.5 ${STATUS_BORDER[g.status]}`}>
-        <div className="flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-sm text-ink-body" title={g.title}>{g.title}</span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
-            {STATUS_LABELS[g.status]}
-          </span>
-        </div>
-        <p className="text-xs text-ink-muted">
-          {sourceLabel ?? (g.level === "company" ? "Company" : "Team")}
-          {g.due_date ? ` · Due ${formatDate(g.due_date)}` : ""}
-          {g.progress != null ? ` · ${g.progress}%` : ""}
-        </p>
-      </li>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Goals</p>
-        <Link href="/app/goals" className="text-xs text-ink-muted hover:text-ink-secondary">Manage →</Link>
-      </div>
-      {goals.length === 0 ? (
-        <p className="text-sm text-ink-muted">No company or team goals yet.</p>
-      ) : (
-        <>
-          {needsAttention.length > 0 ? (
-            <ul className="space-y-2.5">{needsAttention.map(renderGoal)}</ul>
-          ) : (
-            <p className="text-sm text-ink-muted">No goals are marked at risk.</p>
-          )}
-          {other.length > 0 && (
-            <details className="mt-3 border-t border-divider pt-3">
-              <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
-                Show {other.length} other goal{other.length === 1 ? "" : "s"}
-              </summary>
-              <ul className="mt-3 space-y-2.5">{other.map(renderGoal)}</ul>
-            </details>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function CommitmentsCard({
-  members,
-  commitments,
-  setCommitments,
-  selectedTeamId,
-}: {
-  members: TeamMember[];
-  commitments: TeamCommitment[];
-  setCommitments: React.Dispatch<React.SetStateAction<TeamCommitment[]>>;
-  selectedTeamId: string | null;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [reportId, setReportId] = useState("");
-  const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [completingId, setCompletingId] = useState<string | null>(null);
-
-  const today = localDateStr();
-  const weekOut = addDaysStr(today, 7);
-  const open = commitments
-    .filter((c) => c.status === "open")
-    .sort((a, b) => {
-      if (!a.due_date && !b.due_date) return 0;
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-      return a.due_date.localeCompare(b.due_date);
-    });
-
-  async function submit() {
-    if (!description.trim() || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const created = await createTeamCommitment({
-        directReportId: reportId || null,
-        description: description.trim(),
-        dueDate: dueDate || null,
-        orgUnitId: selectedTeamId,
-      });
-      setCommitments((c) => [created, ...c]);
-      setDescription("");
-      setDueDate("");
-      setReportId("");
-      setAdding(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add commitment");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function markDone(id: string) {
-    setCompletingId(id);
-    try {
-      const updated = await updateCommitment(id, "done");
-      setCommitments((c) => c.map((item) => (item.id === id ? updated : item)));
-    } finally {
-      setCompletingId(null);
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-          Team commitments{open.length > 0 && ` (${open.length})`}
-        </p>
-        <button
-          onClick={() => setAdding((a) => !a)}
-          className="text-xs font-medium text-ink-secondary underline hover:text-ink-body"
-        >
-          {adding ? "Cancel" : "Add"}
-        </button>
-      </div>
-
-      {adding && (
-        <div className="mt-2 rounded-lg border border-hairline bg-canvas/60 px-3 py-3">
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Assigned to</label>
-          <select
-            value={reportId}
-            onChange={(e) => setReportId(e.target.value)}
-            className={`${SELECT} w-full`}
-          >
-            {/* "You" is a real owner, not a missing one — a lot of what a team
-                meeting produces is the manager's own work. */}
-            <option value="">You</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Commitment</label>
-          <NoteField
-            value={description}
-            onChange={setDescription}
-            rows={2}
-            className="w-full text-sm"
-          />
-          <label className="mb-1 mt-2 block text-xs font-medium text-ink-secondary">Due date (optional)</label>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className={`${INPUT} w-full`}
-          />
-          {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
-          <div className="mt-2 flex justify-end">
-            <button
-              onClick={submit}
-              disabled={saving || !description.trim()}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {open.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-muted">No open team commitments.</p>
-      ) : (
-        <ul className="mt-3 space-y-2">
-          {open.map((c) => {
-            const railColor = c.due_date && c.due_date <= weekOut
-              ? "border-amber-500"
-              : borderColor(c.direct_report_id, members);
-            return (
-              <li
-                key={c.id}
-                className={`flex items-center justify-between gap-2 border-l-4 py-1 pl-2.5 ${railColor}`}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-ink-body">{c.description}</p>
-                  <p className="text-xs text-ink-muted">
-                    {c.direct_report_name ?? "You"}
-                    {c.due_date ? ` · Due ${formatDate(c.due_date)}` : ""}
-                    {c.due_date && c.due_date < today ? " · Overdue" : ""}
-                    {c.due_date && c.due_date >= today && c.due_date <= weekOut ? " · Due soon" : ""}
-                  </p>
-                </div>
-                <button
-                  onClick={() => markDone(c.id)}
-                  disabled={completingId === c.id}
-                  className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-canvas disabled:opacity-50"
-                >
-                  {completingId === c.id ? "Saving..." : "Done"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Critical callouts (Session 24) — "key updates," revived deliberately
-// small. One manager-authored text block, overwritten on each edit. Each
-// non-empty line renders as its own bullet.
-// ---------------------------------------------------------------------------
-
-function CalloutsPanel({
-  callout,
-  scopeLabel,
-  onSaved,
-}: {
-  callout: TeamCallout;
-  scopeLabel: string;
-  onSaved: (updated: TeamCallout) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(callout.message);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Reset local edit state when the selected team changes (Session 45) —
-  // this panel stays mounted across team switches, so without this a
-  // half-written draft for one team could get saved against another.
   useEffect(() => {
-    setEditing(false);
-    setDraft(callout.message);
-    setError(null);
-  }, [callout.org_unit_id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const lines = callout.message
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  function startEditing() {
-    setDraft(callout.message);
-    setError(null);
-    setEditing(true);
-  }
-
-  async function save() {
-    if (saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await updateTeamCallout(draft, callout.org_unit_id);
-      onSaved(updated);
-      setEditing(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setSaving(false);
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
     }
-  }
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [open]);
 
   return (
-    <div className="flex flex-col rounded-xl border border-hairline bg-surface px-4 py-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Must-knows</p>
-        {!editing && (
-          <button onClick={startEditing} className="text-xs text-ink-muted hover:text-ink-secondary">
-            Edit
-          </button>
-        )}
-      </div>
-      <p className="mt-1 text-xs text-ink-muted">
-        What you need to keep in mind for {scopeLabel}.
-      </p>
-
-      {editing ? (
-        <div className="mt-3">
-          <NoteField
-            value={draft}
-            onChange={setDraft}
-            rows={6}
-            placeholder={"One per line, e.g.\nEnterprise tier scope is cut this quarter.\nQ3 roadmap draft due Friday."}
-            className="w-full text-sm"
-          />
-          {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
-          <div className="mt-2 flex justify-end gap-2">
-            <button
-              onClick={() => setEditing(false)}
-              disabled={saving}
-              className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </div>
-      ) : lines.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-muted">
-          No callouts yet —{" "}
-          <button onClick={startEditing} className="underline hover:text-ink-secondary">
-            add what your team should know this week
-          </button>
-          .
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-2.5 text-sm text-ink-body">
-          {lines.map((line, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="text-ink-faint">•</span>
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Dev focus (Session 47) — the team-level half of Development. Deliberately
-// a near-copy of CalloutsPanel above (same pinned-block-overwritten-in-
-// place shape via team_dev_focus), rendered as its own labeled panel so it
-// doesn't collide with Critical Callouts' "key updates" concept.
-// ---------------------------------------------------------------------------
-
-function DevFocusPanel({
-  devFocus,
-  scopeLabel,
-  onSaved,
-}: {
-  devFocus: TeamDevFocus;
-  scopeLabel: string;
-  onSaved: (updated: TeamDevFocus) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(devFocus.message);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Reset local edit state when the selected team changes — same reason as
-  // CalloutsPanel's identical effect.
-  useEffect(() => {
-    setEditing(false);
-    setDraft(devFocus.message);
-    setError(null);
-  }, [devFocus.org_unit_id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function startEditing() {
-    setDraft(devFocus.message);
-    setError(null);
-    setEditing(true);
-  }
-
-  async function save() {
-    if (saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await updateTeamDevFocus(draft, devFocus.org_unit_id);
-      onSaved(updated);
-      setEditing(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col rounded-xl border border-hairline bg-surface px-4 py-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Training focus</p>
-        {!editing && (
-          <button onClick={startEditing} className="text-xs text-ink-muted hover:text-ink-secondary">
-            Edit
-          </button>
-        )}
-      </div>
-      <p className="mt-1 text-xs text-ink-muted">
-        What {scopeLabel} is focused on developing right now — written by you.
-      </p>
-
-      {editing ? (
-        <div className="mt-3">
-          <NoteField
-            value={draft}
-            onChange={setDraft}
-            rows={4}
-            placeholder={"e.g. Q3 focus: leveling up async communication and stakeholder updates."}
-            className="w-full text-sm"
-          />
-          {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
-          <div className="mt-2 flex justify-end gap-2">
-            <button
-              onClick={() => setEditing(false)}
-              disabled={saving}
-              className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink-secondary hover:bg-canvas"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </div>
-      ) : devFocus.message.trim() === "" ? (
-        <p className="mt-3 text-sm text-ink-muted">
-          No focus set yet —{" "}
-          <button onClick={startEditing} className="underline hover:text-ink-secondary">
-            set this month&apos;s training focus
-          </button>
-          .
-        </p>
-      ) : (
-        <p className="mt-3 whitespace-pre-line text-sm text-ink-body">{devFocus.message}</p>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Meetings (2026-08-24 rebuild)
-//
-// The old panel had a "Next meeting" hero and, underneath it, a free-text
-// "Log a past meeting" box that wrote a completely unrelated row. There was
-// no way to log against the meeting you were looking at. Now the meeting IS
-// the surface: the agenda is on the card, and logging happens on it.
-//
-// Three actions, matching the approved option: Open meeting (the dedicated
-// two-column screen at /app/team/meetings/[id], where a meeting is actually
-// run), Quick log (expands in place, for writing up one that already
-// happened), Edit agenda. Both logging paths assemble raw notes the same way
-// and end in the same MeetingWrapUpReview — the surface differs, the rule
-// that nothing is written until the manager confirms does not.
-// ---------------------------------------------------------------------------
-
-function MeetingsPanel({
-  meetings,
-  setMeetings,
-  members,
-  orgUnitId,
-  orgUnits,
-}: {
-  meetings: TeamMeeting[];
-  setMeetings: React.Dispatch<React.SetStateAction<TeamMeeting[]>>;
-  members: TeamMember[];
-  orgUnitId: string | null;
-  orgUnits: OrgUnit[];
-}) {
-  const [mode, setMode] = useState<"idle" | "plan" | "edit" | "log" | "review">("idle");
-  const [selected, setSelected] = useState<TeamMeeting | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Plan / edit form
-  const [formDate, setFormDate] = useState("");
-  const [formAgenda, setFormAgenda] = useState("");
-  const [formRepeat, setFormRepeat] = useState<number | "">("");
-  const [formSaving, setFormSaving] = useState(false);
-
-  // Quick log
-  const [outcomes, setOutcomes] = useState<AgendaOutcome[]>([]);
-  const [extraNotes, setExtraNotes] = useState("");
-  const [extracting, setExtracting] = useState(false);
-  const [draft, setDraft] = useState<TeamMeetingWrapUpDraft | null>(null);
-
-  const next = deriveNextMeeting(meetings);
-  const logged = meetings.filter((m) => m.status === "logged");
-  const nextScopeName = next
-    ? next.org_unit_id
-      ? (orgUnits.find((unit) => unit.id === next.org_unit_id)?.name ?? "Team")
-      : "All teams"
-    : null;
-  const lifecycleStep = next?.status === "needs_log" ? 3 : (next?.agenda_items.length ?? 0) > 0 ? 2 : 1;
-
-  function reset() {
-    setMode("idle");
-    setDraft(null);
-    setExtraNotes("");
-    setOutcomes([]);
-    setError(null);
-  }
-
-  function openPlan() {
-    setFormDate("");
-    setFormAgenda("");
-    setFormRepeat("");
-    setMode("plan");
-  }
-
-  function openEdit(meeting: TeamMeeting) {
-    setFormDate(meeting.scheduled_at ? isoToDateStr(meeting.scheduled_at) : "");
-    setFormAgenda(meeting.agenda_items.map((i) => i.item).join("\n"));
-    setFormRepeat(meeting.recurrence_weeks ?? "");
-    setMode("edit");
-  }
-
-  function openLog(meeting: TeamMeeting) {
-    setOutcomes(meeting.agenda_items.map((i) => ({ id: i.id, covered: true, notes: "" })));
-    setExtraNotes("");
-    setDraft(null);
-    setMode("log");
-  }
-
-  async function savePlan() {
-    if (!formDate || formSaving) return;
-    setFormSaving(true);
-    setError(null);
-    try {
-      const created = await createTeamMeeting({
-        scheduledAt: formDate,
-        agendaItems: splitAgenda(formAgenda),
-        orgUnitId,
-        recurrenceWeeks: formRepeat === "" ? null : Number(formRepeat),
-      });
-      setMeetings((rows) => [created, ...rows]);
-      reset();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to plan meeting");
-    } finally {
-      setFormSaving(false);
-    }
-  }
-
-  async function saveEdit() {
-    if (!next || formSaving) return;
-    setFormSaving(true);
-    setError(null);
-    try {
-      const updated = await updateTeamMeeting(next.id, {
-        scheduledAt: formDate || null,
-        agendaItems: splitAgenda(formAgenda),
-        recurrenceWeeks: formRepeat === "" ? null : Number(formRepeat),
-        clearRecurrence: formRepeat === "",
-      });
-      setMeetings((rows) => rows.map((m) => (m.id === updated.id ? updated : m)));
-      reset();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save agenda");
-    } finally {
-      setFormSaving(false);
-    }
-  }
-
-  async function removeMeeting(meeting: TeamMeeting) {
-    await deleteTeamMeeting(meeting.id);
-    setMeetings((rows) => rows.filter((m) => m.id !== meeting.id));
-    setConfirmingDelete(false);
-    reset();
-  }
-
-  // The notes the wrap-up actually reads: each agenda item that has notes,
-  // headed by the item so the model knows which topic it belongs to, plus
-  // whatever came up off-agenda.
-  function assembleRawNotes(meeting: TeamMeeting) {
-    const parts = meeting.agenda_items
-      .map((item) => {
-        const outcome = outcomes.find((o) => o.id === item.id);
-        if (!outcome?.notes.trim()) return null;
-        return `${item.item}:\n${outcome.notes.trim()}`;
-      })
-      .filter(Boolean) as string[];
-    if (extraNotes.trim()) parts.push(`Other:\n${extraNotes.trim()}`);
-    return parts.join("\n\n");
-  }
-
-  async function runWrapUp(meeting: TeamMeeting) {
-    const rawNotes = assembleRawNotes(meeting);
-    if (!rawNotes.trim() || extracting) return;
-    setExtracting(true);
-    setError(null);
-    try {
-      const result = await wrapUpTeamMeeting(meeting.id, rawNotes);
-      setDraft(result);
-      setMode("review");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to draft the wrap-up");
-    } finally {
-      setExtracting(false);
-    }
-  }
-
-  function onLogged(result: { meeting: TeamMeeting; next_meeting: TeamMeeting | null }) {
-    setMeetings((rows) => {
-      const merged = rows.map((m) => (m.id === result.meeting.id ? result.meeting : m));
-      if (result.next_meeting && !merged.some((m) => m.id === result.next_meeting!.id)) {
-        return [result.next_meeting, ...merged];
-      }
-      return result.next_meeting
-        ? merged.map((m) => (m.id === result.next_meeting!.id ? result.next_meeting! : m))
-        : merged;
-    });
-    reset();
-  }
-
-  const CARD_ACCENTS = IDENTITY_BG;
-
-  return (
-    <div id="team-meeting">
-      {next ? (
-        <div className={`${FEATURE_SURFACE} px-5 py-4`}>
-          <div className="flex items-center justify-between gap-2">
-            <p className={EYEBROW}>
-              {next.status === "needs_log" ? "Needs logging" : "Next meeting"}
-              {nextScopeName ? ` · ${nextScopeName}` : ""}
-              {next.recurrence_weeks ? ` · ${repeatLabel(next.recurrence_weeks)}` : ""}
-            </p>
-            <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-body">
-              {next.scheduled_at ? formatMeetingDate(isoToDateStr(next.scheduled_at)) : "No date yet"}
-            </span>
-          </div>
-
-          <ol className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-medium" aria-label="Team meeting workflow">
-            {["Plan", "Run", "Wrap up"].map((label, index) => {
-              const step = index + 1;
-              const current = lifecycleStep === step;
-              const complete = lifecycleStep > step;
-              return (
-                <li key={label} className="flex items-center gap-2">
-                  {index > 0 && <span className="text-ink-faint" aria-hidden="true">→</span>}
-                  <span className={`flex items-center gap-1.5 ${current ? "text-brand" : "text-ink-muted"}`}>
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${current ? "border-brand bg-brand-tint" : complete ? "border-teal-800 bg-teal-50" : "border-control bg-sunken"}`}>
-                      {complete ? "✓" : step}
-                    </span>
-                    {label}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-
-          {next.agenda_items.length > 0 ? (
-            <ul className="mt-2 space-y-1">
-              {next.agenda_items.map((item) => (
-                <li key={item.id} className="flex items-start gap-2 text-sm">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-muted" aria-hidden="true" />
-                  <span>{item.item}</span>
-                  {item.carried_from_item_id && (
-                    <span className="mt-0.5 shrink-0 rounded-full border border-hairline px-1.5 text-[10px] text-ink-muted">
-                      carried
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-xs text-ink-muted">No agenda yet.</p>
-          )}
-
-          {mode === "idle" && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {/* The primary action, because the two-column screen is where a
-                  meeting is actually run. Quick log stays for "we already met,
-                  let me write it up in ten seconds" — the two are different
-                  postures, not two doors to the same thing. */}
-              <Link href={`/app/team/meetings/${next.id}`} className={BTN_PRIMARY_SM}>
-                Open meeting
-              </Link>
-              <button onClick={() => openLog(next)} className={BTN_SECONDARY}>
-                Quick log
-              </button>
-              <button onClick={() => openEdit(next)} className={BTN_SECONDARY}>
-                Edit agenda
-              </button>
-              <button onClick={() => setConfirmingDelete(true)} className={BTN_GHOST}>
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-hairline px-4 py-3">
-          <p className="text-xs text-ink-muted">No meeting planned.</p>
-        </div>
-      )}
-
-      {mode === "idle" && (
-        <div className="mt-2">
-          <button onClick={openPlan} className={BTN_GHOST}>
-            {next ? "Plan another meeting" : "Plan a meeting"}
-          </button>
-        </div>
-      )}
-
-      {(mode === "plan" || mode === "edit") && (
-        <div className="mt-3 rounded-xl border border-hairline bg-surface px-4 py-3">
-          <p className={EYEBROW}>{mode === "plan" ? "Plan a meeting" : "Edit agenda"}</p>
-          <label className={`${LABEL} mt-2`} htmlFor="meeting-date">
-            Meeting date
-          </label>
-          <input
-            id="meeting-date"
-            type="date"
-            value={formDate}
-            onChange={(e) => setFormDate(e.target.value)}
-            className={INPUT}
-          />
-          <label className={`${LABEL} mt-2`} htmlFor="meeting-agenda">
-            Agenda — one item per line
-          </label>
-          <NoteField
-            id="meeting-agenda"
-            value={formAgenda}
-            onChange={setFormAgenda}
-            rows={4}
-            className="text-sm"
-            placeholder={"Update on Max's account\nDiscuss hiring for new CSM"}
-          />
-          <label className={`${LABEL} mt-2`} htmlFor="meeting-repeat">
-            Repeat
-          </label>
-          <select
-            id="meeting-repeat"
-            value={formRepeat}
-            onChange={(e) => setFormRepeat(e.target.value === "" ? "" : Number(e.target.value))}
-            className={`${SELECT} w-auto`}
-          >
-            <option value="">Doesn&apos;t repeat</option>
-            <option value={1}>Every week</option>
-            <option value={2}>Every 2 weeks</option>
-            <option value={3}>Every 3 weeks</option>
-            <option value={4}>Every 4 weeks</option>
-          </select>
-          {/* Said plainly so a manager never waits on an invite that isn't
-              coming — same honesty posture as store-only team messages. */}
-          <p className={`${META} mt-1`}>The Same Page doesn&apos;t send calendar invites.</p>
-          {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
-          <div className="mt-3 flex justify-end gap-2">
-            <button onClick={reset} className={BTN_SECONDARY} disabled={formSaving}>
-              Cancel
-            </button>
-            <button
-              onClick={mode === "plan" ? savePlan : saveEdit}
-              disabled={formSaving || !formDate}
-              className={BTN_PRIMARY_SM}
-            >
-              {formSaving ? "Saving..." : mode === "plan" ? "Plan meeting" : "Save agenda"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mode === "log" && next && (
-        <div className="mt-3 rounded-xl border border-hairline bg-surface px-4 py-3">
-          <p className={EYEBROW}>
-            Logging ·{" "}
-            {next.scheduled_at ? formatMeetingDate(isoToDateStr(next.scheduled_at)) : "undated"}
-          </p>
-          {next.agenda_items.map((item) => {
-            const outcome = outcomes.find((o) => o.id === item.id);
-            return (
-              <div key={item.id} className="mt-3">
-                <label className="flex items-center gap-2 text-sm font-medium text-ink-body">
-                  <input
-                    type="checkbox"
-                    checked={outcome?.covered ?? false}
-                    onChange={(e) =>
-                      setOutcomes((rows) =>
-                        rows.map((o) => (o.id === item.id ? { ...o, covered: e.target.checked } : o))
-                      )
-                    }
-                    className="h-3.5 w-3.5 rounded border-control"
-                  />
-                  {item.item}
-                  {!outcome?.covered && (
-                    <span className="rounded-full border border-hairline px-1.5 text-[10px] font-normal text-ink-muted">
-                      carries forward
-                    </span>
-                  )}
-                </label>
-                {outcome?.covered && (
-                  <NoteField
-                    value={outcome.notes}
-                    onChange={(v: string) =>
-                      setOutcomes((rows) =>
-                        rows.map((o) => (o.id === item.id ? { ...o, notes: v } : o))
-                      )
-                    }
-                    rows={2}
-                    className="mt-1 text-sm"
-                    placeholder="What happened..."
-                    aria-label={`Notes for ${item.item}`}
-                  />
-                )}
-              </div>
-            );
-          })}
-
-          <label className={`${LABEL} mt-3`} htmlFor="meeting-other">
-            {next.agenda_items.length > 0 ? "Anything else" : "Notes"}
-          </label>
-          <NoteField
-            id="meeting-other"
-            value={extraNotes}
-            onChange={setExtraNotes}
-            rows={3}
-            className="text-sm"
-            placeholder="Off-agenda notes, or paste from a recorder..."
-          />
-          {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
-          <div className="mt-3 flex justify-end gap-2">
-            <button onClick={reset} className={BTN_SECONDARY} disabled={extracting}>
-              Cancel
-            </button>
-            <button
-              onClick={() => runWrapUp(next)}
-              disabled={extracting || !assembleRawNotes(next).trim()}
-              className={BTN_PRIMARY_SM}
-            >
-              {extracting ? "Drafting..." : "Wrap up & log →"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mode === "review" && next && draft && (
-        <div className="mt-3">
-          <MeetingWrapUpReview
-            meeting={next}
-            members={members.map((m) => ({ id: m.id, name: m.name }))}
-            rawNotes={assembleRawNotes(next)}
-            draft={draft}
-            outcomes={outcomes}
-            onBack={() => setMode("log")}
-            onSaved={onLogged}
-          />
-        </div>
-      )}
-
-      {logged.length > 0 && (
-        <details className="mt-4 border-t border-divider pt-3">
-          <summary className="cursor-pointer text-xs font-medium text-ink-secondary hover:text-ink-body">
-            Meeting history ({logged.length})
-          </summary>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {logged.map((m, i) => (
-              <button
-                key={m.id}
-                onClick={() => setSelected(m)}
-                className="overflow-hidden rounded-xl border border-hairline bg-surface text-left hover:border-control hover:shadow-sm"
-              >
-                <div className={`h-1.5 ${CARD_ACCENTS[i % CARD_ACCENTS.length]}`} />
-                <div className="px-3 py-2.5">
-                  <p className="text-xs text-ink-muted">
-                    {m.scheduled_at ? formatMeetingDate(isoToDateStr(m.scheduled_at)) : timeAgo(m.created_at)}
-                  </p>
-                  <p className="mt-1 text-sm text-ink-body">{snippet(m.summary ?? "", 90)}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </details>
-      )}
-
-      {selected && (
-        <LoggedMeetingModal
-          meeting={selected}
-          onClose={() => setSelected(null)}
-          onSaved={(updated) => {
-            setMeetings((rows) => rows.map((m) => (m.id === updated.id ? updated : m)));
-            setSelected(updated);
-          }}
-        />
-      )}
-
-      {confirmingDelete && next && (
-        <DeleteMeetingModal
-          meeting={next}
-          onClose={() => setConfirmingDelete(false)}
-          onConfirm={() => removeMeeting(next)}
-        />
-      )}
-    </div>
-  );
-}
-
-// A small modal rather than a bare window.confirm, matching how the settings
-// page confirms an archive.
-function DeleteMeetingModal({
-  meeting,
-  onClose,
-  onConfirm,
-}: {
-  meeting: TeamMeeting;
-  onClose: () => void;
-  onConfirm: () => Promise<void>;
-}) {
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirm() {
-    setDeleting(true);
-    setError(null);
-    try {
-      await onConfirm();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete meeting");
-      setDeleting(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-24"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+    <div className="relative flex items-center gap-2" ref={ref}>
+      <span className="text-xs text-ink-muted" id="team-scope-label">Team scope</span>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls="team-scope-menu"
+        aria-labelledby="team-scope-label team-scope-value"
+        className="inline-flex h-9 max-w-60 items-center gap-2 rounded-md border border-control bg-surface px-3 text-sm text-ink-body hover:border-ink-muted hover:bg-sunken hover:text-ink"
       >
-        <h3 className="font-medium text-ink">
-          Delete{" "}
-          {meeting.scheduled_at
-            ? formatMeetingDate(isoToDateStr(meeting.scheduled_at))
-            : "this undated meeting"}
-          ?
-        </h3>
-        <p className="mt-2 text-sm text-ink-secondary">
-          The agenda goes with it, including anything that carried forward into it.
-          {meeting.recurrence_weeks
-            ? " This also stops the meeting repeating — logged meetings and their commitments stay."
-            : " Logged meetings and their commitments stay."}
-        </p>
-        {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className={BTN_GHOST} disabled={deleting}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={confirm}
-            disabled={deleting}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm text-on-critical hover:bg-red-500 disabled:opacity-50"
-          >
-            {deleting ? "Deleting..." : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// One meeting, agenda and outcome together — the thing the old two-row model
-// could not show at all. The summary is editable in place; the agenda is not,
-// because its items carry the per-item notes written during the wrap-up and
-// the PATCH that edits an agenda replaces the item set wholesale.
-function LoggedMeetingModal({
-  meeting,
-  onClose,
-  onSaved,
-}: {
-  meeting: TeamMeeting;
-  onClose: () => void;
-  onSaved: (meeting: TeamMeeting) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(meeting.summary ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    if (!draft.trim() || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      onSaved(await updateTeamMeetingSummary(meeting.id, draft.trim()));
-      setEditing(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save summary");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <p className={EYEBROW}>
-            {meeting.scheduled_at
-              ? formatMeetingDate(isoToDateStr(meeting.scheduled_at))
-              : timeAgo(meeting.created_at)}
-          </p>
-          <div className="flex items-center gap-2">
-            {!editing && (
-              <>
-                {/* The same record with the raw notes attached — the modal is
-                    the quick look, the screen is the whole thing. */}
-                <Link href={`/app/team/meetings/${meeting.id}`} className={BTN_GHOST}>
-                  Open full record
-                </Link>
-                <button
-                  onClick={() => {
-                    setDraft(meeting.summary ?? "");
-                    setEditing(true);
-                  }}
-                  className={BTN_GHOST}
-                >
-                  Edit
-                </button>
-              </>
-            )}
-            <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink-body">
-              &times;
-            </button>
-          </div>
-        </div>
-
-        {editing ? (
-          <div className="mt-3">
-            <NoteField
-              value={draft}
-              onChange={setDraft}
-              rows={5}
-              className="text-sm"
-              aria-label="Summary"
-            />
-            {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
-            <div className="mt-2 flex justify-end gap-2">
-              <button onClick={() => setEditing(false)} className={BTN_SECONDARY} disabled={saving}>
-                Cancel
-              </button>
-              <button
-                onClick={save}
-                disabled={saving || !draft.trim()}
-                className={BTN_PRIMARY_SM}
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-3 whitespace-pre-wrap text-sm text-ink-body">{meeting.summary}</p>
-        )}
-
-        {meeting.agenda_items.length > 0 && (
-          <div className="mt-5">
-            <p className={EYEBROW}>Agenda</p>
-            <ul className="mt-2 space-y-2">
-              {meeting.agenda_items.map((item) => (
-                <li key={item.id} className="rounded-lg border border-hairline bg-sunken px-3 py-2">
-                  <p className="text-sm text-ink-body">
-                    {item.item}
-                    {!item.covered && (
-                      <span className="ml-2 rounded-full border border-hairline px-1.5 text-[10px] text-ink-muted">
-                        not covered
-                      </span>
-                    )}
-                  </p>
-                  {item.notes && (
-                    <p className="mt-1 whitespace-pre-wrap text-xs text-ink-secondary">{item.notes}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Roster row (Session 24) — moved from a left column to a horizontal row at
-// the bottom. Same data/actions as the old RosterColumn (priorities,
-// projects, log-update, invite-to-log-in); clicking a card now opens a
-// shared detail panel below the row instead of expanding the card in place.
-// ---------------------------------------------------------------------------
-
-function RosterRow({
-  members,
-  setMembers,
-  directReports,
-  roleLevels,
-  roleFamilies,
-  orgUnits,
-  setupStatus,
-}: {
-  members: TeamMember[];
-  setMembers: React.Dispatch<React.SetStateAction<TeamMember[]>>;
-  directReports: DirectReport[];
-  roleLevels: RoleLevel[];
-  roleFamilies: RoleFamily[];
-  orgUnits: OrgUnit[];
-  setupStatus: SetupStatus | null;
-}) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  function toggleExpand(memberId: string) {
-    setExpandedId((cur) => (cur === memberId ? null : memberId));
-  }
-
-  const expanded = members.find((m) => m.id === expandedId) ?? null;
-  const directReportById = new Map(directReports.map((dr) => [dr.id, dr]));
-  const roleLevelById = new Map(roleLevels.map((rl) => [rl.id, rl]));
-  const orgUnitById = new Map(orgUnits.map((ou) => [ou.id, ou]));
-  const setupPersonById = new Map((setupStatus?.people ?? []).map((p) => [p.id, p]));
-
-  return (
-    <section id="team-people" aria-labelledby="team-people-heading">
-      <h2 id="team-people-heading" className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">People</h2>
-
-      {members.length === 0 ? (
-        <p className="text-sm text-ink-secondary">
-          No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="underline hover:text-ink-body">
-            Add your first one
-          </Link>
-          .
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {members.map((m) => {
-            // has_role (Session 3's setup-status) is the source of truth for
-            // the amber badge — never recomputed locally. When it's true,
-            // resolve the role/team labels client-side for the chip text
-            // (roleLabel/orgUnitLabel formatting, same as Settings and the
-            // direct-report page).
-            const setupPerson = setupPersonById.get(m.id);
-            const hasRole = setupPerson?.has_role ?? false;
-            const dr = directReportById.get(m.id);
-            const rl = dr?.role_level_id ? roleLevelById.get(dr.role_level_id) : undefined;
-            const ou = dr?.org_unit_id ? orgUnitById.get(dr.org_unit_id) : undefined;
-            const chipText = rl ? `${roleLabel(rl)}${ou ? ` · ${ou.name}` : ""}` : null;
-
+        <span id="team-scope-value" className="truncate">{selectedName}</span>
+        <Icon name="chevron" className={`h-4 w-4 shrink-0 text-ink-muted transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div id="team-scope-menu" role="menu" aria-label="Switch team" className={`absolute right-0 top-11 z-30 w-64 p-1.5 ${ELEVATED}`}>
+          {[{ id: null as string | null, name: "All teams" }, ...led.map((u) => ({ id: u.id as string | null, name: u.name }))].map((team) => {
+            const selected = team.id === selectedTeamId;
             return (
-              <div
-                key={m.id}
-                className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-3 text-left hover:border-control ${
-                  expandedId === m.id ? "border-brand" : "border-hairline"
+              <button
+                key={team.id ?? "all"}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                onClick={() => {
+                  onSelect(team.id);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm ${
+                  selected ? "bg-brand-tint font-medium text-brand" : "text-ink-body hover:bg-sunken hover:text-ink"
                 }`}
               >
-                <Link href={`/app/reports/${m.id}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-md">
-                  <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${IDENTITY_TEXT} ${avatarColor(
-                      m.id,
-                      members
-                    )}`}
-                  >
-                    {initials(m.name)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{m.name}</p>
-                    {hasRole ? (
-                      chipText && <p className="truncate text-xs text-ink-secondary">{chipText}</p>
-                    ) : (
-                      <span className="mt-0.5 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                        No role
-                      </span>
-                    )}
-                    <p className="mt-1 text-[11px] text-brand">Open Relationship Desk →</p>
-                  </div>
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(m.id)}
-                  aria-expanded={expandedId === m.id}
-                  aria-controls={`team-details-${m.id}`}
-                  className={BTN_GHOST}
-                >
-                  Details
-                </button>
-              </div>
+                <span className="min-w-0 flex-1 truncate">{team.name}</span>
+                <span className={`shrink-0 ${selected ? "opacity-100" : "opacity-0"}`} aria-hidden="true">✓</span>
+              </button>
             );
           })}
         </div>
       )}
-
-      {expanded && (
-        <div id={`team-details-${expanded.id}`} className="mt-3">
-          <MemberDetailPanel member={expanded} members={members} setMembers={setMembers} />
-        </div>
-      )}
-    </section>
-  );
-}
-
-function MemberDetailPanel({
-  member,
-  members,
-  setMembers,
-}: {
-  member: TeamMember;
-  members: TeamMember[];
-  setMembers: React.Dispatch<React.SetStateAction<TeamMember[]>>;
-}) {
-  const [history, setHistory] = useState<TeamMessage[] | null>(null);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-
-  const [inviting, setInviting] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState(member.email ?? "");
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSending, setInviteSending] = useState(false);
-
-  useEffect(() => {
-    setHistory(null);
-    setDraft("");
-    setInviting(false);
-    setInviteEmail(member.email ?? "");
-    setInviteUrl(null);
-    setInviteError(null);
-    getTeamMessages(member.id)
-      .then(setHistory)
-      .catch(() => setHistory([]));
-  }, [member.id, member.email]);
-
-  async function submitMessage() {
-    if (!draft.trim() || sending) return;
-    setSending(true);
-    try {
-      const created = await sendTeamMessage(member.id, draft.trim());
-      setHistory((h) => [created, ...(h ?? [])]);
-      setMembers((ms) => ms.map((m) => (m.id === member.id ? { ...m, latest_message: created } : m)));
-      setDraft("");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function submitInvite() {
-    const email = inviteEmail.trim();
-    if (!email || inviteSending) return;
-    setInviteSending(true);
-    setInviteError(null);
-    try {
-      const { invite_url } = await inviteDirectReport(member.id, email);
-      setInviteUrl(invite_url);
-      setMembers((ms) => ms.map((m) => (m.id === member.id ? { ...m, email } : m)));
-    } catch (e) {
-      setInviteError(e instanceof Error ? e.message : "Failed to create invite");
-    } finally {
-      setInviteSending(false);
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-hairline bg-canvas/60 px-4 py-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Team details</p>
-          <p className="mt-1 text-sm text-ink-secondary">Work context, the team update record, and account access for {member.name}.</p>
-        </div>
-        <Link href={`/app/reports/${member.id}`} className="text-xs font-medium text-brand hover:text-brand-hover">
-          Open Relationship Desk →
-        </Link>
-      </div>
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-            Priorities{member.priorities.length > 0 && ` (${member.priorities.length})`}
-          </p>
-          {member.priorities.length === 0 ? (
-            <p className="mt-1 text-sm text-ink-muted">None set.</p>
-          ) : (
-            <ul className="mt-1 space-y-1">
-              {member.priorities.map((g) => (
-                <li key={g.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate text-ink-body">{g.title}</span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[g.status]}`}>
-                    {STATUS_LABELS[g.status]}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <p className="mt-4 text-xs font-medium uppercase tracking-wide text-ink-muted">
-            Projects{member.projects.length > 0 && ` (${member.projects.length})`}
-          </p>
-          {member.projects.length === 0 ? (
-            <p className="mt-1 text-sm text-ink-muted">None active.</p>
-          ) : (
-            <ul className="mt-1 space-y-1">
-              {member.projects.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate text-ink-body">{p.title}</span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[p.status]}`}>
-                    {STATUS_LABELS[p.status]}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-muted">
-            Team update record
-          </label>
-          <p className="mb-2 text-xs leading-5 text-ink-muted">
-            Only you can see these. Nothing is sent to {member.name}. Use the Relationship Desk for private notes and 1:1 captures.
-          </p>
-          <NoteField
-            value={draft}
-            onChange={setDraft}
-            rows={3}
-            className="w-full text-sm"
-            placeholder="Record a team update..."
-          />
-          <div className="mt-2">
-            <button
-              onClick={submitMessage}
-              disabled={sending || !draft.trim()}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm text-on-brand disabled:opacity-50"
-            >
-              {sending ? "Saving..." : "Save update"}
-            </button>
-          </div>
-
-          {history && history.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">History</p>
-              <ul className="mt-1.5 space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                {history.map((msg) => (
-                  <li key={msg.id} className="text-sm text-ink-secondary">
-                    <span className="text-xs text-ink-muted">{timeAgo(msg.created_at)}</span> — {msg.message}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <div>
-          {IC_INVITES_ENABLED && (<>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Account</p>
-          {member.user_id ? (
-            <p className="mt-1 text-xs text-ink-secondary">Account linked — they can log in.</p>
-          ) : inviting ? (
-            <div className="mt-1">
-              {inviteUrl ? (
-                <div>
-                  <p className="text-xs text-ink-secondary">Share this link with them — it expires in 7 days:</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      readOnly
-                      value={inviteUrl}
-                      onFocus={(e) => e.target.select()}
-                      className={`${INPUT} w-full truncate text-xs`}
-                    />
-                    <button
-                      onClick={() => navigator.clipboard?.writeText(inviteUrl)}
-                      className="shrink-0 rounded-md border border-hairline px-2 py-1 text-xs text-ink-secondary hover:bg-surface"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="their@email.com"
-                    className={`${INPUT} w-full text-xs`}
-                  />
-                  <button
-                    onClick={submitInvite}
-                    disabled={inviteSending || !inviteEmail.trim()}
-                    className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-xs text-on-brand disabled:opacity-50"
-                  >
-                    {inviteSending ? "Sending…" : "Send"}
-                  </button>
-                </div>
-              )}
-              {inviteError && <p className="mt-1 text-xs text-red-700">{inviteError}</p>}
-            </div>
-          ) : (
-            <button
-              onClick={() => setInviting(true)}
-              className="mt-1 text-xs font-medium text-ink-secondary underline hover:text-ink-body"
-            >
-              Invite to log in
-            </button>
-          )}
-          </>)}
-
-          {member.latest_message && (
-            <p className="mt-4 text-xs text-ink-muted">
-              Last update {timeAgo(member.latest_message.created_at)}: &ldquo;{member.latest_message.message}&rdquo;
-            </p>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

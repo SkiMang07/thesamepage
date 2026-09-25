@@ -220,6 +220,11 @@ export type Commitment = {
   // Team commitments only (2026-09-24): the team it belongs to. Null means
   // none recorded — the team page falls back to the assignee's team.
   org_unit_id?: string | null;
+  // Where it was made: a team meeting, a 1:1, a goal/project, or added by
+  // hand ("manual"). source_id is that record's id. Returned by the team
+  // commitments list so /app/team can link each one back to its source.
+  source_type?: "one_on_one" | "goal" | "project" | "manual" | "team_meeting" | "outside_meeting" | null;
+  source_id?: string | null;
 };
 
 export type AgendaItem = {
@@ -1227,6 +1232,20 @@ export const updateTeamMeeting = (
     }),
   });
 
+// Inline capture: adds ONE item to the end of a planned meeting's agenda
+// without touching the items already there (their ids key the meeting
+// screen's in-progress notes — updateTeamMeeting's agendaItems sets the whole
+// list). created = false means the line was already on the agenda and nothing
+// new was saved. A logged meeting refuses with 409.
+export const addTeamMeetingAgendaItem = (
+  meetingId: string,
+  item: string
+): Promise<{ item: TeamAgendaItem; created: boolean }> =>
+  authedFetch(`/api/team/meetings/${meetingId}/agenda-items`, {
+    method: "POST",
+    body: JSON.stringify({ item }),
+  });
+
 // Planned meetings only — the backend refuses to delete a logged one, since
 // that is history and commitments point at it through source_id.
 export const deleteTeamMeeting = (id: string): Promise<{ ok: boolean }> =>
@@ -1252,6 +1271,17 @@ export const wrapUpTeamMeeting = (
     body: JSON.stringify({ raw_notes: rawNotes }),
   });
 
+// What the confirmed write actually saved — the receipt on /app/team and the
+// meeting screen is built from this and the refreshed records, never from the
+// draft that was sent. A 409 means the meeting was already logged (a retry or
+// another tab): nothing was written a second time.
+export type TeamMeetingLogResult = {
+  meeting: TeamMeeting;
+  next_meeting: TeamMeeting | null;
+  commitments: TeamCommitment[];
+  carried_forward: string[];
+};
+
 export const logTeamMeeting = (
   id: string,
   body: {
@@ -1261,7 +1291,7 @@ export const logTeamMeeting = (
     commitments: TeamMeetingDraftCommitment[];
     carryForwardItems: string[];
   }
-): Promise<{ meeting: TeamMeeting; next_meeting: TeamMeeting | null }> =>
+): Promise<TeamMeetingLogResult> =>
   authedFetch(`/api/team/meetings/${id}/log`, {
     method: "POST",
     body: JSON.stringify({

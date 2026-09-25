@@ -8,48 +8,66 @@ Backend: `routes/team.py`. Frontend: `frontend/app/app/team/page.tsx`, plus
 
 ## Page structure, top to bottom
 
-1. **Team context switcher** — a compact header button opens the manager's led
-   teams plus the default All teams scope. The selected scope remains visible
-   without presenting the page like a form.
-2. **Now** — a factual attention brief beside the active team meeting. The
-   meeting card makes the Plan → Run → Wrap up lifecycle visible, carries its
-   agenda and logging actions, and keeps meeting history behind a disclosure.
-3. **Live follow-through** — all open team commitments, ordered by due date.
-   Overdue and next-seven-days items receive explicit text and an amber rail.
-4. **Operating work** — Initiatives and Goals, with work explicitly marked at
-   risk shown first. Healthy and neutral work remains available behind a
-   disclosure instead of competing for attention.
-5. **Team context** — manager-only Critical callouts and the current team
-   training focus.
-6. **People** — compact roster cards at the bottom. The person's Relationship
-   Desk is the primary destination; the secondary Team details disclosure keeps
-   work context, the manager-only team update record, and account access.
+Selected design: `docs/design-proposals/2026-09-25-team-overview/` (the
+prototype is the visual reference; its fixtures never shipped). Section
+components live in `frontend/components/team/`.
 
-### The attention brief is not a team score
+1. **Heading** — editorial serif title naming the selected scope, the
+   manager-only line, an avatar row of the people in scope, and the Team scope
+   menu (All teams default, plus the caller's led units).
+2. **In-page links** — Meetings, Shared work, Commitments, People.
+3. **Team meetings** (`TeamMeetingsSection`) beside **Must-knows** and
+   **Training focus** (`TeamContext`, each an exact-scope private text block
+   edited in place). The meeting card shows scope, repeat rule, state chip,
+   date, the Plan → Run → Wrap up steps, the first three agenda items,
+   inline capture, a state-appropriate primary action and collapsed
+   preparation. Other open meetings, Quick log, Edit plan, Delete and
+   meeting history sit under the card.
+4. **Shared work** (`SharedWork`) beside **Commitments** (`TeamCommitments`).
+5. **People** (`TeamPeople`) — roster grid; the Relationship Desk is each
+   person's primary door; "Team details & access" holds current work, the
+   private update record and account access (invites stay behind
+   `IC_INVITES_ENABLED = false`).
 
-The brief is a deterministic projection of records already fetched by the page:
+Layout is measured (ResizeObserver on the page root), not viewport-based,
+so opening Scribe reflows it: ≥1000px content wide (meeting|280px context,
+work|340px commitments, three roster columns); ≥740 medium; ≥600 split
+(work stacks over a two-column commitment list); below that one column.
 
-- an open meeting that needs logging, or a carried-forward meeting that needs a
-  date;
-- open commitments that are overdue or due within seven days;
-- goals or initiatives explicitly marked `at_risk`.
+There is no attention brief, KPI strip or team score. Attention shows where
+it applies: the meeting's "Needs wrap-up"/"Needs a date" chip, overdue
+commitment text and rail, and "At risk" work rows.
 
-It shows at most those three grouped signals, in that order, and links each one
-to the section where the manager can act. It does not infer morale, health, or
-performance; it stores no score and introduces no ranking model. When no signal
-is present, the copy is deliberately narrow: the current meeting state, dated
-commitments, and explicitly at-risk work do not require intervention. It is not
-an all-clear for the team, and it does not replace Mission Control's cross-domain
-priority ranking.
+### The meeting card's lifecycle
 
-Initiatives reuse `getProjects()` filtered client-side to
-`active`/`on_track`/`at_risk` — the same subset Mission Control's Key Initiatives
-card uses. Completed and cancelled work stays off the page; full history lives on
-`/app/goals` and `/app/projects`.
+| Meeting | Current step | Primary action |
+|---|---|---|
+| undated | Plan (amber) | Set a date |
+| dated, no agenda | Plan | Open meeting |
+| dated, has agenda, not past | Run | Open meeting |
+| date passed, not logged (`needs_log`) | Wrap up (amber) | Wrap up meeting (Quick log) |
 
-The Team page is exception-first, not exception-only. Every active initiative,
-goal, and open commitment remains reachable on the page; the disclosures only
-control the initial visual hierarchy.
+Plan shows ✓ only when an agenda is recorded. **Run is never shown as done**
+— nothing records that a meeting was run, and a passed date is not evidence.
+
+### Shared work and commitments
+
+Goals and active projects in scope are one list, exception-first: rows
+marked `at_risk` show; the rest are behind "Show N other goals & projects".
+A row expands to its latest check-in (progress only if a percentage was
+recorded; amber after 14 days) and **explicit** connections only —
+`projects.goal_id` and commitments whose `source_type`/`source_id` point at
+the goal or project. A shared owner is never a link. A standalone project is
+described as standalone, not as a problem. Inherited work says which parent
+unit it belongs to.
+
+Commitments: open ones ordered by due date (undated last), with "Overdue ·
+date" (amber text and rail), "Due soon · date" (within 7 days), "Due date"
+or "No due date". Filters All open / Overdue / Mine plus an Owner select;
+counts come from the same list the rows do. Three rows first, then "View all
+N". A row expands to its source (meeting, project, goal, 1:1 or "Added on
+the Team page"), added date, Mark done and the owner's Relationship Desk.
+Scope changes clear filters and expanded rows.
 
 ## Endpoints (`/api/team`)
 
@@ -59,41 +77,43 @@ control the initial visual hierarchy.
 | `GET /goals` | goals at `level in ('company','department','team')` |
 | `GET`/`POST /{report_id}/messages` | per-report update log |
 | `GET`/`POST /meetings`, `PATCH`/`DELETE /meetings/{id}` | team meetings + agenda items |
+| `POST /meetings/{id}/agenda-items` | inline capture: append ONE item; 409 if logged; an existing line comes back with `created: false` |
 | `POST /meetings/{id}/wrapup` | raw notes → **draft only**, nothing written |
-| `POST /meetings/{id}/log` | the confirmed write, then series rollover |
-| `GET`/`POST /commitments` | team-flagged commitments |
+| `POST /meetings/{id}/log` | the confirmed write, then series rollover; returns the saved meeting, `commitments`, `carried_forward`, `next_meeting`; 409 if already logged |
+| `GET`/`POST /commitments` | team-flagged commitments, with `source_type`/`source_id` |
 | `GET`/`PUT /callout` | critical callouts |
 | `GET`/`PUT /dev-focus` | team training focus (see `development.md`) |
 
-## Team dropdown and org_unit filtering
+## Team scope
 
-The dropdown lists `org_units` where `leader_user_id` is the caller (`GET
-/api/org-units/led`) — there is no separate "which team am I a member of"
-concept. **"All teams" is the default.**
+The scope menu lists `org_units` where `leader_user_id` is the caller (`GET
+/api/org-units/led`) plus **All teams**, the default. There is no separate
+"which team am I a member of" concept. Switching filters data already on the
+page. The rules live in one module, `frontend/components/team/scope.ts`,
+shared by the page and the meeting screen (whose scope is the meeting's own
+`org_unit_id`):
 
-Roster keys off `direct_report_id` → `direct_reports.org_unit_id`; goals,
-projects, `team_meetings`, and `team_callouts` carry `org_unit_id` directly.
-Commitments carry their own `org_unit_id` and fall back to the assignee's team
-when it is null (see Team commitments below).
+| Object | Rule for a selected team |
+|---|---|
+| People | the caller's own direct reports with exactly that `org_unit_id` — no descendant rollup |
+| Projects | that unit or any ancestor; a null-team project appears only under All teams |
+| Goals | company goals always; otherwise that unit or any ancestor. A null-team non-company goal is **not** universal |
+| Commitments | the commitment's own `org_unit_id`, else the assignee's team. Neither → All teams only. A null assignee is "You" |
+| Meetings | exactly that unit, plus null-team (all-teams) meetings; no ancestor cascade |
+| Must-knows, Training focus | the exact-scope text block (All teams has its own) |
 
-**A null `org_unit_id` on a goal, meeting, or callout means "applies to all
-teams"** — such a row shows under every specific team's filter, not only under
-"All teams." Commitments are the exception: a commitment with no team of its
-own and no assignee shows only under "All teams."
+Before 2026-09-25 this doc said a null `org_unit_id` goal or callout showed
+under every team. The code never did that, and the redesign kept the code's
+behaviour rather than broadening access. An inherited goal or project does
+not widen which people, commitments or private records are shown.
 
 ### Hierarchy cascade
 
-`ancestorChain()` (client-side, in `page.tsx`) walks `org_units.parent_unit_id`
-upward from the selected team using the already-fetched `orgUnits` list, building
-a set of the team plus every ancestor. `visibleInitiatives` / `visibleGoals` match
-against that set instead of exact equality, and anything inherited is labeled
-"inherited from parent."
-
-**Deliberate scope limit: cascade applies to goals and initiatives only.**
-Commitments, roster, meetings, and callouts stay exact-match. And this
-downward cascade is a different concept from `org_unit_projects_rollup()`'s
-upward aggregation — the two do not agree, on purpose. See ENGINEERING.md → Scope
-discipline.
+`ancestorChain()` walks `org_units.parent_unit_id` upward from the selected
+team (capped at 20 hops as a cycle guard). Cascade applies to goals and
+projects only, and is labelled with the owning unit. This downward cascade is
+a different concept from `org_unit_projects_rollup()`'s upward aggregation —
+the two do not agree, on purpose. See ENGINEERING.md → Scope discipline.
 
 ## Meetings
 
@@ -140,9 +160,16 @@ twice" answerable at all.
 `manager_id` is **denormalized** onto the row so the policy stays a flat
 `manager_id = auth.uid()` instead of a subquery into `team_meetings`.
 
-Agenda edits replace the item set wholesale. That is safe because per-item
-notes only exist after a meeting is logged, and a logged meeting's agenda is
-never editable.
+Agenda edits (`PATCH agenda_items`) set the whole list but are **reconciled
+by text**: an unchanged line keeps its row, id and `carried_from_item_id`;
+removed lines are deleted and new lines inserted. Inline capture uses the
+append endpoint instead, which never touches existing rows. Item ids matter
+because the meeting screen keys the manager's browser-held notes by them. An
+agenda holds at most 20 items.
+
+`carried_from_item_id` is set when logging carries forward a line that
+matches one of the logged meeting's agenda items. A carry-forward line typed
+fresh during review has no source item and gets no lineage.
 
 ### What each state allows
 
@@ -178,6 +205,50 @@ meeting is created so nothing carried is silently dropped; the UI shows it as
 needing a date.
 
 No calendar invitation is sent, and the UI says so.
+
+### Preparation, capture and the receipt
+
+**Preparation** (`meeting-prep.ts`, `MeetingPrepPanel`) is collapsed under the
+meeting on both surfaces and built deterministically from team-level
+records:
+
+- *Carried over* — agenda items with lineage, naming the source meeting and
+  whether it was covered there; plus commitments made at the last logged
+  meeting that are still open.
+- *What changed* — since the **last logged meeting for exactly the same
+  scope** (its `logged_at`): goal/project check-ins in scope, commitments
+  marked done, and commitments added (excluding that meeting's own
+  outcomes). With no earlier logged meeting it says there is nothing to
+  compare, and claims no changes.
+- *Needs a decision* — decision requests and blockers aren't recorded
+  anywhere, so it says so instead of inferring one from an overdue date or
+  an at-risk status.
+
+Every entry has a "Why this?" disclosure with the reason and a source link.
+"Add to agenda" only fills the capture box for the manager to edit and
+confirm. Sources that failed to load are named. 1:1 notes, assessments,
+Relationship Desk notes and private update records are never used.
+
+**Capture** (`AgendaCapture`): "Add something to discuss…" appends one item
+through `POST /meetings/{id}/agenda-items`. It shows "Added" only after the
+server confirms, keeps the text and says so on failure, locks while saving,
+refuses duplicates, and keeps focus for the next line. It has no
+person/work association — agenda items have no column for one.
+
+**Receipt** (`meeting-outcomes.ts`, `MeetingReceipt`): after confirming a
+wrap-up, the log response is merged into the page's records and the page
+re-reads meetings and commitments. The receipt then shows the reviewed
+summary ("decisions are recorded here"), the commitments whose source is
+this meeting (owner, due state), what carried forward and which occurrence
+it landed on, with links. A logged meeting's record and history modal show
+the same outcomes from stored records. Unticked or removed draft commitments
+never appear, because only saved rows are read.
+
+**Retries:** `/log` claims the meeting with a conditional update (`summary
+is null`). A second attempt gets 409 and writes nothing. The review keeps
+the draft on any failure, and on a 409 the page loads and shows what the
+first save stored. Owners are validated before anything is written, so a bad
+id can't leave a meeting half-logged.
 
 ### The meeting screen (`/app/team/meetings/[id]`)
 

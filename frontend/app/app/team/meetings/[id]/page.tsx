@@ -29,6 +29,11 @@
 //      missing value — see docs/decisions/nullable-commitment-owner.md. It
 //      renders as "You" and must never be filtered out.
 //
+// Preparation (carried over / what changed since the last logged meeting),
+// inline "Add something to discuss" capture and the post-meeting receipt are
+// the shared components in components/team/ — the same ones /app/team uses,
+// so the two surfaces can't describe a meeting differently.
+//
 // Notes autosave to localStorage, not to the server: team_meetings.raw_notes
 // is only written at log time and there is no draft-notes endpoint. That
 // buys back a refresh or a closed tab mid-meeting, and nothing more, so the
@@ -42,13 +47,21 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   DirectReport,
+  OrgUnit,
+  Project,
+  TeamAgendaItem,
   TeamCommitment,
+  TeamGoal,
   TeamMeeting,
+  TeamMeetingLogResult,
   TeamMeetingWrapUpDraft,
   TeamMember,
   getDirectReports,
+  getOrgUnits,
+  getProjects,
   getTeam,
   getTeamCommitments,
+  getTeamGoals,
   getTeamMeetings,
   updateCommitment,
   updateTeamMeeting,
@@ -56,6 +69,14 @@ import {
   wrapUpTeamMeeting,
 } from "@/lib/api";
 import MeetingWrapUpReview, { AgendaOutcome } from "@/components/team/MeetingWrapUpReview";
+import AgendaCapture from "@/components/team/AgendaCapture";
+import MeetingPrepPanel from "@/components/team/MeetingPrepPanel";
+import MeetingReceipt from "@/components/team/MeetingReceipt";
+import PersonAvatar from "@/components/team/PersonAvatar";
+import { derivePrep } from "@/components/team/meeting-prep";
+import { deriveOutcomes, mergeLogResult } from "@/components/team/meeting-outcomes";
+import { inScopeCommitment, inScopeMember, makeScope } from "@/components/team/scope";
+import { createSectionLoader } from "@/lib/sectionLoader";
 import PageShell from "@/components/PageShell";
 import NoteField from "@/components/NoteField";
 import {
@@ -159,6 +180,14 @@ export default function TeamMeetingPage() {
   const { id } = useParams<{ id: string }>();
 
   const [meeting, setMeeting] = useState<TeamMeeting | null>(null);
+  const [allMeetings, setAllMeetings] = useState<TeamMeeting[]>([]);
+  const [goals, setGoals] = useState<TeamGoal[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  const [prepUnavailable, setPrepUnavailable] = useState<string[]>([]);
+  const [captureSeed, setCaptureSeed] = useState<string | null>(null);
+  const [logResult, setLogResult] = useState<TeamMeetingLogResult | null>(null);
+  const [receiptNote, setReceiptNote] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [directReports, setDirectReports] = useState<DirectReport[]>([]);
   const [commitments, setCommitments] = useState<TeamCommitment[]>([]);
@@ -171,7 +200,6 @@ export default function TeamMeetingPage() {
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
-  const [nextMeeting, setNextMeeting] = useState<TeamMeeting | null>(null);
   const [justLogged, setJustLogged] = useState(false);
 
   // Set once the fetched meeting has seeded the notes state, so the autosave
@@ -181,14 +209,31 @@ export default function TeamMeetingPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getTeamMeetings(), getTeam(), getDirectReports(), getTeamCommitments()])
-      .then(([allMeetings, team, reports, teamCommitments]) => {
+    // Meetings, the roster and commitments are what the screen runs on; the
+    // work records only feed preparation, so they degrade on their own and
+    // preparation says what it couldn't load.
+    const { optional, failed } = createSectionLoader();
+    Promise.all([
+      getTeamMeetings(),
+      getTeam(),
+      getDirectReports(),
+      getTeamCommitments(),
+      optional("goals", getTeamGoals(), []),
+      optional("projects", getProjects(), []),
+      optional("teams", getOrgUnits(), []),
+    ])
+      .then(([everyMeeting, team, reports, teamCommitments, teamGoals, allProjects, units]) => {
         if (cancelled) return;
-        const found = allMeetings.find((m) => m.id === id) ?? null;
+        const found = everyMeeting.find((m) => m.id === id) ?? null;
         setMeeting(found);
+        setAllMeetings(everyMeeting);
         setMembers(team);
         setDirectReports(reports);
         setCommitments(teamCommitments);
+        setGoals(teamGoals);
+        setProjects(allProjects.filter((p) => ["active", "on_track", "at_risk"].includes(p.status)));
+        setOrgUnits(units);
+        setPrepUnavailable(failed());
         if (found && found.status !== "logged") {
           const stored = readStoredNotes(found.id);
           const storedById = new Map((stored?.outcomes ?? []).map((o) => [o.id, o]));
@@ -229,29 +274,16 @@ export default function TeamMeetingPage() {
     return () => clearTimeout(timer);
   }, [extraNotes, outcomes, meeting]);
 
-  const orgUnitById = new Map(directReports.map((dr) => [dr.id, dr.org_unit_id]));
+  // The meeting's own team is the scope — the same rules /app/team uses
+  // (components/team/scope.ts). A null org_unit_id meeting applies to all
+  // teams, so it offers everyone and shows every team commitment. A "You"
+  // commitment with no team recorded only shows on an all-teams meeting.
+  const meetingScope = makeScope(meeting?.org_unit_id ?? null, orgUnits, directReports);
+  const scopedMembers = members.filter((m) => inScopeMember(meetingScope, m));
 
-  // Whose names the owner picker offers. A meeting with a null org_unit_id
-  // applies to every team, so it offers everyone — same convention as a null
-  // org_unit_id callout.
-  const scopedMembers =
-    meeting?.org_unit_id == null
-      ? members
-      : members.filter((m) => orgUnitById.get(m.id) === meeting.org_unit_id);
-
-  // A commitment's own org_unit_id (2026-09-24) is its team; without one,
-  // fall back to the assignee's team. A "You" commitment with no team
-  // recorded only shows on an all-teams meeting — it used to show on every
-  // meeting, which leaked other teams' work into this one.
   const openCommitments = commitments
     .filter((c) => c.status === "open")
-    .filter(
-      (c) =>
-        meeting?.org_unit_id == null ||
-        (c.org_unit_id ??
-          (c.direct_report_id ? orgUnitById.get(c.direct_report_id) ?? null : null)) ===
-          meeting.org_unit_id
-    )
+    .filter((c) => inScopeCommitment(meetingScope, c))
     .sort((a, b) => {
       if (a.due_date === b.due_date) return 0;
       if (!a.due_date) return 1;
@@ -289,12 +321,56 @@ export default function TeamMeetingPage() {
     }
   }
 
-  function onLogged(result: { meeting: TeamMeeting; next_meeting: TeamMeeting | null }) {
+  function onLogged(result: TeamMeetingLogResult) {
     clearStoredNotes(result.meeting.id);
+    const merged = mergeLogResult(allMeetings, commitments, result);
+    setAllMeetings(merged.meetings);
+    setCommitments(merged.commitments);
     setMeeting(result.meeting);
-    setNextMeeting(result.next_meeting);
+    setLogResult(result);
+    setReceiptNote(null);
     setJustLogged(true);
     setDraft(null);
+    // Read back what the server holds so the receipt reflects stored records.
+    Promise.all([getTeamMeetings(), getTeamCommitments()])
+      .then(([everyMeeting, teamCommitments]) => {
+        setAllMeetings(everyMeeting);
+        setCommitments(teamCommitments);
+      })
+      .catch(() => {
+        /* the merged response is already on screen */
+      });
+  }
+
+  // A retry (or another tab) found the meeting already logged. Nothing was
+  // written twice; show what the first save stored, and keep the local notes
+  // until the manager has seen that record.
+  async function onAlreadyLogged() {
+    try {
+      const [everyMeeting, teamCommitments] = await Promise.all([getTeamMeetings(), getTeamCommitments()]);
+      const found = everyMeeting.find((m) => m.id === id) ?? null;
+      setAllMeetings(everyMeeting);
+      setCommitments(teamCommitments);
+      if (found) {
+        setMeeting(found);
+        if (found.status === "logged") clearStoredNotes(found.id);
+      }
+      setLogResult(null);
+      setReceiptNote("This meeting was already logged, so nothing was saved a second time. This is what the first save stored.");
+      setJustLogged(true);
+      setDraft(null);
+    } catch {
+      setError("This meeting looks already logged, but the saved record couldn't be loaded. Reload the page to see it.");
+      setDraft(null);
+    }
+  }
+
+  function onItemAdded(item: TeamAgendaItem) {
+    setMeeting((m) => (m && !m.agenda_items.some((i) => i.id === item.id) ? { ...m, agenda_items: [...m.agenda_items, item] } : m));
+    setAllMeetings((rows) =>
+      rows.map((m) => (m.id === item.meeting_id && !m.agenda_items.some((i) => i.id === item.id) ? { ...m, agenda_items: [...m.agenda_items, item] } : m))
+    );
+    setOutcomes((rows) => (rows.some((o) => o.id === item.id) ? rows : [...rows, { id: item.id, covered: true, notes: "" }]));
   }
 
   if (loading) {
@@ -317,6 +393,18 @@ export default function TeamMeetingPage() {
   const dateStr = meeting.scheduled_at ? isoToDateStr(meeting.scheduled_at) : null;
   const coveredCount = outcomes.filter((o) => o.covered).length;
   const carriedCount = meeting.agenda_items.filter((i) => i.carried_from_item_id).length;
+  const prep =
+    meeting.status !== "logged"
+      ? derivePrep({
+          meeting,
+          meetings: allMeetings,
+          commitments,
+          goals,
+          projects,
+          scope: meetingScope,
+          unavailable: prepUnavailable,
+        })
+      : null;
 
   const header = (
     <>
@@ -356,6 +444,7 @@ export default function TeamMeetingPage() {
             outcomes={outcomes}
             onBack={() => setDraft(null)}
             onSaved={onLogged}
+            onAlreadyLogged={onAlreadyLogged}
           />
         </div>
       </PageShell>
@@ -371,32 +460,14 @@ export default function TeamMeetingPage() {
       <PageShell maxWidth="6xl">
         {header}
 
-        {justLogged && (
-          <div className="mt-6 rounded-xl border border-hairline bg-brand-tint px-4 py-3">
-            <p className="text-sm font-medium text-ink">Meeting logged.</p>
-            {nextMeeting ? (
-              <p className="mt-1 text-sm text-ink-body">
-                {nextMeeting.scheduled_at
-                  ? `Your next one is set for ${formatMeetingDate(isoToDateStr(nextMeeting.scheduled_at))}`
-                  : "Anything you carried forward is waiting on a meeting that still needs a date"}
-                {" — "}
-                <Link
-                  href={`/app/team/meetings/${nextMeeting.id}`}
-                  className="underline hover:text-ink"
-                >
-                  open it
-                </Link>
-                .
-              </p>
-            ) : (
-              <p className={`${META} mt-1`}>
-                No follow-up meeting was created — nothing carried forward and this one doesn&apos;t
-                repeat.
-              </p>
-            )}
-          </div>
-        )}
-
+        <div className="mt-6">
+          <MeetingReceipt
+            outcomes={deriveOutcomes(meeting, allMeetings, commitments, justLogged ? logResult : null)}
+            title={justLogged ? "Meeting logged" : "What came out of it"}
+            note={receiptNote ?? undefined}
+            hideSummary
+          />
+        </div>
         <div className="mt-6 space-y-4">
           <SummaryCard meeting={meeting} onSaved={setMeeting} />
 
@@ -532,6 +603,14 @@ export default function TeamMeetingPage() {
                 })}
               </div>
             )}
+
+            <AgendaCapture
+              meeting={meeting}
+              onAdded={onItemAdded}
+              seed={captureSeed}
+              onSeedConsumed={() => setCaptureSeed(null)}
+            />
+            {prep && <MeetingPrepPanel prep={prep} meeting={meeting} onAddSuggestion={setCaptureSeed} />}
           </div>
 
           <div className={CARD_PAD}>
@@ -742,7 +821,10 @@ function SummaryCard({
   return (
     <div className={CARD_PAD}>
       <div className="flex items-center justify-between gap-2">
-        <p className={EYEBROW}>Summary</p>
+        <div>
+          <p className={EYEBROW}>Reviewed summary</p>
+          <p className={`${META} mt-0.5`}>Decisions from this meeting are recorded here.</p>
+        </div>
         {!editing && (
           <button
             type="button"
