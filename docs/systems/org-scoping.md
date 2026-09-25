@@ -58,7 +58,7 @@ functions, all SECURITY DEFINER, all gated by `led_org_unit_ids()`:
 | `org_unit_people_rollup()` | headcount + `job_role`/count breakdown | never a name |
 
 **The projects rollup divergence is deliberate.** Projects gained a direct
-`org_unit_id` column and `/app/team` and `/app/projects` both filter on it, but
+`org_unit_id` column (set on `/app/projects`, filtered on by `/app/team`), but
 this function was left on the older goal/assignee-derived logic: aggregating *up*
 to a leader is a different question from `/app/team`'s cascade *down* from a
 parent team. Check which of the two a surface actually needs before assuming they

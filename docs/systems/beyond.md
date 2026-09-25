@@ -147,9 +147,10 @@ the previous sheet. Rate-limited like the other AI routes.
   the last 90 days to `_build_prep_prompt()`, as a block headed SECONDHAND and
   framed as someone else's account, never as fact or feedback. Private to the
   manager. Fails soft to an empty list (e.g. before the migration has run).
-- **Goals and projects.** `CheckInPanel`'s History lists "From meetings beyond
-  the team" via `GET /api/beyond/links`, linking to each meeting. The check-in
-  itself is already in the history above it.
+- **Goals and projects.** A check-in confirmed from a meeting carries
+  `source_type='outside_meeting'` and the meeting id, so the goal's Updates and
+  the project's record link each such entry to its meeting (titles come from
+  `GET /api/beyond/links`).
 - **Commitments.** Report-owned ones show wherever that report's commitments
   do. The manager's own and counterpart items show on the meeting and the
   person page.

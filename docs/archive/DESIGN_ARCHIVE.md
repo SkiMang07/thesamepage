@@ -150,3 +150,9 @@ way it did.
 | Date | Decision | Rationale |
 |---|---|---|
 | 2026-08-22 | Goals use the KPI strip + `border-l-4` card grid with a per-card progress ring; level tabs stay as a pill filter | Goals remain a broad alignment view, with the Individual tab organized as an owner-first people board |
+
+## Superseded 2026-09-25 by Projects "keep things moving"
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-08-25 | Projects is an Initiative Desk: a factual portfolio index grouped by needed managerial response opens into one focused initiative workspace; it reflows to list→detail when the canvas or Scribe drawer narrows | The manager needs to understand, intervene, and follow through without turning The Same Page into a contributor execution or task-management tool. There is no hidden priority score, and standalone initiatives are neutral rather than treated as deficient |

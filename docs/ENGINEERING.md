@@ -234,7 +234,7 @@ a query or a policy.
 | Model | Predicate | Tables |
 |---|---|---|
 | Manager-scoped | `manager_id = auth.uid()` | direct_reports, one_on_one_series, one_on_ones, commitments, dr_capture_notes, assessments, skill/value_assessments, metric_entries, team_messages, team_meetings, team_meeting_series, team_meeting_agenda_items, team_callouts, team_dev_focus, direct_report_invites, development_plans + dev_plan_*, assistant_messages, mission_control_events, capacity_profiles, time_off_entries, away_periods, away_period_shifts |
-| Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins, outside_people, outside_meetings, outside_meeting_people, outside_meeting_links, outside_meeting_series |
+| Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins, project_follow_throughs, outside_people, outside_meetings, outside_meeting_people, outside_meeting_links, outside_meeting_series |
 | Org-scoped | `org_id = public.current_org_id()` | organizations, users, org_units, role_families, role_levels, *_configs, *_scale_definitions, assessment_levels, capacity_settings, work_unit_configs, documents, document_series, document_scopes, document_citations |
 
 **Naming gotcha:** `goals` and `projects` policies are named `goals_all_own_org` /
@@ -452,7 +452,9 @@ Not yet built, deliberately:
   `direct_reports.user_id` set), but `/app/ic` is a static placeholder. This is
   what keeps `team_messages` store-only. The natural next step to unlock it.
 - **Commitments → project linking** (`source_type='project'`, already in
-  schema.sql's check constraint).
+  schema.sql's check constraint). The manager's private next move on a project
+  is not this: it lives in `project_follow_throughs` (see
+  `docs/systems/projects.md`) so it never surfaces where commitments are read.
 - **Goal and project rollup status** — a parent's status computed from its
   children. `goals.status` / `projects.status` are plain manual fields today.
 - **Capacity demand/allocation** — the model is supply-only. Wiring it into
