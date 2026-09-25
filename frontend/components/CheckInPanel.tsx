@@ -1,8 +1,8 @@
 "use client";
 
-// Check-in panel (Session 26, 2026-08-11) — the shared progress strip + quick
-// check-in form + history used by both goal cards (/app/goals) and project
-// cards (/app/projects). One component because the two parents share the same
+// Check-in panel (Session 26, 2026-08-11) — the progress strip + quick
+// check-in form + history on project cards (/app/projects). Goals moved to
+// components/goals/ (2026-09-25). Written for both parents because they share the same
 // status enum and check-in shape (see backend/routes/check_ins.py).
 //
 // Renders three things:

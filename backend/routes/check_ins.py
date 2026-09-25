@@ -29,6 +29,13 @@ from pydantic import BaseModel
 _STATUSES = ("active", "on_track", "at_risk", "completed", "cancelled")
 
 _CHECK_IN_COLUMNS = "id,goal_id,project_id,status,progress,note,created_at"
+# Goal check-ins also carry a measured reading (2026-09-25 goal measures) and
+# where they came from. Projects keep the narrower column list.
+GOAL_CHECK_IN_COLUMNS = _CHECK_IN_COLUMNS + ",measured_value,source_type,source_id"
+
+# How many recent readings a goal list row carries for the board's plot. The
+# full history is fetched lazily from GET /api/goals/{id}/check-ins.
+RECENT_READINGS_LIMIT = 12
 
 
 class CheckInIn(BaseModel):
@@ -92,10 +99,14 @@ def create_check_in(
     return row
 
 
+def _columns_for(parent_fk: str) -> str:
+    return GOAL_CHECK_IN_COLUMNS if parent_fk == "goal_id" else _CHECK_IN_COLUMNS
+
+
 def list_check_ins(supabase, user_id: str, parent_fk: str, parent_id: str) -> list[dict]:
     return (
         supabase.table("check_ins")
-        .select(_CHECK_IN_COLUMNS)
+        .select(_columns_for(parent_fk))
         .eq("owner_id", user_id)
         .eq(parent_fk, parent_id)
         .order("created_at", desc=True)
@@ -111,17 +122,24 @@ def enrich_with_check_ins(supabase, user_id: str, rows: list[dict], parent_fk: s
     first), grouped in Python — fine at this product's scale, and it keeps
     PostgREST embedding quirks out of the picture.
     """
+    is_goal = parent_fk == "goal_id"
     for row in rows:
         row["progress"] = None
+        row["progress_at"] = None
         row["trend"] = None
         row["last_check_in_at"] = None
         row["last_check_in_note"] = None
+        row["last_check_in_status"] = None
+        if is_goal:
+            row["latest_reading"] = None
+            row["recent_readings"] = []
+            row["reading_count"] = 0
     ids = [r["id"] for r in rows]
     if not ids:
         return rows
     check_ins = (
         supabase.table("check_ins")
-        .select(_CHECK_IN_COLUMNS)
+        .select(_columns_for(parent_fk))
         .eq("owner_id", user_id)
         .in_(parent_fk, ids)
         .order("created_at", desc=True)
@@ -138,12 +156,35 @@ def enrich_with_check_ins(supabase, user_id: str, rows: list[dict], parent_fk: s
             continue
         row["last_check_in_at"] = history[0]["created_at"]
         row["last_check_in_note"] = history[0]["note"]
+        row["last_check_in_status"] = history[0]["status"]
         # Progress = latest non-null % asserted; trend compares the latest
         # two non-null %s (a note-only check-in neither wipes nor moves it).
-        with_progress = [ci["progress"] for ci in history if ci["progress"] is not None]
+        with_progress = [ci for ci in history if ci["progress"] is not None]
         if with_progress:
-            row["progress"] = with_progress[0]
+            row["progress"] = with_progress[0]["progress"]
+            row["progress_at"] = with_progress[0]["created_at"]
         if len(with_progress) >= 2:
-            delta = with_progress[0] - with_progress[1]
+            delta = with_progress[0]["progress"] - with_progress[1]["progress"]
             row["trend"] = "up" if delta > 0 else "down" if delta < 0 else "flat"
+        if is_goal:
+            # Readings are only ever explicitly entered values. The newest
+            # reading keeps its own date, which can be older than the newest
+            # check-in (a note-only update never re-dates a value).
+            readings = [
+                {"check_in_id": ci["id"], "value": _number(ci.get("measured_value")), "at": ci["created_at"]}
+                for ci in history
+                if ci.get("measured_value") is not None
+            ]
+            row["reading_count"] = len(readings)
+            row["recent_readings"] = readings[:RECENT_READINGS_LIMIT]
+            row["latest_reading"] = readings[0] if readings else None
     return rows
+
+
+def _number(value):
+    """PostgREST returns numeric columns as JSON numbers, but be tolerant of
+    a string: a reading must reach the client as a number, never "12"."""
+    if value is None or isinstance(value, (int, float)):
+        return value
+    as_float = float(value)
+    return int(as_float) if as_float.is_integer() else as_float

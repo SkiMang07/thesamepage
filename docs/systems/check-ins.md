@@ -4,7 +4,7 @@ The temporal layer under goals and projects. Without it, goal and initiative car
 are inert: no computable progress signal and no freshness/trend signal.
 
 Backend: `routes/check_ins.py` — **shared helpers, not a router**. Frontend:
-`components/CheckInPanel.tsx`.
+`components/CheckInPanel.tsx` (project cards; goal updates use `components/goals/`).
 
 ## One shared table for both parents
 
@@ -27,7 +27,11 @@ history can also list the Beyond meetings that touched the item
 
 ## Write-through
 
-`create_check_in()` inserts the row, then updates the parent's `status` column. So
+Goal check-ins from `/app/goals` go through `record_goal_check_in()`, which does
+the insert and the status write-through in one transaction and is retry-safe via
+`client_request_id` (see `goals.md`). Project check-ins and confirmed Beyond
+check-ins use `create_check_in()`, which inserts the row, then updates the
+parent's `status` column. So
 status-reading surfaces such as the team KPI strip, org-unit rollup SQL, and
 person-page sections stay current. Mission Control also reads the timestamped rows
 for goal/project eligibility, freshness evidence, conflicts, and the weekly truth
@@ -41,10 +45,17 @@ query per list, grouped in Python.
 - `progress` — the latest **non-null** % across the parent's check-ins. A
   note-only check-in never wipes the number.
 - `trend` — direction between the latest two non-null %s.
-- `last_check_in_at` / `last_check_in_note` — newest row.
+- `progress_at` — when that % was recorded.
+- `last_check_in_at` / `last_check_in_note` / `last_check_in_status` — newest row.
+- Goals only: `latest_reading`, `recent_readings` (newest 12) and
+  `reading_count`, from `measured_value` — an explicitly entered reading of the
+  goal's optional numeric measure. A note-only check-in never re-dates a
+  reading. Details in `goals.md`.
 
 **Progress is manually asserted** (0–100 per check-in), which is honest about the
-judgment involved. Structured key results were considered and deferred.
+judgment involved. It is "completion", separate from a goal's measured value,
+which can itself be a percentage. One optional numeric measure per goal exists
+(`goals.md`); multi-measure key results remain deferred.
 AI-proposed status/progress from `success_metrics` plus notes is deferred to the
 agent layer.
 

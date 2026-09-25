@@ -416,7 +416,30 @@ export type Goal = {
   org_unit_id: string | null;
   org_unit_name?: string | null;
   created_at: string;
+  // One optional numeric measure (2026-09-25). Null = the written
+  // success_metrics is the whole criterion. See docs/systems/goals.md.
+  measure?: GoalMeasure | null;
+  // Readings of that measure — explicitly entered values only. The latest
+  // reading keeps its own date, which can be older than last_check_in_at.
+  latest_reading?: GoalReading | null;
+  recent_readings?: GoalReading[];
+  reading_count?: number;
 } & CheckInDerived;
+
+export type GoalMeasureFormat = "count" | "number" | "percent";
+export type GoalMeasureDirection = "at_least" | "at_most" | "below";
+
+export type GoalMeasure = {
+  label: string;
+  format: GoalMeasureFormat;
+  // Display label only ("handoffs"); "%" for percent. Never parsed.
+  unit: string | null;
+  // The CURRENT target. It is not a historical record of past targets.
+  target: number;
+  direction: GoalMeasureDirection;
+};
+
+export type GoalReading = { check_in_id: string; value: number; at: string };
 
 // Session 26 — fields derived from the check_ins temporal layer, attached by
 // the backend's enrich_with_check_ins() on every goals/projects list call.
@@ -427,9 +450,12 @@ export type CheckInTrend = "up" | "down" | "flat";
 
 export type CheckInDerived = {
   progress?: number | null;
+  // When that completion % was recorded (may be older than the last check-in).
+  progress_at?: string | null;
   trend?: CheckInTrend | null;
   last_check_in_at?: string | null;
   last_check_in_note?: string | null;
+  last_check_in_status?: GoalStatus | null;
 };
 
 export type CheckIn = {
@@ -440,18 +466,32 @@ export type CheckIn = {
   progress: number | null;
   note: string | null;
   created_at: string;
+  // Goal check-ins only: an explicitly entered reading (null = none; 0 is a
+  // value) and where the check-in came from.
+  measured_value?: number | null;
+  source_type?: "manual" | "outside_meeting" | null;
+  source_id?: string | null;
 };
 
 export type CheckInIn = {
   status: GoalStatus;
+  // Completion percentage (0-100). Distinct from measured_value, which can
+  // itself be a percentage-valued outcome.
   progress?: number | null;
   note?: string | null;
+};
+
+// A goal update. `client_request_id` makes a retried submit return the row
+// it already created instead of saving twice.
+export type GoalCheckInIn = CheckInIn & {
+  measured_value?: number | null;
+  client_request_id?: string | null;
 };
 
 export const getGoalCheckIns = (goalId: string): Promise<CheckIn[]> =>
   authedFetch(`/api/goals/${goalId}/check-ins`);
 
-export const createGoalCheckIn = (goalId: string, body: CheckInIn): Promise<CheckIn> =>
+export const createGoalCheckIn = (goalId: string, body: GoalCheckInIn): Promise<CheckIn> =>
   authedFetch(`/api/goals/${goalId}/check-ins`, { method: "POST", body: JSON.stringify(body) });
 
 export const getProjectCheckIns = (projectId: string): Promise<CheckIn[]> =>
@@ -470,6 +510,9 @@ export type GoalIn = {
   direct_report_id?: string | null;
   parent_goal_id?: string | null;
   org_unit_id?: string | null;
+  // Omit to leave the stored measure unchanged; null removes it (refused
+  // once readings exist).
+  measure?: GoalMeasure | null;
 };
 
 export const getGoals = (params?: { level?: GoalLevel; directReportId?: string; orgUnitId?: string; status?: GoalStatus }): Promise<Goal[]> => {
@@ -480,6 +523,25 @@ export const getGoals = (params?: { level?: GoalLevel; directReportId?: string; 
   if (params?.status) q.set("status", params.status);
   const qs = q.toString();
   return authedFetch(`/api/goals${qs ? `?${qs}` : ""}`);
+};
+
+// Check-ins in one level/scope for the Goals page's Updates view, newest
+// first and bounded. `unassociated` is "Not linked", distinct from all.
+export const getGoalUpdates = (params: {
+  level: GoalLevel;
+  directReportId?: string;
+  orgUnitId?: string;
+  unassociated?: boolean;
+  closed?: boolean;
+  limit?: number;
+}): Promise<CheckIn[]> => {
+  const q = new URLSearchParams({ level: params.level });
+  if (params.directReportId) q.set("direct_report_id", params.directReportId);
+  if (params.orgUnitId) q.set("org_unit_id", params.orgUnitId);
+  if (params.unassociated) q.set("unassociated", "true");
+  if (params.closed) q.set("closed", "true");
+  if (params.limit) q.set("limit", String(params.limit));
+  return authedFetch(`/api/goals/updates?${q.toString()}`);
 };
 
 export const createGoal = (body: GoalIn): Promise<Goal> =>

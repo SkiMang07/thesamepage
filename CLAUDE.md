@@ -50,6 +50,7 @@ expectations.md     role ladders, coverage grid, JD import, AI draft
 assessments.md      rolling ratings, AI draft-then-review
 development.md      individual plans, team training focus
 check-ins.md        the temporal layer under goals and projects
+goals.md            /app/goals — board, scope, measures and readings, Updates, Review together
 capacity.md         supply model, off-days buffer, department rollup
 org-scoping.md      org_units, leader assignment, role-scoped rollups
 brand.md            Current & Carbon — colour roles, ink scale, status vocabulary, logo
@@ -78,6 +79,12 @@ content, not validated customer data or final copy.
 `/app/reports/[id]` — implemented; open it before visual work on that page.
 Current behaviour is in `docs/systems/one-on-ones.md`. Its example data is
 fictional reference content.
+
+`docs/design-proposals/2026-09-25-goals-in-view/` (`BUILD_BRIEF.md`,
+`prototype-v2.html`) is the **selected Goals design** for `/app/goals` —
+implemented; open it before visual work on that page. `prototype.html` in the
+same folder is the superseded first concept. Current behaviour is in
+`docs/systems/goals.md`. Its example data is fictional reference content.
 
 `gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
 the argument behind each marketing page. `website/` stays a build root with its own

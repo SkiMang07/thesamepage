@@ -144,3 +144,9 @@ way it did.
 | Date | Decision | Rationale |
 |---|---|---|
 | 2026-08-24 | The person page (`/app/reports/[id]`) is a "Relationship Desk": identity and relationship rhythm, the next conversation beside live follow-through, then explicit Work / Growth / History / Private notes modes. Expectations and assessment sit within Growth; completed 1:1 summaries and resolved commitments sit within History. Admin inputs remain in the settings drawer | The relationship and its next conversation should lead. The prior four-tile Command Deck made the page legible but still treated one person like a dashboard; it also left past conversations and manager-only notes semantically ambiguous |
+
+## Superseded 2026-09-25 by the outcomes-first Goals board
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-08-22 | Goals use the KPI strip + `border-l-4` card grid with a per-card progress ring; level tabs stay as a pill filter | Goals remain a broad alignment view, with the Individual tab organized as an owner-first people board |
