@@ -241,12 +241,12 @@ It hasn't been observed in use.
   ("person history combined with leadership principles"). There's no object called
   *how I manage*. That's a product gap the messaging depends on.
 - **The anchoring guardrail on the assessment draft.** A drafted 3 pulls a manager who'd
-  have said 2. Review is thinner protection than it sounds. The fix is to make the
-  anchor auditable rather than to remove the draft: show the evidence beside each
-  drafted score, and surface what the model deliberately left blank instead of
-  omitting it silently. That turns the weakness into the demo.
-- **Eval coverage on the assessment draft.** Third AI call site to cover, behind
-  wrap-up extraction and `/prep`, both of which were flagged first.
+  have said 2. Review is thinner protection than it sounds. The auditable anchor is now
+  built: each drafted judgment shows its cited records and stated limits, items the
+  model left blank are listed with a reason, and prior judgments sit apart from new
+  proposals. Whether that is enough protection has not been measured with real managers.
+- **Eval coverage on the assessment calls.** The picture, draft, discussion and summary
+  calls have no eval yet, behind wrap-up extraction and `/prep`.
 - Belief 2 needs one round of interviews. It's the spine and it's an assertion.
 - Naming the standard is a layer 4 decision and it's on the critical path.
 

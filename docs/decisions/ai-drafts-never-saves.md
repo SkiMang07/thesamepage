@@ -3,7 +3,8 @@
 **Status:** Accepted — records and corrects the boundary governing behavior that
 already shipped. Since 2026-09-25 the drafting lives in the period-assessment flow
 (`POST /api/assessments/reviews/{id}/draft`, `docs/systems/assessments.md`); the rule
-is unchanged and is what that flow enforces.
+is unchanged and is what that flow enforces (implemented in `b2c1cf6`; see
+`docs/decisions/assessments-are-period-assessments.md`).
 
 ## Context
 

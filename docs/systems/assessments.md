@@ -11,7 +11,8 @@ scale and discusses it. Every value that is recorded was set or explicitly
 confirmed by the manager. Manual assessment is the same flow without AI proposals.
 (For Assessments this supersedes the app-wide "AI is an optional assist"
 convention in `docs/DESIGN.md`; draft-then-review still binds — see
-`docs/decisions/ai-drafts-never-saves.md`.)
+`docs/decisions/ai-drafts-never-saves.md`. Why the flow is shaped this way:
+`docs/decisions/assessments-are-period-assessments.md`.)
 
 Backend: `routes/assessment_reviews.py` (the flow), `assessment_evidence.py`
 (evidence gathering, not a route), `routes/assessments.py` (levels, team list,

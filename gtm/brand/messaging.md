@@ -99,11 +99,11 @@ manager already made, at the moment they can't reach it.
 | Proof | Status |
 |---|---|
 | What a role is expected to deliver, know and embody, set in advance, per level | **Shipped** (`role_families` / `role_levels`, metric + skill + value configs, each with its own scale) |
-| Assessment against your own scale rather than a vendor's | **Shipped** (rolling, `assessment_levels` seeded per org and editable) |
+| Assessment against your own scale rather than a vendor's | **Shipped** (period assessments — quarterly, biannual or off-cycle — against each item's own configured scale; `assessment_levels` seeded per org and editable) |
 | Your company's real documents, extracted, confirmed by a human, then cited when used | **Shipped** (Context Engine: Space, Librarian, Brain, `document_citations`) |
 | Coaching that reads person history against your stated leadership principles | **Partly.** It works when principles are uploaded as a document. There's no object called *how I manage* |
-| AI that drafts against your scale and never saves a value you didn't set | **Shipped.** `POST /assessments/{id}/draft` is a pure call; nothing persists until the manager sets it |
-| A draft that leaves the box empty when the evidence is thin, rather than filling it | **Shipped.** The demoable proof and the one a competitor won't build. Lead pillar 3's AI story here |
+| AI that drafts against your scale and never saves a value you didn't set | **Shipped.** The assessment flow's draft, discussion and summary calls write only to the draft; ratings are recorded only when the manager reviews the whole assessment and completes it (`docs/systems/assessments.md`) |
+| A draft that leaves the box empty when the evidence is thin, rather than filling it | **Shipped.** The demoable proof and the one a competitor won't build. Lead pillar 3's AI story here. Each drafted judgment shows its cited records and what they don't establish; unassessed items are listed with a reason, and metrics are never inferred |
 
 **The gap to close.** Beliefs 4 and 5 both assume the manager has said how they want
 to manage. Today that arrives as a file upload. Until there's a first-class place for
