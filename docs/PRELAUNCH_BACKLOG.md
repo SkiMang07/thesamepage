@@ -42,7 +42,7 @@ the sharing story, multi-manager surface area, and naming drift.
 These change the scope of the backlog below — decide them first. "Hide" means
 remove from nav/UI for launch, not delete the code.
 
-- [ ] **CUT-1 · Hide the IC invite ("Invite to log in") and the IC page** —
+- [x] **CUT-1 · Hide the IC invite ("Invite to log in") and the IC page** —
   [Pass 1 + Pass 2] — `/app/team` Team details → Account
   (`frontend/app/app/team/page.tsx` ~2181–2235), `frontend/app/app/ic/page.tsx`.
   The flow dead-ends: the invited IC sees "Your manager will be adding more
@@ -53,6 +53,9 @@ remove from nav/UI for launch, not delete the code.
   stamped "manager-only" and "not sent to {name}" while their side is a shrug.
   Hide the Account block and the invite path until an IC experience exists.
   **Effort S. P1 if not cut.**
+  *Done 2026-09-24:* the Account block and invite path are behind
+  `IC_INVITES_ENABLED = false` in `team/page.tsx`. The invite backend and
+  `/app/ic` are untouched; flip the flag when the IC view ships.
 - [ ] **CUT-2 · Hide Capacity's "By department" section; consider hiding the
   whole Capacity page** — [Pass 1] — `/app/capacity`
   (`frontend/app/app/capacity/page.tsx` ~360–395). The department rollup
@@ -95,7 +98,7 @@ remove from nav/UI for launch, not delete the code.
   when either clock runs out the account goes read-only (everything visible,
   nothing new saved) until they pay $20/mo. Stripe must be live before the
   first 14-day trial ends. The build is §7 B; this row closes when §7 B does.
-- [ ] **P0-2 · The rating chip is a secret grade stapled to the person's
+- [x] **P0-2 · The rating chip is a secret grade stapled to the person's
   name** — [Pass 2] — `/app/reports/[id]`
   (`frontend/app/app/reports/[id]/page.tsx:511–512`): `{ratingLabel}` (e.g.
   "Needs Improvement") renders in a pill beside the h1 name with no indication
@@ -103,7 +106,9 @@ remove from nav/UI for launch, not delete the code.
   "creepy dossier" the persona fears, on the surface the manager opens before
   every conversation. Minimum: visibility label + link to the assessment it
   came from. **Effort S.**
-- [ ] **P0-3 · Nothing in the product tells the manager what is and isn't
+  *Done 2026-09-24:* the chip reads "{rating} · only you" and links to the
+  assessment it came from.
+- [x] **P0-3 · Nothing in the product tells the manager what is and isn't
   shared — the sharing story exists only in marketing** — [Pass 2] — the
   manager's surfaces are stamped "This view is manager-only."
   (`team/page.tsx:1111`), "Manager-only and not sent to {member.name}"
@@ -115,6 +120,10 @@ remove from nav/UI for launch, not delete the code.
   consistent visibility statement on the person page + team page explaining
   what's private now and what sharing is coming (**S**); the real fix is the
   IC experience itself (**L**, post-launch, behind CUT-1). **Effort S now.**
+  *Done 2026-09-24:* the person page and team page both say "Only you can
+  see this page. Nothing here is shared with {name / your team}." Present
+  tense only, by Andrew's call: no promise of future sharing until it has a
+  date. The callouts card's separate "manager-only" label was folded into it.
 
 ---
 

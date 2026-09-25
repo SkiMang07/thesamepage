@@ -159,6 +159,11 @@ import NoteField from "@/components/NoteField";
 import { SkeletonSection } from "@/components/Skeleton";
 import PartialLoadNotice from "@/components/PartialLoadNotice";
 import { createSectionLoader } from "@/lib/sectionLoader";
+
+// Hidden for launch (PRELAUNCH_BACKLOG CUT-1): there is no IC experience yet,
+// so inviting a report would only show them a placeholder page. The invite
+// backend and /app/ic stay in place; flip this back on when the IC view ships.
+const IC_INVITES_ENABLED = false;
 // Same status vocabulary as Goals/Projects.
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-sunken text-ink-secondary",
@@ -580,6 +585,9 @@ export default function TeamPage() {
       </div>
       <p className="mt-1 text-sm text-ink-secondary">
         What this team is moving, and where you need to help.
+      </p>
+      <p className="mt-1 text-xs text-ink-muted">
+        Only you can see this page. Nothing here is shared with your team.
       </p>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
@@ -1125,7 +1133,7 @@ function CalloutsPanel({
         )}
       </div>
       <p className="mt-1 text-xs text-ink-muted">
-        Your current must-knows for {scopeLabel}. This view is manager-only.
+        Your current must-knows for {scopeLabel}.
       </p>
 
       {editing ? (
@@ -2161,7 +2169,7 @@ function MemberDetailPanel({
             Team update record
           </label>
           <p className="mb-2 text-xs leading-5 text-ink-muted">
-            Manager-only and not sent to {member.name}. Use the Relationship Desk for private notes and 1:1 captures.
+            Only you can see these. Nothing is sent to {member.name}. Use the Relationship Desk for private notes and 1:1 captures.
           </p>
           <NoteField
             value={draft}
@@ -2195,6 +2203,7 @@ function MemberDetailPanel({
         </div>
 
         <div>
+          {IC_INVITES_ENABLED && (<>
           <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Account</p>
           {member.user_id ? (
             <p className="mt-1 text-xs text-ink-secondary">Account linked — they can log in.</p>
@@ -2246,6 +2255,7 @@ function MemberDetailPanel({
               Invite to log in
             </button>
           )}
+          </>)}
 
           {member.latest_message && (
             <p className="mt-4 text-xs text-ink-muted">

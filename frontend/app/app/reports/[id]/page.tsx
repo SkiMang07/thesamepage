@@ -520,7 +520,13 @@ export default function ReportDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold text-ink">{report.name}</h1>
                 {ratingLabel && (
-                  <span className="rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-body">{ratingLabel}</span>
+                  <Link
+                    href={`/app/assessments/${id}`}
+                    title="Latest assessment. Only you can see it."
+                    className="rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-body hover:bg-hairline"
+                  >
+                    {ratingLabel} <span className="font-normal text-ink-muted">· only you</span>
+                  </Link>
                 )}
               </div>
               {(roleLevel || orgUnit || report.role_title) && (
@@ -530,6 +536,9 @@ export default function ReportDetailPage() {
                 </p>
               )}
               {report.notes && <p className="mt-1 text-sm text-ink-muted">{report.notes}</p>}
+              <p className="mt-1 text-xs text-ink-muted">
+                Only you can see this page. Nothing here is shared with {report.name.split(" ")[0]}.
+              </p>
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
                 <span>Last met <strong className="font-medium text-ink-body">{lastCompleted?.meeting_date ? timeAgo(lastCompleted.meeting_date) : "not yet"}</strong></span>
                 <span>
