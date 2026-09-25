@@ -41,8 +41,10 @@ from pydantic import BaseModel, Field
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_LIGHT, settings
 from mission_control_engine import build_brief
+from mission_control_week import build_week, week_bounds
 from routes.capacity import _time_off_hours
 from routes.expectations_ai import _compute_coverage
+from routes.one_on_ones import get_one_on_ones_overview
 from utils import (
     get_authenticated_client,
     get_org,
@@ -571,6 +573,209 @@ def get_action_brief(
         "timezone": timezone_name[:64],
         **result,
     }
+
+
+# ---------------------------------------------------------------------------
+# "Your week, in focus" — the factual week view beside the action brief.
+# Read-only. Every domain loads independently, like the brief, so one failure
+# marks that section unavailable instead of rendering as zero.
+# ---------------------------------------------------------------------------
+
+
+def _load_week_snapshot(user_id: str, supabase, local_date: date) -> dict:
+    coverage: dict[str, str] = {}
+    week_start, week_end = week_bounds(local_date)
+    # scheduled_at is a noon-UTC date, so whole-UTC-day bounds select exactly
+    # the meetings dated this week.
+    lower = f"{week_start.isoformat()}T00:00:00+00:00"
+    upper = f"{(week_end + timedelta(days=1)).isoformat()}T00:00:00+00:00"
+
+    reports = _safe_call(
+        coverage,
+        "people",
+        lambda: (
+            supabase.table("direct_reports")
+            .select("id,name,role_title")
+            .eq("manager_id", user_id)
+            .is_("archived_at", "null")
+            .order("name")
+            .execute()
+            .data
+        ),
+        [],
+    )
+
+    one_on_ones = _safe_call(
+        coverage,
+        "one_on_ones",
+        lambda: (
+            supabase.table("one_on_ones")
+            .select("id,direct_report_id,scheduled_at,summary,prep_guide,carry_forward_items")
+            .eq("manager_id", user_id)
+            .gte("scheduled_at", lower)
+            .lt("scheduled_at", upper)
+            .execute()
+            .data
+        ),
+        [],
+    )
+    # The canonical "who's due" computation, called rather than re-derived.
+    cadence = _safe_call(
+        coverage,
+        "cadence",
+        lambda: get_one_on_ones_overview(auth=(user_id, supabase)),
+        [],
+    )
+
+    def load_team_meetings():
+        rows = (
+            supabase.table("team_meetings")
+            .select("id,scheduled_at,summary,agenda_note,org_unit_id,org_units(name)")
+            .eq("manager_id", user_id)
+            .gte("scheduled_at", lower)
+            .lt("scheduled_at", upper)
+            .execute()
+            .data
+        )
+        ids = [row["id"] for row in rows]
+        items = []
+        if ids:
+            items = (
+                supabase.table("team_meeting_agenda_items")
+                .select("meeting_id,item,position")
+                .eq("manager_id", user_id)
+                .in_("meeting_id", ids)
+                .order("position")
+                .execute()
+                .data
+            )
+        return rows, items
+
+    team_rows, team_items = _safe_call(coverage, "team_meetings", load_team_meetings, ([], []))
+    team_agenda_counts: dict[str, int] = {}
+    team_agenda_items: dict[str, list[str]] = {}
+    for item in team_items:
+        team_agenda_counts[item["meeting_id"]] = team_agenda_counts.get(item["meeting_id"], 0) + 1
+        team_agenda_items.setdefault(item["meeting_id"], []).append(item["item"])
+
+    def load_outside():
+        rows = (
+            supabase.table("outside_meetings")
+            .select("id,title,kind,scheduled_at,summary,prep_guide,carry_forward_items")
+            .eq("owner_id", user_id)
+            .gte("scheduled_at", lower)
+            .lt("scheduled_at", upper)
+            .execute()
+            .data
+        )
+        ids = [row["id"] for row in rows]
+        links = []
+        people = []
+        if ids:
+            links = (
+                supabase.table("outside_meeting_people")
+                .select("meeting_id,person_id")
+                .eq("owner_id", user_id)
+                .in_("meeting_id", ids)
+                .execute()
+                .data
+            )
+            person_ids = sorted({row["person_id"] for row in links})
+            if person_ids:
+                people = (
+                    supabase.table("outside_people")
+                    .select("id,name")
+                    .eq("owner_id", user_id)
+                    .in_("id", person_ids)
+                    .execute()
+                    .data
+                )
+        return rows, links, people
+
+    outside_rows, outside_links, outside_people = _safe_call(
+        coverage, "outside_meetings", load_outside, ([], [], [])
+    )
+    meeting_people: dict[str, list[str]] = {}
+    for link in outside_links:
+        meeting_people.setdefault(link["meeting_id"], []).append(link["person_id"])
+
+    commitments = _safe_call(
+        coverage,
+        "commitments",
+        lambda: (
+            supabase.table("commitments")
+            .select("id,title,description,direct_report_id,committed_by,status,due_date,completed_at,source_type,source_id,created_at")
+            .eq("owner_id", user_id)
+            .neq("committed_by", "counterpart")
+            .execute()
+            .data
+        ),
+        [],
+    )
+
+    def load_goals():
+        goals = (
+            supabase.table("goals")
+            .select("id,title,level,status,due_date,success_metrics,direct_report_id,org_unit_id,org_units(name)")
+            .eq("owner_id", user_id)
+            .in_("status", ["active", "on_track", "at_risk"])
+            .execute()
+            .data
+        )
+        ids = [row["id"] for row in goals]
+        check_ins = []
+        projects = []
+        if ids:
+            check_ins = (
+                supabase.table("check_ins")
+                .select("goal_id,status,progress,note,created_at")
+                .eq("owner_id", user_id)
+                .in_("goal_id", ids)
+                .order("created_at", desc=True)
+                .execute()
+                .data
+            )
+            projects = (
+                supabase.table("projects")
+                .select("id,title,status,goal_id")
+                .eq("owner_id", user_id)
+                .in_("goal_id", ids)
+                .execute()
+                .data
+            )
+        return goals, check_ins, projects
+
+    goals, goal_check_ins, projects = _safe_call(coverage, "goals", load_goals, ([], [], []))
+
+    return {
+        "reports": reports,
+        "one_on_ones": one_on_ones,
+        "cadence": cadence,
+        "team_meetings": team_rows,
+        "team_agenda_counts": team_agenda_counts,
+        "team_agenda_items": team_agenda_items,
+        "outside_meetings": outside_rows,
+        "outside_meeting_people": meeting_people,
+        "outside_people": {row["id"]: row for row in outside_people},
+        "commitments": commitments,
+        "goals": goals,
+        "goal_check_ins": goal_check_ins,
+        "projects": projects,
+        "coverage": coverage,
+    }
+
+
+@router.get("/week")
+def get_week_in_focus(
+    local_date: str | None = None,
+    auth=Depends(get_authenticated_client),
+):
+    """The week Mission Control shows beside the action brief. Read-only; it
+    never writes a disposition, an event, or a source record."""
+    user_id, supabase = auth
+    manager_date = _manager_local_date(local_date)
+    snapshot = _load_week_snapshot(user_id, supabase, manager_date)
+    return build_week(snapshot, manager_date)
 
 
 @router.post("/events")

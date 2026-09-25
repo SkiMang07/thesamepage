@@ -66,9 +66,12 @@ Pending work that is scoped but not built has its own doc:
 shipped (see `docs/systems/beyond.md`) and awaits archiving. Shipped scoping docs live in
 `docs/archive/scoping/` — historical, never current intent.
 
-`docs/systems/mission-control-visual-authority.html` is the **approved Mission
-Control visual authority** — open it before visual work on that surface. Its example
-data is reference content, not validated customer data or final copy.
+`docs/design-proposals/2026-09-24-week-in-focus/` (`BUILD_BRIEF.md`,
+`prototype-source.html`) is the **selected Mission Control design** — open it
+before visual work on that surface. It supersedes the page composition in
+`docs/systems/mission-control-visual-authority.html`, which remains the colour
+reference cited by `docs/systems/brand.md`. Example data in both is reference
+content, not validated customer data or final copy.
 
 `gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
 the argument behind each marketing page. `website/` stays a build root with its own

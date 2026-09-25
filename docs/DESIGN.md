@@ -185,26 +185,24 @@ behind the person page's settings drawer — off the main flow, not in Settings.
   receipt with a view link and a 30s Undo. Ambiguity candidates render as tappable
   quick-reply chips.
 
-### Mission Control action brief
+### Mission Control — "Your week, in focus"
 
-Mission Control is a manager's action brief, not an
-information-architecture dashboard. The persistent sidebar owns wayfinding, so
-the large “Your people / The work / Foundation” zone map is absent from the
-landing page.
+Mission Control is a factual picture of the manager's week with a quiet next
+move beside it, not an information-architecture dashboard. The persistent
+sidebar owns wayfinding. The page leads with an editorial serif heading and
+three large, clickable counts. Below them sit the dated conversation week and
+follow-through by owner. A narrow right-hand column holds the action brief's
+recommendation, and Goals & progress runs full width underneath. Every number
+opens the records behind it.
 
-The mature first viewport contains one evidence-linked **Suggested focus**, no
-more than two secondary priorities, and one factual progress/all-clear signal.
-Candidate eligibility and ranking begin deterministic; AI may explain the
-recommendation but does not silently rank unrelated domains. Every suggestion is
-inspectable and contestable through Why this? / Addressed / Snooze / Not relevant.
+The recommendation stays deterministic, inspectable and contestable through
+Why this? / Addressed / Snooze / Not relevant. It is deliberately visually
+secondary. Meetings show preparation state, never an invented time. Age alone
+never removes the brief: after 24 hours it shows a quiet refresh prompt.
 
-Age alone never removes or disables the brief. Confirmed source-record writes
-refresh it automatically; after 24 hours, an unchanged open brief keeps its
-content and shows only a quiet optional refresh prompt.
-
-The detailed current behavior lives in `docs/systems/mission-control.md`; the
-approved reasoning and state requirements remain in
-`docs/archive/mission-control-redesign/MISSION_CONTROL_ACTION_FIRST_DECISION.md`.
+The detailed current behavior lives in `docs/systems/mission-control.md`. The
+selected design and its acceptance checks are in
+`docs/design-proposals/2026-09-24-week-in-focus/`.
 
 ### Card and form patterns
 
@@ -234,7 +232,7 @@ in `docs/archive/DESIGN_ARCHIVE.md`, complete and unedited.
 | 2026-08-26 | Settings is a five-part foundation workspace: a readiness summary and persistent foundation map open one focused editor for Workspace identity, People & structure, Roles & expectations, Operating defaults, or Your account. Every editor states the scope and override behavior before the controls | A flat tab row made setup feel like an undifferentiated form collection and hid the blast radius of organization-wide changes. The map makes incomplete foundations findable, preserves every existing workflow, and keeps recurring management work in Team, Org, Capacity, and each Relationship Desk |
 | 2026-08-26 | `/app/org` is one inspectable organization hierarchy: the selected unit opens a role-scoped, exception-first detail panel; structural editing is a secondary mode, and the old Build / Chart / Rollup tabs are retired | Configuration, browsing, and leadership monitoring were three different jobs flattened into equal tabs. One hierarchy gives the page a recurring manager job, keeps structure visible outside the caller's data scope without false zeroes, and places aggregate attention beside the unit it describes |
 | 2026-08-24 | The next 1:1 is a persistent workspace: logging always creates the next occurrence, its sources assemble automatically, and the manager reviews them before just-in-time agenda generation | Removes repeated “save for prep” filing decisions without freezing a stale AI sheet or duplicating live commitments. Full decision in `docs/decisions/next-one-on-one-workspace.md` |
-| 2026-08-23 | Mission Control is action-first: no large zone map; one evidence-linked Suggested focus, up to two secondary priorities and one factual truth signal. Ranking is deterministic; AI explanation is bounded and contestable | The persistent sidebar already owns product orientation. The manager needs a trusted next move, not a second sitemap or an anxiety-producing backlog. Full decision in `docs/archive/mission-control-redesign/MISSION_CONTROL_ACTION_FIRST_DECISION.md` |
+| 2026-09-24 | Mission Control is "Your week, in focus": three factual clickable counts, a dated conversation week (four rows a day, then overflow), follow-through by owner, and goals by tier with check-in-backed progress. The action brief's recommendation moves to a quiet right-hand column with unchanged controls; the management runway is retired | Andrew picked it from a three-direction design exploration. A dominant recommendation hero was too loud for a factual landing page, and managers wanted to see the week and act from it. Ranking, dispositions and AI boundaries are unchanged. Design in `docs/design-proposals/2026-09-24-week-in-focus/` |
 | 2026-08-24 | `/app/team` is a team attention workspace: factual attention beside the active meeting first, then live follow-through, exception-first operating work, Team context, and People. There is no KPI strip or synthesized team-health score; the Relationship Desk is each roster card's primary person destination | The evolutionary redesign preserves every existing workflow while aligning the page with the action-first Mission Control and relationship-first person page |
 | 2026-08-24 | Logging a team meeting happens **on the meeting**, not in a separate compose box: the agenda card carries the log action, each agenda item gets its own notes field, and unticked items are offered as carry-forward. A dedicated meeting screen is the second surface, not a replacement | Picked from a mockup review of three options. The old free-text box wrote a row unrelated to the agenda it sat under, which is why there was no way to log against the meeting on screen |
 | 2026-08-11 | Check-in staleness turns the freshness label amber after 14 days, vs. the 21-day 1:1 cadence | A stale green is more dangerous than an honest yellow, and goals drift faster than relationships |

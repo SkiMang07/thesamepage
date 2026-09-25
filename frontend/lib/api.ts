@@ -920,6 +920,98 @@ export const getMissionControlBrief = (): Promise<MissionControlVariant> => {
   return authedFetch(`/api/dashboard/brief?${query}`);
 };
 
+// "Your week, in focus" — the factual week view beside the action brief.
+// Read-only (GET /api/dashboard/week). Meetings carry a date, never a time.
+export type WeekConversationKind = "one_on_one" | "team_meeting" | "outside_one_on_one" | "outside_group";
+export type WeekConversationState = "completed" | "prep_saved" | "to_prepare" | "not_logged";
+
+export type WeekConversation = {
+  id: string;
+  kind: WeekConversationKind;
+  record_id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  subtitle: string | null;
+  direct_report_id: string | null;
+  participants: string[];
+  state: WeekConversationState;
+  href: string;
+  person_href: string | null;
+  agenda: string[];
+  summary: string | null;
+  carry_forward_count: number;
+};
+
+export type WeekCommitmentState = "completed" | "due" | "overdue";
+export type WeekCommitmentOwner = "mine" | "team";
+
+export type WeekCommitment = {
+  id: string;
+  title: string;
+  owner: WeekCommitmentOwner;
+  owner_name: string;
+  direct_report_id: string | null;
+  about_name: string | null;
+  state: WeekCommitmentState;
+  due_date: string | null;
+  completed_at: string | null;
+  source_type: string | null;
+  href: string;
+};
+
+export type WeekOpenCommitment = {
+  id: string;
+  title: string | null;
+  due_date: string | null;
+  owner_name: string | null;
+  more?: number;
+};
+
+export type WeekGoal = {
+  id: string;
+  title: string;
+  level: GoalLevel;
+  status: GoalStatus;
+  due_date: string | null;
+  success_metrics: string | null;
+  direct_report_id: string | null;
+  direct_report_name: string | null;
+  org_unit_name: string | null;
+  progress: number | null;
+  progress_at: string | null;
+  trend: CheckInTrend | null;
+  last_check_in_at: string | null;
+  last_check_in_status: GoalStatus | null;
+  last_check_in_note: string | null;
+  days_since_check_in: number | null;
+  stale: boolean;
+  attention_reasons: { label: string; severe: boolean }[];
+  projects: { id: string; title: string; status: GoalStatus }[];
+  commitments: { id: string; title: string; due_date: string | null; owner_name: string }[];
+};
+
+export type WeekInFocus = {
+  week: { start: string; end: string; today: string };
+  conversations: WeekConversation[];
+  unscheduled_due: {
+    direct_report_id: string;
+    name: string;
+    days_since_last: number | null;
+    cadence_days: number | null;
+    cadence_source: CadenceSource | null;
+    href: string;
+  }[];
+  commitments: WeekCommitment[];
+  undated_open_commitments: Record<WeekCommitmentOwner, number>;
+  open_commitments_by_report: Record<string, WeekOpenCommitment[]>;
+  goals: WeekGoal[];
+  reports: { id: string; name: string }[];
+  coverage: Record<string, "ok" | "partial" | "unavailable">;
+};
+
+export const getWeekInFocus = (): Promise<WeekInFocus> =>
+  authedFetch(`/api/dashboard/week?${new URLSearchParams({ local_date: browserLocalDate() })}`);
+
 export type MissionControlEventInput = {
   brief_id: string;
   event_type:

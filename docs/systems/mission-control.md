@@ -1,34 +1,86 @@
 # Mission Control (`/app/dashboard`)
 
-The authenticated landing page is a manager's action brief. It chooses one
-deterministic Suggested focus, up to two quieter secondary priorities, and one
-factual progress or all-clear signal. The persistent sidebar owns wayfinding;
-Mission Control no longer duplicates it with a zone map.
+The authenticated landing page is "Your week, in focus": a factual picture of
+the manager's week with the action brief's recommendation beside it. The
+persistent sidebar owns wayfinding; Mission Control does not duplicate it.
 
-## Management runway
+## Page composition
 
-The mature brief presents its ranked candidates as a selectable management
-runway: **Now**, **Next**, and **Watch**. The labels expose the existing rank as
-a suggested sequence without turning it into a mandatory task queue; the
-manager can select any candidate and act in a different order. Selection is
-presentation state only — it does not rerank candidates, write a disposition,
-or change an underlying source record.
+Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
+(`BUILD_BRIEF.md`, `prototype-source.html`). In order:
 
-Only the selected candidate opens into the feature surface. Its deterministic
-evidence is visible before interaction, while `Why this?` expands the complete
-source, freshness, ranking basis, boundaries, and optional AI paraphrase. The
-exact-workflow CTA and Addressed / Snooze / Not relevant controls retain their
-existing event semantics.
+1. **Heading.** "Mission Control" eyebrow and the serif "Your week, in focus."
+   No subtitle.
+2. **Three counts**, each a button that opens its records in the right-hand
+   column: conversations completed (of those dated this week), commitments
+   completed this week, and overdue commitments (with the number of owners).
+3. **Conversation week.** Monday–Friday columns, plus Saturday/Sunday only when
+   something is dated there. Up to four rows per day, then "View all N (+k)"
+   opens the whole day beneath the week. Rows show initials, a short name
+   (first name, or first name + initial when two people share one) and the
+   state as glyph + word: ✓ Done, • Prepped / Agenda, ○ To prep / No agenda,
+   △ Not logged (the date has passed with nothing written up). Meetings are
+   dated by day, so no times are shown. 1:1s, team meetings (square avatar)
+   and meetings beyond the team all appear. People due by cadence with no
+   date set are listed below the week, linking to prep. They are not
+   calendar events.
+4. **Follow-through.** "Mine" and "My team" bars split into Completed / Due
+   this week / Overdue. Each bar shows proportions within its own group.
+   Selecting a segment lists exactly those records.
+5. **Right-hand column.** By default it shows "Your next move" (the brief's
+   primary candidate) and up to two "Keep in view" items (the secondaries),
+   each with the quiet variant of the unchanged CTA / Why this? / Addressed /
+   Snooze / Not relevant controls. Selecting a conversation, count or
+   segment replaces the column with details. × or Esc returns focus to
+   whatever opened it.
+6. **Goals & progress**, full width. Company / Team / Individual tabs, plus
+   Department only when department goals exist. Individual adds a person
+   picker. Default is the first tier that has goals. Up to six cards,
+   attention first (the dashboard's existing at-risk / due / stale order),
+   link to Goals for the rest. Selecting a card opens the latest check-in
+   note, what the percentage represents, and the linked projects and
+   goal-sourced commitments.
 
-Below the runway, a compact conversation runway keeps the current 1:1 rhythm
-visible beside the factual truth signal. Recent recorded changes remain quieter
-supporting context below both. This hierarchy replaces the former peer-card
-composition; it does not change candidate eligibility, ranking, or coverage.
+Layout is measured, not viewport-based: the page switches to one column below
+~700px of content width and the week to stacked days below ~92px per day, so
+the Scribe drawer reflows it the same way a narrow window does.
 
-Frontend: `frontend/app/app/dashboard/page.tsx` and
-`frontend/components/mission-control/ActionBrief.tsx`.
-Backend: `backend/routes/dashboard.py` and
-`backend/mission_control_engine.py`.
+## The week view
+
+`GET /api/dashboard/week?local_date=` (`routes/dashboard.py` →
+`mission_control_week.build_week`, pure and clock-injected) is read-only. Each
+domain loads independently and reports coverage. A section whose source
+failed says so instead of showing zeros.
+
+- **Week:** Monday–Sunday containing the manager's local date. Meetings are
+  selected by their `scheduled_at` day (noon-UTC dates).
+- **Conversation state:** `summary` → completed. A prep sheet (1:1s, beyond
+  the team) or agenda items/note (team meetings) → prepared. A past date with
+  neither → not logged. Otherwise → to prepare.
+- **Unscheduled due:** calls `get_one_on_ones_overview()`, the canonical
+  "who's due", and keeps people who are due with no dated upcoming occurrence.
+- **Commitments:** counterpart rows excluded, archived people excluded.
+  Owner is *team* when a direct report committed, otherwise *mine* (a null
+  report is the manager's own). State: *completed* means done with
+  `completed_at` this week up to today. Dropped does not count. *Overdue*
+  means open with a due date before today. *Due* means open and due between
+  today and Sunday. Undated open commitments are counted separately, not
+  placed in a bar. Every displayed count is the length of the returned list.
+- **Goals:** active / on track / at risk only. `progress` is the latest
+  recorded percentage and `progress_at` is the date of the check-in that
+  recorded it, which can be older than `last_check_in_at`. No percentage →
+  "Progress not recorded", never 0%. Stale means more than 14 days since the
+  last check-in. Status and freshness are labelled separately.
+
+The brief and the week load separately. Either can fail without taking the
+other down. Only when both fail does the page fall back to the full-page
+failure state with "Open previous dashboard".
+
+Frontend: `frontend/app/app/dashboard/page.tsx`,
+`frontend/components/mission-control/WeekInFocus.tsx` (page) and
+`ActionBrief.tsx` (shared recommendation controls and loading/failure states).
+Backend: `backend/routes/dashboard.py`, `backend/mission_control_engine.py`,
+`backend/mission_control_week.py`.
 
 ## Brief and ranking
 

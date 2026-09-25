@@ -61,10 +61,13 @@ import {
   getProjects,
   getTeamAssessments,
   getTeamOverview,
+  getWeekInFocus,
+  WeekInFocus as WeekInFocusData,
 } from "@/lib/api";
 import { SECTION_GAP, useZoneData, ZoneMap } from "@/components/ZoneMap";
 import PageShell from "@/components/PageShell";
-import { ActionBrief, ActionBriefLoadFailure, ActionBriefLoading } from "@/components/mission-control/ActionBrief";
+import { ActionBriefLoadFailure, ActionBriefLoading } from "@/components/mission-control/ActionBrief";
+import { WeekInFocus } from "@/components/mission-control/WeekInFocus";
 import { SkeletonSection } from "@/components/Skeleton";
 import PartialLoadNotice from "@/components/PartialLoadNotice";
 import { createSectionLoader } from "@/lib/sectionLoader";
@@ -210,28 +213,54 @@ type PerformanceRow = TeamOverviewItem & {
   is_due: boolean;
 };
 
+// Mission Control — "Your week, in focus" (docs/design-proposals/
+// 2026-09-24-week-in-focus/). Two independent loads: the action brief (the
+// recommendation in the right-hand column) and the factual week view. Either
+// can fail without taking the other down; each failure is labelled rather
+// than rendered as an empty or all-clear state. The rollout flag still
+// returns the legacy dashboard below.
 export default function DashboardPage() {
   const [variant, setVariant] = useState<Awaited<ReturnType<typeof getMissionControlBrief>> | null>(null);
   const [failed, setFailed] = useState(false);
+  const [week, setWeek] = useState<WeekInFocusData | null>(null);
+  const [weekFailed, setWeekFailed] = useState(false);
   const [legacyOverride, setLegacyOverride] = useState(false);
   const [reload, setReload] = useState(0);
+  const [weekReload, setWeekReload] = useState(0);
+  // Refreshes keep the current content on screen and swap it when the new
+  // data lands, so focus and the open selection survive a refresh.
   const refreshBrief = useCallback(() => {
-    setVariant(null);
     setReload((value) => value + 1);
+    setWeekReload((value) => value + 1);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    setFailed(false);
     getMissionControlBrief()
       .then((result) => {
-        if (!cancelled) setVariant(result);
+        if (cancelled) return;
+        setVariant(result);
+        setFailed(false);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
       });
     return () => { cancelled = true; };
   }, [reload]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWeekInFocus()
+      .then((result) => {
+        if (cancelled) return;
+        setWeek(result);
+        setWeekFailed(false);
+      })
+      .catch(() => {
+        if (!cancelled) setWeekFailed(true);
+      });
+    return () => { cancelled = true; };
+  }, [weekReload]);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -252,9 +281,28 @@ export default function DashboardPage() {
   }, [refreshBrief]);
 
   if (legacyOverride || variant?.variant === "legacy") return <LegacyDashboardPage />;
-  if (failed) return <ActionBriefLoadFailure onRetry={() => setReload((value) => value + 1)} onLegacy={() => setLegacyOverride(true)} />;
-  if (!variant) return <ActionBriefLoading />;
-  return <ActionBrief brief={variant} onRefresh={refreshBrief} />;
+  if (failed && weekFailed) {
+    return (
+      <ActionBriefLoadFailure
+        onRetry={refreshBrief}
+        onLegacy={() => setLegacyOverride(true)}
+      />
+    );
+  }
+  // Wait for both to settle so the page doesn't reflow twice on first load.
+  if ((!variant && !failed) || (!week && !weekFailed)) return <ActionBriefLoading />;
+  return (
+    <WeekInFocus
+      brief={variant && variant.variant === "action_first" ? variant : null}
+      briefFailed={failed}
+      week={week}
+      weekFailed={weekFailed}
+      onRefresh={refreshBrief}
+      onRetryBrief={() => setReload((value) => value + 1)}
+      onRetryWeek={() => setWeekReload((value) => value + 1)}
+      onLegacy={() => setLegacyOverride(true)}
+    />
+  );
 }
 
 function LegacyDashboardPage() {
