@@ -212,6 +212,15 @@ function PrepFlow() {
       .finally(() => setResumeLoading(false));
   }, [resumeId, editSources, id]);
 
+  // "Date & repeat" on the Relationship Desk links here with #schedule: land
+  // on the canonical date control instead of a second scheduling editor.
+  useEffect(() => {
+    if (resumeLoading || typeof window === "undefined" || window.location.hash !== "#schedule") return;
+    const field = document.getElementById("meeting-schedule");
+    field?.scrollIntoView({ block: "center" });
+    field?.focus();
+  }, [resumeLoading, step]);
+
   // Step 1 → 2: call AI prep endpoint
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -333,6 +342,7 @@ function PrepFlow() {
             <label className="block">
               <span className="text-sm font-medium text-ink-body">Meeting date</span>
               <input
+                id="meeting-schedule"
                 type="date"
                 value={scheduleDate}
                 onChange={(e) => {
@@ -340,6 +350,11 @@ function PrepFlow() {
                   setScheduleDate(nextDate);
                   if (!nextDate) setRecurrenceWeeks(null);
                 }}
+                // An existing workspace saves its date straight away, through
+                // the same write the prep sheet uses, so "Date & repeat" from
+                // the Relationship Desk works without building an agenda.
+                // Without one, the date is saved when the agenda is built.
+                onBlur={() => oneOnOneId && persistSchedule(scheduleDate, scheduleDate ? recurrenceWeeks : null)}
                 className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink-body focus:border-brand focus:outline-none"
               />
             </label>
@@ -347,10 +362,12 @@ function PrepFlow() {
               <span className="text-sm font-medium text-ink-body">Repeat this 1:1</span>
               <select
                 value={recurrenceWeeks ?? ""}
-                disabled={!scheduleDate}
-                onChange={(e) =>
-                  setRecurrenceWeeks(e.target.value ? (Number(e.target.value) as RecurrenceWeeks) : null)
-                }
+                disabled={!scheduleDate || scheduleSaving}
+                onChange={(e) => {
+                  const next = e.target.value ? (Number(e.target.value) as RecurrenceWeeks) : null;
+                  setRecurrenceWeeks(next);
+                  if (oneOnOneId) persistSchedule(scheduleDate, next);
+                }}
                 className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink-body focus:border-brand focus:outline-none disabled:opacity-50"
               >
                 <option value="">Does not repeat</option>
@@ -362,6 +379,11 @@ function PrepFlow() {
             </label>
             <p className="text-xs text-ink-muted sm:col-span-2">
               This schedules the rhythm inside The Same Page. Calendar invitations will come with calendar sync.
+              {oneOnOneId && (
+                <span className="ml-1 text-ink-secondary" aria-live="polite">
+                  {scheduleSaving ? "Saving…" : scheduleSaved ? "Saved." : ""}
+                </span>
+              )}
             </p>
           </div>
 
@@ -503,6 +525,7 @@ function PrepFlow() {
                 <label className="block">
                   <span className="block text-[11px] font-medium uppercase tracking-wide text-ink-muted">Meeting date</span>
                   <input
+                    id="meeting-schedule"
                     type="date"
                     value={scheduleDate}
                     onChange={(e) => {

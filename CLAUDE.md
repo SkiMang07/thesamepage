@@ -73,6 +73,12 @@ before visual work on that surface. It supersedes the page composition in
 reference cited by `docs/systems/brand.md`. Example data in both is reference
 content, not validated customer data or final copy.
 
+`docs/design-proposals/2026-09-25-relationship-continuity/` (`BUILD_BRIEF.md`,
+`prototype.html`) is the **selected Relationship Desk design** for
+`/app/reports/[id]` — implemented; open it before visual work on that page.
+Current behaviour is in `docs/systems/one-on-ones.md`. Its example data is
+fictional reference content.
+
 `gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
 the argument behind each marketing page. `website/` stays a build root with its own
 HubSpot tooling. **gtm/ is the thinking, website/ is the build.** Read `gtm/README.md`

@@ -8,7 +8,7 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 
 | Route | Notes |
 |---|---|
-| `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for" |
+| `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for". Returns `meeting`, `next_session`, the `commitments` actually inserted, and the cleaned `carry_forward_items` — see "Logging is all-or-nothing" |
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
 | `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one |
@@ -54,12 +54,12 @@ single accumulating object for carry-forwards, captures, live commitments, and
 current goal/development signals. `/app/1-1s` remains a triage surface: an
 undated gathering workspace does not make a not-yet-due person look scheduled.
 Gathering and scheduled occurrences open the source review; a planned occurrence
-resumes the generated sheet. On the person page, the visible workflow is
-**Review & prepare → Start 1:1 → Wrap up & log**. The secondary **Log a 1:1**
-path remains for a conversation that happened without preparation. The
-**History** context renders only completed/logged occurrences plus resolved
-commitments; the unfinished next occurrence appears only in the dedicated next
-conversation workspace.
+resumes the generated sheet. On the person page, the primary action is
+**Review & prepare**, or **Start 1:1** once a sheet exists; the secondary
+**Log a 1:1** path remains for a conversation that happened without
+preparation. The page's layout is described under "The Relationship Desk"
+below. Its past-conversations timeline renders only completed occurrences; the
+unfinished next occurrence appears only in the next-conversation surface.
 
 The `/app/1-1s` index is a relationship-oriented launcher, not a second person
 workspace. It renders one alphabetized, searchable row per active report with
@@ -70,6 +70,79 @@ most one manager-confirmed carry-forward cue. The preview hands off to the exact
 prep sheet or the canonical person page. Full history, commitments, cadence
 settings, and detailed notes stay on that person page so the two surfaces cannot
 drift into competing records.
+
+## The Relationship Desk (`/app/reports/[id]`)
+
+Identity (name, role, team, person notes, a privacy line), then four views:
+**Relationship** (default), **Work**, **Growth**, **Private notes**. Person
+settings (cadence override, capacity, time off) open in a drawer. The selected
+design is `docs/design-proposals/2026-09-25-relationship-continuity/`.
+
+Relationship reads top to bottom:
+
+- **Last → next conversation**, one surface. The latest completed summary's own
+  opening sentence (never a rewrite) opens the full summary in the timeline
+  below. The next occurrence shows its date — or "No date set" plus the cadence
+  truth with the rule that produced it; cadence due is never shown as a date —
+  its repeat rule, and a passed-but-unlogged date says so. Unprepared, it shows
+  the first carried topic with the rest behind a disclosure; prepared, the saved
+  sheet's situation summary and first agenda titles, and any captures kept
+  since. Compact disclosures show kept thoughts (removable), work check-ins,
+  suggested signals and the open-commitment count. **Date & repeat** links to
+  `/prep#schedule`, which focuses the canonical date control; on an existing
+  workspace that control now saves on change, through the same schedule write.
+- **Keep a thought** directly below: one field, one explicit save to the capture
+  endpoint. Text clears only after the server confirms; failures keep it.
+- **Follow-through** beside it: open commitments grouped by owner (You, then the
+  person), three rows each with a count-accurate expansion, ordered earliest due
+  first with undated last. Each row opens its source (see below), done / drop,
+  and a resolved list with reopen.
+- **Current work / Growth direction** previews: the most relevant live goal or
+  project with its latest check-in, and the saved plan's opening sentence.
+- **Past conversations**: completed occurrences newest first, each with its
+  summary's opening, the count of commitments linked to it, and the full
+  reviewed summary on expansion. Search filters the fetched summaries only.
+
+Work-update evidence says "since the last 1:1" only when a prior meeting date
+exists; otherwise it labels itself "latest recorded". It is read-only and never
+added to the agenda. Every section loads independently; a failed source is named
+and never passes as an empty state.
+
+### Commitment sources
+
+`GET /api/commitments` returns `source_type` and `source_id` as stored (and can
+filter by them). The desk resolves a 1:1 source only against history it could
+read for this manager and person: a source that doesn't resolve shows as "no
+longer available", never guessed. Per-conversation counts use those links only.
+Manual, goal, project, team-meeting and outside-meeting sources are labelled as
+such.
+
+### Logging is all-or-nothing, and ends in a receipt
+
+The log writes the meeting first, then inserts every reviewed commitment in one
+statement, then rolls the next occurrence. If anything after the meeting write
+fails, `_undo_partial_log()` deletes the inserted commitments and either deletes
+an inserted occurrence or returns the completed one to unfinished (summary,
+notes, `logged_at`, date restored), then answers 500. A retry therefore
+completes the same occurrence once, rather than 404ing or filing the
+conversation twice. The compensation is best-effort, not a database
+transaction.
+
+The review screen blocks double submission. On an error it checks history for a
+completed meeting with the exact submitted summary logged since the save began
+— the save that succeeded but whose response was lost — and treats that as
+saved instead of inviting a duplicate. Otherwise the review stays intact.
+
+On success it returns to `/app/reports/[id]?logged=<meeting id>` with the save
+result held in memory (`lib/one-on-one-receipt.ts`). The receipt shows the
+reviewed summary, the commitments the server inserted, the confirmed carried
+topics, and the resulting next occurrence (or that the prepared one was kept).
+It renders only when the meeting is in this manager's fetched history. After a
+reload it is rebuilt, for the latest conversation only, from persisted records:
+the meeting and its linked commitments; carried topics are not recorded against
+a past meeting and are not reconstructed. If the page's refresh fails after a
+successful save, the receipt says so and offers a re-read, never a re-log.
+Dismissing it removes the query parameter. Decisions stay in the summary.
 
 ## Scheduling and recurrence
 

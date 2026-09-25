@@ -167,17 +167,32 @@ class _MemoryQuery:
         self.values = values
         return self
 
+    def delete(self):
+        self.operation = "delete"
+        return self
+
     def execute(self):
         rows = self.client.rows[self.table]
+        if self.table in self.client.fail_on and self.operation in self.client.fail_on[self.table]:
+            raise RuntimeError(f"simulated {self.operation} failure on {self.table}")
         if self.operation == "insert":
-            inserted = {**self.values}
-            inserted.setdefault("id", f"{self.table}-{len(rows) + 1}")
-            inserted.setdefault("created_at", "2026-08-23T16:00:00+00:00")
-            inserted.setdefault("summary", None)
-            inserted.setdefault("prep_guide", None)
-            inserted.setdefault("carry_forward_items", [])
-            rows.append(inserted)
-            return SimpleNamespace(data=[{**inserted}])
+            batch = self.values if isinstance(self.values, list) else [self.values]
+            out = []
+            for values in batch:
+                inserted = {**values}
+                inserted.setdefault("id", f"{self.table}-{len(rows) + 1}")
+                inserted.setdefault("created_at", "2026-08-23T16:00:00+00:00")
+                inserted.setdefault("summary", None)
+                inserted.setdefault("prep_guide", None)
+                inserted.setdefault("carry_forward_items", [])
+                rows.append(inserted)
+                out.append({**inserted})
+            return SimpleNamespace(data=out)
+        if self.operation == "delete":
+            keep = [row for row in rows if not all(predicate(row) for predicate in self.filters)]
+            removed = [row for row in rows if row not in keep]
+            self.client.rows[self.table] = keep
+            return SimpleNamespace(data=removed)
 
         matched = [row for row in rows if all(predicate(row) for predicate in self.filters)]
         if self.limit_count is not None:
@@ -190,6 +205,9 @@ class _MemoryQuery:
 
 class _MemoryClient:
     def __init__(self):
+        # {table: {operation, ...}} — makes that call raise, to exercise the
+        # partial-failure path.
+        self.fail_on: dict[str, set[str]] = {}
         self.rows = {
             "one_on_ones": [
                 {
@@ -380,3 +398,105 @@ def test_explicit_workspace_id_still_completes_a_prepped_occurrence():
     assert result["meeting"]["id"] == "current"
     assert result["meeting"]["status"] == "completed"
     assert result["next_session"]["id"] != "current"
+
+
+def test_log_response_carries_the_saved_commitments_and_confirmed_topics():
+    """The receipt is built from what was saved, not what was submitted: blank
+    rows are dropped and each returned commitment is linked to the meeting."""
+    client = _MemoryClient()
+    result = _resolve(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                one_on_one_id="current",
+                summary="Agreed the handoff owner.",
+                new_commitments=[
+                    NewCommitmentIn(description="Confirm the owner", committed_by="manager"),
+                    NewCommitmentIn(description="   ", committed_by="manager"),
+                    NewCommitmentIn(description="Test the checklist", committed_by="direct_report", due_date="2026-09-28"),
+                ],
+                carry_forward_items=["  How did the outline land? ", "How did the outline land?"],
+                meeting_date="2026-09-25",
+            ),
+            auth=("manager", client),
+        )
+    )
+    saved = result["commitments"]
+    assert [c["description"] for c in saved] == ["Confirm the owner", "Test the checklist"]
+    assert {c["source_type"] for c in saved} == {"one_on_one"}
+    assert {c["source_id"] for c in saved} == {"current"}
+    assert saved[1]["committed_by"] == "direct_report"
+    assert result["carry_forward_items"] == ["How did the outline land?"]
+    assert len(client.rows["commitments"]) == 2
+
+
+def test_failed_commitment_write_undoes_the_completed_occurrence():
+    """A failure after the meeting write must not leave a half-logged meeting
+    that a retry can't complete: the prepared occurrence goes back to
+    unfinished, with its prep and date, and nothing else is written."""
+    client = _MemoryClient()
+    client.fail_on = {"commitments": {"insert"}}
+    before = {**client.rows["one_on_ones"][0]}
+    try:
+        _resolve(
+            log_one_on_one(
+                LogOneOnOneIn(
+                    direct_report_id="report",
+                    one_on_one_id="current",
+                    summary="Aligned.",
+                    new_commitments=[NewCommitmentIn(description="Send the plan")],
+                    meeting_date="2026-09-20",
+                ),
+                auth=("manager", client),
+            )
+        )
+        raise AssertionError("expected the log to fail")
+    except Exception as exc:  # HTTPException
+        assert getattr(exc, "status_code", None) == 500
+    row = client.rows["one_on_ones"][0]
+    assert row["summary"] is None
+    assert row["scheduled_at"] == before["scheduled_at"]
+    assert row["prep_guide"] == before["prep_guide"]
+    assert len(client.rows["one_on_ones"]) == 1
+    assert client.rows["commitments"] == []
+
+    # The retry now succeeds against the same occurrence, once.
+    client.fail_on = {}
+    result = _resolve(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                one_on_one_id="current",
+                summary="Aligned.",
+                new_commitments=[NewCommitmentIn(description="Send the plan")],
+                meeting_date="2026-09-20",
+            ),
+            auth=("manager", client),
+        )
+    )
+    assert result["meeting"]["id"] == "current"
+    assert len(client.rows["commitments"]) == 1
+
+
+def test_failed_next_occurrence_write_removes_an_inserted_ad_hoc_meeting_and_its_commitments():
+    client = _MemoryClient()
+    client.fail_on = {"one_on_ones": {"update"}}
+    try:
+        _resolve(
+            log_one_on_one(
+                LogOneOnOneIn(
+                    direct_report_id="report",
+                    summary="Hallway chat.",
+                    separate_occurrence=True,
+                    new_commitments=[NewCommitmentIn(description="Share the doc")],
+                ),
+                auth=("manager", client),
+            )
+        )
+        raise AssertionError("expected the log to fail")
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 500
+    # Only the original prepared occurrence remains, untouched.
+    assert [row["id"] for row in client.rows["one_on_ones"]] == ["current"]
+    assert client.rows["one_on_ones"][0]["summary"] is None
+    assert client.rows["commitments"] == []

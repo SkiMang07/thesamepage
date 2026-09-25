@@ -12,7 +12,8 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
+import { getOneOnOneHistory, logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
+import { stashOneOnOneReceipt } from "@/lib/one-on-one-receipt";
 import PageShell from "@/components/PageShell";
 
 import NoteField from "@/components/NoteField";
@@ -110,14 +111,21 @@ export default function WrapUpReview({
     setNextKey((k) => k + 1);
   }
 
+  // A synchronous guard as well as the disabled button: two fast clicks can
+  // both run before React re-renders the button disabled.
+  const savingRef = useRef(false);
+
   async function handleSave() {
-    if (!summary.trim()) return;
+    if (!summary.trim() || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
+    const submittedSummary = summary.trim();
+    const startedAt = Date.now();
     try {
-      await logOneOnOne({
+      const result = await logOneOnOne({
         direct_report_id: directReportId,
-        summary: summary.trim(),
+        summary: submittedSummary,
         notes: rawNotes,
         meeting_date: meetingDate || null,
         separate_occurrence: separateOccurrence,
@@ -127,10 +135,45 @@ export default function WrapUpReview({
         carry_forward_items: followUps.map((item) => item.text.trim()).filter(Boolean),
         one_on_one_id: oneOnOneId,
       });
-      router.push(`/app/reports/${directReportId}`);
+      // The receipt on the person page renders exactly what the server says
+      // it saved. The review stays put until then; nothing here is cleared.
+      stashOneOnOneReceipt({ ...result, personId: directReportId });
+      router.push(`/app/reports/${directReportId}?logged=${result.meeting.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save. Try again.");
+      // The server undoes a partially written log before it answers with an
+      // error, so a failure normally means nothing was saved. The exception
+      // is a save that succeeded but whose answer never arrived (a dropped
+      // connection). Check before inviting a retry that would log it twice.
+      const recorded = await findRecordedMeeting(submittedSummary, startedAt);
+      if (recorded) {
+        router.push(`/app/reports/${directReportId}?logged=${recorded}&reconciled=1`);
+        return;
+      }
+      // The raw API error isn't actionable. What is: the review is intact.
+      console.error("[wrap-up] save failed", e instanceof Error ? e.name : "error");
+      setError("Couldn't save this meeting. Your review is still here — try again.");
+      savingRef.current = false;
       setSaving(false);
+    }
+  }
+
+  // A completed meeting for this person with exactly this reviewed summary,
+  // logged since this save began. Returns its id, or null when there is none
+  // or the check itself could not run (then the error stays and the manager
+  // decides; nothing is assumed saved).
+  async function findRecordedMeeting(submittedSummary: string, startedAt: number): Promise<string | null> {
+    try {
+      const history = await getOneOnOneHistory(directReportId);
+      const match = history.find(
+        (session) =>
+          session.status === "completed" &&
+          (session.summary ?? "").trim() === submittedSummary &&
+          session.logged_at != null &&
+          new Date(session.logged_at).getTime() >= startedAt - 60_000
+      );
+      return match?.id ?? null;
+    } catch {
+      return null;
     }
   }
 

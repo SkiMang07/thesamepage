@@ -221,8 +221,9 @@ export type Commitment = {
   // none recorded — the team page falls back to the assignee's team.
   org_unit_id?: string | null;
   // Where it was made: a team meeting, a 1:1, a goal/project, or added by
-  // hand ("manual"). source_id is that record's id. Returned by the team
-  // commitments list so /app/team can link each one back to its source.
+  // hand ("manual"). source_id is that record's id. Returned by the team and
+  // person commitment lists as stored; a surface links one only when it can
+  // read that source itself, and otherwise says the source is unavailable.
   source_type?: "one_on_one" | "goal" | "project" | "manual" | "team_meeting" | "outside_meeting" | null;
   source_id?: string | null;
 };
@@ -1476,8 +1477,22 @@ export const logOneOnOne = (body: {
   // "A different conversation from the one I have prep saved for." Logs its
   // own occurrence and leaves the prepped workspace untouched.
   separate_occurrence?: boolean;
-}): Promise<{ meeting: OneOnOne; next_session: OneOnOne }> =>
+}): Promise<LogOneOnOneResult> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
+
+// What a successful log actually saved, straight from the server: the
+// completed meeting, the commitments inserted for it (source_type
+// "one_on_one", source_id = meeting.id — never the rows merely submitted),
+// the confirmed carry-forward topics after cleaning, and the unfinished
+// occurrence that now holds them. The Relationship Desk's receipt renders
+// exactly this. A failure is all-or-nothing: the server undoes a partial
+// write before answering with an error.
+export type LogOneOnOneResult = {
+  meeting: OneOnOne;
+  next_session: OneOnOne;
+  commitments: Commitment[];
+  carry_forward_items: string[];
+};
 
 // ---------------------------------------------------------------------------
 // Capture notes (Session 50, 2026-08-21) — the Person Page cockpit's

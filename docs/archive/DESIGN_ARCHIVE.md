@@ -138,3 +138,9 @@ way it did.
 | 2026-08-23 | Mission Control is action-first: no large zone map; one evidence-linked Suggested focus, up to two secondary priorities and one factual truth signal. Ranking is deterministic; AI explanation is bounded and contestable | The persistent sidebar already owns product orientation. The manager needs a trusted next move, not a second sitemap or an anxiety-producing backlog. Full decision in `docs/archive/mission-control-redesign/MISSION_CONTROL_ACTION_FIRST_DECISION.md` |
 
 | 2026-08-24 | `/app/team` is a team attention workspace: factual attention beside the active meeting first, then live follow-through, exception-first operating work, Team context, and People. There is no KPI strip or synthesized team-health score; the Relationship Desk is each roster card's primary person destination | The evolutionary redesign preserves every existing workflow while aligning the page with the action-first Mission Control and relationship-first person page | _(superseded 2026-09-25 by the Team overview redesign)_
+
+## Superseded 2026-09-25 by the conversation-continuity Relationship Desk
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-08-24 | The person page (`/app/reports/[id]`) is a "Relationship Desk": identity and relationship rhythm, the next conversation beside live follow-through, then explicit Work / Growth / History / Private notes modes. Expectations and assessment sit within Growth; completed 1:1 summaries and resolved commitments sit within History. Admin inputs remain in the settings drawer | The relationship and its next conversation should lead. The prior four-tile Command Deck made the page legible but still treated one person like a dashboard; it also left past conversations and manager-only notes semantically ambiguous |

@@ -19,6 +19,8 @@ const SIZES = {
   sm: "h-7 w-7 text-2xs",
   md: "h-8 w-8 text-2xs",
   lg: "h-10 w-10 text-xs",
+  // The Relationship Desk's identity avatar.
+  xl: "h-12 w-12 text-base sm:h-14 sm:w-14 sm:text-lg",
 } as const;
 
 export default function PersonAvatar({

@@ -1121,7 +1121,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         # can't be used to overwrite someone else's row.
         source_rows = (
             supabase.table("one_on_ones")
-            .select("id,series_id,scheduled_at,summary")
+            .select("id,series_id,scheduled_at,summary,notes,logged_at")
             .eq("id", body.one_on_one_id)
             .eq("manager_id", user_id)
             .eq("direct_report_id", body.direct_report_id)
@@ -1151,6 +1151,14 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         if candidate and not candidate.get("prep_guide"):
             source_session = candidate
             completed_workspace = True
+
+    # What the completed occurrence looked like before this log touched it,
+    # so a failure further down can put it back (see _undo_partial_log).
+    prior_session = (
+        {key: source_session.get(key) for key in ("notes", "logged_at", "scheduled_at")}
+        if source_session
+        else None
+    )
 
     if source_session:
         updates = {
@@ -1191,100 +1199,170 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         )
         source_session = meeting
 
-    for c in body.new_commitments:
-        description = c.description.strip()
-        if not description:
-            continue
-        supabase.table("commitments").insert({
+    commitment_rows = [
+        {
             "owner_id": user_id,
             "direct_report_id": body.direct_report_id,
             "committed_by": c.committed_by if c.committed_by in ("manager", "direct_report") else "manager",
             "source_type": "one_on_one",
             "source_id": meeting["id"],
-            "description": description,
+            "description": c.description.strip(),
             "due_date": c.due_date or None,
             "status": "open",
-        }).execute()
+        }
+        for c in body.new_commitments
+        if c.description.strip()
+    ]
+    created_commitments: list[dict] = []
+    try:
+        # One statement, so the reviewed commitments land together or not at
+        # all — never the first two of five.
+        if commitment_rows:
+            created_commitments = (
+                supabase.table("commitments").insert(commitment_rows).execute().data or []
+            )
 
-    carry_forward_items = _clean_follow_up_items(body.carry_forward_items)
-    next_session = None
-    series = None
-    if completed_workspace and source_session.get("series_id"):
-        rows = (
-            supabase.table("one_on_one_series")
-            .select("id,interval_weeks,timezone,active,anchor_at")
-            .eq("id", source_session["series_id"])
-            .eq("manager_id", user_id)
-            .eq("active", True)
-            .limit(1)
-            .execute()
-            .data
-        )
-        series = rows[0] if rows else None
+        carry_forward_items = _clean_follow_up_items(body.carry_forward_items)
+        next_session = None
+        series = None
+        if completed_workspace and source_session.get("series_id"):
+            rows = (
+                supabase.table("one_on_one_series")
+                .select("id,interval_weeks,timezone,active,anchor_at")
+                .eq("id", source_session["series_id"])
+                .eq("manager_id", user_id)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+                .data
+            )
+            series = rows[0] if rows else None
 
-    if series:
-        # Roll forward from the date the manager confirmed, not the date the
-        # occurrence was originally planned for and not when they got round to
-        # logging it. _next_occurrence_at() skips occurrences already in the
-        # past, so backfilling a meeting from last week still lands the next
-        # one in the future instead of creating a stale shell.
-        current_at = meeting_at or source_session.get("scheduled_at") or series["anchor_at"]
-        next_at = _next_occurrence_at(current_at, series["interval_weeks"])
-    else:
-        next_at = None
+        if series:
+            # Roll forward from the date the manager confirmed, not the date the
+            # occurrence was originally planned for and not when they got round to
+            # logging it. _next_occurrence_at() skips occurrences already in the
+            # past, so backfilling a meeting from last week still lands the next
+            # one in the future instead of creating a stale shell.
+            current_at = meeting_at or source_session.get("scheduled_at") or series["anchor_at"]
+            next_at = _next_occurrence_at(current_at, series["interval_weeks"])
+        else:
+            next_at = None
 
-    # One unfinished occurrence is the persistent workspace for the next
-    # conversation. A recurring series gives it a date; an ad-hoc cadence
-    # leaves it undated but still real, so carry-forwards no longer masquerade
-    # as manually captured notes.
-    open_rows_query = (
-        supabase.table("one_on_ones")
-        .select("*")
-        .eq("manager_id", user_id)
-        .eq("direct_report_id", body.direct_report_id)
-        .is_("summary", "null")
-    )
-    open_rows = open_rows_query.limit(1).execute().data
-    if open_rows:
-        merged = _clean_follow_up_items(
-            [*(open_rows[0].get("carry_forward_items") or []), *carry_forward_items]
-        )
-        workspace_updates: dict = {"carry_forward_items": merged}
-        if completed_workspace:
-            # This log consumed the person's next-meeting slot, so the row we
-            # are about to touch is its replacement and inherits the series
-            # and the rolled-forward date.
-            workspace_updates["series_id"] = series["id"] if series else None
-            workspace_updates["scheduled_at"] = next_at
-        # Otherwise the open row is an untouched workspace that already has
-        # its own schedule — very likely the prepped occurrence this ad-hoc
-        # conversation was deliberately logged apart from. It collects the
-        # carry-forwards and keeps its series and date.
-        next_session = (
+        # One unfinished occurrence is the persistent workspace for the next
+        # conversation. A recurring series gives it a date; an ad-hoc cadence
+        # leaves it undated but still real, so carry-forwards no longer masquerade
+        # as manually captured notes.
+        open_rows_query = (
             supabase.table("one_on_ones")
-            .update(workspace_updates)
-            .eq("id", open_rows[0]["id"])
+            .select("*")
             .eq("manager_id", user_id)
-            .execute()
-            .data[0]
+            .eq("direct_report_id", body.direct_report_id)
+            .is_("summary", "null")
         )
-    else:
-        next_session = (
-            supabase.table("one_on_ones")
-            .insert({
-                "manager_id": user_id,
-                "direct_report_id": body.direct_report_id,
-                "series_id": series["id"] if series else None,
-                "scheduled_at": next_at,
-                "carry_forward_items": carry_forward_items,
-            })
-            .execute()
-            .data[0]
-        )
-    next_session["one_on_one_series"] = series or {}
-    next_session = _serialize_session(next_session)
+        open_rows = open_rows_query.limit(1).execute().data
+        if open_rows:
+            merged = _clean_follow_up_items(
+                [*(open_rows[0].get("carry_forward_items") or []), *carry_forward_items]
+            )
+            workspace_updates: dict = {"carry_forward_items": merged}
+            if completed_workspace:
+                # This log consumed the person's next-meeting slot, so the row we
+                # are about to touch is its replacement and inherits the series
+                # and the rolled-forward date.
+                workspace_updates["series_id"] = series["id"] if series else None
+                workspace_updates["scheduled_at"] = next_at
+            # Otherwise the open row is an untouched workspace that already has
+            # its own schedule — very likely the prepped occurrence this ad-hoc
+            # conversation was deliberately logged apart from. It collects the
+            # carry-forwards and keeps its series and date.
+            next_session = (
+                supabase.table("one_on_ones")
+                .update(workspace_updates)
+                .eq("id", open_rows[0]["id"])
+                .eq("manager_id", user_id)
+                .execute()
+                .data[0]
+            )
+        else:
+            next_session = (
+                supabase.table("one_on_ones")
+                .insert({
+                    "manager_id": user_id,
+                    "direct_report_id": body.direct_report_id,
+                    "series_id": series["id"] if series else None,
+                    "scheduled_at": next_at,
+                    "carry_forward_items": carry_forward_items,
+                })
+                .execute()
+                .data[0]
+            )
+        next_session["one_on_one_series"] = series or {}
+        next_session = _serialize_session(next_session)
 
-    return {"meeting": _serialize_session(meeting), "next_session": next_session}
+    except Exception as exc:
+        # The meeting is already written. Leaving it half-saved would tell the
+        # manager "try again" while a retry either 404s (the prepared
+        # occurrence is now complete) or files the conversation twice (an
+        # ad-hoc log). Put back what this request changed, then fail.
+        logger.error("1:1 log failed after the meeting write; undoing it: %s", type(exc).__name__)
+        _undo_partial_log(
+            supabase,
+            user_id,
+            meeting_id=meeting["id"],
+            inserted_meeting=prior_session is None,
+            prior_session=prior_session,
+            commitment_ids=[row["id"] for row in created_commitments if row.get("id")],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="The meeting couldn't be saved, so nothing was recorded. Your review is still here — try again.",
+        )
+
+    # Everything the receipt shows comes from what the database returned for
+    # this request: the completed meeting, the commitments actually inserted
+    # (not every row the client submitted), the confirmed carry-forward
+    # topics after cleaning, and the occurrence that now holds them.
+    return {
+        "meeting": _serialize_session(meeting),
+        "next_session": next_session,
+        "commitments": created_commitments,
+        "carry_forward_items": carry_forward_items,
+    }
+
+
+def _undo_partial_log(
+    supabase,
+    user_id: str,
+    *,
+    meeting_id: str,
+    inserted_meeting: bool,
+    prior_session: dict | None,
+    commitment_ids: list[str],
+) -> None:
+    """Best-effort compensation for a log that failed after its meeting write.
+
+    Removes the commitments this request inserted, then either deletes the
+    occurrence it inserted or returns the occurrence it completed to
+    unfinished. Each step is independent so one failure doesn't skip the
+    rest; failures are logged without record content."""
+    for commitment_id in commitment_ids:
+        try:
+            supabase.table("commitments").delete().eq("id", commitment_id).eq("owner_id", user_id).execute()
+        except Exception as exc:  # pragma: no cover - logged, not raised
+            logger.error("could not undo a commitment from a failed 1:1 log: %s", type(exc).__name__)
+    try:
+        if inserted_meeting:
+            supabase.table("one_on_ones").delete().eq("id", meeting_id).eq("manager_id", user_id).execute()
+        else:
+            supabase.table("one_on_ones").update({
+                "summary": None,
+                "notes": (prior_session or {}).get("notes"),
+                "logged_at": (prior_session or {}).get("logged_at"),
+                "scheduled_at": (prior_session or {}).get("scheduled_at"),
+            }).eq("id", meeting_id).eq("manager_id", user_id).execute()
+    except Exception as exc:  # pragma: no cover - logged, not raised
+        logger.error("could not undo a failed 1:1 log's meeting write: %s", type(exc).__name__)
 
 
 @router.get("/{direct_report_id}/history")

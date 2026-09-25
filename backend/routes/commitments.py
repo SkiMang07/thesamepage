@@ -66,21 +66,34 @@ def create_commitment(body: CommitmentIn, auth=Depends(get_authenticated_client)
 def list_commitments(
     direct_report_id: str | None = None,
     status: str | None = None,
+    source_type: str | None = None,
+    source_id: str | None = None,
     auth=Depends(get_authenticated_client),
 ):
-    """List the manager's commitments, optionally filtered by direct report
-    and/or status. Includes the direct report's name for dashboard use."""
+    """List the manager's commitments, optionally filtered by direct report,
+    status, and/or the record it was made in. Includes the direct report's
+    name for dashboard use.
+
+    source_type/source_id say where a commitment was made (a 1:1, a team
+    meeting, a goal/project, or "manual"). They are returned as stored and
+    never resolved here: a caller links one only when it can read that source
+    itself, so a deleted or inaccessible source shows as unavailable rather
+    than leaking or being guessed at."""
     user_id, supabase = auth
 
     query = (
         supabase.table("commitments")
-        .select("id,description,due_date,status,committed_by,created_at,completed_at,direct_report_id,direct_reports(name)")
+        .select("id,description,due_date,status,committed_by,created_at,completed_at,direct_report_id,source_type,source_id,direct_reports(name)")
         .eq("owner_id", user_id)
     )
     if direct_report_id:
         query = query.eq("direct_report_id", direct_report_id)
     if status:
         query = query.eq("status", status)
+    if source_type:
+        query = query.eq("source_type", source_type)
+    if source_id:
+        query = query.eq("source_id", source_id)
 
     rows = query.order("created_at", desc=True).execute().data
 
