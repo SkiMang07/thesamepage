@@ -57,9 +57,10 @@ export default function AssessmentsPage() {
   }, [rows]);
 
   return (
-    <PageShell maxWidth="6xl">
-      <h1 className="font-serif text-[2.3rem] font-normal leading-none tracking-[-0.03em] text-ink sm:text-[2.6rem]">Assessments</h1>
-      <p className="mt-2 max-w-2xl text-sm text-ink-secondary">
+    <PageShell maxWidth="8xl">
+      <div className="mx-auto max-w-[1510px]">
+      <h1 className="font-serif text-[2.6rem] font-normal leading-none tracking-[-0.03em] text-ink sm:text-[3.05rem]">Assessments</h1>
+      <p className="mt-2.5 max-w-3xl text-sm text-ink-secondary">
         Quarterly or biannual — or off-cycle when there’s a reason. AI brings the period together and drafts against each role’s expectations; you decide every judgment.
       </p>
 
@@ -86,13 +87,14 @@ export default function AssessmentsPage() {
               {tally.not_started} not started
             </p>
           )}
-          <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {rows.map(({ r, strip }) => (
               <PersonCard key={r.id} r={r} strip={strip} />
             ))}
           </ul>
         </>
       )}
+      </div>
     </PageShell>
   );
 }
