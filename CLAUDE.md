@@ -205,8 +205,10 @@ docs/        see the table above
 There are no outside users yet, so Andrew's acceptance testing happens **on the
 live app**. The release path is: build → test thoroughly → run the migration in
 Supabase → push → Andrew tests on the deployed app. Secrets live in Railway and
-Vercel only; `backend/.env` is intentionally empty and Andrew does not keep
-local keys.
+Vercel. The one local key is `ANTHROPIC_API_KEY` in `backend/.env`
+(gitignored), kept so the Scribe eval (`eval/test_assistant.py`) can run; every
+other value there is empty. Run the eval in the cloud sandbox with a temporary
+copy of that file and delete the copy afterwards.
 
 - **Claude's own testing is required, not optional.** It has caught real bugs
   in nearly every build. Unit tests, `tsc --noEmit` on a clean checkout, the
