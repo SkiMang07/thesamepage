@@ -63,6 +63,7 @@ import GoalForm from "@/components/goals/GoalForm";
 import UpdatesFeed from "@/components/goals/UpdatesFeed";
 import Dialog from "@/components/goals/Dialog";
 import { ReviewPresentation, ReviewSetup } from "@/components/goals/ReviewTogether";
+import { useOpenRecord } from "@/lib/scribeCitations";
 
 type Filter = "all" | "review" | "missing" | "closed";
 type View = "board" | "updates";
@@ -374,6 +375,9 @@ export default function GoalsPage() {
       window.scrollTo({ top: 0 });
     });
   }
+
+  // A Scribe citation chip for a goal while this page is already open.
+  useOpenRecord("goal", openDetail);
 
   function backToBoard() {
     const from = detailId;

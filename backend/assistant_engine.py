@@ -18,6 +18,7 @@ import json
 import logging
 from fastapi import HTTPException
 
+import scribe_citations
 from ai_core import call_anthropic_with_tools
 from config import AI_SCRIBE_MODEL, AI_SCRIBE_THINKING
 
@@ -233,7 +234,8 @@ Today's date: {TODAY}
 - Do not turn one observation into a diagnosis, prediction, or claim about a person's mindset or trajectory. State what additional evidence would change the read.
 - Missing records mean only that Scribe has thin evidence. Do not treat an empty record as proof of employee performance, manager neglect, or an organizational problem.
 - When internal evidence is thin, say so briefly but still provide useful general guidance when possible. "Not enough evidence" should not become a refusal to help think.
-- Name important internal sources and dates naturally in the answer when they support a consequential claim. Include the supplied application route when it materially helps the manager verify a source. Never invent a source, date, or route.
+- Name important internal sources and dates naturally in the answer when they support a consequential claim. Never invent a source, date, or route.
+- CITATIONS: when you name a specific person, goal, project, team/org unit, or company document that a tool returned, write it as [[type:id|Name]] so the manager can open it with one click. type is one of person, goal, project, org_unit, document; id is the exact id the tool returned (for search results, source_id; a company_document is type document); Name is how the record reads in prose. Example: "[[person:3f2a…|Beth]] owes the pricing memo for [[goal:9c1e…|Activate the Army]]." Cite a record the first time you name it in an answer, not every mention. Only cite ids a tool returned in this conversation. For a check-in, commitment, 1:1, or note, cite the goal, project, or person it belongs to. Do not write application routes as text; the citation is the link. Never use this syntax inside emit_draft payloads or display fields.
 - Never mix evidence between people. Role and expectation claims must come from the assigned ids in tool results, never from inference.
 - Ask a clarifying question only when ambiguity would materially change the answer. If the manager's desired output is unclear, you may offer questions to ask, an approach, a draft message, role-play, or a record follow-up.
 
@@ -386,10 +388,13 @@ def run_assistant_turn(
                     implicit references resolve correctly.
 
     Returns (text, drafts):
-      text   — the agent's final reply text
+      text   — the agent's final reply text; [[type:id|Name]] citation
+               markers are validated against this turn's tool results
+               (scribe_citations.resolve)
       drafts — list of emit_draft payloads collected during this turn
     """
     drafts: list = []
+    citable = scribe_citations.seed_from_thread(thread)
     current_year = today_str[:4]
     system = (
         SYSTEM_PROMPT_TEMPLATE
@@ -435,7 +440,8 @@ def run_assistant_turn(
             text_parts = [
                 block["text"] for block in content if block.get("type") == "text"
             ]
-            return " ".join(text_parts).strip(), drafts
+            text = " ".join(text_parts).strip()
+            return scribe_citations.resolve(text, citable), drafts
 
         # There are tool_use blocks to execute
         # First, collect any text from this intermediate turn (informational, not returned)
@@ -460,6 +466,11 @@ def run_assistant_turn(
                     result = {"error": str(exc)}
             else:
                 result = {"error": f"Unknown tool: {tool_name}"}
+
+            try:
+                scribe_citations.collect(tool_name, result, citable)
+            except Exception as exc:  # a citation miss must never break the turn
+                logger.warning("Could not register citable records from %s: %s", tool_name, exc)
 
             tool_results.append({
                 "type": "tool_result",

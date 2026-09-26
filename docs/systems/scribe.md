@@ -125,10 +125,37 @@ user's org, but every result retains its confirmed team/company scope so Scribe
 cannot silently generalize it. Documents returned to the model are recorded in
 the existing `document_citations` ledger after a successful turn.
 
-Scribe names consequential sources and dates in conversational prose and may
-include a supplied application route. There is no separate citation object or
-clickable citation component in the drawer yet; never infer a source, date, or
-route that was not returned by a tool.
+### Citations
+
+Every record Scribe names is a chip in the drawer that opens that record.
+Scribe writes `[[type:id|Name]]` in its reply, where `type` is `person`,
+`goal`, `project`, `org_unit` or `document`. Before the reply leaves
+`run_assistant_turn`, `backend/scribe_citations.py` checks each marker against
+the ids Scribe's read tools returned in this turn (`collect`), plus markers
+already stored on earlier assistant turns in the thread (`seed_from_thread`):
+
+- a known id keeps its marker, with the label replaced by the record's stored
+  name (brief items carry no name, so Scribe's own label is kept);
+- an unknown id or unsupported type is flattened to its label as plain text.
+
+So a chip can only ever point at a record the tools supplied for this manager.
+Check-ins, commitments, 1:1s and notes are cited through the goal, project or
+person they belong to. The validated markers are stored in
+`assistant_messages.content`; there is no citation table.
+
+`frontend/lib/scribeCitations.ts` parses the markers and builds routes from
+type + id: person → `/app/reports/<id>`, goal → `/app/goals?goal=<id>`,
+project → `/app/projects?project=<id>`, team → `/app/org`, document →
+`/app/context`. When the target goal or project page is already open, the chip
+sends a `tsp:open-record` event instead of navigating, and the page opens the
+record through its own unsaved-edits guard (`useOpenRecord`). Below `md` the
+drawer is a full-screen sheet and closes on a chip click; beside the page it
+stays open. The mechanism is a text convention rather than Anthropic
+search-result blocks because Scribe's tools return JSON rows, not documents,
+and the drawer renders plain text; it adds no model call.
+
+Not yet: chips are not measured in analytics, and `org_unit` opens the org
+chart rather than the specific team.
 
 ## API and conversation state
 
@@ -217,7 +244,7 @@ Generic app pages may provide a bounded display label only.
 (`ANTHROPIC_API_KEY` in `backend/.env` or the shell; it cannot run against the
 deployed app). Each tool round reads the system prompt, tool definitions and
 the thread so far from the prompt cache (`docs/ENGINEERING.md` → AI calls).
-It contains 30 cases covering the six write verbs plus:
+It contains 31 cases covering the six write verbs plus:
 
 - grounded person status;
 - manager-private notes without diagnosis;
@@ -232,7 +259,9 @@ It contains 30 cases covering the six write verbs plus:
 - company onboarding guidance compared with conflicting current work;
 - malicious instructions embedded in confirmed document content;
 - empty internal evidence, duplicate names, stale records, and unsupported
-  citation requests.
+  citation requests;
+- citation markers with real ids (case 31, graded on the marked-up text; every
+  other case is graded on the label-only text a reader sees).
 
 The full-suite exit bar permits at most two misses. The Scribe runs with the
 model's default thinking and a 4,000-token budget per round
@@ -278,6 +307,5 @@ agent-loop changes.
   relevant date. It warns the model but does not decide whether a record is
   still authoritative. Context Engine freshness rules continue to govern
   documents, and evergreen documents are not marked stale on age alone.
-- Routes in prose are currently plain text in the Scribe drawer. A small
-  clickable-source treatment remains optional follow-up work, not a trust
-  boundary.
+- Citation chips open the record's page, not a specific check-in, commitment
+  or 1:1 inside it; those are cited through their goal, project or person.

@@ -178,8 +178,8 @@ real misses before adding infrastructure.
 Remaining search follow-ups are evidence-driven only:
 
 - improve recall/ranking if beta queries show consistent lexical misses;
-- consider a small clickable-source treatment if source-opening behavior shows
-  that plain conversational source names/routes are insufficient;
+- clickable sources shipped as citation chips (C2, 2026-09-26; see
+  `docs/systems/scribe.md` → Citations);
 - broaden deep entity context beyond people only when real questions require
   more than search plus the current canonical list tools.
 

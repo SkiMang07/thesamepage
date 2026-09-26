@@ -57,6 +57,7 @@ if os.environ.get("SCRIBE_EVAL_MODEL"):
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from assistant_engine import AI_SCRIBE_MODEL, run_assistant_turn  # noqa: E402
+from scribe_citations import strip as strip_citations  # noqa: E402
 
 # ---- fake data ----
 # Realistic but minimal dataset that exercises all cases.
@@ -926,6 +927,24 @@ CASES = [
             and not text_has(text, "guarantees unlimited", "policy confirms unlimited", "unlimited pto is guaranteed")
         ),
     },
+
+    # -----------------------------------------------------------------
+    # 31. Clickable citations (C2): a named record carries a valid marker.
+    #     "raw" cases are graded on the marked-up text; every other case is
+    #     graded on the label-only text a reader sees.
+    # -----------------------------------------------------------------
+    {
+        "id": 31,
+        "desc": "Named person and goal come back as [[type:id|Name]] citations with real ids",
+        "raw": True,
+        "utterance": "Where does Jordan stand on their goals? I want to be able to check the records.",
+        "check": lambda text, drafts: (
+            len(drafts) == 0
+            and "[[person:dr-jordan|Jordan]]" in text
+            and "[[goal:" in text
+            and "/app/" not in text
+        ),
+    },
 ]
 
 
@@ -969,7 +988,7 @@ def run_eval(verbose: bool = True) -> int:
                 tool_executor=build_executor(**case.get("executor_kwargs", {})),
                 today_str=TODAY,
             )
-            ok = case["check"](text, drafts)
+            ok = case["check"](text if case.get("raw") else strip_citations(text), drafts)
         except Exception as exc:
             text = f"ERROR: {exc}"
             drafts = []

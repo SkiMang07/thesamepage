@@ -39,6 +39,7 @@ import { DrawerMessage, useDrawer } from "@/lib/drawer-context";
 import { DraftTracker, joinDraft } from "@/lib/aiDraftTelemetry";
 
 import NoteField from "@/components/NoteField";
+import { parseCitations, requestOpenRecord, stripCitations, type Segment } from "@/lib/scribeCitations";
 import { NAV_STRIP_HEIGHT } from "@/components/ZoneMap";
 // ---------------------------------------------------------------------------
 // Helpers
@@ -714,12 +715,60 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
 // MessageBubble — renders one message + its draft cards + ambiguity chips
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Citations (C2) — every record Scribe names is a chip that opens it
+// ---------------------------------------------------------------------------
+
+const CITE_NOUN: Record<string, string> = {
+  person: "person",
+  goal: "goal",
+  project: "project",
+  org_unit: "team",
+  document: "company document",
+};
+
+function CitationChip({ seg, onOpen }: { seg: Extract<Segment, { kind: "cite" }>; onOpen: () => void }) {
+  const pathname = usePathname();
+  return (
+    <Link
+      href={seg.href}
+      aria-label={`Open ${CITE_NOUN[seg.type] ?? "record"} ${seg.label}`}
+      title={`Open ${CITE_NOUN[seg.type] ?? "record"}`}
+      onClick={(e) => {
+        // Already on the page that holds this goal/project: it reads the URL
+        // only on load, so ask it to open the record through its own guard.
+        const target = seg.href.split("?")[0];
+        if (pathname === target && (seg.type === "goal" || seg.type === "project")) {
+          e.preventDefault();
+          requestOpenRecord({ type: seg.type, id: seg.id });
+        }
+        onOpen();
+      }}
+      className="mx-px inline rounded border border-control bg-surface px-1 py-px font-medium text-brand decoration-brand/40 hover:border-brand hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+    >
+      {seg.label}
+    </Link>
+  );
+}
+
+function CitedText({ text, onOpen }: { text: string; onOpen: () => void }) {
+  return (
+    <>
+      {parseCitations(text).map((seg, i) =>
+        seg.kind === "text" ? <span key={i}>{seg.text}</span> : <CitationChip key={i} seg={seg} onOpen={onOpen} />,
+      )}
+    </>
+  );
+}
+
 function MessageBubble({
   msg,
   onQuickReply,
+  onOpenCitation,
 }: {
   msg: DrawerMessage;
   onQuickReply: (text: string) => void;
+  onOpenCitation: () => void;
 }) {
   const isUser = msg.role === "user";
   const parsed = !isUser ? parseCandidates(msg.text) : null;
@@ -733,13 +782,13 @@ function MessageBubble({
             : "bg-sunken text-ink-body"
         }`}
       >
-        {parsed ? parsed.before : msg.text}
+        {isUser ? msg.text : <CitedText text={parsed ? parsed.before : msg.text} onOpen={onOpenCitation} />}
       </div>
 
       {/* Ambiguity candidate chips — tappable quick-reply buttons */}
       {parsed && parsed.options.length > 0 && (
         <div className="flex flex-wrap gap-1.5 max-w-[90%]">
-          {parsed.options.map((opt) => (
+          {parsed.options.map(stripCitations).map((opt) => (
             <button
               key={opt}
               onClick={() => onQuickReply(opt)}
@@ -845,6 +894,12 @@ export default function ScribeDrawer() {
     }
   }
 
+  // Below md the drawer is a full-screen sheet, so a chip closes it to show
+  // the record; beside the page (md and up) it stays open.
+  function closeIfFullScreen() {
+    if (window.matchMedia("(max-width: 767px)").matches) close();
+  }
+
   async function handleNewConversation() {
     if (messages.length > 0 && !window.confirm("Start a new Scribe conversation? Existing source records will not be changed.")) {
       return;
@@ -918,7 +973,7 @@ export default function ScribeDrawer() {
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} onQuickReply={(t) => handleSend(t)} />
+          <MessageBubble key={msg.id} msg={msg} onQuickReply={(t) => handleSend(t)} onOpenCitation={closeIfFullScreen} />
         ))}
         <div ref={threadEndRef} />
       </div>

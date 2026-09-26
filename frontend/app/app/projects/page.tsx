@@ -63,6 +63,7 @@ import FollowThroughPanel from "@/components/projects/FollowThroughPanel";
 import { OverviewBand, PortfolioScan } from "@/components/projects/PortfolioOverview";
 import { ReviewPlan, ReviewPresentation, ReviewSetup } from "@/components/projects/ProjectReview";
 import { StatusChip } from "@/components/projects/StatusChip";
+import { useOpenRecord } from "@/lib/scribeCitations";
 
 type View = "open" | "mine" | "closed";
 type Receipt = { projectId: string | null; text: string; warning?: string } | null;
@@ -263,6 +264,28 @@ export default function ProjectsPage() {
     setView(isClosed(p) ? "closed" : "open");
     goToBrief(p.id, panel);
   }
+
+  /** A Scribe citation: /app/projects?project=<id> on load, or the chip's
+   *  event while the page is already open. Opens the brief, no panel. */
+  function openCited(id: string) {
+    const p = projects.find((x) => x.id === id);
+    if (!p) {
+      setPageError("That project isn't in your projects. It may have been deleted.");
+      return;
+    }
+    resetScope();
+    setView(isClosed(p) ? "closed" : "open");
+    goToBrief(p.id);
+  }
+  useOpenRecord("project", openCited);
+  const deepLinkRead = useRef(false);
+  useEffect(() => {
+    if (loading || loadError || deepLinkRead.current) return;
+    deepLinkRead.current = true;
+    const id = new URLSearchParams(window.location.search).get("project");
+    if (id) openCited(id);
+    // openCited reads the loaded list; run once, right after the first load.
+  }, [loading, loadError]);
 
   function flash(id: string) {
     setSavedId(id);
