@@ -61,6 +61,8 @@ function announceRecordChange(path: string, method: string) {
   // An assessment draft is working state, not a record. Only completing one
   // writes ratings the rest of the app reads.
   if (path.startsWith("/api/assessments/reviews") && !path.endsWith("/complete")) return;
+  // Proposing suggestions writes proposals, not records.
+  if (path === "/api/beyond/suggestions/refresh") return;
   window.dispatchEvent(new Event(RECORDS_CHANGED_EVENT));
   window.localStorage.setItem(RECORDS_CHANGED_STORAGE_KEY, String(Date.now()));
 }
@@ -2848,6 +2850,20 @@ export type OutsideMeeting = {
   // Topics carried INTO this meeting from the last one.
   carry_forward_items: string[];
   prep_guide: OutsidePrepGuide | null;
+  // Private things saved to raise in this conversation. Present on the
+  // meeting and person reads; absent on the lighter overview list.
+  prep_items?: BeyondPrepItem[];
+};
+
+// A private thing the manager saved to raise in an upcoming conversation:
+// their own thought, or an AI suggestion's prep line they edited and
+// accepted. Not an agreed commitment; never sent to anyone.
+export type BeyondPrepItem = {
+  id: string;
+  text: string;
+  source: "thought" | "suggestion";
+  suggestion_id: string | null;
+  created_at: string;
 };
 
 // counterpart = something the other person owes the manager. A null
@@ -2882,6 +2898,9 @@ export type OutsideMeetingLink = {
 export type OutsideMeetingDetail = OutsideMeeting & {
   commitments: BeyondCommitment[];
   links: OutsideMeetingLink[];
+  prep_items: BeyondPrepItem[];
+  // False when saved thoughts couldn't be read (e.g. before the migration).
+  prep_items_available: boolean;
 };
 
 export type BeyondOverview = {
@@ -2897,6 +2916,7 @@ export type BeyondPersonDetail = {
   meetings: OutsideMeeting[];
   commitments: BeyondCommitment[];
   links: OutsideMeetingLink[];
+  prep_items_available?: boolean;
 };
 
 export type BeyondDraftCommitment = {
@@ -2930,6 +2950,8 @@ export type BeyondPrepSources = {
   since: string;
   last_meeting: { id: string; date: string; summary: string | null } | null;
   carried: string[];
+  // Things the manager saved to raise here, in their own words.
+  saved?: string[];
   you_owe: { id: string; description: string; due_date: string | null }[];
   they_owe: { id: string; description: string; due_date: string | null }[];
   goals: { id: string; title: string; level: string; status: GoalStatus; due_date: string | null; progress: number | null }[];
@@ -3109,6 +3131,135 @@ export const getBeyondLinks = (params: {
   if (params.directReportId) q.set("direct_report_id", params.directReportId);
   return authedFetch(`/api/beyond/links?${q.toString()}`);
 };
+
+// --- Overview and conversation continuity (routes/beyond_continuity.py) ----
+
+export type BeyondMeetingRef = {
+  id: string;
+  title: string | null;
+  kind: OutsideMeetingKind;
+  date: string | null;
+  status: "draft" | "upcoming" | "logged";
+  people: { id: string; name: string }[];
+};
+
+export type BeyondConversation = BeyondMeetingRef & {
+  // The reviewed write-up; null until the meeting is logged.
+  summary: string | null;
+  carried: string[];
+  prep_items: BeyondPrepItem[];
+  prepared: boolean;
+  has_notes: boolean;
+  recurrence_weeks: number | null;
+};
+
+// An open commitment with its real owner. owner_name is the counterpart's
+// or the report's name; null means the manager ("You").
+export type BeyondOpenCommitment = {
+  id: string;
+  description: string;
+  due_date: string | null;
+  committed_by: "manager" | "direct_report" | "counterpart";
+  owner_name: string | null;
+  outside_person_id: string | null;
+  source_meeting: BeyondMeetingRef | null;
+};
+
+export type BeyondPersonContinuity = {
+  id: string;
+  name: string;
+  relationship: OutsideRelationship;
+  role_title: string | null;
+  next_meeting: BeyondConversation | null;
+  // A 1:1 that happened and isn't written up yet.
+  draft: BeyondConversation | null;
+  // An explicit repeat rule, in weeks. Null = no cadence on record.
+  cadence_weeks: number | null;
+  // The latest reviewed 1:1, else the latest reviewed group meeting they were in.
+  latest_outcome: BeyondConversation | null;
+  last_met: string | null;
+  you_owe: BeyondOpenCommitment[];
+  they_owe: BeyondOpenCommitment[];
+  group_meeting_count: number;
+};
+
+export type BeyondGroupConversation = BeyondConversation & {
+  open_commitments: BeyondOpenCommitment[];
+};
+
+export type BeyondSuggestion = {
+  id: string;
+  title: string;
+  reason: string;
+  suggested_prep: string | null;
+  status: "open" | "dismissed" | "connected";
+  added_meeting_id: string | null;
+  // Excerpts are copied from the records by the server, never model text.
+  source: { type: "commitment" | "meeting"; commitment_id: string | null; excerpt: string; meeting: BeyondMeetingRef };
+  target: { type: "goal" | "project"; id: string; title: string; excerpt: string | null };
+  person: { id: string; name: string } | null;
+};
+
+export type BeyondBriefItem = {
+  id: string;
+  // Recorded facts: upcoming, commitment, review, cadence, reconnect.
+  // Proposals: suggestion.
+  kind: "upcoming" | "commitment" | "review" | "cadence" | "reconnect" | "suggestion";
+  title: string;
+  date: string | null;
+  due_label?: string;
+  reason: string;
+  source: { label: string; meeting_id: string | null };
+  action: { label: string; href: string | null };
+  suggestion_id?: string;
+  person_id: string | null;
+};
+
+export type BeyondContinuity = {
+  today: string;
+  people: BeyondPersonContinuity[];
+  groups: BeyondGroupConversation[];
+  // Upcoming conversations a prep line can be saved into, soonest first.
+  upcoming: BeyondConversation[];
+  suggestions: BeyondSuggestion[];
+  brief: BeyondBriefItem[];
+  brief_more: BeyondBriefItem[];
+  prep_items_available: boolean;
+  suggestions_available: boolean;
+};
+
+export const getBeyondContinuity = (): Promise<BeyondContinuity> => authedFetch("/api/beyond/continuity");
+
+export const addBeyondPrepItem = (
+  meetingId: string,
+  body: { text: string; suggestionId?: string | null }
+): Promise<{ item: BeyondPrepItem; meeting: OutsideMeeting & { prep_items: BeyondPrepItem[] } }> =>
+  authedFetch(`/api/beyond/meetings/${meetingId}/prep-items`, {
+    method: "POST",
+    body: JSON.stringify({ text: body.text, suggestion_id: body.suggestionId ?? null }),
+  });
+
+export const removeBeyondPrepItem = (
+  meetingId: string,
+  itemId: string
+): Promise<{ meeting: OutsideMeeting & { prep_items: BeyondPrepItem[] } }> =>
+  authedFetch(`/api/beyond/meetings/${meetingId}/prep-items/${itemId}`, { method: "DELETE" });
+
+// Asks the model only when the reviewed evidence changed. ai_failed is not
+// an error: the brief's recorded items keep working without it.
+export const refreshBeyondSuggestions = (): Promise<{ ran: boolean; ai_failed: boolean; available: boolean; added?: number }> =>
+  authedFetch("/api/beyond/suggestions/refresh", { method: "POST" });
+
+export const dismissBeyondSuggestion = (id: string): Promise<{ ok: boolean }> =>
+  authedFetch(`/api/beyond/suggestions/${id}/dismiss`, { method: "POST" });
+
+// Confirms one meeting ↔ goal/project connection. Never a check-in or a
+// status change.
+export const connectBeyondSuggestion = (id: string, note: string | null): Promise<{ ok: boolean; link_id: string; already: boolean }> =>
+  authedFetch(`/api/beyond/suggestions/${id}/connect`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
 
 // ---------------------------------------------------------------------------
 // Entitlement — founding place, 14-day trial, paid, or read-only.

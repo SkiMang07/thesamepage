@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import PageShell from "@/components/PageShell";
 import { CommitmentRow } from "../../CommitmentRow";
+import ThoughtBox from "@/components/beyond/ThoughtBox";
 import {
   BeyondCommitment,
   BeyondPersonDetail,
@@ -224,6 +225,25 @@ export default function OutsidePersonPage() {
             <Link href={`/app/beyond/meetings/${next.id}`} className={BTN_PRIMARY}>
               {next.prep_guide ? "Open prep" : "Prepare"}
             </Link>
+            {(next.carry_forward_items.length > 0 || (next.prep_items ?? []).length > 0) && (
+              <ul className="w-full space-y-1 border-t border-divider pt-3">
+                {next.carry_forward_items.map((t) => (
+                  <li key={t} className="text-sm text-ink-body">
+                    <span className="text-ink-muted">Bring forward:</span> {t}
+                  </li>
+                ))}
+                {(next.prep_items ?? []).map((i) => (
+                  <li key={i.id} className="text-sm text-ink-body">
+                    <span className="text-ink-muted">Your note:</span> “{i.text}”
+                  </li>
+                ))}
+              </ul>
+            )}
+            {data.prep_items_available !== false && (
+              <div className="w-full">
+                <ThoughtBox meetingId={next.id} meetingDate={next.meeting_date} withLabel={firstName} onSaved={load} />
+              </div>
+            )}
           </>
         ) : (
           <>

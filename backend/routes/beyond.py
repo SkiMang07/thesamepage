@@ -329,6 +329,28 @@ def _serialize_meeting(
     }
 
 
+def fetch_prep_items(supabase, user_id: str, meeting_ids: list[str]) -> tuple[dict[str, list[dict]], bool]:
+    """meeting_id -> the private things saved to raise in it, and whether
+    they could be read. Read separately from _MEETING_COLUMNS and failing
+    soft, so every existing Beyond read keeps working on a deploy that lands
+    before 2026-09-25_beyond_continuity.sql has run. Callers must show
+    "couldn't load", never an empty list, when the flag is False."""
+    if not meeting_ids:
+        return {}, True
+    try:
+        rows = (
+            supabase.table("outside_meetings")
+            .select("id,prep_items")
+            .eq("owner_id", user_id)
+            .in_("id", meeting_ids)
+            .execute()
+            .data
+        )
+    except Exception:
+        logger.warning("beyond: prep items unavailable", exc_info=True)
+        return {}, False
+    return {row["id"]: [i for i in (row.get("prep_items") or []) if isinstance(i, dict)] for row in rows}, True
+
 def _clean_items(values, limit: int = 20) -> list[str]:
     """Trim, drop blanks, de-duplicate case-insensitively, cap the count."""
     cleaned: list[str] = []
@@ -719,10 +741,15 @@ def get_person(person_id: str, auth=Depends(get_authenticated_client)):
 
     series = _active_series(supabase, user_id)
     active = next((s_ for s_ in series.values() if s_["person_id"] == person_id), None)
+    items, items_available = fetch_prep_items(supabase, user_id, [m["id"] for m in meetings if not m.get("summary")])
     return {
         "person": person,
         "recurrence_weeks": active["interval_weeks"] if active else None,
-        "meetings": [_serialize_meeting(m, joins.get(m["id"], []), people, series) for m in meetings],
+        "meetings": [
+            {**_serialize_meeting(m, joins.get(m["id"], []), people, series), "prep_items": items.get(m["id"], [])}
+            for m in meetings
+        ],
+        "prep_items_available": items_available,
         "commitments": _commitment_rows(supabase, user_id, person_id=person_id),
         "links": _link_rows(supabase, user_id, meeting_ids),
     }
@@ -782,10 +809,13 @@ def get_meeting(meeting_id: str, auth=Depends(get_authenticated_client)):
     meeting = _fetch_meeting(supabase, user_id, meeting_id)
     people = _people_by_id(supabase, user_id)
     joins = _meeting_people(supabase, user_id, [meeting_id])
+    items, items_available = fetch_prep_items(supabase, user_id, [meeting_id])
     return {
         **_serialize_meeting(meeting, joins.get(meeting_id, []), people, _active_series(supabase, user_id)),
         "commitments": _commitment_rows(supabase, user_id, meeting_ids=[meeting_id]),
         "links": _link_rows(supabase, user_id, [meeting_id]),
+        "prep_items": items.get(meeting_id, []),
+        "prep_items_available": items_available,
     }
 
 
@@ -1431,6 +1461,13 @@ def _gather_prep_sources(supabase, user_id: str, meeting: dict, person: dict) ->
             else None
         ),
         "carried": meeting.get("carry_forward_items") or [],
+        # Things the manager saved to raise here (a thought, or a suggestion's
+        # prep line they edited and accepted). Their own words, private.
+        "saved": [
+            i.get("text")
+            for i in fetch_prep_items(supabase, user_id, [meeting["id"]])[0].get(meeting["id"], [])
+            if i.get("text")
+        ],
         "you_owe": [c for c in open_between if c["committed_by"] != "counterpart"],
         "they_owe": [c for c in open_between if c["committed_by"] == "counterpart"],
         "goals": [],
@@ -1580,6 +1617,10 @@ def _build_outside_prep_prompt(sources: dict, manager_notes: str, today_iso: str
     parts.append(
         "SAID ABOUT THE WORK IN OTHER MEETINGS BEYOND THE TEAM:\n"
         + lines(sources["heard"], lambda h: f"  • {h.get('meeting') or 'A meeting'} on {h.get('item') or 'the work'}: {h['note']}")
+    )
+    parts.append(
+        "THINGS THE MANAGER SAVED TO RAISE (their own private notes — not agreed commitments, not facts about anyone):\n"
+        + lines(sources.get("saved") or [], lambda t: f"  • {t}")
     )
     parts.append(f"THE MANAGER'S OWN NOTES FOR THIS 1:1:\n{manager_notes.strip() or '  (none)'}")
     context = "\n\n".join(parts)

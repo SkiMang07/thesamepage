@@ -17,7 +17,9 @@ import NoteField from "@/components/NoteField";
 import PageShell from "@/components/PageShell";
 import BeyondWrapUpReview from "./BeyondWrapUpReview";
 import PrepPanel from "./PrepPanel";
+import ThoughtBox from "@/components/beyond/ThoughtBox";
 import {
+  BeyondPrepItem,
   BeyondWrapUpDraft,
   OutsideMeeting,
   OutsideMeetingDetail,
@@ -25,6 +27,7 @@ import {
   OutsidePerson,
   OutsideRelationship,
   createOutsideMeeting,
+  removeBeyondPrepItem,
   createOutsidePerson,
   deleteOutsideMeeting,
   getBeyondOverview,
@@ -56,12 +59,14 @@ type Phase = "notes" | "drafting" | "review";
 export default function MeetingEditor({
   existing,
   initialPersonId,
+  initialKind,
   plan = false,
   onLogged,
   onDeleted,
 }: {
   existing?: OutsideMeeting;
   initialPersonId?: string | null;
+  initialKind?: OutsideMeetingKind | null;
   // Planning a future 1:1 rather than logging one that happened.
   plan?: boolean;
   onLogged: (meeting: OutsideMeetingDetail & { next_meeting_id?: string | null }) => void;
@@ -84,13 +89,16 @@ export default function MeetingEditor({
     }
     return localDateStr();
   });
-  const [kind, setKind] = useState<OutsideMeetingKind>(existing?.kind ?? "one_on_one");
+  const [kind, setKind] = useState<OutsideMeetingKind>(existing?.kind ?? initialKind ?? "one_on_one");
   const [personIds, setPersonIds] = useState<string[]>(
     existing ? existing.people.map((p) => p.id) : initialPersonId ? [initialPersonId] : []
   );
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [repeat, setRepeat] = useState<number | null>(existing?.recurrence_weeks ?? null);
   const [carried, setCarried] = useState<string[]>(existing?.carry_forward_items ?? []);
+  // Private things saved to raise here (a thought, or an accepted
+  // suggestion's prep line). Not commitments; never sent.
+  const [prepItems, setPrepItems] = useState<BeyondPrepItem[]>(existing?.prep_items ?? []);
   const [notesState, setNotesState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const [phase, setPhase] = useState<Phase>("notes");
@@ -169,6 +177,19 @@ export default function MeetingEditor({
       } catch {
         setCarried(carried);
       }
+    }
+  }
+
+  async function removePrepItem(item: BeyondPrepItem) {
+    if (!meeting) return;
+    const previous = prepItems;
+    setPrepItems(previous.filter((i) => i.id !== item.id));
+    try {
+      const { meeting: updated } = await removeBeyondPrepItem(meeting.id, item.id);
+      setPrepItems(updated.prep_items);
+    } catch (e) {
+      setPrepItems(previous);
+      setError(e instanceof Error ? e.message : "Couldn't remove that note");
     }
   }
 
@@ -330,7 +351,10 @@ export default function MeetingEditor({
 
       {canPrep && meeting && (
         <div className="mt-5">
-          <PrepPanel meeting={{ ...meeting, carry_forward_items: carried }} onPrepared={(m) => setMeeting(m)} />
+          <PrepPanel
+            meeting={{ ...meeting, carry_forward_items: carried, prep_items: prepItems }}
+            onPrepared={(m) => setMeeting(m)}
+          />
         </div>
       )}
 
@@ -517,6 +541,42 @@ export default function MeetingEditor({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {(prepItems.length > 0 || (isUpcoming && meeting)) && (
+            <div className="mt-2 rounded-lg border border-hairline bg-sunken px-3 py-2">
+              <p className={`${META} font-medium`}>Your private prep</p>
+              {prepItems.length > 0 && (
+                <ul className="mt-1 space-y-1">
+                  {prepItems.map((item) => (
+                    <li key={item.id} className="flex items-center gap-2 text-sm text-ink-body">
+                      <span className="flex-1">
+                        {item.text}
+                        {item.source === "suggestion" && (
+                          <span className="ml-1 text-xs text-ink-muted">(from a suggestion you reviewed)</span>
+                        )}
+                      </span>
+                      {meeting?.status !== "logged" && (
+                        <button type="button" onClick={() => removePrepItem(item)} className={BTN_GHOST} aria-label={`Remove ${item.text}`}>
+                          Remove
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {isUpcoming && meeting && (
+                <div className="mt-1">
+                  <ThoughtBox
+                    meetingId={meeting.id}
+                    meetingDate={meeting.meeting_date}
+                    withLabel={withName ?? (title.trim() || "this group")}
+                    onSaved={(item) => setPrepItems((items) => [...items, item])}
+                    compact
+                  />
+                </div>
+              )}
+              <p className={`${META} mt-1`}>Private. Not agreed commitments. Goes into prep when you prepare; nothing is sent.</p>
             </div>
           )}
           <NoteField

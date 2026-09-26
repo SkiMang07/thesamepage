@@ -100,6 +100,13 @@ implemented as the period-assessment flow; open it before visual work on
 superseded exploration. Current behaviour is in `docs/systems/assessments.md`. Its
 example data is fictional.
 
+`docs/design-proposals/2026-09-25-beyond-directions/` (`CLAUDE_BUILD_BRIEF.md`,
+`overview-revised.png`, `option-a-conversation.png`) is the **selected Beyond
+the team design** for `/app/beyond` — implemented as four views with option A's
+continuity in the deeper views; open it before visual work on that page.
+`option-b-exchange.png` was not selected. Current behaviour is in
+`docs/systems/beyond.md`. Its example data is fictional.
+
 `gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
 the argument behind each marketing page. `website/` stays a build root with its own
 HubSpot tooling. **gtm/ is the thinking, website/ is the build.** Read `gtm/README.md`

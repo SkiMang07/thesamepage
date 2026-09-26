@@ -49,10 +49,35 @@ export default function ProjectRecord({ projectId, version }: { projectId: strin
       </div>
     );
   }
+  // Connections confirmed from /app/beyond without a check-in: a source
+  // relationship only, never an update or a status change.
+  const checkInSources = new Set(state.entries.map((ci) => ci.source_id).filter(Boolean));
+  const conversations = Array.from(state.meetings.values()).filter((m) => !checkInSources.has(m.meeting_id));
+  const connected = conversations.length > 0 && (
+    <div className={state.entries.length ? "mt-6 border-t border-divider pt-4" : "mt-4"}>
+      <p className="text-2xs uppercase tracking-[0.12em] text-ink-muted">Connected conversations beyond the team</p>
+      <ul className="mt-2 space-y-2">
+        {conversations.map((m) => (
+          <li key={m.id} className="text-sm">
+            <Link href={`/app/beyond/meetings/${m.meeting_id}`} className="text-brand hover:text-brand-hover">
+              {m.meeting_title || "Meeting beyond the team"} ↗
+            </Link>
+            {m.note && <p className="mt-0.5 text-xs text-ink-secondary">{m.note}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
   if (!state.entries.length) {
-    return <p className="text-sm text-ink-muted">No updates recorded yet. The first one starts the record.</p>;
+    return (
+      <>
+        <p className="text-sm text-ink-muted">No updates recorded yet. The first one starts the record.</p>
+        {connected}
+      </>
+    );
   }
   return (
+    <>
     <ol className="space-y-4">
       {state.entries.map((ci) => {
         const meeting = ci.source_type === "outside_meeting" && ci.source_id ? state.meetings.get(ci.source_id) : undefined;
@@ -79,5 +104,7 @@ export default function ProjectRecord({ projectId, version }: { projectId: strin
         );
       })}
     </ol>
+    {connected}
+    </>
   );
 }

@@ -1486,6 +1486,13 @@ create table outside_meetings (
   carry_forward_items jsonb not null default '[]'::jsonb
                 constraint outside_meetings_carry_forward_items_array
                 check (jsonb_typeof(carry_forward_items) = 'array'),
+  -- Private things to raise in this upcoming conversation: a thought the
+  -- manager added, or a suggested prep line they edited and accepted.
+  -- {id, text, source: 'thought'|'suggestion', suggestion_id, created_at}.
+  -- Not an agreed commitment; never sent.
+  prep_items    jsonb not null default '[]'::jsonb
+                constraint outside_meetings_prep_items_array
+                check (jsonb_typeof(prep_items) = 'array'),
   created_at    timestamptz not null default now()
 );
 
@@ -1537,6 +1544,56 @@ alter table commitments
     check (committed_by <> 'counterpart' or (outside_person_id is not null and direct_report_id is null));
 
 create index commitments_outside_person_idx on commitments (outside_person_id) where outside_person_id is not null;
+
+-- AI-proposed connections between a REVIEWED Beyond record and one of the
+-- manager's own live goals or projects (Overview brief). Evidence excerpts
+-- are copied from the records by the server. 'open' | 'dismissed' (the same
+-- key + evidence is never proposed again) | 'connected' (wrote exactly one
+-- outside_meeting_links row; no check-in, no status change).
+-- added_meeting_id = its prep line was added to a conversation, which
+-- confirms nothing. outside_suggestion_runs remembers the evidence
+-- fingerprint of the last AI pass, so the model is only asked again when
+-- the records change.
+create table outside_suggestions (
+  id                    uuid primary key default uuid_generate_v4(),
+  owner_id              uuid not null references auth.users(id),
+  suggestion_key        text not null,   -- source + target identity
+  evidence_hash         text not null,   -- what the evidence said when proposed
+  source_meeting_id     uuid not null references outside_meetings(id) on delete cascade,
+  source_commitment_id  uuid references commitments(id) on delete cascade,
+  source_excerpt        text not null,
+  goal_id               uuid references goals(id) on delete cascade,
+  project_id            uuid references projects(id) on delete cascade,
+  target_excerpt        text,
+  person_id             uuid references outside_people(id) on delete set null,
+  title                 text not null,
+  reason                text not null,
+  suggested_prep        text,
+  status                text not null default 'open'
+                        check (status in ('open', 'dismissed', 'connected')),
+  added_meeting_id      uuid references outside_meetings(id) on delete set null,
+  added_at              timestamptz,
+  resolved_at           timestamptz,
+  link_id               uuid references outside_meeting_links(id) on delete set null,
+  created_at            timestamptz not null default now(),
+  constraint outside_suggestions_one_target
+    check (num_nonnulls(goal_id, project_id) = 1)
+);
+
+alter table outside_suggestions enable row level security;
+
+create unique index outside_suggestions_key_evidence_idx
+  on outside_suggestions (owner_id, suggestion_key, evidence_hash);
+create index outside_suggestions_open_idx
+  on outside_suggestions (owner_id, created_at desc) where status = 'open';
+
+create table outside_suggestion_runs (
+  owner_id     uuid primary key references auth.users(id),
+  fingerprint  text not null,
+  ran_at       timestamptz not null default now()
+);
+
+alter table outside_suggestion_runs enable row level security;
 
 -- commitments.org_unit_id (2026-09-24): the team a commitment belongs to, so
 -- /app/team can scope a manager-owned ("You") commitment. Null = no team
@@ -1800,6 +1857,22 @@ create policy "outside_meeting_links_all_own" on outside_meeting_links
     and (project_id is null or exists (select 1 from projects p where p.id = project_id and p.owner_id = auth.uid()))
     and (direct_report_id is null or exists (select 1 from direct_reports d where d.id = direct_report_id and d.manager_id = auth.uid()))
   );
+
+create policy "outside_suggestions_all_own" on outside_suggestions
+  for all using (owner_id = auth.uid())
+  with check (
+    owner_id = auth.uid()
+    and exists (select 1 from outside_meetings m where m.id = source_meeting_id and m.owner_id = auth.uid())
+    and (added_meeting_id is null or exists (select 1 from outside_meetings m where m.id = added_meeting_id and m.owner_id = auth.uid()))
+    and (source_commitment_id is null or exists (select 1 from commitments c where c.id = source_commitment_id and c.owner_id = auth.uid()))
+    and (goal_id is null or exists (select 1 from goals g where g.id = goal_id and g.owner_id = auth.uid()))
+    and (project_id is null or exists (select 1 from projects p where p.id = project_id and p.owner_id = auth.uid()))
+    and (person_id is null or exists (select 1 from outside_people p where p.id = person_id and p.owner_id = auth.uid()))
+    and (link_id is null or exists (select 1 from outside_meeting_links l where l.id = link_id and l.owner_id = auth.uid()))
+  );
+
+create policy "outside_suggestion_runs_all_own" on outside_suggestion_runs
+  for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
 -- team_messages — private to the manager who sent them, same manager-scoped
 -- pattern as one_on_ones/assessments

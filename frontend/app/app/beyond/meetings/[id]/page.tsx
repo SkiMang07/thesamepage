@@ -208,6 +208,20 @@ export default function OutsideMeetingPage() {
         </section>
       )}
 
+      {(meeting.prep_items ?? []).length > 0 && (
+        <section className={`${CARD_PAD} mt-5`}>
+          <p className={EYEBROW}>What you saved to raise</p>
+          <ul className="mt-2 space-y-1">
+            {meeting.prep_items.map((item) => (
+              <li key={item.id} className="text-sm text-ink-body">
+                {item.text}
+              </li>
+            ))}
+          </ul>
+          <p className={`${META} mt-2`}>Your private prep for this meeting — not part of the reviewed outcome.</p>
+        </section>
+      )}
+
       {meeting.notes && (
         <details className="mt-5">
           <summary className={`${META} cursor-pointer`}>Raw notes</summary>

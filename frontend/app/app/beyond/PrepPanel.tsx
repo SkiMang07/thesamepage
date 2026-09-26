@@ -53,7 +53,7 @@ export default function PrepPanel({
     getOutsideMeetingPrepSources(meeting.id)
       .then(setSources)
       .catch(() => setSourcesError(true));
-  }, [meeting.id, meeting.carry_forward_items.length]);
+  }, [meeting.id, meeting.carry_forward_items.length, meeting.prep_items?.length]);
 
   async function prepare() {
     setPreparing(true);
@@ -126,6 +126,7 @@ export default function PrepPanel({
               {[
                 sources.last_meeting ? `last 1:1 (${shortDate(sources.last_meeting.date + "T12:00:00Z")})` : "no earlier 1:1",
                 sources.carried.length && `${sources.carried.length} carried`,
+                sources.saved?.length && `${sources.saved.length} saved to raise`,
                 sources.you_owe.length && `you owe ${sources.you_owe.length}`,
                 sources.they_owe.length && `${first} owes ${sources.they_owe.length}`,
                 teamUpdate && `${sources.goals.length + sources.projects.length} live goals & projects`,
@@ -138,6 +139,7 @@ export default function PrepPanel({
             {showSources && (
               <div className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
                 <SourceList title="Carried from last time" items={sources.carried} />
+                <SourceList title="You saved to raise" items={sources.saved ?? []} />
                 <SourceList
                   title={`You owe ${first}`}
                   items={sources.you_owe.map((c) => c.description + (c.due_date ? ` · due ${shortDate(c.due_date + "T12:00:00Z")}` : ""))}

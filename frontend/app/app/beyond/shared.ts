@@ -68,3 +68,33 @@ export function meetingTitle(m: { title: string | null; kind: string; people: { 
   if (m.people.length) return `Meeting with ${m.people.map((p) => p.name).join(", ")}`;
   return "Untitled meeting";
 }
+
+// A date-only value ("2026-09-28") or a noon-UTC meeting timestamp, read as
+// the calendar day it names. Date-only strings get noon UTC so no timezone
+// shifts them to the day before.
+function asDate(value: string) {
+  return new Date(value.length === 10 ? `${value}T12:00:00Z` : value);
+}
+
+export function dayShort(value: string | null | undefined) {
+  return value ? asDate(value).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+}
+
+// "Tue, Sep 29"
+export function dayWeekday(value: string | null | undefined) {
+  return value ? asDate(value).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
+}
+
+export function firstName(name: string | null | undefined) {
+  return (name ?? "").split(" ")[0] || (name ?? "");
+}
+
+// The first sentence of a reviewed write-up, for previews. The full text
+// stays one click away on the meeting record.
+export function firstSentence(text: string | null | undefined, max = 180) {
+  if (!text) return "";
+  const clean = text.replace(/\s+/g, " ").trim();
+  const match = clean.match(/^.+?[.!?](\s|$)/);
+  const sentence = (match ? match[0] : clean).trim();
+  return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence;
+}

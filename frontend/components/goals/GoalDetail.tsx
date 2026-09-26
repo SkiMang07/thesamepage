@@ -92,6 +92,11 @@ export default function GoalDetail({
   const readings = (history ?? [])
     .filter((ci) => ci.measured_value != null)
     .map((ci) => ({ check_in_id: ci.id, value: ci.measured_value as number, at: ci.created_at }));
+  // Confirmed connections from meetings beyond the team that didn't come
+  // with a check-in (confirmed from a suggestion on /app/beyond). They
+  // record a source relationship only — never an update or a status.
+  const checkInSources = new Set((history ?? []).map((ci) => ci.source_id).filter(Boolean));
+  const conversations = meetings.filter((m) => !checkInSources.has(m.meeting_id));
   const meetingTitle = (ci: CheckIn) =>
     meetings.find((m) => m.meeting_id === ci.source_id)?.meeting_title || "Meeting beyond the team";
 
@@ -232,7 +237,7 @@ export default function GoalDetail({
       </details>
 
       <details className="border-t border-hairline">
-        <summary className={SUMMARY}>Connections · {(parent || goal.parent_goal_id ? 1 : 0) + children.length + serving.length}</summary>
+        <summary className={SUMMARY}>Connections · {(parent || goal.parent_goal_id ? 1 : 0) + children.length + serving.length + conversations.length}</summary>
         <div className="space-y-3 pb-4 text-sm">
           {goal.parent_goal_id ? (
             <Connection kind="Parent goal">
@@ -261,6 +266,14 @@ export default function GoalDetail({
             </Connection>
           ))}
           {serving.length === 0 && <p className="text-xs text-ink-muted">No projects linked.</p>}
+          {conversations.map((m) => (
+            <Connection key={m.id} kind="Conversation beyond the team">
+              <Link href={`/app/beyond/meetings/${m.meeting_id}`} className="text-brand hover:text-brand-hover">
+                {m.meeting_title || "Meeting beyond the team"} ↗
+              </Link>
+              {m.note && <p className="mt-0.5 text-xs text-ink-secondary">{m.note}</p>}
+            </Connection>
+          ))}
           <p className="text-xs text-ink-muted">Each goal keeps its own recorded status and progress.</p>
         </div>
       </details>
