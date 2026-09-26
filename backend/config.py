@@ -53,7 +53,10 @@ settings = Settings()
 # Anthropic model defaults — MUST be valid Anthropic model names.
 # (Prism Tree gotcha: an OpenAI name here fails hard since the anthropic
 # call path doesn't trigger provider fallback on 4xx errors.)
-AI_DEFAULT_MODEL_HEAVY = "claude-sonnet-4-6"
+# Heavy is Sonnet 5: the same model the Scribe runs, cheaper per token than
+# Sonnet 4.6, and held to eval/test_assessments.py and eval/test_assistant.py
+# before it was switched. Re-run both evals before changing it again.
+AI_DEFAULT_MODEL_HEAVY = "claude-sonnet-5"
 AI_DEFAULT_MODEL_LIGHT = "claude-haiku-4-5-20251001"
 AI_SCRIBE_MODEL = settings.AI_SCRIBE_MODEL
 

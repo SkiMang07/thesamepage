@@ -77,6 +77,7 @@ def test_split_prompt_caches_the_prefix_and_sends_the_body_as_user(wire):
     ]
     assert body["messages"] == [{"role": "user", "content": "this record"}]
     assert "cache_control" not in body      # no top-level automatic caching on a one-shot
+    assert body["thinking"] == {"type": "disabled"}
 
 
 def test_prefix_and_body_kwargs_match_cached_prompt(wire):
@@ -103,6 +104,7 @@ def test_tools_call_has_system_breakpoint_and_automatic_caching(wire):
         {"type": "text", "text": "agent rules", "cache_control": {"type": "ephemeral"}}
     ]
     assert body["messages"] == msgs and body["tools"] == tools
+    assert "thinking" not in body            # the Scribe keeps the model default
     # Only these two breakpoints; nothing on the messages themselves.
     assert "cache_control" not in json.dumps(body["messages"])
 
@@ -154,3 +156,20 @@ def test_usage_log_records_cache_fields(monkeypatch, caplog):
     assert seen["cache_read_input_tokens"] == 4000
     assert "cache_creation_input_tokens" not in seen   # zeros are dropped, not logged
     assert seen["input_tokens"] == 5
+
+
+def test_extract_text_skips_thinking_blocks_and_joins_text():
+    from ai_core import extract_text
+    resp = {"content": [
+        {"type": "thinking", "thinking": "", "signature": "x"},
+        {"type": "text", "text": "  first "},
+        {"type": "text", "text": "second  "},
+    ]}
+    assert extract_text("anthropic", resp) == "first second"
+
+
+def test_extract_text_rejects_a_reply_with_no_text():
+    from fastapi import HTTPException
+    from ai_core import extract_text
+    with pytest.raises(HTTPException):
+        extract_text("anthropic", {"content": [{"type": "thinking", "thinking": ""}]})

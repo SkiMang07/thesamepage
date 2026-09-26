@@ -703,3 +703,23 @@ def test_team_list_carries_history_with_confirmed_headline_only(db, ai):
     expected = ((snap.get("summary") or {}).get("headline") or (snap.get("narrative") or {}).get("headline") or None)
     assert row["headline"] == (expected.strip() if expected else None)
     assert "completed_snapshot" not in row
+
+
+def test_parse_json_survives_preamble_fences_and_trailing_remarks():
+    assert ar._parse_json('{"a": 1}') == {"a": 1}
+    assert ar._parse_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert ar._parse_json('Here is the picture {with a brace}:\n{"a": 1}\n\nNote: {S1} was thin.') == {"a": 1}
+    assert ar._parse_json('{"a": {"b": [1, 2]}} trailing {junk') == {"a": {"b": [1, 2]}}
+    with pytest.raises(ValueError):
+        ar._parse_json("no object here")
+
+
+def test_metric_value_quoted_by_the_model_is_still_checked_against_a_reading():
+    entry = {"kind": "metric", "config_id": "m1", "scale": []}
+    reading = {"id": "metric_entry:r1", "kind": "metric_entry", "config_id": "m1", "value": 4.6, "reading_period": "Q3"}
+    ok, why = ar._clean_proposal(entry, {"value": "4.6", "sources": ["S1"], "reason": "r"}, {"S1": "metric_entry:r1"}, {"metric_entry:r1": reading}, {})
+    assert ok and ok["value"] == 4.6 and ok["period"] == "Q3"
+    none, why = ar._clean_proposal(entry, {"value": "4.9", "sources": ["S1"], "reason": "r"}, {"S1": "metric_entry:r1"}, {"metric_entry:r1": reading}, {})
+    assert none is None and "No recorded reading" in why
+    stated, _ = ar._clean_proposal(entry, {"value": "4.8", "sources": ["U"], "reason": "r"}, {"S1": "metric_entry:r1", "U": "message:1"}, {"metric_entry:r1": reading}, {"message:1": "corrected CSAT is 4.8"})
+    assert stated and stated["value"] == 4.8

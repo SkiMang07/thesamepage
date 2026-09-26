@@ -73,13 +73,27 @@ def _fingerprint(value) -> str:
 
 
 def _parse_json(raw: str) -> dict:
+    """The JSON object in a model reply. Prefers a fenced ```json block;
+    otherwise the first '{' from which a complete object decodes, so a
+    stray brace in a preamble or a remark after the object doesn't fail
+    the call (Sonnet 5 does both occasionally)."""
     text = (raw or "").strip()
-    if text.startswith("```"):
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    if fenced:
+        text = fenced.group(1)
+    elif text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z]*", "", text).rstrip("`").strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError("no JSON object in model output")
-    return json.loads(text[start : end + 1])
+    decoder = json.JSONDecoder()
+    start = text.find("{")
+    while start != -1:
+        try:
+            obj, _ = decoder.raw_decode(text[start:])
+            if isinstance(obj, dict):
+                return obj
+        except ValueError:
+            pass
+        start = text.find("{", start + 1)
+    raise ValueError("no JSON object in model output")
 
 
 def _period_label(cadence: str | None, start: date, end: date) -> str:
@@ -541,6 +555,11 @@ def _clean_proposal(entry: dict, j: dict, ref_map: dict[str, str], evidence_by_i
     base = {"reason": reason, "sources": sources, "limitations": limitations, "attention": attention, "generated_at": _now()}
     if entry["kind"] == "metric":
         value = j.get("value")
+        if isinstance(value, str):
+            try:
+                value = float(value.strip().replace(",", ""))   # "4.8" from the model is still 4.8
+            except ValueError:
+                pass
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             return None, "No recorded reading for this period."
         readings = [evidence_by_id[s] for s in sources if s in evidence_by_id and evidence_by_id[s]["kind"] == "metric_entry"

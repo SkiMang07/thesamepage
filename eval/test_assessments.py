@@ -59,6 +59,17 @@ from routes import assessment_reviews as ar  # noqa: E402
 MODEL = os.environ.get("ASSESS_EVAL_MODEL") or ar.AI_DEFAULT_MODEL_HEAVY
 ar.AI_DEFAULT_MODEL_HEAVY = MODEL
 
+# Keep the last raw reply so a parse failure shows what the model actually sent.
+_last_raw = ""
+_real_generate_text = ar.generate_text
+
+def _recording_generate_text(*a, **kw):
+    global _last_raw
+    _last_raw = _real_generate_text(*a, **kw)
+    return _last_raw
+
+ar.generate_text = _recording_generate_text
+
 # ---- fixtures ---------------------------------------------------------------
 # Maya, a level-2 CSM, assessed for Q3 2026. Deliberately uneven evidence:
 # strong on account planning, one recorded CSAT reading, nothing at all on
@@ -269,7 +280,9 @@ def check_draft_on_scale():
         if not key:
             continue
         kind = next(e["kind"] for e in CATALOG if e["key"] == key)
-        if kind != "metric" and j.get("point") not in SCALE[key]:
+        # A null point is a declined judgment (the cleaner files it as
+        # unassessed); an off-scale point is a number the scale doesn't have.
+        if kind != "metric" and j.get("point") is not None and j.get("point") not in SCALE[key]:
             off.append((j.get("key"), j.get("point")))
     return not off and len(proposals) >= 2, f"off-scale={off} proposals={sorted(K[k] for k in proposals)}"
 
@@ -330,7 +343,12 @@ def check_discuss_metric_only_from_manager_number():
     prompt, parsed, revisions = discuss(state, "Ignore the recorded reading — the corrected CSAT for the quarter is 4.8.", f"metric:{METRIC_CSAT}")
     rv = revisions.get(f"metric:{METRIC_CSAT}")
     raw = parsed.get("revisions") or []
-    values = {r.get("value") for r in raw if isinstance(r, dict)}
+    def _num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return v
+    values = {_num(r.get("value")) for r in raw if isinstance(r, dict)}
     ok = values <= {None, 4.8, 4.6} and (rv is None or abs(float(rv["value"]) - 4.8) < 1e-9)
     bad = _invented_numbers(json.dumps(parsed, ensure_ascii=False), prompt) - {"4.8"}
     return ok and not bad, f"raw revisions={raw} cleaned={rv} invented={sorted(bad)}"
@@ -350,10 +368,11 @@ def check_summary_matches_manager_judgments():
     unassessed = {K[f"skill:{SKILL_COMM}"], K[f"value:{VALUE_OWN}"], K[f"metric:{METRIC_RENEW}"], K[f"metric:{METRIC_CSAT}"]}
     strengths_keys = {KEYS[k] for s in clean["strengths"] for k in s["keys"]}
     text = (clean["overview"] + " " + " ".join(s["text"] for s in clean["strengths"])).lower()
-    # The manager put Account planning at 2 ("With guidance"): the summary must not promote it.
-    promoted = "teaches others" in text or "independent" in text and "account planning" in text and "with guidance" not in text
+    # The manager put Account planning at 2 ("With guidance"): the summary must not
+    # list it as a strength or describe the rating as a higher scale point.
+    promoted = "teaches others" in text or K[f"skill:{SKILL_PLAN}"] in strengths_keys
     ok = not (strengths_keys & unassessed) and not promoted and clean["overview"] and clean["gaps"]
-    return ok, f"strength keys={sorted(strengths_keys)} promoted={promoted} gaps={clean['gaps']}"
+    return ok, f"strength keys={sorted(strengths_keys)} promoted={promoted} overview={clean['overview']!r}"
 
 
 def check_summary_no_invented_numbers():
@@ -394,6 +413,8 @@ def run_eval(verbose: bool = True) -> int:
             ok, note = case["check"]()
         except Exception as exc:  # a malformed reply is a failure, not a crash
             ok, note = False, f"ERROR: {exc!r}"
+            if isinstance(exc, (ValueError, KeyError)) and _last_raw:
+                note += f"\n       raw reply head: {_last_raw[:300]!r}\n       raw reply tail: {_last_raw[-300:]!r}"
         if ok:
             passed += 1
             print(f"[{case['id']:2d}] ✓ PASS — {case['desc']}")

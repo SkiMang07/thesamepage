@@ -62,6 +62,14 @@ _ANTHROPIC_TO_OPENAI = {
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 _CACHE_EPHEMERAL = {"type": "ephemeral"}
 
+# One-shot calls (generate_text, the document call) run with thinking off.
+# Sonnet 5 thinks by default, and thinking tokens both bill as output and
+# count against max_tokens: with it on, a 1,800-token summary budget was
+# spent entirely on thinking and the JSON never arrived. Off is what Sonnet
+# 4.6 did on these prompts. The Scribe loop keeps the model default; its
+# eval bar was set with thinking on.
+_THINKING_OFF = {"type": "disabled"}
+
 # The user turn a one-shot call sends when the caller gave a single prompt
 # and no separate body. The whole prompt lives in `system`.
 _PROCEED = "Proceed."
@@ -143,6 +151,7 @@ def _call_anthropic(
             json={
                 "model": model,
                 "max_tokens": max_tokens,
+                "thinking": _THINKING_OFF,
                 "system": _system_blocks(system, cache),
                 "messages": [{"role": "user", "content": user_text}],
             },
@@ -192,9 +201,14 @@ def extract_text(provider: str, response: dict) -> str:
     actually worked."""
     try:
         if provider == "anthropic" and "choices" not in response:
-            return response["content"][0]["text"].strip()
+            # Join the text blocks: models with thinking on (Sonnet 5) put a
+            # `thinking` block first, so content[0] is not the answer.
+            text = "".join(b["text"] for b in response["content"] if b.get("type") == "text")
+            if not text and response["content"]:
+                raise KeyError("text")
+            return text.strip()
         return response["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError) as e:
+    except (KeyError, IndexError, TypeError) as e:
         raise HTTPException(status_code=502, detail=f"Unexpected AI response shape: {e}")
 
 
@@ -246,6 +260,7 @@ def _call_anthropic_with_document(
             json={
                 "model": model,
                 "max_tokens": max_tokens,
+                "thinking": _THINKING_OFF,
                 "system": prompt,
                 "messages": [
                     {
