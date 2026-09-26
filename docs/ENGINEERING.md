@@ -159,10 +159,13 @@ before changing a model name in `config.py`.
 
 ### Background worker
 
+**Parked (2026-09-26):** built, tested and deployed with the API, but not running — the Railway worker service has deliberately not been created. To turn it on, see `docs/PRELAUNCH_BACKLOG.md` → P2-later. Everything below describes
+how it behaves once it runs.
+
 `backend/jobs/` runs on a **second Railway service** built from the same repo
 and `backend/` root as the API, with the same environment variables and the
-start command `python -m jobs.worker` (the `worker:` line in `Procfile`
-records it). It serves no HTTP. Every 15 minutes (`WORKER_TICK_SECONDS`) a
+start command `python -m jobs.worker` (or `--once` on a Railway cron
+schedule). The API's `Procfile` stays web-only. It serves no HTTP. Every 15 minutes (`WORKER_TICK_SECONDS`) a
 tick collects ended batches; inside the nightly window (four hours from
 `NIGHTLY_PREP_HOUR_UTC`, default 07:00 UTC = 3am New York) it also submits the
 night's work. `python -m jobs.worker --once` runs one tick and exits, which is

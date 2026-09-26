@@ -224,6 +224,10 @@ itself; the card carries the titles.
 
 ### Prepared overnight
 
+**Parked (2026-09-26):** built, tested and deployed with the API, but not running — the Railway worker service has deliberately not been created. Until it is, no sheet is ever marked "Prepared overnight" and every
+sheet comes from the manager's own Prepare. This section describes the behaviour
+once it runs.
+
 Every unfinished occurrence dated today or tomorrow with no sheet is prepared
 in the night by the background worker (`docs/ENGINEERING.md` → Background
 worker), for managers on an active plan or trial and never for archived people.

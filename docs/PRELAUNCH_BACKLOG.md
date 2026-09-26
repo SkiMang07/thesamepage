@@ -304,6 +304,18 @@ Judgment surfaces:
 
 ---
 
+- [ ] **P2-later · Turn on overnight 1:1 prep** (parked 2026-09-26, wanted
+  down the road). The code shipped in `d7fd154` (`backend/jobs/`, `ai_jobs`,
+  migration already run); nothing runs until a Railway worker service exists.
+  Parked because today it only saves one click: it prepares only 1:1s with a
+  date typed in the app, and nobody is told the sheet is waiting. Turn it on
+  when calendar sync supplies meeting dates or the weekly email (B5 in
+  `AI_OPPORTUNITIES.md`) can announce "the sheet is ready". Setup, ~5 min: new
+  Railway service from the same repo, root `backend/`, start command
+  `python -m jobs.worker --once`, cron `*/15 7-11 * * *`, the API's variables,
+  no domain, no healthcheck; success is a `worker_started` then a
+  `nightly_prep` log line. `docs/ENGINEERING.md` → Background worker has the rest.
+
 ## 5. First five moves, in order
 
 1. **P0-1 (billing decision).** It gates the launch plan itself — everything
@@ -740,16 +752,6 @@ Decided the same day, behind the sentence:
   four open questions in `gtm/site/legal.md` answered.
 
 ### F. Reliability and performance
-
-- [ ] ✘ **Worker service running on Railway** (overnight prep, 2026-09-26).
-  The code ships with the API, but nothing prepares overnight until a second
-  Railway service exists: same repo, root `backend/`, start command
-  `python -m jobs.worker`, the API's variables (at least `SUPABASE_URL`,
-  `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`,
-  `SENTRY_DSN`), no public domain. Needs migration
-  `2026-09-26_overnight_prep.sql` first. Done when a `worker_started` line and,
-  after 07:00 UTC, a `nightly_prep` submit line appear in its logs. Worth a
-  Sentry alert on its errors, since no one watches a worker.
 
 - [x] ✔ **"JWT issued at future" 500s** (Sentry THESAMEPAGE-BACKEND-2, first
   caught 2026-09-24, minutes after Sentry went live). Right after the browser

@@ -1,7 +1,9 @@
 # Next 1:1 is a persistent workspace
 
 **Status:** Implemented. Amended 2026-09-26: synthesis may also happen
-overnight before a dated meeting (see "Amendment" below).
+overnight before a dated meeting (see "Amendment" below). The overnight path is
+built but parked — no worker is running — until calendar sync or the weekly
+email makes it worth turning on.
 
 ## Context
 
