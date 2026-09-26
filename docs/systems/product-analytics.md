@@ -38,9 +38,39 @@ What we measure about how managers use the app, how it is collected, and the rul
 |---|---|---|---|
 |`$pageview`|browser|every route change in the app, `/auth` and `/invite`|PostHog defaults, URLs scrubbed as above|
 |`$identify`|browser|first time a signed-in session is tied to the user id|none of ours|
+|`ai_draft_resolved`|server; browser-computed surfaces arrive via `POST /api/telemetry/ai-draft`|an AI draft or proposal is saved, thrown away, or left open (see "AI-draft quality")|`surface`, `outcome`, `edited_before_save`, `edit_bucket`, `seconds_to_confirm`; `items_drafted` / `items_kept` / `items_added` on wrap-ups|
 |`prep_sheet_saved`|`POST /api/one-on-ones/prep`|every time a prep sheet is generated and saved|`is_first` (bool): no sheet existed for this manager before this one. `regenerated` (bool): this 1:1 already had a sheet and it was replaced|
 
 `is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
+
+## AI-draft quality
+
+`ai_draft_resolved` measures how much of the AI's work survives review, one event per draft. It is the anchoring measurement the draft-then-review decision records say is missing. No draft or saved text leaves the app: the comparison happens where both texts already sit, and only the result is sent.
+
+**Surfaces.**
+
+|`surface`|Draft|Accepted when|Discarded when|Compared in|
+|---|---|---|---|---|
+|`one_on_one_wrapup`|summary, commitments, follow-ups, opening line|the 1:1 log saves|"Back to notes"|browser|
+|`team_wrapup`|summary, commitments, carry-forward|the team meeting log saves|"Back to notes"|browser|
+|`beyond_wrapup`|summary, commitments, check-in and report notes, carry-forward|the outside meeting log saves|"Back to notes"|browser|
+|`development_plan`|"Draft with AI" plan suggestion, or a "Revise with AI" rewrite of the plan|the plan text saves|"Dismiss" on the suggestion|browser|
+|`development_note`|"Revise with AI" rewrite of a private note|the note saves|n/a|browser|
+|`scribe_proposal`|a Scribe draft card's editable fields|the card is confirmed|the card is discarded|browser|
+|`document_extraction`|the Librarian's category, freshness and effective date for an upload|the manager confirms it|the upload is deleted while still in review|server, from `correction_log`|
+|`assessment_item`|one AI judgment, or one redraft revision, on an assessment item|accepted as proposed, or overridden (`set`, counted as edited)|unassessed, or the manager's prior judgment chosen over it; a revision dismissed|server, first manager action on an untouched AI judgment only|
+|`role_suggestion`|one AI suggestion on a role expectations draft|accepted (applied as written)|dismissed|server|
+
+**Properties.**
+
+- `outcome`: `accepted`, `discarded`, or `abandoned` (a browser draft still open when its page closed or unmounted; best effort). A new draft replacing an open one counts the old one as `discarded`. Scribe cards are never `abandoned`, because closing the drawer leaves them pending and they come back.
+- `edit_bucket`: word-level edit distance between draft and saved text, as a share of the draft's words. `none` (identical, ignoring case and spacing), `light` (<10%), `moderate` (10–40%), `heavy` (40%+). `document_extraction` uses the share of its three fields corrected (one is `moderate`, two or more `heavy`). Always `none` unless `accepted`. `edited_before_save` is `edit_bucket != none`.
+- `seconds_to_confirm`: from the draft appearing to its resolution, capped at 86,400. Server surfaces measure from the stored proposal time (assessment judgment or revision, role suggestion `created_at`, document upload). Scribe measures from the card appearing.
+- `items_drafted` / `items_kept` / `items_added` (wrap-ups only): drafted commitments, saved commitments recognisably from the draft (anything short of a `heavy` rewrite), and saved commitments that were not.
+
+**Where the code is.** `frontend/lib/aiDraftTelemetry.ts` (bucket, item counts, one-shot `DraftTracker`; `npm run test:ai-drafts`) and `lib/useAiDraft.ts` (React wiring, abandon on unmount or `pagehide`). `backend/routes/telemetry.py` accepts only the fixed enums and non-negative ints (`extra="forbid"`) and refuses server-side surfaces. `analytics.ai_draft_resolved()` drops any value outside the vocabularies instead of sending it, and `analytics.edit_bucket()` must stay identical to the browser's `editBucket()`. Tests: `backend/tests/test_ai_draft_telemetry.py`.
+
+**Not covered.** Prep sheets (the manager's own working sheet, not a record; `prep_sheet_saved` covers them), the retired `/expectations/draft`, `/draft-org-values` and `/roles/import/draft` endpoints, and the "Draft with AI" opportunity suggestions, which are added one at a time and not yet measured.
 
 ## Pathways
 
@@ -63,6 +93,7 @@ Add a row here when one is decided, then add its events to the catalog above. Ca
 - **Prep to logged 1:1.** Does a saved sheet turn into a logged meeting? Needs a server event on `POST /api/one-on-ones` (`was_prepped` flag).
 - **Weekly return.** Does a manager come back the following week? PostHog retention on `$pageview` is enough; no new event.
 - **Team setup completion.** Share of new managers who add at least one direct report. Needs a server event when the first report is created.
+- **Draft trust.** Share of `ai_draft_resolved` accepted with `edit_bucket` `none` or `light`, by `surface`. Needs no new event.
 - **Dictation use.** Share of saved sheets that used the mic. Needs a flag the frontend already knows, passed on the prep request.
 
 ## Adding an event

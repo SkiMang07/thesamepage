@@ -2,6 +2,7 @@
 // Prism Tree's frontend/src/lib/api.ts. Add new backend calls to this file
 // rather than calling fetch() ad hoc from components.
 import { createClient } from "./supabase";
+import type { AiDraftReport } from "./aiDraftTelemetry";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 /**
@@ -72,6 +73,8 @@ function announceRecordChange(path: string, method: string) {
   // record changes. Confirmed Scribe drafts use the normal source endpoints and
   // are announced there.
   if (path.startsWith("/api/dashboard/") || path.startsWith("/api/assistant/")) return;
+  // AI-draft telemetry reports on a save; it is not one.
+  if (path.startsWith("/api/telemetry/")) return;
   // An assessment draft is working state, not a record. Only completing one
   // writes ratings the rest of the app reads.
   if (path.startsWith("/api/assessments/reviews") && !path.endsWith("/complete")) return;
@@ -3540,3 +3543,13 @@ export type Entitlement = {
 };
 
 export const getEntitlement = (): Promise<Entitlement> => authedFetch("/api/entitlement");
+
+// ── AI-draft telemetry (E7) ────────────────────────────────────────────────
+// Enums and counts only; the draft text never leaves the browser. Built by
+// lib/aiDraftTelemetry.ts. Fire-and-forget: a failure is swallowed, and
+// keepalive lets an "abandoned" report outlive a closing tab.
+export const reportAiDraft = (report: AiDraftReport): Promise<void> =>
+  authedFetch("/api/telemetry/ai-draft", { method: "POST", body: JSON.stringify(report), keepalive: true }).then(
+    () => undefined,
+    () => undefined,
+  );

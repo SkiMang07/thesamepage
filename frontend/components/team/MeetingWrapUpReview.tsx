@@ -21,7 +21,7 @@
 // as the 1:1 wrap-up review.
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import WrapUpReviewShell, { ReviewCommitment } from "@/components/team/WrapUpReviewShell";
 import {
   ApiError,
@@ -32,6 +32,8 @@ import {
   logTeamMeeting,
 } from "@/lib/api";
 import { BTN_GHOST, BTN_SECONDARY, EYEBROW, INPUT, META } from "@/lib/tokens";
+import { joinDraft } from "@/lib/aiDraftTelemetry";
+import { useAiDraft } from "@/lib/useAiDraft";
 
 export type AgendaOutcome = { id: string; covered: boolean; notes: string };
 
@@ -77,6 +79,21 @@ export default function MeetingWrapUpReview({
     dedupe([...uncoveredItems(meeting.agenda_items, outcomes), ...draft.carry_forward_items])
   );
   const [newCarry, setNewCarry] = useState("");
+
+  // E7: how much of the AI's draft survives review. Enums and counts only.
+  const telemetry = useAiDraft("team_wrapup");
+  const initialCarried = useRef(carried);
+  useEffect(() => {
+    telemetry.start({
+      text: joinDraft([draft.summary, ...draft.commitments.map((c) => c.description), ...initialCarried.current]),
+      items: draft.commitments.map((c) => c.description),
+    });
+  }, [draft, telemetry]);
+
+  function handleBack() {
+    telemetry.discard();
+    onBack();
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,6 +118,10 @@ export default function MeetingWrapUpReview({
             due_date: c.due_date || null,
           })),
         carryForwardItems: carried,
+      });
+      telemetry.accept({
+        text: joinDraft([summary, ...commitments.map((c) => c.description), ...carried]),
+        items: commitments.map((c) => c.description),
       });
       onSaved(result);
     } catch (e) {
@@ -144,7 +165,7 @@ export default function MeetingWrapUpReview({
       error={error}
       canSave
       saveLabel="Save meeting"
-      onBack={onBack}
+      onBack={handleBack}
       onSave={save}
     >
       <div className="mt-5">

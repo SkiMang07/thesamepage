@@ -10,11 +10,13 @@
 // a 1:1 held last Tuesday landing on last Tuesday and landing on whichever
 // day its workspace happened to be created.
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getOneOnOneHistory, logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
 import { stashOneOnOneReceipt } from "@/lib/one-on-one-receipt";
 import PageShell from "@/components/PageShell";
+import { joinDraft } from "@/lib/aiDraftTelemetry";
+import { useAiDraft } from "@/lib/useAiDraft";
 
 import NoteField from "@/components/NoteField";
 type EditableCommitment = WrapUpCommitment & { key: number };
@@ -102,6 +104,27 @@ export default function WrapUpReview({
 
   const firstName = reportName.split(" ")[0] || "Them";
 
+  // E7: how much of the AI's draft survives review. Enums and counts only.
+  const telemetry = useAiDraft("one_on_one_wrapup");
+  useEffect(() => {
+    telemetry.start({
+      text: joinDraft([draft.summary, ...draft.commitments.map((c) => c.description), ...(draft.follow_up_items ?? []), draft.opening_line]),
+      items: draft.commitments.map((c) => c.description),
+    });
+  }, [draft, telemetry]);
+
+  function reportSaved() {
+    telemetry.accept({
+      text: joinDraft([summary, ...commitments.map((c) => c.description), ...followUps.map((f) => f.text), openingLine]),
+      items: commitments.map((c) => c.description),
+    });
+  }
+
+  function handleBack() {
+    telemetry.discard();
+    onBack();
+  }
+
   function updateCommitment(key: number, patch: Partial<WrapUpCommitment>) {
     setCommitments((cs) => cs.map((c) => (c.key === key ? { ...c, ...patch } : c)));
   }
@@ -141,6 +164,7 @@ export default function WrapUpReview({
       });
       // The receipt on the person page renders exactly what the server says
       // it saved. The review stays put until then; nothing here is cleared.
+      reportSaved();
       stashOneOnOneReceipt({ ...result, personId: directReportId });
       router.push(`/app/reports/${directReportId}?logged=${result.meeting.id}`);
     } catch (e) {
@@ -150,6 +174,7 @@ export default function WrapUpReview({
       // connection). Check before inviting a retry that would log it twice.
       const recorded = await findRecordedMeeting(submittedSummary, startedAt);
       if (recorded) {
+        reportSaved();
         router.push(`/app/reports/${directReportId}?logged=${recorded}&reconciled=1`);
         return;
       }
@@ -200,7 +225,7 @@ export default function WrapUpReview({
 
   return (
     <PageShell maxWidth="2xl">
-      <button onClick={onBack} className="text-sm text-ink-secondary hover:underline">
+      <button onClick={handleBack} className="text-sm text-ink-secondary hover:underline">
         ← {backLabel}
       </button>
       <h1 className="mt-4 text-2xl font-semibold">Review before saving</h1>

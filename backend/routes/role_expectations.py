@@ -56,6 +56,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Reque
 from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
+import analytics
 from ai_core import generate_text, generate_text_from_document
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.documents import _MAX_UPLOAD_BYTES
@@ -1314,7 +1315,7 @@ def sanitize_review(parsed: dict, draft: dict) -> tuple[list[dict], list[dict], 
             if _squash(text) == _squash(item.get(field)):
                 continue
             suggestions.append({"id": sid, "type": "rewrite", "item_key": item["key"], "field": field,
-                                "text": text, "why": why, "status": "pending"})
+                                "text": text, "why": why, "status": "pending", "created_at": _now_iso()})
         elif stype == "target":
             item = items_by_key.get(raw.get("item_key"))
             text = _clean_text(raw.get("text"), 300)
@@ -1325,7 +1326,7 @@ def sanitize_review(parsed: dict, draft: dict) -> tuple[list[dict], list[dict], 
                 continue
             source = "manager" if nums <= answer_numbers else "source"
             suggestions.append({"id": sid, "type": "target", "item_key": item["key"], "text": text,
-                                "source": source, "why": why, "status": "pending"})
+                                "source": source, "why": why, "status": "pending", "created_at": _now_iso()})
         elif stype == "add":
             candidate = {k: raw.get(k) for k in ("section", "measure", "title", "responsibility", "meets", "exceeds")}
             if any(unsupported_numbers(candidate.get(f) if isinstance(candidate.get(f), str) else "", allowed)
@@ -1335,7 +1336,7 @@ def sanitize_review(parsed: dict, draft: dict) -> tuple[list[dict], list[dict], 
             item = normalize_item(candidate, default_origin="suggestion")
             if not item or not item["title"] or _squash(item["title"]) in {_squash(i["title"]) for i in draft["items"]}:
                 continue
-            suggestions.append({"id": sid, "type": "add", "item": item, "why": why, "status": "pending"})
+            suggestions.append({"id": sid, "type": "add", "item": item, "why": why, "status": "pending", "created_at": _now_iso()})
     summary = _clean_text(parsed.get("summary"), 300) or None
     if summary and unsupported_numbers(summary, allowed):
         summary = None
@@ -1398,7 +1399,7 @@ class SuggestionActionIn(BaseModel):
 def act_on_suggestion(draft_id: str, suggestion_id: str, body: SuggestionActionIn, auth=Depends(get_authenticated_client)):
     """Accept or dismiss one AI suggestion. Accepting changes only the one
     field (or adds the one item) it names."""
-    _, supabase = auth
+    user_id, supabase = auth
     draft = _load_draft(supabase, draft_id)
     _require_open(draft)
     _check_version(draft, body.version)
@@ -1431,6 +1432,12 @@ def act_on_suggestion(draft_id: str, suggestion_id: str, body: SuggestionActionI
     updated = _write_draft(supabase, draft, {
         "items": items, "suggestions": suggestions, "questions": reconcile_questions(items, stored_qs),
     })
+    # Accepting applies the suggestion as written; there is no edit step.
+    analytics.ai_draft_resolved(
+        user_id, surface="role_suggestion",
+        outcome="accepted" if body.action == "accept" else "discarded",
+        seconds_to_confirm=analytics.seconds_since(sug.get("created_at")),
+    )
     return _present_draft(supabase, updated)
 
 

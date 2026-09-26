@@ -68,6 +68,7 @@ import {
   CaptureNote,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import { useAiDraft } from "@/lib/useAiDraft";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
 import {
@@ -578,6 +579,10 @@ export function DevelopmentSection({
   const [draftHint, setDraftHint] = useState<string | null>(null);
   const [addingAiOppIndex, setAddingAiOppIndex] = useState<number | null>(null);
 
+  // E7: how much AI-drafted plan and note text survives to the save.
+  const planDraft = useAiDraft("development_plan");
+  const noteDraft = useAiDraft("development_note");
+
   const existingSourceIds = new Set(
     bundle.opportunities.map((o) => o.source_config_id).filter(Boolean) as string[]
   );
@@ -700,6 +705,7 @@ export function DevelopmentSection({
     setAddingNote(true);
     try {
       await createDevManagerNote(directReportId, content);
+      noteDraft.accept({ text: content });
       await onRefresh();
       setNewNote("");
       setError(null);
@@ -714,6 +720,7 @@ export function DevelopmentSection({
     setSavingPlan(true);
     try {
       await updateDevPlanText(directReportId, planText.trim() || null);
+      planDraft.accept({ text: planText });
       await onRefresh();
       setError(null);
     } catch (e) {
@@ -730,6 +737,7 @@ export function DevelopmentSection({
     try {
       const result = await reviseDevText(directReportId, text);
       setPlanText(result.note);
+      planDraft.start({ text: result.note });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to revise with AI");
@@ -755,6 +763,7 @@ export function DevelopmentSection({
       );
       setAiOpportunities(freshOpps);
       setAiPlanSuggestion(d.plan_note);
+      if (d.plan_note) planDraft.start({ text: d.plan_note });
       if (freshOpps.length === 0 && !d.plan_note) {
         setDraftHint("Not enough evidence yet for a draft — write your own below, or add more 1:1 history and assessment scores first.");
       }
@@ -794,6 +803,7 @@ export function DevelopmentSection({
     try {
       const result = await reviseDevText(directReportId, text);
       setNewNote(result.note);
+      noteDraft.start({ text: result.note });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to revise with AI");
@@ -889,7 +899,12 @@ export function DevelopmentSection({
               <button onClick={usePlanSuggestion} className="text-xs font-medium text-blue-700 hover:text-blue-900">
                 Use this
               </button>
-              <button onClick={() => setAiPlanSuggestion(null)} className="text-xs text-blue-400 hover:text-blue-600">
+              <button
+                onClick={() => {
+                  planDraft.discard();
+                  setAiPlanSuggestion(null);
+                }}
+                className="text-xs text-blue-400 hover:text-blue-600">
                 Dismiss
               </button>
             </div>

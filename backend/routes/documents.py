@@ -70,6 +70,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
+import analytics
 import context_engine
 from ai_core import generate_text, generate_text_from_document
 from config import AI_DEFAULT_MODEL_HEAVY
@@ -578,6 +579,15 @@ def _replace_scopes(supabase, document_id: str, org_unit_ids: list) -> list[dict
     return result.data
 
 
+def extraction_edit_bucket(corrections: int) -> str:
+    """E7 bucket for a Librarian proposal: the share of its correctable
+    fields (category, freshness, effective date) the manager changed."""
+    ratio = corrections / len(_CORRECTABLE_FIELDS)
+    if ratio == 0:
+        return "none"
+    return "moderate" if ratio < 0.40 else "heavy"
+
+
 @router.put("/{document_id}/confirm")
 def confirm_document(document_id: str, body: DocumentConfirmIn, auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
@@ -638,6 +648,11 @@ def confirm_document(document_id: str, body: DocumentConfirmIn, auth=Depends(get
         raise HTTPException(status_code=500, detail="Failed to confirm document")
 
     scopes = _replace_scopes(supabase, document_id, unit_ids)
+    analytics.ai_draft_resolved(
+        user_id, surface="document_extraction", outcome="accepted",
+        edit_bucket=extraction_edit_bucket(len(correction_log)),
+        seconds_to_confirm=analytics.seconds_since(doc.get("created_at")),
+    )
     return {**updated.data[0], "scopes": scopes}
 
 
@@ -650,7 +665,7 @@ def delete_document(document_id: str, auth=Depends(get_authenticated_client)):
     systems and one lagging the other shouldn't block the user."""
     user_id, supabase = auth
 
-    existing = supabase.table("documents").select("id,storage_path").eq("id", document_id).execute().data
+    existing = supabase.table("documents").select("id,storage_path,status,created_at").eq("id", document_id).execute().data
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -662,4 +677,10 @@ def delete_document(document_id: str, auth=Depends(get_authenticated_client)):
         logger.warning("storage cleanup failed for document %s", document_id, exc_info=True)
 
     supabase.table("documents").delete().eq("id", document_id).execute()
+    if existing[0].get("status") == "pending_review":
+        # Thrown away at review: the Librarian's reading was never confirmed.
+        analytics.ai_draft_resolved(
+            user_id, surface="document_extraction", outcome="discarded",
+            seconds_to_confirm=analytics.seconds_since(existing[0].get("created_at")),
+        )
     return {"deleted": True}

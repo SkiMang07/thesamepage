@@ -18,7 +18,7 @@
 // id. Most meetings route nothing, and the empty states say so plainly.
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import WrapUpReviewShell, { OwnerGroup, ReviewCommitment } from "@/components/team/WrapUpReviewShell";
 import {
   BeyondDraftCheckIn,
@@ -32,6 +32,8 @@ import {
 } from "@/lib/api";
 import { BTN_GHOST, BTN_SECONDARY, EYEBROW, INPUT, LABEL, META, SELECT } from "@/lib/tokens";
 import { CHECK_IN_STATUS_OPTIONS } from "./shared";
+import { joinDraft } from "@/lib/aiDraftTelemetry";
+import { useAiDraft } from "@/lib/useAiDraft";
 
 type Named = { id: string; name: string };
 type Titled = { id: string; title: string };
@@ -105,6 +107,26 @@ export default function BeyondWrapUpReview({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // E7: how much of the AI's draft survives review. Enums and counts only.
+  const telemetry = useAiDraft("beyond_wrapup");
+  useEffect(() => {
+    telemetry.start({
+      text: joinDraft([
+        draft.summary,
+        ...draft.commitments.map((c) => c.description),
+        ...draft.check_ins.map((c) => c.note),
+        ...draft.report_notes.map((n) => n.note),
+        ...(draft.carry_forward_items ?? []),
+      ]),
+      items: draft.commitments.map((c) => c.description),
+    });
+  }, [draft, telemetry]);
+
+  function handleBack() {
+    telemetry.discard();
+    onBack();
+  }
+
   const ownerGroups: OwnerGroup[] = [
     { label: "Your team", options: reports.map((r) => ({ value: `r:${r.id}`, label: r.name })) },
     {
@@ -146,6 +168,16 @@ export default function BeyondWrapUpReview({
         checkIns: checkInBodies,
         reportNotes: reportNotes.map((n) => ({ direct_report_id: n.direct_report_id, note: n.note.trim() })),
         carryForwardItems: isOneOnOne ? carry : [],
+      });
+      telemetry.accept({
+        text: joinDraft([
+          summary,
+          ...commitments.map((c) => c.description),
+          ...checkIns.map((c) => c.note),
+          ...reportNotes.map((n) => n.note),
+          ...(isOneOnOne ? carry : []),
+        ]),
+        items: commitments.map((c) => c.description),
       });
       onSaved(result);
     } catch (e) {
@@ -193,7 +225,7 @@ export default function BeyondWrapUpReview({
         }
         canSave={canSave}
         saveLabel="Save meeting"
-        onBack={onBack}
+        onBack={handleBack}
         onSave={save}
       >
         <div className="mt-5">

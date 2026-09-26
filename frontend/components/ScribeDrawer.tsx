@@ -33,8 +33,10 @@ import {
   sendAssistantMessage,
   updateAssistantDraft,
   updateProject,
+  reportAiDraft,
 } from "@/lib/api";
 import { DrawerMessage, useDrawer } from "@/lib/drawer-context";
+import { DraftTracker, joinDraft } from "@/lib/aiDraftTelemetry";
 
 import NoteField from "@/components/NoteField";
 import { NAV_STRIP_HEIGHT } from "@/components/ZoneMap";
@@ -207,6 +209,13 @@ type ReceiptData = {
 
 type DraftCardState = "idle" | "editing" | "confirming" | "confirmed" | "discarded";
 
+// The fields a manager can edit on a card, as one string for E7's edit
+// bucket. Compared in the browser; only the bucket is reported.
+const SCRIBE_EDITABLE = ["title", "name", "role_title", "description", "due_date", "note", "success_metrics", "progress"];
+function scribeText(payload: Record<string, unknown>): string {
+  return joinDraft(SCRIBE_EDITABLE.map((k) => (payload[k] == null ? "" : String(payload[k]))));
+}
+
 function DraftCard({ draft }: { draft: DraftEntity }) {
   const initialState: DraftCardState =
     draft.status === "confirmed"
@@ -228,6 +237,14 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
       : null,
   );
   const [error, setError] = useState<string | null>(null);
+  // E7. Only a card still pending when it appears is a draft under review.
+  // No "abandoned" here: closing the drawer leaves the card pending on the
+  // server, and it comes back.
+  const [telemetry] = useState(() =>
+    initialState === "idle"
+      ? new DraftTracker("scribe_proposal", { text: scribeText(draft.payload as Record<string, unknown>) }, (r) => void reportAiDraft(r))
+      : null,
+  );
   const [undoSeconds, setUndoSeconds] = useState<number | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -428,6 +445,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
         });
       }
       setCardState("confirmed");
+      telemetry?.accept({ text: scribeText(p) });
 
       // Start undo timer for reversible actions
       if (draft.entity_type === "project" || draft.entity_type === "goal") {
@@ -463,6 +481,7 @@ function DraftCard({ draft }: { draft: DraftEntity }) {
       if (draft.draft_id) {
         await updateAssistantDraft(draft.draft_id, { status: "discarded" });
       }
+      telemetry?.discard();
       setCardState("discarded");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Discard failed");

@@ -45,6 +45,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
+import analytics
 from ai_core import CachedPrompt, generate_text
 from assessment_evidence import gather_evidence
 from config import AI_DEFAULT_MODEL_HEAVY
@@ -1110,6 +1111,35 @@ def draft_judgments(request: Request, review_id: str, body: DraftIn, auth=Depend
     return _present(row, scorecard)
 
 
+def _judgment_text(d: dict | None) -> str:
+    d = d or {}
+    parts = [str(d[k]) for k in ("point", "value", "period") if d.get(k) is not None]
+    return " ".join(parts + [d.get("reason") or ""])
+
+
+def _draft_resolution(action: str, item: dict, decision: dict) -> dict | None:
+    """What one item action says about the AI's draft, for ai_draft_resolved
+    (E7). Fires once per proposal: the first manager action on an untouched
+    AI judgment, or the apply/dismiss of a redraft revision. None otherwise."""
+    if action in ("apply_revision", "dismiss_revision"):
+        return {
+            "outcome": "accepted" if action == "apply_revision" else "discarded",
+            "edit_bucket": "none",
+            "seconds_to_confirm": analytics.seconds_since((item.get("revision") or {}).get("created_at")),
+        }
+    old = item.get("decision") or {}
+    if old.get("origin") != "ai" or not item.get("proposal"):
+        return None
+    secs = analytics.seconds_since(old.get("updated_at"))
+    if action in ("accept_proposal", "keep_proposal"):
+        return {"outcome": "accepted", "edit_bucket": "none", "seconds_to_confirm": secs}
+    if action == "set":
+        bucket = analytics.edit_bucket(_judgment_text(item["proposal"]), _judgment_text(decision))
+        return {"outcome": "accepted", "edit_bucket": bucket, "seconds_to_confirm": secs}
+    # unassessed, or the manager's own prior judgment over the AI's
+    return {"outcome": "discarded", "edit_bucket": "none", "seconds_to_confirm": secs}
+
+
 @router.post("/{review_id}/items/{item_key}")
 def item_action(review_id: str, item_key: str, body: ItemActionIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     """One manager decision on one item. Only that item changes."""
@@ -1125,6 +1155,7 @@ def item_action(review_id: str, item_key: str, body: ItemActionIn, auth=Depends(
             raise HTTPException(status_code=404, detail="That expectation isn't configured for this person any more.")
         draft = _ensure_items(row.get("draft") or {}, catalog)
         item = dict(draft["items"][item_key])
+        before = dict(item)
         decision = dict(item.get("decision") or {})
         now = _now()
         points = {s["point"] for s in entry["scale"]}
@@ -1175,9 +1206,12 @@ def item_action(review_id: str, item_key: str, body: ItemActionIn, auth=Depends(
         item["decision"] = decision
         item["changed_by_redraft"] = False
         draft["items"] = {**draft["items"], item_key: item}
+        holder["resolution"] = _draft_resolution(body.action, before, decision)
         return {"draft": draft}
 
     row = _mutate(supabase, user_id, review_id, change, body.version)
+    if holder.get("resolution"):
+        analytics.ai_draft_resolved(user_id, surface="assessment_item", **holder["resolution"])
     return _present(row, holder["scorecard"])
 
 
