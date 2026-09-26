@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-eval/test_assistant.py — 30-utterance eval for the Scribe agent loop.
+eval/test_assistant.py — 33-utterance eval for the Scribe agent loop.
 
 Usage:
   cd <repo-root>
@@ -10,7 +10,7 @@ Requires ANTHROPIC_API_KEY — loaded from backend/.env if present, otherwise
 from the shell environment. Supabase keys are not needed (tool executor is
 mocked with realistic fake data).
 
-Exit 0 if at most two cases fail (currently ≥28/30); exit 1 otherwise.
+Exit 0 if at most two cases fail (currently ≥31/33); exit 1 otherwise.
 
 Runtime varies by model (each case can make multiple real Anthropic API calls).
 """
@@ -321,6 +321,71 @@ FAKE_WORKSPACE_EVIDENCE = [
     },
 ]
 
+# C3 packets. Facts here (the NRR reading, the discount Must-know, the team
+# meeting summary) exist nowhere else in the fixtures, so a passing answer
+# shows Scribe called get_entity_context.
+FAKE_ENTITY_CONTEXT = {
+    ("org_unit", "ou-na"): {
+        "entity_type": "org_unit",
+        "org_unit": {"id": "ou-na", "name": "North America", "unit_type": "team", "parent_unit_id": "ou-cs"},
+        "parent_unit": {"id": "ou-cs", "name": "Customer Success", "unit_type": "department"},
+        "units_in_scope": [{"id": "ou-na", "name": "North America", "unit_type": "team"}],
+        "coverage": (
+            "Only this manager's own records are included: their direct reports, goals, "
+            "projects, commitments and team meetings in this unit and the units under it. "
+            "Teams or people run by other managers are not visible here, so a thin packet "
+            "means thin evidence, not a quiet team."
+        ),
+        "roster": [
+            {"id": "dr-leah", "name": "Leah", "role_title": "Account Manager", "org_unit_id": "ou-na",
+             "last_one_on_one_date": "2026-08-19", "next_one_on_one_date": "2026-09-02",
+             "open_commitments": 3, "overdue_commitments": 2},
+        ],
+        "goals": [
+            {"id": "goal-nrr", "title": "Improve NRR", "level": "company", "status": "active",
+             "latest_check_in": {"status": "active", "note": "Q3 reading in; finance model still pending",
+                                 "created_at": "2026-08-15"}},
+        ],
+        "projects": [
+            {"id": "proj-vendor", "title": "Billing vendor migration", "status": "at_risk",
+             "direct_report_id": "dr-leah",
+             "latest_check_in": {"status": "at_risk", "note": "Security review is still unassigned.",
+                                 "created_at": "2026-08-24"}},
+        ],
+        "team_meetings": [
+            {"id": "tm-na-1", "scheduled_at": "2026-08-25T12:00:00Z",
+             "summary": "Agreed Q4 renewal owners. Discount freeze stays until the new pricing lands.",
+             "agenda_items": [{"item": "Q4 renewals", "covered": True}, {"item": "Pricing change", "covered": False}]},
+        ],
+        "team_commitments": [
+            {"id": "tc-na-1", "description": "Publish the Q4 renewal owner list", "status": "open",
+             "due_date": "2026-08-22", "direct_report_id": "dr-leah"},
+        ],
+        "must_knows": [{"id": "mk-na", "message": "No discounts over 10% without Finance sign-off.",
+                        "updated_at": "2026-08-20"}],
+        "upcoming_time_off": [],
+    },
+    ("goal", "goal-nrr"): {
+        "entity_type": "goal",
+        "goal": {"id": "goal-nrr", "title": "Improve NRR", "level": "company", "status": "active",
+                 "success_metrics": "Net revenue retention at or above 110% by year end."},
+        "owner_person": None,
+        "org_unit": None,
+        "measure": {"label": "NRR", "format": "percent", "unit": None, "target": 110,
+                    "direction": "at_least", "latest_reading": 104,
+                    "latest_reading_at": "2026-08-15T00:00:00Z", "readings_recorded": 3},
+        "parent_goal": None,
+        "child_goals": [],
+        "linked_projects": [],
+        "check_ins": [
+            {"id": "ci-nrr-3", "status": "active", "measured_value": 104,
+             "note": "Q3 reading in; finance model still pending", "created_at": "2026-08-15"},
+            {"id": "ci-nrr-2", "status": "active", "measured_value": 101, "created_at": "2026-07-15"},
+        ],
+        "commitments": [],
+    },
+}
+
 TODAY = "2026-08-27"  # Thursday; next Friday = 2026-08-28
 
 
@@ -382,12 +447,19 @@ def build_executor(
             "results": results[:12],
         }
 
+    def entity_context(input_data: dict) -> dict:
+        key = (input_data.get("entity_type"), input_data.get("entity_id"))
+        if key not in FAKE_ENTITY_CONTEXT:
+            raise ValueError("That record was not found")
+        return FAKE_ENTITY_CONTEXT[key]
+
     return {
         "list_goals": lambda _: FAKE_GOALS,
         "list_projects": lambda _: FAKE_PROJECTS,
         "list_direct_reports": lambda _: available_reports,
         "list_org_units": lambda _: available_units,
         "get_people_context": people_context,
+        "get_entity_context": entity_context,
         "search_workspace": workspace_search,
         "get_manager_brief": lambda _: FAKE_MANAGER_BRIEF,
     }
@@ -785,7 +857,7 @@ CASES = [
         "check": lambda text, drafts: (
             len(drafts) == 0
             and "jordan" in text.lower()
-            and "communicates delivery risk early" in text.lower()
+            and text_has(text, "communicates delivery risk early", "communicate delivery risk early")
             and text_has(text, "leadership principles", "2026-07-01", "july 1")
         ),
     },
@@ -943,6 +1015,37 @@ CASES = [
             and "[[person:dr-jordan|Jordan]]" in text
             and "[[goal:" in text
             and "/app/" not in text
+        ),
+    },
+
+    # -----------------------------------------------------------------
+    # 32. Team context packet (C3): a team question uses the packet's facts
+    # -----------------------------------------------------------------
+    {
+        "id": 32,
+        "desc": "Team question draws on the org-unit packet (Must-know, meeting, overdue work)",
+        "utterance": "How is the North America team doing?",
+        "check": lambda text, drafts: (
+            len(drafts) == 0
+            and "leah" in text.lower()
+            and "discount" in text.lower()
+            and text_has(text, "overdue", "past due", "renewal owner")
+        ),
+    },
+
+    # -----------------------------------------------------------------
+    # 33. Goal context packet (C3): measure and reading, cited
+    # -----------------------------------------------------------------
+    {
+        "id": 33,
+        "desc": "Goal question reports the measure's latest reading against target and cites the goal",
+        "raw": True,
+        "utterance": "How far is Improve NRR from its target?",
+        "check": lambda text, drafts: (
+            len(drafts) == 0
+            and "104" in text
+            and "110" in text
+            and "[[goal:goal-nrr|" in text
         ),
     },
 ]

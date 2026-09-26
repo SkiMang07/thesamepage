@@ -27,7 +27,7 @@ import context_engine
 from assistant_engine import run_assistant_turn
 from mission_control_engine import build_brief
 from routes.dashboard import _load_action_snapshot
-from scribe_context import get_people_context
+from scribe_context import get_entity_context, get_people_context
 from scribe_workspace import search_workspace
 from utils import get_authenticated_client, limiter
 
@@ -41,7 +41,7 @@ class AssistantMessageIn(BaseModel):
     # page". Injected into the system prompt ephemerally (not stored in the
     # thread) so pronouns and implicit references resolve against the right page.
     page_context: str | None = None
-    page_context_entity_type: Literal["direct_report", "project"] | None = None
+    page_context_entity_type: Literal["direct_report", "project", "goal", "org_unit"] | None = None
     page_context_entity_id: UUID | None = None
 
 
@@ -222,6 +222,13 @@ def _build_tool_executor(
             user_id,
             input_data.get("direct_report_ids") or [],
         ),
+        "get_entity_context": lambda input_data: get_entity_context(
+            supabase,
+            user_id,
+            input_data.get("entity_type") or "",
+            input_data.get("entity_id") or "",
+            today=manager_date,
+        ),
         "search_workspace": workspace_search,
         "get_manager_brief": manager_brief,
         "list_org_units": lambda _: (
@@ -242,20 +249,18 @@ def _validated_page_context(supabase, user_id: str, body: AssistantMessageIn) ->
     if not entity_type or not entity_id:
         return label
 
-    table, owner_column, label_column = (
-        ("direct_reports", "manager_id", "name")
-        if entity_type == "direct_report"
-        else ("projects", "owner_id", "title")
-    )
-    rows = (
-        supabase.table(table)
-        .select(f"id,{label_column}")
-        .eq("id", entity_id)
-        .eq(owner_column, user_id)
-        .limit(1)
-        .execute()
-        .data
-    )
+    table, owner_column, label_column = {
+        "direct_report": ("direct_reports", "manager_id", "name"),
+        "project": ("projects", "owner_id", "title"),
+        "goal": ("goals", "owner_id", "title"),
+        # Org units are org-wide (RLS scopes them to the manager's org), the
+        # same visibility list_org_units has; their contents stay owner-scoped.
+        "org_unit": ("org_units", None, "name"),
+    }[entity_type]
+    query = supabase.table(table).select(f"id,{label_column}").eq("id", entity_id)
+    if owner_column:
+        query = query.eq(owner_column, user_id)
+    rows = query.limit(1).execute().data
     if not rows:
         raise HTTPException(status_code=422, detail="Page context is outside the manager's scope")
     trusted_label = rows[0].get(label_column) or entity_type

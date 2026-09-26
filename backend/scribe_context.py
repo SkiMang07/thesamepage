@@ -1,11 +1,12 @@
 """Connected, permission-scoped evidence retrieval for Scribe.
 
-This module deliberately exposes one broad person/team-context capability rather
-than a workflow per question. The model decides which people it needs; this
-layer guarantees that every returned record belongs to one of those people and
-to the authenticated manager.
+This module deliberately exposes broad context capabilities rather than a
+workflow per question: get_people_context for people, get_entity_context (C3)
+for one goal, project or org unit. The model decides what it needs; this layer
+guarantees that every returned record belongs to the authenticated manager.
 """
 from collections import defaultdict
+from datetime import date
 
 from fastapi import HTTPException
 
@@ -368,3 +369,500 @@ def get_people_context(
         },
         "people": contexts,
     }
+
+
+# ---------------------------------------------------------------------------
+# C3 — goal, project and org-unit context packets
+# ---------------------------------------------------------------------------
+#
+# Scope is today's rule, deliberately unchanged: a goal or project must be owned
+# by the manager; an org unit's own row is readable org-wide (as list_org_units
+# is), but everything inside it is limited to the manager's own records. When
+# DEPARTMENT_ROLLUP phase 1 lands, _unit_scope_note and the owner filters here
+# are the one place to switch to the shared scope definition.
+
+ENTITY_TYPES = ("goal", "project", "org_unit")
+
+_GOAL_COLUMNS = (
+    "id,title,description,success_metrics,level,org_unit_id,direct_report_id,"
+    "parent_goal_id,status,due_date,measure_label,measure_format,measure_unit,"
+    "measure_target,measure_direction,created_at"
+)
+_GOAL_BRIEF_COLUMNS = "id,title,level,org_unit_id,direct_report_id,parent_goal_id,status,due_date"
+_PROJECT_COLUMNS = "id,title,description,goal_id,org_unit_id,direct_report_id,status,due_date,created_at"
+_PROJECT_BRIEF_COLUMNS = "id,title,goal_id,org_unit_id,direct_report_id,status,due_date"
+_CHECK_IN_COLUMNS = (
+    "id,goal_id,project_id,status,progress,note,measured_value,source_type,source_id,created_at"
+)
+_COMMITMENT_COLUMNS = (
+    "id,description,direct_report_id,org_unit_id,committed_by,source_type,source_id,"
+    "due_date,status,completed_at,is_team_commitment,created_at"
+)
+
+MAX_CHECK_INS = 20
+MAX_COMMITMENTS = 40
+MAX_UNIT_RECORDS = 40
+MAX_TEAM_MEETINGS = 6
+MAX_UNITS_IN_SUBTREE = 25
+TIME_OFF_WINDOW_DAYS = 30
+
+
+def _not_found(entity_type: str) -> HTTPException:
+    return HTTPException(status_code=404, detail=f"That {entity_type.replace('_', ' ')} was not found")
+
+
+def _latest_check_ins(supabase, user_id: str, column: str, ids: list[str]) -> dict[str, dict]:
+    """Most recent check-in per goal or project id."""
+    if not ids:
+        return {}
+    rows = (
+        supabase.table("check_ins")
+        .select(_CHECK_IN_COLUMNS)
+        .eq("owner_id", user_id)
+        .in_(column, ids)
+        .order("created_at", desc=True)
+        .limit(min(10 * len(ids), 400))
+        .execute()
+        .data
+    )
+    latest: dict[str, dict] = {}
+    for row in rows:
+        key = str(row.get(column))
+        if key not in latest:
+            latest[key] = row
+    return latest
+
+
+def _people_by_id(supabase, user_id: str, ids: set[str]) -> dict[str, dict]:
+    ids = {value for value in ids if value}
+    if not ids:
+        return {}
+    rows = (
+        supabase.table("direct_reports")
+        .select("id,name,role_title,org_unit_id,archived_at")
+        .eq("manager_id", user_id)
+        .in_("id", sorted(ids))
+        .execute()
+        .data
+    )
+    return {str(row["id"]): row for row in rows}
+
+
+def _units_by_id(supabase, ids: set[str]) -> dict[str, dict]:
+    ids = {value for value in ids if value}
+    if not ids:
+        return {}
+    rows = (
+        supabase.table("org_units")
+        .select("id,name,unit_type,parent_unit_id")
+        .in_("id", sorted(ids))
+        .execute()
+        .data
+    )
+    return {str(row["id"]): row for row in rows}
+
+
+def _with_latest(rows: list[dict], latest: dict[str, dict], source_type: str) -> list[dict]:
+    tagged = _tag(rows, source_type)
+    for row in tagged:
+        check_in = latest.get(str(row["id"]))
+        row["latest_check_in"] = (
+            _tag([check_in], f"{source_type}_check_in")[0] if check_in else None
+        )
+    return tagged
+
+
+def _measure(goal: dict, check_ins: list[dict]) -> dict | None:
+    """The goal's numeric measure and its latest reading, reported as data."""
+    if not goal.get("measure_format"):
+        return None
+    readings = [row for row in check_ins if row.get("measured_value") is not None]
+    latest = readings[0] if readings else None
+    return {
+        "label": goal.get("measure_label"),
+        "format": goal.get("measure_format"),
+        "unit": goal.get("measure_unit"),
+        "target": goal.get("measure_target"),
+        "direction": goal.get("measure_direction"),
+        "latest_reading": latest.get("measured_value") if latest else None,
+        "latest_reading_at": latest.get("created_at") if latest else None,
+        "readings_recorded": len(readings),
+    }
+
+
+def _sourced_commitments(
+    supabase, user_id: str, source_type: str, source_ids: list[str]
+) -> list[dict]:
+    if not source_ids:
+        return []
+    return (
+        supabase.table("commitments")
+        .select(_COMMITMENT_COLUMNS)
+        .eq("owner_id", user_id)
+        .eq("source_type", source_type)
+        .in_("source_id", source_ids)
+        .order("created_at", desc=True)
+        .limit(MAX_COMMITMENTS)
+        .execute()
+        .data
+    )
+
+
+def _open_first(rows: list[dict]) -> list[dict]:
+    # Open work first (soonest due first), then the most recently closed.
+    open_rows = sorted(
+        (row for row in rows if row.get("status") == "open"),
+        key=lambda row: str(row.get("due_date") or "9999-12-31"),
+    )
+    closed = [row for row in rows if row.get("status") != "open"]
+    return (open_rows + closed)[:MAX_COMMITMENTS]
+
+
+def _goal_context(supabase, user_id: str, goal_id: str) -> dict:
+    rows = (
+        supabase.table("goals").select(_GOAL_COLUMNS)
+        .eq("owner_id", user_id).eq("id", goal_id).limit(1).execute().data
+    )
+    if not rows:
+        raise _not_found("goal")
+    goal = rows[0]
+
+    parent = (
+        supabase.table("goals").select(_GOAL_BRIEF_COLUMNS)
+        .eq("owner_id", user_id).eq("id", str(goal["parent_goal_id"])).limit(1).execute().data
+        if goal.get("parent_goal_id") else []
+    )
+    children = (
+        supabase.table("goals").select(_GOAL_BRIEF_COLUMNS)
+        .eq("owner_id", user_id).eq("parent_goal_id", goal_id)
+        .order("title").limit(MAX_UNIT_RECORDS).execute().data
+    )
+    projects = (
+        supabase.table("projects").select(_PROJECT_BRIEF_COLUMNS)
+        .eq("owner_id", user_id).eq("goal_id", goal_id)
+        .order("title").limit(MAX_UNIT_RECORDS).execute().data
+    )
+    check_ins = (
+        supabase.table("check_ins").select(_CHECK_IN_COLUMNS)
+        .eq("owner_id", user_id).eq("goal_id", goal_id)
+        .order("created_at", desc=True).limit(MAX_CHECK_INS).execute().data
+    )
+    child_ids = [str(row["id"]) for row in children]
+    project_ids = [str(row["id"]) for row in projects]
+    latest_goal = _latest_check_ins(supabase, user_id, "goal_id", child_ids)
+    latest_project = _latest_check_ins(supabase, user_id, "project_id", project_ids)
+    commitments = (
+        _sourced_commitments(supabase, user_id, "goal", [goal_id])
+        + _sourced_commitments(supabase, user_id, "project", project_ids)
+    )
+
+    related = [goal, *parent, *children, *projects]
+    people = _people_by_id(supabase, user_id, {str(r.get("direct_report_id") or "") for r in related})
+    units = _units_by_id(supabase, {str(r.get("org_unit_id") or "") for r in related})
+
+    record = _tag([goal], "goal")[0]
+    return {
+        "entity_type": "goal",
+        "goal": record,
+        "owner_person": people.get(str(goal.get("direct_report_id"))),
+        "org_unit": units.get(str(goal.get("org_unit_id"))),
+        "measure": _measure(goal, check_ins),
+        "parent_goal": _tag(parent, "goal")[0] if parent else None,
+        "child_goals": _with_latest(children, latest_goal, "goal"),
+        "linked_projects": _with_latest(projects, latest_project, "project"),
+        "check_ins": _tag(check_ins, "goal_check_in"),
+        "commitments": _tag(_open_first(commitments), "commitment"),
+        "related_people": list(people.values()),
+        "related_org_units": list(units.values()),
+    }
+
+
+def _project_context(supabase, user_id: str, project_id: str) -> dict:
+    rows = (
+        supabase.table("projects").select(_PROJECT_COLUMNS)
+        .eq("owner_id", user_id).eq("id", project_id).limit(1).execute().data
+    )
+    if not rows:
+        raise _not_found("project")
+    project = rows[0]
+
+    goal_rows = (
+        supabase.table("goals").select(_GOAL_COLUMNS)
+        .eq("owner_id", user_id).eq("id", str(project["goal_id"])).limit(1).execute().data
+        if project.get("goal_id") else []
+    )
+    goal = goal_rows[0] if goal_rows else None
+    goal_check_ins = (
+        supabase.table("check_ins").select(_CHECK_IN_COLUMNS)
+        .eq("owner_id", user_id).eq("goal_id", str(goal["id"]))
+        .order("created_at", desc=True).limit(MAX_CHECK_INS).execute().data
+        if goal else []
+    )
+    check_ins = (
+        supabase.table("check_ins").select(_CHECK_IN_COLUMNS)
+        .eq("owner_id", user_id).eq("project_id", project_id)
+        .order("created_at", desc=True).limit(MAX_CHECK_INS).execute().data
+    )
+    commitments = _sourced_commitments(supabase, user_id, "project", [project_id])
+
+    related = [project, *([goal] if goal else [])]
+    people = _people_by_id(supabase, user_id, {str(r.get("direct_report_id") or "") for r in related})
+    units = _units_by_id(supabase, {str(r.get("org_unit_id") or "") for r in related})
+
+    linked_goal = None
+    if goal:
+        linked_goal = {
+            **{key: goal.get(key) for key in ("id", "title", "level", "status", "due_date", "org_unit_id")},
+            "measure": _measure(goal, goal_check_ins),
+            "latest_check_in": _tag(goal_check_ins[:1], "goal_check_in")[0] if goal_check_ins else None,
+            "_source": {"ref": f"goal:{goal['id']}", "type": "goal", "date": goal.get("created_at"),
+                        "visibility": "manager_record"},
+        }
+    return {
+        "entity_type": "project",
+        "project": _tag([project], "project")[0],
+        "owner_person": people.get(str(project.get("direct_report_id"))),
+        "org_unit": units.get(str(project.get("org_unit_id"))),
+        "linked_goal": linked_goal,
+        "check_ins": _tag(check_ins, "project_check_in"),
+        "commitments": _tag(_open_first(commitments), "commitment"),
+        "related_people": list(people.values()),
+        "related_org_units": list(units.values()),
+    }
+
+
+def _subtree(all_units: list[dict], root_id: str) -> list[dict]:
+    children: dict[str, list[dict]] = defaultdict(list)
+    for unit in all_units:
+        if unit.get("parent_unit_id"):
+            children[str(unit["parent_unit_id"])].append(unit)
+    by_id = {str(unit["id"]): unit for unit in all_units}
+    ordered: list[dict] = []
+    queue = [root_id]
+    seen: set[str] = set()
+    while queue and len(ordered) < MAX_UNITS_IN_SUBTREE:
+        current = queue.pop(0)
+        if current in seen or current not in by_id:
+            continue
+        seen.add(current)
+        ordered.append(by_id[current])
+        queue.extend(str(child["id"]) for child in sorted(children[current], key=lambda u: u.get("name") or ""))
+    return ordered
+
+
+def _unit_scope_note() -> str:
+    return (
+        "Only this manager's own records are included: their direct reports, goals, "
+        "projects, commitments and team meetings in this unit and the units under it. "
+        "Teams or people run by other managers are not visible here, so a thin packet "
+        "means thin evidence, not a quiet team."
+    )
+
+
+def _org_unit_context(supabase, user_id: str, unit_id: str, today: date) -> dict:
+    all_units = (
+        supabase.table("org_units")
+        .select("id,name,unit_type,parent_unit_id,leader_user_id")
+        .order("name")
+        .execute()
+        .data
+    )
+    by_id = {str(unit["id"]): unit for unit in all_units}
+    unit = by_id.get(unit_id)
+    if not unit:
+        raise _not_found("org_unit")
+    subtree = _subtree(all_units, unit_id)
+    unit_ids = [str(row["id"]) for row in subtree]
+    parent = by_id.get(str(unit.get("parent_unit_id"))) if unit.get("parent_unit_id") else None
+
+    people = (
+        supabase.table("direct_reports")
+        .select("id,name,role_title,org_unit_id,start_date")
+        .eq("manager_id", user_id)
+        .is_("archived_at", "null")
+        .in_("org_unit_id", unit_ids)
+        .order("name")
+        .execute()
+        .data
+    )
+    person_ids = [str(row["id"]) for row in people]
+
+    # Compact roster signals only. 1:1 notes, private notes, assessments and
+    # development stay out; Scribe calls get_people_context for depth.
+    meetings = (
+        supabase.table("one_on_ones")
+        .select("id,direct_report_id,scheduled_at")
+        .in_("direct_report_id", person_ids)
+        .order("scheduled_at", desc=True)
+        .limit(min(40 * len(person_ids), 1000))
+        .execute()
+        .data
+        if person_ids else []
+    )
+    person_commitments = (
+        supabase.table("commitments")
+        .select("id,direct_report_id,status,due_date")
+        .in_("direct_report_id", person_ids)
+        .eq("status", "open")
+        .limit(1000)
+        .execute()
+        .data
+        if person_ids else []
+    )
+    today_iso = today.isoformat()
+    last_meeting: dict[str, str] = {}
+    next_meeting: dict[str, str] = {}
+    for row in meetings:
+        key = str(row.get("direct_report_id"))
+        when = str(row.get("scheduled_at") or "")[:10]
+        if not when:
+            continue
+        if when <= today_iso:
+            last_meeting.setdefault(key, when)
+        elif key not in next_meeting or when < next_meeting[key]:
+            next_meeting[key] = when
+    open_counts: dict[str, int] = defaultdict(int)
+    overdue_counts: dict[str, int] = defaultdict(int)
+    for row in person_commitments:
+        key = str(row.get("direct_report_id"))
+        open_counts[key] += 1
+        if row.get("due_date") and str(row["due_date"])[:10] < today_iso:
+            overdue_counts[key] += 1
+    roster = []
+    for person in people:
+        key = str(person["id"])
+        roster.append({
+            **{field: person.get(field) for field in ("id", "name", "role_title", "org_unit_id", "start_date")},
+            "last_one_on_one_date": last_meeting.get(key),
+            "next_one_on_one_date": next_meeting.get(key),
+            "open_commitments": open_counts.get(key, 0),
+            "overdue_commitments": overdue_counts.get(key, 0),
+            "_source": {"ref": f"direct_report:{key}", "type": "direct_report",
+                        "date": person.get("start_date"), "visibility": "manager_record"},
+        })
+
+    goals = (
+        supabase.table("goals").select(_GOAL_BRIEF_COLUMNS)
+        .eq("owner_id", user_id).in_("org_unit_id", unit_ids)
+        .order("title").limit(MAX_UNIT_RECORDS).execute().data
+    )
+    projects = (
+        supabase.table("projects").select(_PROJECT_BRIEF_COLUMNS)
+        .eq("owner_id", user_id).in_("org_unit_id", unit_ids)
+        .order("title").limit(MAX_UNIT_RECORDS).execute().data
+    )
+    latest_goal = _latest_check_ins(supabase, user_id, "goal_id", [str(r["id"]) for r in goals])
+    latest_project = _latest_check_ins(supabase, user_id, "project_id", [str(r["id"]) for r in projects])
+
+    team_meetings = (
+        supabase.table("team_meetings")
+        .select("id,org_unit_id,scheduled_at,summary,logged_at")
+        .eq("manager_id", user_id)
+        .in_("org_unit_id", unit_ids)
+        .order("scheduled_at", desc=True)
+        .limit(MAX_TEAM_MEETINGS)
+        .execute()
+        .data
+    )
+    meeting_ids = [str(row["id"]) for row in team_meetings]
+    agenda = (
+        supabase.table("team_meeting_agenda_items")
+        .select("id,meeting_id,position,item,covered")
+        .eq("manager_id", user_id)
+        .in_("meeting_id", meeting_ids)
+        .order("position")
+        .execute()
+        .data
+        if meeting_ids else []
+    )
+    agenda_by_meeting = _group(agenda, "meeting_id")
+    # Summary and agenda only; raw notes never leave the meeting screen.
+    meeting_records = _tag(
+        [{field: row.get(field) for field in ("id", "org_unit_id", "scheduled_at", "summary", "logged_at")}
+         for row in team_meetings],
+        "team_meeting",
+        date_key="scheduled_at",
+    )
+    for row in meeting_records:
+        row["agenda_items"] = [
+            {"item": item.get("item"), "covered": item.get("covered")}
+            for item in agenda_by_meeting.get(str(row["id"]), [])
+        ]
+
+    team_commitments = (
+        supabase.table("commitments").select(_COMMITMENT_COLUMNS)
+        .eq("owner_id", user_id).eq("is_team_commitment", True)
+        .in_("org_unit_id", unit_ids)
+        .order("created_at", desc=True).limit(MAX_COMMITMENTS * 2).execute().data
+    )
+    callouts = (
+        supabase.table("team_callouts")
+        .select("id,org_unit_id,message,updated_at")
+        .eq("manager_id", user_id)
+        .in_("org_unit_id", unit_ids)
+        .execute()
+        .data
+    )
+    time_off_rows = (
+        supabase.table("time_off_entries")
+        .select("id,direct_report_id,start_date,end_date,type,hours_per_day")
+        .in_("direct_report_id", person_ids)
+        .order("start_date")
+        .limit(200)
+        .execute()
+        .data
+        if person_ids else []
+    )
+    window_end = date.fromordinal(today.toordinal() + TIME_OFF_WINDOW_DAYS).isoformat()
+    upcoming_time_off = [
+        row for row in time_off_rows
+        if str(row.get("end_date") or "")[:10] >= today_iso
+        and str(row.get("start_date") or "")[:10] <= window_end
+    ]
+
+    return {
+        "entity_type": "org_unit",
+        "org_unit": {**unit, "_source": {"ref": f"org_unit:{unit_id}", "type": "org_unit",
+                                          "date": None, "visibility": "shared_org_context"}},
+        "parent_unit": parent,
+        "units_in_scope": subtree,
+        "coverage": _unit_scope_note(),
+        "roster": roster,
+        "goals": _with_latest(goals, latest_goal, "goal"),
+        "projects": _with_latest(projects, latest_project, "project"),
+        "team_meetings": meeting_records,
+        "team_commitments": _tag(_open_first(team_commitments), "commitment"),
+        "must_knows": _tag(
+            [row for row in callouts if (row.get("message") or "").strip()],
+            "team_callout",
+            date_key="updated_at",
+        ),
+        "upcoming_time_off": _tag(upcoming_time_off, "time_off", date_key="start_date"),
+    }
+
+
+def get_entity_context(
+    supabase,
+    user_id: str,
+    entity_type: str,
+    entity_id: str,
+    *,
+    today: date | None = None,
+) -> dict:
+    """Return one connected, manager-scoped packet for a goal, project or org unit.
+
+    Resolve the id first with list_goals, list_projects, list_org_units or
+    search_workspace. A record outside the manager's scope is a 404, never a
+    partial packet.
+    """
+    kind = str(entity_type or "").strip()
+    record_id = str(entity_id or "").strip()
+    if kind not in ENTITY_TYPES:
+        raise HTTPException(status_code=422, detail="entity_type must be goal, project or org_unit")
+    if not record_id:
+        raise HTTPException(status_code=422, detail="entity_id is required")
+    if kind == "goal":
+        return _goal_context(supabase, user_id, record_id)
+    if kind == "project":
+        return _project_context(supabase, user_id, record_id)
+    return _org_unit_context(supabase, user_id, record_id, today or date.today())

@@ -2687,6 +2687,7 @@ export type AssistantPageKind =
   | "project"
   | "goal"
   | "goals"
+  | "org_unit"
   | "team_meeting"
   | "mission_control";
 
@@ -2697,7 +2698,9 @@ export type AssistantPageContext = {
   subject?: string;
 };
 
-const VERIFIED_PAGE_KINDS = new Set<AssistantPageKind>(["direct_report", "project"]);
+// The server re-checks these ids against the manager's scope before Scribe
+// sees them (routes/assistant.py → _validated_page_context).
+const VERIFIED_PAGE_KINDS = new Set<AssistantPageKind>(["direct_report", "project", "goal", "org_unit"]);
 
 // Shape returned by GET /api/assistant/thread
 export type StoredMessage = {

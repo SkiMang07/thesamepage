@@ -22,6 +22,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import AskAboutButton from "@/components/AskAboutButton";
 import {
   DirectReport,
   OrgUnit,
@@ -216,7 +217,21 @@ export default function TeamPage() {
               />
             )}
           </div>
-          <p className="mt-2 text-xs text-ink-muted">Only you can see this page. Nothing here is shared with your team.</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+            <p className="text-xs text-ink-muted">Only you can see this page. Nothing here is shared with your team.</p>
+            {selectedTeamId !== null && (
+              <AskAboutButton
+                label="Ask about this team"
+                prompt={`How is ${selectedTeamName} doing, and what needs my attention?`}
+                context={{
+                  label: `Team page — team: ${selectedTeamName}`,
+                  entity_type: "org_unit",
+                  entity_id: selectedTeamId,
+                  subject: selectedTeamName,
+                }}
+              />
+            )}
+          </div>
           {!loading && visibleMembers.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center gap-1.5">
               {visibleMembers.slice(0, 8).map((m) => (

@@ -14,7 +14,9 @@ components live in `frontend/components/team/`.
 
 1. **Heading** — editorial serif title naming the selected scope, the
    manager-only line, an avatar row of the people in scope, and the Team scope
-   menu (All teams default, plus the caller's led units).
+   menu (All teams default, plus the caller's led units). With a specific team
+   selected, "Ask about this team" opens Scribe with that org unit as verified
+   page context (`get_entity_context`; see `docs/systems/scribe.md`).
 2. **In-page links** — Meetings, Shared work, Commitments, People.
 3. **Team meetings** (`TeamMeetingsSection`) beside **Must-knows** and
    **Training focus** (`TeamContext`, each an exact-scope private text block

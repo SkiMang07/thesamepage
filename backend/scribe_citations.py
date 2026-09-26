@@ -93,8 +93,40 @@ def collect(tool_name: str, result: Any, registry: Registry) -> None:
                 _add(registry, "goal", row.get("id"), row.get("title"))
             for row in _rows(context.get("projects")):
                 _add(registry, "project", row.get("id"), row.get("title"))
+    elif tool_name == "get_entity_context" and isinstance(result, dict):
+        _collect_entity(result, registry)
     elif tool_name == "get_manager_brief":
         _collect_brief(result, registry)
+
+
+def _collect_entity(result: dict, registry: Registry) -> None:
+    """C3 packets: the entity itself and every goal, project, person and unit in it."""
+    for key in ("goal", "parent_goal", "linked_goal"):
+        row = result.get(key)
+        if isinstance(row, dict):
+            _add(registry, "goal", row.get("id"), row.get("title"))
+    for key in ("child_goals", "goals"):
+        for row in _rows(result.get(key)):
+            _add(registry, "goal", row.get("id"), row.get("title"))
+    project = result.get("project")
+    if isinstance(project, dict):
+        _add(registry, "project", project.get("id"), project.get("title"))
+    for key in ("linked_projects", "projects"):
+        for row in _rows(result.get(key)):
+            _add(registry, "project", row.get("id"), row.get("title"))
+    for key in ("org_unit", "parent_unit"):
+        row = result.get(key)
+        if isinstance(row, dict):
+            _add(registry, "org_unit", row.get("id"), row.get("name"))
+    for key in ("units_in_scope", "related_org_units"):
+        for row in _rows(result.get(key)):
+            _add(registry, "org_unit", row.get("id"), row.get("name"))
+    owner = result.get("owner_person")
+    if isinstance(owner, dict):
+        _add(registry, "person", owner.get("id"), owner.get("name"))
+    for key in ("roster", "related_people"):
+        for row in _rows(result.get(key)):
+            _add(registry, "person", row.get("id"), row.get("name"))
 
 
 def _collect_brief(node: Any, registry: Registry) -> None:

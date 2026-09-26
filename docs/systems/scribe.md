@@ -43,6 +43,7 @@ Read tools:
 - `list_projects`
 - `list_direct_reports`
 - `get_people_context`
+- `get_entity_context`
 - `search_workspace`
 - `get_manager_brief`
 - `list_org_units`
@@ -51,6 +52,31 @@ Read tools:
 resolves names with `list_direct_reports`, then requests one stable ID for a
 person question or several IDs for an explicit team comparison or synthesis.
 It is not tied to a predefined question type.
+
+`get_entity_context(entity_type, entity_id)` is the same idea for one goal,
+project or org unit (`backend/scribe_context.py`). The model resolves the id
+first (a list tool or search), or takes it from verified page context.
+
+- **goal**: the goal, its numeric measure (target, direction, latest reading and
+  reading count, reported as data with no verdict), owner person or team, parent
+  and child goals, linked projects with their latest check-in, the last 20
+  check-ins, and commitments sourced from the goal or its projects.
+- **project**: the project, owner, team, linked goal (status, measure, latest
+  check-in), the last 20 check-ins, and commitments sourced from the project.
+- **org_unit**: the unit, its parent, and its whole subtree (up to 25 units), so a
+  department includes its teams. A compact roster (last and next 1:1 date, open
+  and overdue commitment counts; no 1:1 notes, private notes, assessments or
+  development, since `get_people_context` is the deep path), the unit's goals
+  and projects with their latest check-in, the last six team meetings (summary
+  and agenda items, never raw notes), team commitments, Must-knows, and time
+  off in the next 30 days.
+
+Scope is today's rule. A goal or project must be owned by the manager, or the
+call 404s. An org unit's own row is readable org-wide, as `list_org_units` is,
+but everything inside it is the manager's own records only, and the packet's
+`coverage` line says so, so a thin team packet reads as thin evidence. The
+department rollup (`docs/DEPARTMENT_ROLLUP_SCOPING.md`) switches this in one
+place when it ships.
 
 `search_workspace` is the query-aware discovery tool across manager-owned
 goals, projects, check-ins, commitments, active direct reports, assigned role
@@ -181,17 +207,20 @@ label, and link. This prevents a refreshed drawer from resurrecting a completed
 draft and makes an ambiguous client failure fail closed instead of duplicating
 the write. Fully atomic source-write idempotency is not yet implemented.
 
-Structured page context is `{label, entity_type, entity_id}`. Direct-report and
-project IDs are checked against the authenticated manager, and the trusted label
-comes from the database rather than the client-provided prose. The context is
-ephemeral and is not stored in the thread.
+Structured page context is `{label, entity_type, entity_id}`. Direct-report,
+project and goal IDs are checked against the authenticated manager; an org unit
+is checked for existence within the manager's org (RLS), the same visibility
+`list_org_units` has. The trusted label comes from the database rather than the
+client-provided prose, and the prompt tells Scribe to use a verified id
+directly (with `get_entity_context` for a goal, project or org unit). The
+context is ephemeral and is not stored in the thread.
 
-The frontend has more page kinds than the server verifies: `goal`, `goals`,
+The frontend has more page kinds than the server verifies: `goals`,
 `team_meeting` and `mission_control` exist to key the drawer's starters and
 launchers. `sendAssistantMessage()` in `lib/api.ts` forwards `entity_type` and
-`entity_id` only for `direct_report` and `project`; every other kind sends the
-bounded label alone, the same display-only context any generic page has.
-Scribe resolves a goal from the label with `list_goals`, like any named goal.
+`entity_id` only for `direct_report`, `project`, `goal` and `org_unit`; every
+other kind sends the bounded label alone, the same display-only context any
+generic page has.
 
 ## Frontend
 
@@ -210,6 +239,9 @@ offers three starter prompts keyed on the page context's `entity_type`:
   1:1.
 - `goals` / `goal`: goals with no update this month; goals that look at risk;
   projects not linked to a goal.
+- `org_unit` (the Team page, using the team name from `subject`): how the team
+  is doing and what needs attention; which goals and projects haven't moved;
+  what's still open from recent team meetings.
 - `mission_control`: what to get to first this week; who I haven't had a 1:1
   with in a while; help me get ready for a hard conversation.
 
@@ -220,8 +252,9 @@ until the manager presses Send, so they cost nothing unused.
 `useDrawer().ask(prompt, context?)`, which opens the drawer with the prompt in
 the composer. They appear as "Ask about {first name}" on the Relationship Desk
 header, "Ask about this goal" on each goal card and the goal detail view, "Ask
-about this project" in each project brief's action row, and "Ask about this
-meeting" on a team meeting. A launcher may pass a narrower context (one goal on
+about this project" in each project brief's action row, "Ask about this
+team" beside the Team page's manager-only line when a specific team is selected
+(not under "All teams"), and "Ask about this meeting" on a team meeting. A launcher may pass a narrower context (one goal on
 the Goals board, one project); that override lasts until the drawer closes or
 the route changes, then the page's own context returns. Scribe has no meeting
 tool, so the meeting launcher carries the agenda (up to six items) in its
@@ -302,7 +335,10 @@ agent-loop changes.
   index on this path.
 - Deep assessments, development, capacity, and time-off evidence remain in
   `get_people_context`; workspace search is discovery, not a replacement for
-  that connected person packet.
+  that connected person packet. `get_entity_context` covers one goal, project
+  or org unit at a time; comparing several teams takes several calls.
+- A team packet shows only the calling manager's records. A team shared with
+  another manager looks thinner than it is until the department rollup ships.
 - Relational `is_stale` is a simple 180-day age signal based on the result's
   relevant date. It warns the model but does not decide whether a record is
   still authoritative. Context Engine freshness rules continue to govern

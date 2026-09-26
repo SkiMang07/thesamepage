@@ -72,12 +72,12 @@ The v2 read surface is converging toward four capabilities:
      context.
    - Returns compact evidence references with stable IDs, subject/scope IDs,
      source type, event/effective date, and a human-readable excerpt.
-2. `get_entity_context(entity_type, entity_id, time_range?)` — **partially
-   shipped as `get_people_context`**
-   - Deep, connected context for one resolved person is shipped, including
-     explicit multi-person synthesis.
-   - Equivalent deep team, goal, project, and org-unit packets remain pending;
-     broad discovery for those entities is available through workspace search.
+2. `get_entity_context(entity_type, entity_id)` — **shipped** (C3, 2026-09-26)
+   - People: `get_people_context`, one or several resolved people.
+   - Goals, projects and org units (a department includes its teams):
+     `get_entity_context`. The `time_range` argument was dropped; packets are
+     recency-bounded and search covers date-scoped questions. See
+     `docs/systems/scribe.md` → Agent loop.
 3. `get_manager_brief()` — **shipped**
    - Makes Mission Control's deterministic attention evidence available when it
      helps answer a question. It is an optional tool, not a mandatory route.
@@ -180,8 +180,8 @@ Remaining search follow-ups are evidence-driven only:
 - improve recall/ranking if beta queries show consistent lexical misses;
 - clickable sources shipped as citation chips (C2, 2026-09-26; see
   `docs/systems/scribe.md` → Citations);
-- broaden deep entity context beyond people only when real questions require
-  more than search plus the current canonical list tools.
+- deep goal, project and org-unit packets shipped (C3, 2026-09-26); widen the
+  org-unit scope when the department rollup ships.
 
 ## Model bake-off
 

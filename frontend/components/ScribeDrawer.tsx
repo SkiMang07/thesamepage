@@ -121,6 +121,14 @@ function starterPrompts(ctx: AssistantPageContext | undefined): string[] {
         "Which goals look at risk, and why?",
         "Which projects aren't linked to a goal?",
       ];
+    case "org_unit": {
+      const team = ctx.subject || "this team";
+      return [
+        `How is ${team} doing, and what needs my attention?`,
+        `Which of ${team}'s goals and projects haven't moved lately?`,
+        `What's still open from ${team}'s recent team meetings?`,
+      ];
+    }
     case "mission_control":
       return [
         "What should I get to first this week, and why?",
