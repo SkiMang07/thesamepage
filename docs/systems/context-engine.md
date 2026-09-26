@@ -44,11 +44,25 @@ current_org_id()::text`.
 
 ## Upload pipeline
 
-`POST /api/documents/upload` runs synchronously: PPTX→PDF (headless LibreOffice)
-→ raw file to the bucket → `documents` row at `status='processing'` → **one**
-structured Librarian call (extraction plus category / freshness_class /
-effective_date / summary_card / novelty_score / series together, per document —
-not one call per category question) → row set to `pending_review`.
+`POST /api/documents/upload` runs synchronously: raw file to the bucket →
+`documents` row at `status='processing'` → text → **one** structured Librarian
+call (category / freshness_class / effective_date / summary_card /
+novelty_score / series together, per document — not one call per category
+question) → row set to `pending_review`. Any failure sets `status='failed'`.
+
+**We read the text; the model only files it.** `extracted_text` is the
+document's own text: the file itself for `.md`/`.txt`, and for PDF and PPTX
+(PPTX→PDF via headless LibreOffice first) the PDF's text layer read locally
+with `pypdf`. The Librarian gets that text (first 120,000 characters) and
+returns only the small filing fields — `max_tokens` 1500, 120s timeout. It is
+never asked to copy the document back: a reply that long runs past the token
+cap and the HTTP timeout, the JSON comes back cut off, and the upload fails.
+That is what failed the first real upload, a ~21KB principles doc.
+
+Only a PDF with no usable text layer (under 200 characters — a scan, or slides
+that are all pictures) is sent to the model as a document to read and
+transcribe (`generate_text_from_document`, `max_tokens` 4000). A long scan can
+still be cut off there; it fails cleanly and the manager can delete it.
 
 `document_scopes` is deliberately **not** written here. Scope is a
 user-confirmed field. A doc with no scope row is invisible to retrieval until a
@@ -95,15 +109,21 @@ cost/prompt-size judgment call) get a second query for full `extracted_text`;
 tier one never touches that column.
 
 `format_context_block()` renders an embeddable prompt section, `""` when nothing
-was retrieved. `record_citations()` writes one `document_citations` row per doc
+was retrieved. Each document's text is capped at 24,000 characters (~6,000
+tokens, with a "not included" marker) so a long PDF can't put a whole book
+into every prep; a principles-sized doc goes in whole. `record_citations()` writes one `document_citations` row per doc
 actually embedded.
 
 **No AI call inside retrieval.** Ranking is plain Python over already-fetched
 metadata. Revisit only if the heuristic proves insufficient against real usage.
 
-**Only call site today: `POST /api/one-on-ones/prep`.** The context block splices
-into `_build_prep_prompt()` after role expectations, before the manager's raw
-notes. Wrap-up, assessments, and the dashboard insight are not wired to it.
+**Call sites: 1:1 prep.** `assemble_prep_inputs()` retrieves for the report's
+org unit and splices the block into `_build_prep_prompt()` after role
+expectations, before the manager's raw notes; it is shared by
+`POST /api/one-on-ones/prep` and the parked overnight prep. The sheet's "Drew
+on" line names each embedded document as "<title> (Knowledge)". The Scribe
+searches confirmed docs separately (`search_confirmed_documents()`). Wrap-up,
+assessments, and the dashboard insight are not wired to it.
 
 ## Decay
 
@@ -149,7 +169,9 @@ block the upload flow.
 
 ## Not verified live
 
-None of the Context Engine has run against production data. Specifically
-unexercised: real Supabase Storage (local verification used a simplified stub),
-a real PPTX→PDF conversion on Railway, and a real conflicting-document scenario
-created through the actual UI.
+A `.md` upload has run end to end in production: stored in Storage, filed,
+confirmed with scopes. Still unexercised live: a PDF or PPTX upload (and so
+the PPTX→PDF conversion on Railway), a prep sheet that cites a document, and a
+real conflicting-document scenario created through the actual UI.
+`backend/tests/test_knowledge_to_prep.py` covers upload → confirm → prep
+("Drew on") locally for all three file types with fictional fixtures.

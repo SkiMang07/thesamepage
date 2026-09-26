@@ -58,6 +58,7 @@ trust/weight this document" logic. See that module's docstring.
 """
 import logging
 import base64
+import io
 import json
 import shutil
 import subprocess
@@ -91,6 +92,16 @@ _PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.prese
 _PDF_MIME = "application/pdf"
 _TEXT_EXTENSIONS = {".txt", ".md"}
 _STORAGE_BUCKET = "context-engine-docs"
+
+# A PDF (or a deck converted to one) whose text layer is shorter than this is
+# treated as having none -- a scan, or slides that are all pictures -- and the
+# model reads the PDF itself instead.
+_MIN_TEXT_LAYER_CHARS = 200
+
+# The Librarian only files the document (category, date, summary). It does
+# not need a 300-page PDF to do that, and an unbounded prompt would just be a
+# slow, expensive or rejected call. The full text is still stored.
+_LIBRARIAN_INPUT_CHARS = 120_000
 
 # Raw file size ceiling — the pipeline is synchronous and feeds the whole
 # document into one AI call, so an unbounded upload would just turn into a
@@ -192,19 +203,40 @@ def convert_to_pdf(raw_bytes: bytes, kind: str) -> bytes:
         return output_path.read_bytes()
 
 
+def _pdf_text_layer(pdf_bytes: bytes) -> str:
+    """The PDF's own text, read locally. Empty for a scan or an unreadable
+    file, in which case the caller falls back to the model reading the PDF."""
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    except Exception as exc:
+        logger.info("pdf text layer unreadable, falling back to the model: %s", exc)
+        return ""
+
+
 # ---------------------------------------------------------------------------
 # Librarian extraction call
 # ---------------------------------------------------------------------------
 
-def _build_extraction_prompt(existing_series: list[dict], embedded_text: str | None = None) -> str:
+_SOURCE_LABELS = {
+    "text": "a plain-text upload",
+    "pdf": "the text of a PDF (layout and images are not included)",
+    "pptx": "the text of a slide deck (layout and images are not included)",
+}
+
+
+def _build_extraction_prompt(
+    existing_series: list[dict], embedded_text: str | None = None, source_kind: str = "text"
+) -> str:
     series_lines = (
         "\n".join(f"- {s['name']} (cadence: {s.get('cadence') or 'unspecified'})" for s in existing_series)
         or "(none yet — this would be the first)"
     )
 
     document_section = (
-        f"""The document's full text follows, delimited by triple dashes — this is a plain-text
-upload, not a deck/PDF, so there is nothing else to read:
+        f"""The document's text follows, delimited by triple dashes. It is {_SOURCE_LABELS.get(source_kind, _SOURCE_LABELS["text"])},
+so there is nothing else to read:
 ---
 {embedded_text}
 ---"""
@@ -212,10 +244,11 @@ upload, not a deck/PDF, so there is nothing else to read:
         else "Read the attached document (a PDF, possibly converted from a slide deck) in full."
     )
 
-    # Plain-text uploads: we already hold the full text, so the model must NOT
-    # echo it back. Transcribing a long .md into the JSON blew past both the
-    # output token cap and the HTTP timeout (a ~20KB principles doc failed with
-    # "The read operation timed out"). The route stores the raw text itself.
+    # When we already hold the text (a .md/.txt, or a PDF/deck with a text
+    # layer) the model must NOT echo it back. Transcribing a long document into
+    # the JSON blew past both the output token cap and the HTTP timeout (a
+    # ~21KB principles doc failed with "The read operation timed out"; the same
+    # text as a PDF came back cut off). The route stores the text itself.
     extracted_text_key = (
         ""
         if embedded_text is not None
@@ -427,21 +460,32 @@ def upload_document(
     existing_series = supabase.table("document_series").select("id,name,cadence").execute().data
 
     try:
+        # Read the text ourselves whenever the file has any: the model then
+        # only returns the small filing fields. Only a PDF with no text layer
+        # (a scan) is sent to the model to read and transcribe.
+        pdf_bytes = None
         if file_type == "text":
-            embedded_text = raw_bytes.decode("utf-8", errors="replace")
-            prompt = _build_extraction_prompt(existing_series, embedded_text=embedded_text)
-            raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=1500, timeout=120.0)
+            source_text = raw_bytes.decode("utf-8", errors="replace")
         else:
             pdf_bytes = convert_to_pdf(raw_bytes, "pptx") if file_type == "pptx" else raw_bytes
+            layer = _pdf_text_layer(pdf_bytes)
+            source_text = layer if len(layer) >= _MIN_TEXT_LAYER_CHARS else None
+
+        if source_text is not None:
+            prompt = _build_extraction_prompt(
+                existing_series, embedded_text=source_text[:_LIBRARIAN_INPUT_CHARS], source_kind=file_type
+            )
+            raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=1500, timeout=120.0)
+            parsed = _parse_librarian_response(raw)
+            parsed["extracted_text"] = source_text
+        else:
             document_b64 = base64.b64encode(pdf_bytes).decode("ascii")
             prompt = _build_extraction_prompt(existing_series)
             raw = generate_text_from_document(
                 prompt, document_b64, media_type="application/pdf",
                 model=AI_DEFAULT_MODEL_HEAVY, max_tokens=4000,
             )
-        parsed = _parse_librarian_response(raw)
-        if file_type == "text":
-            parsed["extracted_text"] = embedded_text
+            parsed = _parse_librarian_response(raw)
     except HTTPException:
         supabase.table("documents").update({"status": "failed"}).eq("id", document_id).execute()
         raise

@@ -565,6 +565,13 @@ def search_confirmed_documents(
     return results
 
 
+# Stored text is now the document's own text layer, not a model transcription
+# capped at ~4,000 output tokens, so a long PDF could otherwise put a whole
+# book into every prep prompt. ~6,000 tokens a document, at most 4 documents.
+# A ~21KB principles doc fits whole.
+_MAX_CONTEXT_CHARS_PER_DOC = 24_000
+
+
 def format_context_block(retrieved_docs: list[dict]) -> str:
     """Render get_relevant_context()'s output as a ready-to-embed prompt
     section. Returns "" (not a section with nothing in it) when there is
@@ -579,6 +586,8 @@ def format_context_block(retrieved_docs: list[dict]) -> str:
         category_label = _CATEGORY_LABELS.get(doc.get("category"), doc.get("category") or "uncategorized")
         effective = doc.get("effective_date") or "date unknown"
         body = doc.get("extracted_text") or doc.get("summary_card") or "(no content extracted)"
+        if len(body) > _MAX_CONTEXT_CHARS_PER_DOC:
+            body = body[:_MAX_CONTEXT_CHARS_PER_DOC].rstrip() + "\n    […the rest of this document is not included]"
         lines.append(
             f'  • "{doc["title"]}" [{category_label} — {doc.get("scope_label", "")} — as of {effective}]\n'
             f"    {body}"
