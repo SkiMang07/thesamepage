@@ -212,6 +212,18 @@ upload, not a deck/PDF, so there is nothing else to read:
         else "Read the attached document (a PDF, possibly converted from a slide deck) in full."
     )
 
+    # Plain-text uploads: we already hold the full text, so the model must NOT
+    # echo it back. Transcribing a long .md into the JSON blew past both the
+    # output token cap and the HTTP timeout (a ~20KB principles doc failed with
+    # "The read operation timed out"). The route stores the raw text itself.
+    extracted_text_key = (
+        ""
+        if embedded_text is not None
+        else """
+  "extracted_text": "the document's full text content, transcribed as faithfully and completely as
+    you can — this is what future retrieval will search, so completeness matters more than brevity.","""
+    )
+
     return f"""You are the Librarian, the resident context-curation agent for The Same Page, a
 management operating system. A manager just uploaded a document to their team's Context Engine —
 your job is to read it and propose how it should be filed. You curate; you do not give advice.
@@ -221,10 +233,7 @@ your job is to read it and propose how it should be filed. You curate; you do no
 Respond with ONLY a single JSON object (no markdown code fences, no commentary before or after) with
 exactly these keys:
 
-{{
-  "extracted_text": "the document's full text content, transcribed as faithfully and completely as
-    you can — this is what future retrieval will search, so completeness matters more than brevity.
-    For a plain-text upload, this can simply be the text you were given, lightly cleaned up.",
+{{{extracted_text_key}
   "category": "one of: where_we_are_going, who_we_are_and_how_we_operate, who_we_serve,
     what_we_offer, how_people_grow_here — pick the single best fit",
   "freshness_class": "one of: evergreen (timeless — values, charters), dated (true as of a specific
@@ -421,7 +430,7 @@ def upload_document(
         if file_type == "text":
             embedded_text = raw_bytes.decode("utf-8", errors="replace")
             prompt = _build_extraction_prompt(existing_series, embedded_text=embedded_text)
-            raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=3000)
+            raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=1500, timeout=120.0)
         else:
             pdf_bytes = convert_to_pdf(raw_bytes, "pptx") if file_type == "pptx" else raw_bytes
             document_b64 = base64.b64encode(pdf_bytes).decode("ascii")
@@ -431,6 +440,8 @@ def upload_document(
                 model=AI_DEFAULT_MODEL_HEAVY, max_tokens=4000,
             )
         parsed = _parse_librarian_response(raw)
+        if file_type == "text":
+            parsed["extracted_text"] = embedded_text
     except HTTPException:
         supabase.table("documents").update({"status": "failed"}).eq("id", document_id).execute()
         raise

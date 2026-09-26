@@ -59,7 +59,9 @@ _ANTHROPIC_TO_OPENAI = {
 }
 
 
-def _call_anthropic(prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: int = 1500) -> dict:
+def _call_anthropic(
+    prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: int = 1500, timeout: float = 60.0
+) -> dict:
     started = time.monotonic()
     try:
         resp = httpx.post(
@@ -75,7 +77,7 @@ def _call_anthropic(prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens
                 "system": prompt,
                 "messages": [{"role": "user", "content": "Proceed."}],
             },
-            timeout=60.0,
+            timeout=timeout,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -122,10 +124,13 @@ def extract_text(provider: str, response: dict) -> str:
         raise HTTPException(status_code=502, detail=f"Unexpected AI response shape: {e}")
 
 
-def generate_text(prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: int = 1500) -> str:
+def generate_text(
+    prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: int = 1500, timeout: float = 60.0
+) -> str:
     """Convenience wrapper: prompt in, plain text out. Use this from route
-    handlers for the common case (no need to touch provider/response internals)."""
-    response = _call_anthropic(prompt, model=model, max_tokens=max_tokens)
+    handlers for the common case (no need to touch provider/response internals).
+    Pass a longer timeout for calls that read a long input (document extraction)."""
+    response = _call_anthropic(prompt, model=model, max_tokens=max_tokens, timeout=timeout)
     return extract_text("anthropic", response)
 
 
