@@ -398,7 +398,7 @@ function Workspace({
       </div>
 
       <div className="mt-5">
-        <SourcePane text={draft.source_text} label={draft.source_label} />
+        <SourcePane text={draft.source_text} label={draft.source_label} context={draft.analysis?.context} />
       </div>
       {openCount > 0 && (
         <a href="#coach-heading" className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline lg:hidden">
@@ -611,6 +611,7 @@ function ApprovedView({ ws, focus, onOpened }: { ws: RoleWorkspace; focus: strin
 function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWorkspace) => void }) {
   const [text, setText] = useState(ws.role.job_responsibilities ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const [context, setContext] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copyOptions, setCopyOptions] = useState<RolesOverviewLevel[]>([]);
@@ -626,11 +627,14 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
     setBusy("compose");
     setError(null);
     try {
-      const composed = await composeRoleFromJd(file ? { file, roleLevelId: ws.role.id } : { text: text.trim(), roleLevelId: ws.role.id });
+      const composed = await composeRoleFromJd(
+        file ? { file, context, roleLevelId: ws.role.id } : { text: text.trim(), context, roleLevelId: ws.role.id }
+      );
       const next = await openRoleDraft({
         role_level_id: ws.role.id,
         source_text: composed.source_text,
         source_label: composed.source_label,
+        context: composed.context,
         items: composed.items,
         questions: composed.questions,
         notes: composed.notes,
@@ -646,7 +650,12 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
     setBusy(copyRoleId ? "copy" : "blank");
     setError(null);
     try {
-      let next = await openRoleDraft({ role_level_id: ws.role.id, source_text: text.trim() || null, source_label: text.trim() ? "Job description" : null });
+      let next = await openRoleDraft({
+        role_level_id: ws.role.id,
+        source_text: text.trim() || null,
+        source_label: text.trim() ? "Job description" : null,
+        context: context.trim() || null,
+      });
       if (copyRoleId && next.draft) next = await copyIntoRoleDraft(next.draft.id, next.draft.version, copyRoleId);
       onOpened(next);
     } catch (e) {
@@ -672,7 +681,7 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
           {ws.role.job_responsibilities ? "The description saved for this role is below — edit it or replace it." : "Paste or upload it. You’ll get a first draft and a few focused questions."}
         </p>
         <div className="mt-4">
-          <JdInput text={text} onText={setText} file={file} onFile={setFile} disabled={!!busy} />
+          <JdInput text={text} onText={setText} file={file} onFile={setFile} context={context} onContext={setContext} disabled={!!busy} />
         </div>
         <div className="mt-4 flex justify-end">
           <button type="button" onClick={fromJd} disabled={!!busy || (!file && text.trim().length < 40)} className={BTN_PRIMARY}>

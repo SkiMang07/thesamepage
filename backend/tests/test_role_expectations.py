@@ -83,6 +83,60 @@ def test_judged_responsibility_has_no_target():
     assert rex.item_kind(items[0]) == "skills"
 
 
+NOTES = "He was promoted from Director of Support. He now owns renewals and expansion too, and we agreed 110% net revenue retention for the year."
+
+
+def test_compose_takes_a_target_from_the_managers_notes():
+    items, questions, notes = rex.sanitize_composed(
+        {"items": [_composed(meets="Grows the book. Keeps NRR at 110%.",
+                             target={"text": "110% net revenue retention",
+                                     "quote": "we agreed 110% net revenue retention for the year"})]},
+        corpus_text=JD, source_available=True, context_text=NOTES)
+    (item,) = items
+    assert item["target"]["status"] == "set" and item["target"]["source"] == "manager"
+    assert "110%" in item["meets"]
+    assert questions == [] and notes == []
+
+
+def test_notes_do_not_launder_an_invented_number():
+    items, _, notes = rex.sanitize_composed(
+        {"items": [_composed(meets="Keeps NRR at 120%.", target={"text": "120% NRR", "quote": "120% NRR"})]},
+        corpus_text=JD, source_available=True, context_text=NOTES)
+    assert items[0]["target"] == {"status": "unresolved"}
+    assert "120" not in items[0]["meets"]
+    assert any("your notes" in n for n in notes)
+
+
+def test_notes_work_when_the_pdf_has_no_text_layer():
+    # Scanned PDF: corpus is empty and source unavailable, but the notes still count.
+    items, _, _ = rex.sanitize_composed(
+        {"items": [_composed(meets="Keeps NRR on plan.", target={"text": "110% NRR", "quote": "110% net revenue retention"})]},
+        corpus_text="", source_available=False, context_text=NOTES)
+    assert items[0]["target"]["source"] == "manager"
+
+
+def test_compose_prompt_puts_the_notes_above_the_job_description():
+    prompt = rex._compose_prompt(jd_text=JD, role_hint=None, ladders_block="(none)", org_values=[],
+                                 sibling_block="", include_identity=True, context=NOTES)
+    assert NOTES in prompt and "follow the notes" in prompt
+    assert "manager's notes win" in prompt
+    bare = rex._compose_prompt(jd_text=JD, role_hint=None, ladders_block="(none)", org_values=[],
+                               sibling_block="", include_identity=False)
+    assert "MANAGER'S NOTES" not in bare
+
+
+def test_review_counts_the_notes_as_stated():
+    item = rex.normalize_item(_composed(key="n-bbbbbbbbbbbb", meets="Grows the book.", target={"status": "unresolved"}))
+    draft = _draft([item])
+    draft["analysis"] = {"context": NOTES}
+    parsed = {"suggestions": [{"type": "target", "item_key": item["key"], "text": "110% net revenue retention"},
+                              {"type": "target", "item_key": item["key"], "text": "130% net revenue retention"}]}
+    _, sugs, _ = rex.sanitize_review(parsed, draft)
+    assert [(s["text"], s["source"]) for s in sugs] == [("110% net revenue retention", "manager")]
+    assert NOTES in rex._review_prompt(role={"job_role": "Director of CS", "job_level": 5, "role_families": None},
+                                       draft={**draft, "questions": []}, org_values=[])
+
+
 def _draft(items, questions=None, source=JD):
     return {"items": items, "questions": questions or [], "suggestions": [], "source_text": source}
 

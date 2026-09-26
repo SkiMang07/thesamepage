@@ -175,8 +175,20 @@ export function FollowUpPicker({
 }
 
 /** The supplied job description, collapsed by default. */
-export function SourcePane({ text, label, open, onToggle }: { text: string | null; label: string | null; open?: boolean; onToggle?: (open: boolean) => void }) {
-  if (!text) {
+export function SourcePane({
+  text,
+  label,
+  context,
+  open,
+  onToggle,
+}: {
+  text: string | null;
+  label: string | null;
+  context?: string | null;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+}) {
+  if (!text && !context) {
     return (
       <p className="rounded-lg border border-dashed border-control px-4 py-3 text-sm text-ink-muted">
         No job description saved for this role. Everything below is your own wording.
@@ -190,10 +202,17 @@ export function SourcePane({ text, label, open, onToggle }: { text: string | nul
       onToggle={(e) => onToggle?.((e.target as HTMLDetailsElement).open)}
     >
       <summary className="cursor-pointer py-3 text-sm font-medium text-ink">
-        Source job description <span className="font-normal text-ink-muted">· {label || "as supplied"}</span>
+        {text ? "Source job description" : "Your notes on this role"}{" "}
+        <span className="font-normal text-ink-muted">· {text ? `${label || "as supplied"}${context ? " + your notes" : ""}` : "no job description"}</span>
       </summary>
-      <div className="max-h-[28rem] overflow-y-auto whitespace-pre-wrap border-t border-divider py-3 text-sm leading-relaxed text-ink-secondary">
-        {text}
+      <div className="max-h-[28rem] overflow-y-auto border-t border-divider py-3 text-sm leading-relaxed text-ink-secondary">
+        {context && (
+          <div className={text ? "mb-4 rounded-md bg-sunken px-3 py-2.5" : ""}>
+            {text && <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">Your notes · these win where they disagree</p>}
+            <p className="whitespace-pre-wrap text-ink-body">{context}</p>
+          </div>
+        )}
+        {text && <div className="whitespace-pre-wrap">{text}</div>}
       </div>
     </details>
   );

@@ -51,7 +51,8 @@ keys. Every reader filters `retired_at IS NULL`.
   index). `kind` `new` (no approved expectations yet) or `revision` (approved
   expectations stay in use meanwhile). Holds `source_text`/`source_label` (the JD as
   supplied), `items` (the plain-language document), `questions`, `suggestions`,
-  `analysis`, and an optimistic-lock `version`. `status` open → approved/discarded.
+  `analysis` (which also carries `context`, the manager's notes — see Define a
+  role), and an optimistic-lock `version`. `status` open → approved/discarded.
 - `role_expectation_decisions` — a detail the manager chose to come back to: role
   level, the item (`item_key`, which becomes the config id on approval), topic,
   question, `follow_up_on` date, status deferred → resolved/dropped. Survives
@@ -74,7 +75,13 @@ are listed once with add/edit/remove and an AI suggestion that saves nothing unt
 kept. First use shows a single "Start with one role" prompt.
 
 **Define a role** (`/app/expectations/new`). Paste or upload (PDF, .docx, .txt,
-.md) a job description. `POST /import` makes one AI call: placement proposal
+.md) a job description, and optionally add notes in "What the job description
+doesn't say" (typed or dictated; the box stays when a file is attached). Job
+descriptions are often out of date — written before a promotion — or generic;
+the notes say what's true now. **Where the notes and the job description
+disagree, the notes win** (title and level included), and a target stated in the
+notes is a stated target (`target_source` `manager`). The notes are kept on the
+draft as `analysis.context` and go into every reanalysis. `POST /import` makes one AI call: placement proposal
 (attach / new ladder / existing level, validated server-side by `roles_import`'s
 helpers) plus a first draft and at most three focused questions. The manager
 confirms title, level and ladder; an existing ladder+level opens that role instead
@@ -83,13 +90,13 @@ of creating a second one. `?family=` pins a ladder; `?assign=` assigns a person
 skips AI. The JD text is never lost on failure.
 
 **Role page** (`/app/expectations/[roleLevelId]`):
-- *Open draft* → the workspace: collapsible source JD, the editable document by
+- *Open draft* → the workspace: collapsible source JD (with the manager's notes above it), the editable document by
   section, and the coaching panel. Actions: **Save & reanalyze**, **Review for
   approval →**, **Save & finish later**, discard. Unsaved edits warn on leave.
   "Reuse expectations from another role" copies approved items in as editable copies.
 - *Approved, no draft* → the standard in use, open decisions with "Resolve in a
   revision", and "Refine expectations".
-- *Nothing yet* → start from the JD (saved one prefilled), another role, or blank.
+- *Nothing yet* → start from the JD (saved one prefilled) plus notes, another role, or blank.
 
 **Review** (`…/review`). The complete content that will become active, Edit links
 back to each field, every open detail with "Bring this back" dates, what's parked,
@@ -105,12 +112,13 @@ and one explicit confirmation + **Approve** for the whole role.
   **one transaction**. A stale version is 409; any failure writes nothing; a retry
   after success returns the approved draft unchanged.
 - **Never invent a number.** Every number in AI-proposed text must already appear
-  in the job description, the current draft or the manager's answers
-  (`numbers_in` / `strip_unsupported`); sentences with any other number are
+  in the job description, the manager's notes, the current draft or the manager's
+  answers (`numbers_in` / `strip_unsupported`); sentences with any other number are
   removed and noted. A composed target survives only if its exact quote is in the
-  source and its numbers are in the quote; otherwise the item is numeric with an
-  unresolved target. A scanned PDF with no text layer yields no numbers at all.
-  Suggested targets must trace to the source or the manager's answers.
+  source (`target_source` `source`) or the notes (`manager`) and its numbers are in
+  the quote; otherwise the item is numeric with an unresolved target. A scanned PDF
+  with no text layer yields no numbers of its own — only the notes' numbers count.
+  Suggested targets must trace to the source, the notes or the manager's answers.
 - **Every missing target is explicit.** A numeric responsibility without a target
   always carries a system question (independent of the AI). It closes only by
   writing the target or making the item unmeasured — never by dismissing it.

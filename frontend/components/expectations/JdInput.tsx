@@ -1,14 +1,60 @@
 "use client";
 
-// Paste or upload a job description. The text stays in the parent's state,
-// so a failed draft never loses what the manager pasted.
+// Paste or upload a job description, plus the manager's own notes beside it.
+// The notes box stays whether the description is pasted or attached: a job
+// description is often out of date (written before a promotion) or generic,
+// and the notes are where the manager says what's true now. Where the two
+// disagree, the notes win (backend/routes/role_expectations.py).
+// Everything stays in the parent's state, so a failed draft never loses it.
 
 import { useRef, useState } from "react";
-import { TEXTAREA } from "@/lib/tokens";
+import { LABEL, TEXTAREA } from "@/lib/tokens";
+import NoteField from "@/components/NoteField";
 
 const ACCEPT = ".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown";
 
 export default function JdInput({
+  text,
+  onText,
+  file,
+  onFile,
+  context,
+  onContext,
+  disabled,
+}: {
+  text: string;
+  onText: (t: string) => void;
+  file: File | null;
+  onFile: (f: File | null) => void;
+  context: string;
+  onContext: (t: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <SourceInput text={text} onText={onText} file={file} onFile={onFile} disabled={disabled} />
+      <div className="mt-5">
+        <label htmlFor="jd-context" className={LABEL}>
+          What the job description doesn’t say <span className="font-normal text-ink-muted">· optional</span>
+        </label>
+        <p className="mb-2 text-sm text-ink-muted">
+          How the role has changed, what you expect now, targets you’ve already agreed. Where this and the job description disagree, this wins.
+        </p>
+        <NoteField
+          id="jd-context"
+          value={context}
+          onChange={onContext}
+          disabled={disabled}
+          rows={5}
+          placeholder="e.g. He was promoted from Director of Support — he now owns renewals and onboarding too, and leads three managers."
+          className="text-sm leading-relaxed"
+        />
+      </div>
+    </div>
+  );
+}
+
+function SourceInput({
   text,
   onText,
   file,

@@ -2014,6 +2014,8 @@ export type RoleDraft = {
     summary?: string | null;
     error?: string;
     notes?: string[];
+    /** The manager's notes beside the job description. They win where the two disagree. */
+    context?: string | null;
     analyzed_at?: string;
     new_questions?: number;
     new_suggestions?: number;
@@ -2107,6 +2109,7 @@ export type RoleCompose = {
   match: RoleImportMatch | null;
   source_text: string | null;
   source_label: string | null;
+  context: string | null;
   items: RoleItem[];
   questions: RoleQuestion[];
   notes: string[];
@@ -2120,10 +2123,11 @@ export const getRoleWorkspace = (roleLevelId: string): Promise<RoleWorkspace> =>
 // One AI call: placement proposal + first draft + focused questions from a
 // job description. Nothing is saved. With roleLevelId the role is known and
 // no placement is proposed.
-export const composeRoleFromJd = (input: { file?: File; text?: string; roleLevelId?: string }): Promise<RoleCompose> => {
+export const composeRoleFromJd = (input: { file?: File; text?: string; context?: string; roleLevelId?: string }): Promise<RoleCompose> => {
   const formData = new FormData();
   if (input.file) formData.append("file", input.file);
   if (input.text) formData.append("text", input.text);
+  if (input.context?.trim()) formData.append("context", input.context.trim());
   if (input.roleLevelId) formData.append("role_level_id", input.roleLevelId);
   return authedFormFetch("/api/role-expectations/import", formData);
 };
@@ -2134,6 +2138,7 @@ export const openRoleDraft = (body: {
   role_level_id: string;
   source_text?: string | null;
   source_label?: string | null;
+  context?: string | null;
   items?: RoleItem[];
   questions?: RoleQuestion[];
   notes?: string[];

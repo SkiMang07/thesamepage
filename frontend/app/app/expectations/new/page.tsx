@@ -50,6 +50,7 @@ function DefineRole() {
   const [step, setStep] = useState<Step>("input");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [context, setContext] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [composed, setComposed] = useState<RoleCompose | null>(null);
   const [families, setFamilies] = useState<RoleFamily[]>([]);
@@ -81,7 +82,7 @@ function DefineRole() {
     setError(null);
     setStep("working");
     try {
-      const out = await composeRoleFromJd(file ? { file } : { text: text.trim() });
+      const out = await composeRoleFromJd(file ? { file, context } : { text: text.trim(), context });
       if (!out.is_job_description) {
         setError(out.reason || "That doesn’t look like a job description.");
         setStep("input");
@@ -144,6 +145,7 @@ function DefineRole() {
         role_level_id: roleLevelId,
         source_text: sourceText,
         source_label: composed?.source_label ?? (file ? file.name : sourceText ? "Pasted job description" : null),
+        context: composed?.context ?? (context.trim() || null),
         items: composed?.items,
         questions: composed?.questions,
         notes: composed?.notes,
@@ -188,7 +190,7 @@ function DefineRole() {
 
       {step !== "placement" && (
         <section className={`${CARD} mt-6 p-5 sm:p-6`}>
-          <JdInput text={text} onText={setText} file={file} onFile={setFile} disabled={step === "working"} />
+          <JdInput text={text} onText={setText} file={file} onFile={setFile} context={context} onContext={setContext} disabled={step === "working"} />
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={startWithoutDraft} disabled={step === "working"} className={BTN_GHOST}>
               Start without a draft
