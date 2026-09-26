@@ -11,12 +11,15 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 | `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for". Returns `meeting`, `next_session`, the `commitments` actually inserted, and the cleaned `carry_forward_items` — see "Logging is all-or-nothing" |
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
-| `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one |
+| `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one. `opening_line` omitted keeps the occurrence's; null clears it |
 | `PATCH /session/{id}/schedule` | edits an unfinished occurrence's date and 1–4 week repeat rule |
-| `POST /wrapup` | notes → draft summary, commitments, and carry-forward topics |
+| `POST /wrapup` | notes → draft summary, commitments, carry-forward topics, and an `opening_line` for the next 1:1 |
 | `GET`/`POST /{direct_report_id}/captures`, `DELETE /captures/{id}` | between-session capture notes |
 
 `/overview` is declared before `/{id}`.
+
+The worker's overnight prep (`backend/jobs/nightly_prep.py`) is not an
+endpoint; see "Prepared overnight" below.
 
 ## Status is derived, never stored
 
@@ -87,7 +90,9 @@ Relationship reads top to bottom:
   its repeat rule, and a passed-but-unlogged date says so. Unprepared, it shows
   the first carried topic with the rest behind a disclosure; prepared, the saved
   sheet's situation summary and first agenda titles, and any captures kept
-  since. Compact disclosures show kept thoughts (removable), work check-ins,
+  since. A sheet the worker prepared is badged "Prepared overnight" with a
+  line asking the manager to review it before starting. An unprepared
+  occurrence with a kept opening line shows it first ("Open with"). Compact disclosures show kept thoughts (removable), work check-ins,
   suggested signals and the open-commitment count. **Date & repeat** links to
   `/prep#schedule`, which focuses the canonical date control; on an existing
   workspace that control now saves on change, through the same schedule write.
@@ -217,13 +222,43 @@ moment a manager prepared, and a fully prepped conversation could report
 scheduled states alone. Rationale and suggested questions stay on the prep sheet
 itself; the card carries the titles.
 
+### Prepared overnight
+
+Every unfinished occurrence dated today or tomorrow with no sheet is prepared
+in the night by the background worker (`docs/ENGINEERING.md` → Background
+worker), for managers on an active plan or trial and never for archived people.
+It reads what the source review would include by default: the occurrence's
+carry-forwards and opening line, every capture (oldest first, as the notes
+prefill), open commitments, up to three at-risk goals and the development
+plan's opening (the same lines `lib/one-on-one-workspace.ts` derives), recent
+history, role expectations and Context Engine documents. It goes through the
+same `assemble_prep_inputs()` / `parse_prep_output()` / `build_prep_guide()`
+as `/prep`, sent through the Batch API.
+
+The result is saved only if the occurrence still has no sheet and no summary,
+checked again in the write itself, so a manager who prepares by hand in the
+meantime always wins. A reply that doesn't parse into an agenda saves nothing.
+Once saved, the captures the prompt read are deleted (their text is now the
+sheet's `source_notes`), and any kept later stay. `prep_guide` records
+`prepared_by` (`manager` | `overnight`), `prepared_at`, and for overnight
+sheets `drew_on`, the plain list the sheet shows ("Prepared overnight · Drew on
+1 carried topic, 2 open commitments, … · Rebuild"). Rebuild is "Edit prep":
+the source review, with everything the worker read, then a normal generate.
+The existing "Prep ready" surfaces (`/app/1-1s`, Mission Control's "Review
+Jordan's saved 1:1 prep") light up without change.
+
+See `docs/decisions/next-one-on-one-workspace.md` → Amendment for why this is
+still just-in-time.
+
 Output shape is `situation_summary` + `agenda_items[]`, not flat Q&A lists. Each
 agenda item renders as a collapsible card: rationale as italic subtext, suggested
 questions as an indented list. **The closing question is mandatory and always the
 last agenda item.**
 
 The prompt is assembled by `_build_prep_prompt()` from, in order: history,
-open commitments, carry-forward, selected signals, secondhand notes from
+open commitments, carry-forward, the kept opening line (asked to become the
+first agenda item's first question unless newer context resolves it), selected
+signals, secondhand notes from
 meetings beyond the team (framed as someone else's account, never fact — see
 `beyond.md`), role expectations, the Context Engine block (see
 `context-engine.md`), then the manager's raw notes.
@@ -258,6 +293,16 @@ unresolved topics from the call notes, but they remain editable/removable and
 are not saved until the manager confirms the whole wrap-up. They seed
 `carry_forward_items` on the next occurrence whether that occurrence is
 scheduled through a recurring series or remains an undated gathering workspace.
+
+Above it, **Open next time with**: one sentence the manager could open the next
+1:1 with, drafted from the single most important thread left open (a
+commitment with a date, or a deferred topic), phrased as a question about
+where it landed — never "don't forget" or "you said you'd". The prompt allows
+an empty line and often returns one. It is editable and clearable, and only a
+kept, non-empty line is saved, onto the next occurrence's `opening_line`
+(replacing any earlier one; an empty one leaves an existing line alone). Prep
+shows it as the first source ("Open with · kept at your last wrap-up"),
+removable like the others.
 
 Open commitments are never copied into the next occurrence. They remain one
 live accountability record and `/prep` pulls whatever is still open at

@@ -197,6 +197,12 @@ export type PrepGuide = {
   agenda_items: AgendaItem[];
   open_commitments_to_check: Pick<Commitment, "id" | "description" | "due_date" | "committed_by">[];
   source_notes?: string;
+  // "manager" (they pressed Prepare) or "overnight" (the worker prepared it
+  // ahead of the meeting). Absent on sheets saved before 2026-09-26.
+  prepared_by?: "manager" | "overnight";
+  prepared_at?: string;
+  // Overnight sheets only: plain labels for what the sheet was built from.
+  drew_on?: string[];
 };
 
 export type OneOnOne = {
@@ -210,6 +216,8 @@ export type OneOnOne = {
   recurrence_weeks?: 1 | 2 | 3 | 4 | null;
   recurrence_timezone?: string | null;
   carry_forward_items: string[];
+  // One line to open this 1:1 with, kept at the previous wrap-up.
+  opening_line?: string | null;
   created_at: string;
   // When the write-up was saved. Bookkeeping only — never a meeting date.
   logged_at?: string | null;
@@ -265,6 +273,10 @@ export type PrepResponse = {
   scheduled_at: string | null;
   recurrence_weeks: 1 | 2 | 3 | 4 | null;
   carry_forward_items: string[];
+  opening_line?: string | null;
+  prepared_by?: "manager" | "overnight";
+  prepared_at?: string | null;
+  drew_on?: string[];
 };
 
 // AI-drafted wrap-up of a 1:1 — reviewed and edited by the manager before
@@ -279,6 +291,8 @@ export type WrapUpDraft = {
   summary: string;
   commitments: WrapUpCommitment[];
   follow_up_items: string[];
+  // One line to open the next 1:1 with; "" when nothing was left open.
+  opening_line: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -1554,6 +1568,8 @@ export const prepOneOnOne = (body: {
   carry_forward_items?: string[];
   suggested_topics?: string[];
   excluded_commitment_ids?: string[];
+  // Omit to keep the occurrence's opening line; null clears it.
+  opening_line?: string | null;
 }): Promise<PrepResponse> =>
   authedFetch("/api/one-on-ones/prep", { method: "POST", body: JSON.stringify(body) });
 
@@ -1591,6 +1607,8 @@ export const logOneOnOne = (body: {
   // "A different conversation from the one I have prep saved for." Logs its
   // own occurrence and leaves the prepped workspace untouched.
   separate_occurrence?: boolean;
+  // Kept at review; saved onto the next occurrence. Null/empty keeps nothing.
+  opening_line?: string | null;
 }): Promise<LogOneOnOneResult> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 
@@ -1606,6 +1624,7 @@ export type LogOneOnOneResult = {
   next_session: OneOnOne;
   commitments: Commitment[];
   carry_forward_items: string[];
+  opening_line?: string | null;
 };
 
 // ---------------------------------------------------------------------------

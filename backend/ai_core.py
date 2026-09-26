@@ -5,6 +5,7 @@ This is the single place that knows about provider fallback, model mapping,
 and response-shape extraction, so a provider outage or API change is a
 one-file fix instead of a grep-and-replace across the codebase.
 """
+import json
 import logging
 import time
 import httpx
@@ -133,6 +134,19 @@ def _split(prompt, prefix, body) -> tuple[str, str, bool]:
     return prompt, _PROCEED, False
 
 
+def _text_params(system: str, user_text: str, cache: bool, model: str, max_tokens: int) -> dict:
+    """The Messages API body for a one-shot text call — shared by the live
+    call and the Batch API, so a batched prompt is byte-for-byte the call it
+    replaces (same cache prefix, same thinking setting)."""
+    return {
+        "model": model,
+        "max_tokens": max_tokens,
+        "thinking": _THINKING_OFF,
+        "system": _system_blocks(system, cache),
+        "messages": [{"role": "user", "content": user_text}],
+    }
+
+
 def _call_anthropic(
     prompt=None,
     model: str = AI_DEFAULT_MODEL_HEAVY,
@@ -148,13 +162,7 @@ def _call_anthropic(
         resp = httpx.post(
             _ANTHROPIC_URL,
             headers=_anthropic_headers(),
-            json={
-                "model": model,
-                "max_tokens": max_tokens,
-                "thinking": _THINKING_OFF,
-                "system": _system_blocks(system, cache),
-                "messages": [{"role": "user", "content": user_text}],
-            },
+            json=_text_params(system, user_text, cache, model, max_tokens),
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -342,6 +350,92 @@ def call_anthropic_with_tools(
     except httpx.HTTPStatusError as e:
         _log_failure("anthropic", "tools", model, e.response.status_code, started)
         raise HTTPException(status_code=502, detail=f"AI tool call failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Batch API — for work keyed to the calendar rather than to a click (the
+# background worker in backend/jobs/). Half the price of a live call, results
+# within 24 hours and usually within the hour, and prompt caching still
+# applies. Only the worker uses these; no request path waits on a batch.
+# ---------------------------------------------------------------------------
+
+_BATCHES_URL = "https://api.anthropic.com/v1/messages/batches"
+
+
+class AIBatchError(RuntimeError):
+    """A Batch API call failed. The worker records it and tries again later."""
+
+
+def submit_text_batch(requests: list[tuple[str, object]], model: str = AI_DEFAULT_MODEL_HEAVY,
+                      max_tokens: int = 1500) -> str:
+    """Submit one-shot text calls as a single batch and return the batch id.
+
+    `requests` is [(custom_id, prompt)], where prompt is a plain string or a
+    CachedPrompt, exactly as generate_text() takes it. custom_id is how each
+    result finds its way back (<= 64 chars, unique within the batch)."""
+    body = {"requests": []}
+    for custom_id, prompt in requests:
+        system, user_text, cache = _split(prompt, None, None)
+        body["requests"].append({
+            "custom_id": custom_id,
+            "params": _text_params(system, user_text, cache, model, max_tokens),
+        })
+    started = time.monotonic()
+    try:
+        resp = httpx.post(_BATCHES_URL, headers=_anthropic_headers(), json=body, timeout=60.0)
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        _log_failure("anthropic", "batch_submit", model, status, started)
+        raise AIBatchError(f"batch submit failed: {status or type(e).__name__}") from e
+    data = resp.json()
+    logger.info("ai_batch_submitted", extra={"fields": {
+        "batch_id": data.get("id"), "model": model, "requests": len(requests),
+    }})
+    return data["id"]
+
+
+def get_batch(batch_id: str) -> dict:
+    """The batch's current state. `processing_status` is 'in_progress',
+    'canceling' or 'ended'; `results_url` is set once it has ended."""
+    try:
+        resp = httpx.get(f"{_BATCHES_URL}/{batch_id}", headers=_anthropic_headers(), timeout=30.0)
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        raise AIBatchError(f"batch lookup failed: {type(e).__name__}") from e
+    return resp.json()
+
+
+def batch_text_results(batch: dict):
+    """Yield (custom_id, text, error) for every request in an ended batch.
+    text is the joined answer text for a succeeded request; otherwise it is
+    None and error is the result type ('errored', 'canceled', 'expired') or
+    'no_text'. Each succeeded result gets its own ai_call log line
+    (kind 'batch'), so the cost ledger sees batched calls like live ones."""
+    url = batch.get("results_url")
+    if not url:
+        raise AIBatchError("batch has no results yet")
+    try:
+        resp = httpx.get(url, headers=_anthropic_headers(), timeout=120.0)
+        resp.raise_for_status()
+    except httpx.HTTPError as e:
+        raise AIBatchError(f"batch results fetch failed: {type(e).__name__}") from e
+    for line in resp.text.splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        custom_id = row.get("custom_id")
+        result = row.get("result") or {}
+        if result.get("type") != "succeeded":
+            yield custom_id, None, result.get("type") or "unknown"
+            continue
+        message = result.get("message") or {}
+        _log_usage("anthropic", "batch", message.get("model") or "", message, time.monotonic())
+        text = "".join(b.get("text", "") for b in message.get("content") or [] if b.get("type") == "text")
+        if not text.strip():
+            yield custom_id, None, "no_text"
+        else:
+            yield custom_id, text.strip(), None
 
 
 def generate_text_from_document(

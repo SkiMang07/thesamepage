@@ -52,12 +52,17 @@ _EXPECTATION_TABLES = {
 }
 
 
-def fetch_role_expectations(supabase, role_level_id: str | None) -> dict | None:
+def fetch_role_expectations(supabase, role_level_id: str | None, org_id: str | None = None) -> dict | None:
     """The DR's assigned role_level plus its metric/skill/value configs.
 
     Returns None when no role is assigned (or the role row is gone) so both
     the DR detail page and the prep prompt can degrade gracefully. Shared by
     GET /{report_id} here and the 1:1 prep prompt in one_on_ones.py.
+
+    Pass org_id wherever the caller knows it. The org-wide company values
+    (role_level_id IS NULL) have no role to scope them, so under RLS they are
+    the caller's org's, but under the worker's service-role client they would
+    be every org's. With org_id they are this org's only.
     """
     if not role_level_id:
         return None
@@ -84,7 +89,12 @@ def fetch_role_expectations(supabase, role_level_id: str | None) -> dict | None:
             # downstream consumer (DR detail's expectations block, 1:1 prep
             # grounding, assessments' scorecard) sees company values
             # automatically without each caller re-implementing the union.
-            query = query.or_(f"role_level_id.eq.{role_level_id},role_level_id.is.null")
+            if org_id:
+                query = query.or_(
+                    f"role_level_id.eq.{role_level_id},and(role_level_id.is.null,org_id.eq.{org_id})"
+                )
+            else:
+                query = query.or_(f"role_level_id.eq.{role_level_id},role_level_id.is.null")
         else:
             query = query.eq("role_level_id", role_level_id)
         # order_type sorts primary < secondary < tertiary alphabetically;

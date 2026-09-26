@@ -75,6 +75,8 @@ export default function ConversationPanel({
   const datePassed = nextDate != null && nextDate < localDateStr();
   const repeat = recurrenceLabel(next?.recurrence_weeks);
   const carried = next?.carry_forward_items ?? [];
+  const openingLine = next?.opening_line?.trim() || null;
+  const overnight = guide?.prepared_by === "overnight";
   const lastDate = sessionDate(lastCompleted);
 
   const prepBase = `/app/reports/${personId}/prep`;
@@ -131,7 +133,7 @@ export default function ConversationPanel({
           <p className="text-2xs font-medium uppercase tracking-[0.16em] text-ink-muted">Next conversation</p>
           {next && (
             <span className={`rounded-full px-2.5 py-1 text-2xs font-medium ${prepared ? "bg-brand-tint text-brand" : "bg-sunken text-ink-secondary"}`}>
-              {prepared ? "Prep ready" : "Gathering context"}
+              {prepared ? (overnight ? "Prepared overnight" : "Prep ready") : "Gathering context"}
             </span>
           )}
         </div>
@@ -157,10 +159,20 @@ export default function ConversationPanel({
           </p>
         )}
 
+        {/* The opener kept at the last wrap-up, until a sheet folds it in. */}
+        {!prepared && openingLine && !historyFailed && (
+          <div className="mt-5">
+            <p className="text-xs text-ink-muted">Open with · Kept at your last wrap-up</p>
+            <p className="mt-1.5 text-sm text-ink">{openingLine}</p>
+          </div>
+        )}
+
         {/* The middle: a saved guide once prepared, otherwise what's carried. */}
         {prepared && guide ? (
           <div className="mt-5">
-            <p className="text-xs text-ink-muted">Your prepared sheet</p>
+            <p className="text-xs text-ink-muted">
+              {overnight ? "Prepared overnight from what's gathered · review it before you start" : "Your prepared sheet"}
+            </p>
             {guide.situation_summary && (
               <p className="mt-1.5 text-sm leading-6 text-ink-body">{excerpt(guide.situation_summary, 200)}</p>
             )}
@@ -207,7 +219,7 @@ export default function ConversationPanel({
               </ul>
             )}
           </div>
-        ) : historyFailed ? null : (
+        ) : historyFailed || openingLine ? null : (
           <p className="mt-5 text-sm text-ink-secondary">
             {captures.length > 0 ? "Your kept thoughts are waiting for review." : "Nothing gathered yet."}
           </p>

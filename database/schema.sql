@@ -219,6 +219,8 @@ create unique index one_on_one_series_active_report_idx
 -- notes = private manager thoughts (not shown in history).
 -- prep_guide = AI-generated prep stored for reference.
 -- carry_forward_items = manager-confirmed topics seeded from the prior call.
+-- opening_line = one sentence to open this 1:1 with, drafted at the prior
+--   wrap-up and kept by the manager; null = none kept.
 -- org_id nullable for MVP.
 --
 -- scheduled_at IS THE MEETING DATE, planned or backfilled, encoded at noon
@@ -243,6 +245,7 @@ create table one_on_ones (
   carry_forward_items jsonb not null default '[]'::jsonb
                     constraint one_on_ones_carry_forward_items_array
                     check (jsonb_typeof(carry_forward_items) = 'array'),
+  opening_line     text,
   created_at       timestamptz not null default now(),
   constraint one_on_ones_series_owner_fkey
     foreign key (series_id, manager_id, direct_report_id)
@@ -1682,6 +1685,37 @@ create table outside_suggestion_runs (
 );
 
 alter table outside_suggestion_runs enable row level security;
+
+-- -------------------------
+-- AI JOBS (2026-09-26) — the background worker's ledger (backend/jobs/).
+-- One row per unit of AI work the worker runs on its own schedule; today only
+-- 'overnight_prep', one row per 1:1 occurrence. batch_id is the Anthropic
+-- Batch API id; input is the snapshot of sources the prompt drew on (so only
+-- those captures are consumed when the sheet is saved); outcome is a short
+-- machine reason, never record text. Written and read only by the worker's
+-- service-role client: RLS on, no policies, invisible to every user session.
+-- -------------------------
+create table ai_jobs (
+  id           uuid primary key default uuid_generate_v4(),
+  kind         text not null check (kind in ('overnight_prep')),
+  manager_id   uuid not null references auth.users(id) on delete cascade,
+  one_on_one_id uuid references one_on_ones(id) on delete cascade,
+  status       text not null default 'queued'
+               check (status in ('queued', 'submitted', 'applied', 'skipped', 'failed')),
+  batch_id     text,
+  input        jsonb not null default '{}'::jsonb,
+  outcome      text,
+  created_at   timestamptz not null default now(),
+  submitted_at timestamptz,
+  finished_at  timestamptz
+);
+
+alter table ai_jobs enable row level security;
+
+create index ai_jobs_batch_idx on ai_jobs (batch_id) where status = 'submitted';
+create index ai_jobs_occurrence_idx on ai_jobs (one_on_one_id, created_at desc);
+create unique index ai_jobs_one_in_flight_idx
+  on ai_jobs (kind, one_on_one_id) where status in ('queued', 'submitted');
 
 -- commitments.org_unit_id (2026-09-24): the team a commitment belongs to, so
 -- /app/team can scope a manager-owned ("You") commitment. Null = no team

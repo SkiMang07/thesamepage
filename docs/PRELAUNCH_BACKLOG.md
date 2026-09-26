@@ -741,6 +741,16 @@ Decided the same day, behind the sentence:
 
 ### F. Reliability and performance
 
+- [ ] ✘ **Worker service running on Railway** (overnight prep, 2026-09-26).
+  The code ships with the API, but nothing prepares overnight until a second
+  Railway service exists: same repo, root `backend/`, start command
+  `python -m jobs.worker`, the API's variables (at least `SUPABASE_URL`,
+  `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`,
+  `SENTRY_DSN`), no public domain. Needs migration
+  `2026-09-26_overnight_prep.sql` first. Done when a `worker_started` line and,
+  after 07:00 UTC, a `nightly_prep` submit line appear in its logs. Worth a
+  Sentry alert on its errors, since no one watches a worker.
+
 - [x] ✔ **"JWT issued at future" 500s** (Sentry THESAMEPAGE-BACKEND-2, first
   caught 2026-09-24, minutes after Sentry went live). Right after the browser
   refreshed its Supabase token, PostgREST rejected the new token because its

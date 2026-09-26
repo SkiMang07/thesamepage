@@ -94,6 +94,9 @@ export default function WrapUpReview({
     (draft.follow_up_items ?? []).map((text, i) => ({ key: i, text }))
   );
   const [nextFollowUpKey, setNextFollowUpKey] = useState(draft.follow_up_items?.length ?? 0);
+  // One line to open the next 1:1 with. Drafted, never required: clearing
+  // it saves nothing.
+  const [openingLine, setOpeningLine] = useState(draft.opening_line ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,6 +136,7 @@ export default function WrapUpReview({
           .map(({ key: _key, ...c }) => ({ ...c, description: c.description.trim() }))
           .filter((c) => c.description),
         carry_forward_items: followUps.map((item) => item.text.trim()).filter(Boolean),
+        opening_line: openingLine.trim() || null,
         one_on_one_id: oneOnOneId,
       });
       // The receipt on the person page renders exactly what the server says
@@ -237,6 +241,36 @@ export default function WrapUpReview({
           rows={5}
           className="mt-2"
         />
+      </div>
+
+      <div className="mt-8">
+        <p className="block text-sm font-medium text-ink-body">
+          Open next time with{" "}
+          <span className="font-normal text-ink-muted">— one line to start the next 1:1</span>
+        </p>
+        <p className="mt-1 text-xs text-ink-muted">
+          {draft.opening_line
+            ? "Drafted from what was left open. Edit it, or clear it to keep nothing."
+            : "Nothing stood out to open with. Write one if you want it waiting next time."}
+        </p>
+        <div className="mt-3 flex items-start gap-3 rounded-lg border border-hairline px-4 py-3">
+          <ExpandingTextArea
+            value={openingLine}
+            onChange={setOpeningLine}
+            placeholder={`How would you like to start with ${firstName} next time?`}
+            ariaLabel="Opening line for the next 1:1"
+          />
+          {openingLine && (
+            <button
+              type="button"
+              onClick={() => setOpeningLine("")}
+              className="text-ink-faint hover:text-ink-secondary"
+              title="Clear"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-8">

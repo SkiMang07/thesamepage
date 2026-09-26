@@ -92,6 +92,12 @@ Anthropic SDK directly (`ai_core.py` itself uses raw `httpx`, not the SDK).
   across turns) and the top-level `cache_control` that turns on automatic
   caching, so each round of the loop reads the thread so far from cache and
   pays full price only for the new assistant turn and tool results.
+- `submit_text_batch()`, `get_batch()`, `batch_text_results()` — the Batch
+  API, for the background worker only (see below). Each request body is built
+  by the same `_text_params()` as a live `generate_text()` call, so a batched
+  prompt caches and thinks exactly like the live one; results come back at half
+  price, usually within the hour, always within 24. Every succeeded result
+  logs its own `ai_call` line with `kind: "batch"`. No fallback.
 
 **Prompt caching: what goes in the prefix.** The split is about repetition,
 not meaning. The prefix is whatever is byte-identical between calls that
@@ -150,6 +156,44 @@ run the real prompts against the real model over fixture data. Both need
 `ANTHROPIC_API_KEY` in `backend/.env` or the shell; neither touches the
 database. Re-run the one that covers a prompt after changing it, and both
 before changing a model name in `config.py`.
+
+### Background worker
+
+`backend/jobs/` runs on a **second Railway service** built from the same repo
+and `backend/` root as the API, with the same environment variables and the
+start command `python -m jobs.worker` (the `worker:` line in `Procfile`
+records it). It serves no HTTP. Every 15 minutes (`WORKER_TICK_SECONDS`) a
+tick collects ended batches; inside the nightly window (four hours from
+`NIGHTLY_PREP_HOUR_UTC`, default 07:00 UTC = 3am New York) it also submits the
+night's work. `python -m jobs.worker --once` runs one tick and exits, which is
+also how to run it as a Railway cron service instead.
+
+`ai_jobs` is its only state and its ledger: one row per unit of work (today
+`overnight_prep`, one per 1:1 occurrence), with the batch id, a snapshot of
+the sources the prompt read, and the outcome. A partial unique index allows
+one in-flight job per occurrence, a finished job blocks resubmission for 20
+hours, a failed one gets one retry, an orphaned `queued` row is released after
+30 minutes, and a batch still running after 26 hours is written off. So a
+restart or a mid-night deploy never prepares anything twice. Once a job
+finishes its snapshot is cut down to the `drew_on` labels, so no second copy
+of record text stays behind. RLS is on with no policies: no user session can
+see the table.
+
+**The worker uses the service-role client (`get_admin_client()`), which
+bypasses RLS.** That is the one place in the app where it is allowed, and it
+changes the rule for any code it calls: every query must carry its own
+manager/owner/org predicate, because nothing else isolates tenants. The shared
+prep assembly (`assemble_prep_inputs()` in `routes/one_on_ones.py`) does, and
+`fetch_role_expectations()` takes `org_id` because company-wide values have no
+role to scope them — without it the service role reads every org's values.
+`tests/test_nightly_prep.py` plants another tenant's commitment, goal and value
+and fails if any reaches the prompt. Before a new job reuses a request-path
+helper, read that helper for queries that lean on RLS alone.
+
+The worker spends only for managers on an active plan or a trial with time
+left (the same rule as `ensure_entitlement()`), never for archived people.
+Railway logs carry `nightly_prep` lines per phase (counts only) and the usual
+`ai_call` lines.
 
 ### Entitlement and the read-only gate
 

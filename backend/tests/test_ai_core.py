@@ -198,3 +198,57 @@ def test_scribe_loop_keeps_thinking_and_sizes_its_budget_for_it(monkeypatch):
     assert text == "Done." and drafts == []
     assert seen[0]["thinking"] is True
     assert seen[0]["max_tokens"] == 4000
+
+
+def test_batch_submit_sends_each_prompt_exactly_as_a_live_call(monkeypatch):
+    """A batched prompt must be byte-for-byte the live call it replaces: same
+    cached prefix block, same thinking setting, body as the user turn."""
+    sent: list[dict] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None, **kw):
+        sent.append({"url": url, "json": json})
+        return _Resp({"id": "msgbatch_1", "processing_status": "in_progress"})
+
+    monkeypatch.setattr(ai_core.httpx, "post", fake_post)
+    monkeypatch.setattr(ai_core.settings, "ANTHROPIC_API_KEY", "test-key")
+    batch_id = ai_core.submit_text_batch(
+        [("job-1", CachedPrompt("RULES", "DATA")), ("job-2", "whole prompt")],
+        model="claude-sonnet-5",
+        max_tokens=2000,
+    )
+    assert batch_id == "msgbatch_1"
+    assert sent[0]["url"].endswith("/v1/messages/batches")
+    first, second = sent[0]["json"]["requests"]
+    assert first["custom_id"] == "job-1"
+    assert first["params"] == {
+        "model": "claude-sonnet-5",
+        "max_tokens": 2000,
+        "thinking": {"type": "disabled"},
+        "system": [{"type": "text", "text": "RULES", "cache_control": {"type": "ephemeral"}}],
+        "messages": [{"role": "user", "content": "DATA"}],
+    }
+    assert second["params"]["system"] == "whole prompt"          # one-off: uncached
+    assert second["params"]["messages"] == [{"role": "user", "content": "Proceed."}]
+
+
+def test_batch_results_yield_text_or_the_reason_there_is_none(monkeypatch):
+    lines = [
+        {"custom_id": "a", "result": {"type": "succeeded", "message": {
+            "model": "claude-sonnet-5", "usage": {"input_tokens": 5, "output_tokens": 2},
+            "content": [{"type": "thinking", "thinking": ""}, {"type": "text", "text": " {\"x\": 1} "}],
+        }}},
+        {"custom_id": "b", "result": {"type": "errored", "error": {"type": "invalid_request"}}},
+        {"custom_id": "c", "result": {"type": "succeeded", "message": {"content": []}}},
+    ]
+
+    class _Text:
+        text = "\n".join(json.dumps(line) for line in lines) + "\n"
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(ai_core.httpx, "get", lambda url, headers=None, timeout=None: _Text())
+    out = list(ai_core.batch_text_results({"results_url": "https://example.invalid/results"}))
+    assert out == [("a", '{"x": 1}', None), ("b", None, "errored"), ("c", None, "no_text")]
+    with pytest.raises(ai_core.AIBatchError):
+        list(ai_core.batch_text_results({"processing_status": "in_progress"}))

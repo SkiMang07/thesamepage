@@ -122,6 +122,8 @@ function PrepFlow() {
   const [scheduleDate, setScheduleDate] = useState("");
   const [recurrenceWeeks, setRecurrenceWeeks] = useState<RecurrenceWeeks | null>(null);
   const [carryForwardItems, setCarryForwardItems] = useState<string[]>([]);
+  // The opener kept at the last wrap-up. Null once removed in review.
+  const [openingLine, setOpeningLine] = useState<string | null>(null);
   const [suggestedTopics, setSuggestedTopics] = useState<OneOnOneSuggestion[]>([]);
   const [openCommitments, setOpenCommitments] = useState<Commitment[]>([]);
   const [excludedCommitmentIds, setExcludedCommitmentIds] = useState<string[]>([]);
@@ -189,6 +191,7 @@ function PrepFlow() {
         setScheduleDate(scheduledAtToDate(session.scheduled_at));
         setRecurrenceWeeks(session.recurrence_weeks ?? null);
         setCarryForwardItems(session.carry_forward_items ?? []);
+        setOpeningLine(session.opening_line?.trim() || null);
         if (session.prep_guide) {
           setPrep({
             id: session.id,
@@ -198,6 +201,10 @@ function PrepFlow() {
             scheduled_at: session.scheduled_at,
             recurrence_weeks: session.recurrence_weeks ?? null,
             carry_forward_items: session.carry_forward_items ?? [],
+            opening_line: session.opening_line ?? null,
+            prepared_by: session.prep_guide.prepared_by,
+            prepared_at: session.prep_guide.prepared_at ?? null,
+            drew_on: session.prep_guide.drew_on,
           });
           setStep(editSources ? 1 : 2);
         }
@@ -229,6 +236,7 @@ function PrepFlow() {
     );
     if (
       !notes.trim() &&
+      !openingLine &&
       carryForwardItems.length === 0 &&
       suggestedTopics.length === 0 &&
       includedCommitments.length === 0
@@ -246,6 +254,7 @@ function PrepFlow() {
         carry_forward_items: carryForwardItems,
         suggested_topics: suggestedTopics.map((topic) => topic.text),
         excluded_commitment_ids: excludedCommitmentIds,
+        opening_line: openingLine,
       });
       setPrep(result);
       setOneOnOneId(result.id);
@@ -387,6 +396,24 @@ function PrepFlow() {
             </p>
           </div>
 
+          {openingLine && (
+            <div className="mb-5 rounded-lg border border-hairline bg-surface px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                Open with · kept at your last wrap-up
+              </p>
+              <div className="mt-2 flex items-start justify-between gap-3 text-sm text-ink-body">
+                <span>{openingLine}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpeningLine(null)}
+                  className="shrink-0 text-xs text-ink-muted hover:text-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
+
           {carryForwardItems.length > 0 && (
             <div className="mb-5 rounded-lg border border-hairline bg-surface px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -488,6 +515,7 @@ function PrepFlow() {
             disabled={
               loading ||
               (!notes.trim() &&
+                !openingLine &&
                 carryForwardItems.length === 0 &&
                 suggestedTopics.length === 0 &&
                 openCommitments.every((commitment) => excludedCommitmentIds.includes(commitment.id)))
@@ -520,6 +548,20 @@ function PrepFlow() {
                 <p className="mt-1 text-sm text-ink-muted">
                   {reportName ? `1:1 with ${reportName}` : "Upcoming 1:1"}
                 </p>
+                {prep.prepared_by === "overnight" && (
+                  <p className="mt-1 max-w-md text-xs text-ink-secondary">
+                    Prepared overnight
+                    {prep.drew_on && prep.drew_on.length > 0 && ` · Drew on ${prep.drew_on.join(", ")}`}
+                    {" · "}
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="font-medium text-brand hover:text-brand-hover hover:underline"
+                    >
+                      Rebuild
+                    </button>
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="block">

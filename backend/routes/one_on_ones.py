@@ -81,6 +81,9 @@ class PrepRequest(BaseModel):
     carry_forward_items: list[str] | None = None
     suggested_topics: list[str] = Field(default_factory=list)
     excluded_commitment_ids: list[str] = Field(default_factory=list)
+    # The opener kept at the last wrap-up. Omitted keeps whatever the
+    # occurrence carries; "" or null clears it (removed in source review).
+    opening_line: str | None = None
 
 
 class AgendaItem(BaseModel):
@@ -97,6 +100,10 @@ class PrepResponse(BaseModel):
     scheduled_at: str | None = None
     recurrence_weeks: int | None = None
     carry_forward_items: list[str] = Field(default_factory=list)
+    opening_line: str | None = None
+    prepared_by: str = "manager"
+    prepared_at: str | None = None
+    drew_on: list[str] | None = None
 
 
 class NewCommitmentIn(BaseModel):
@@ -127,6 +134,10 @@ class LogOneOnOneIn(BaseModel):
     # only way to log without consuming the open workspace. Ignored when
     # one_on_one_id names a specific occurrence.
     separate_occurrence: bool = False
+    # The opener for the next 1:1, drafted at wrap-up and kept (possibly
+    # edited) by the manager. Saved onto the next occurrence; empty keeps
+    # nothing and leaves an existing one alone.
+    opening_line: str | None = None
 
 
 class WrapUpRequest(BaseModel):
@@ -145,6 +156,9 @@ class WrapUpDraft(BaseModel):
     summary: str
     commitments: list[WrapUpCommitment]
     follow_up_items: list[str]
+    # One sentence the manager could open the next 1:1 with. "" = nothing
+    # left open that warrants one.
+    opening_line: str = ""
 
 
 class ScheduleUpdate(BaseModel):
@@ -234,6 +248,7 @@ def _build_prep_prompt(
     carry_forward_items: list[str] | None = None,
     suggested_topics: list[str] | None = None,
     secondhand_notes: list[dict] | None = None,
+    opening_line: str | None = None,
 ) -> str:
     # --- Recency context ---
     if days_since_last is None:
@@ -278,6 +293,14 @@ def _build_prep_prompt(
 CONFIRMED FOLLOW-UPS FROM THE LAST 1:1:
 {items}
 These were explicitly carried forward by the manager. Address each one in the agenda unless newer context clearly resolves it.
+"""
+
+    opening_block = ""
+    if opening_line:
+        opening_block = f"""
+SUGGESTED OPENING LINE (drafted at the last wrap-up and kept by the manager):
+  "{opening_line}"
+Unless newer context above clearly resolves it, make this the first suggested question of the first agenda item.
 """
 
     suggested_topics_block = ""
@@ -378,7 +401,7 @@ RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
 
 OPEN COMMITMENTS (unresolved — each is marked with who owes it):
 {commitments_block}
-{carry_forward_block}{suggested_topics_block}{secondhand_block}{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
+{carry_forward_block}{opening_block}{suggested_topics_block}{secondhand_block}{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
 MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
 {raw_notes or '(No additional notes were added.)'}
 
@@ -410,9 +433,14 @@ Produce:
    - Phrase each as a short, concrete reminder that will still make sense weeks from now.
    - Do NOT invent follow-ups. An empty list is a valid answer.
 
+4. opening_line — one sentence the manager could say to open the NEXT 1:1, picking up the single most important thread this call left open (a commitment with a date, or a topic explicitly deferred). Rules:
+   - Written as the manager would say it to the report: plain, warm, specific, ending in a question. Name the thing and, if one was stated, the date.
+   - Ask where it landed; never check up on the person. No "don't forget", no "you said you'd", no "as you promised".
+   - Only from what is in these notes. If nothing was left open that is worth opening with, return "". An empty string is a valid answer.
+
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
-{"summary": "...", "commitments": [{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"]}"""
+{"summary": "...", "commitments": [{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"], "opening_line": "Last time we agreed to revisit the renewal forecast by the 3rd. Where did it land?"}"""
 
     body = f"""THIS 1:1 WAS WITH {report_name}.
 
@@ -496,6 +524,12 @@ def _clean_follow_up_items(items: list[str]) -> list[str]:
         if len(cleaned) == 10:
             break
     return cleaned
+
+
+def _clean_opening_line(value: str | None) -> str | None:
+    """One trimmed sentence or None. Bounded like a carry-forward topic."""
+    line = " ".join((value or "").split())
+    return line[:300] or None
 
 
 def _encode_meeting_date(value: str | None) -> str | None:
@@ -787,6 +821,181 @@ def _manager_has_prep_sheet(supabase, user_id: str) -> bool:
     return bool(rows)
 
 
+# ---------------------------------------------------------------------------
+# Prep assembly — shared by POST /prep and the overnight worker
+# (backend/jobs/nightly_prep.py). One place decides what a prep prompt is
+# built from, so a sheet prepared overnight reads exactly the sources the
+# manager's own "Review & prepare" would have included by default.
+#
+# Every query here names its owner explicitly (manager_id / owner_id / org)
+# even though RLS already scopes the request path: the worker runs with the
+# service-role client, where these predicates are the only isolation.
+# ---------------------------------------------------------------------------
+
+PREP_MAX_TOKENS = 2000
+
+
+def assemble_prep_inputs(
+    supabase,
+    user_id: str,
+    direct_report_id: str,
+    org_id: str | None,
+    *,
+    raw_notes: str,
+    carry_forward_items: list[str],
+    suggested_topics: list[str],
+    excluded_commitment_ids: set[str] | None = None,
+    opening_line: str | None = None,
+) -> dict | None:
+    """Everything a prep call needs, or None when the direct report is not
+    this manager's. Returns {prompt, report_name, open_commitments,
+    document_ids}."""
+    report_rows = (
+        supabase.table("direct_reports")
+        .select("name,role_level_id,org_unit_id,one_on_one_cadence_days")
+        .eq("id", direct_report_id)
+        .eq("manager_id", user_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not report_rows:
+        return None
+    report = report_rows[0]
+    # Same org.one_on_one_cadence_days -> 21 fallback resolve_cadence_days()
+    # uses everywhere else.
+    cadence_days, _cadence_source = resolve_cadence_days(report, get_org(user_id, supabase))
+
+    # Open commitments — owner_id is the same predicate RLS applies.
+    excluded = excluded_commitment_ids or set()
+    open_commitments = [
+        commitment
+        for commitment in (
+            supabase.table("commitments")
+            .select("id,description,due_date,committed_by")
+            .eq("owner_id", user_id)
+            .eq("direct_report_id", direct_report_id)
+            .eq("status", "open")
+            .execute()
+            .data
+        )
+        if commitment.get("id") not in excluded
+    ]
+
+    # Recent history. Over-fetch and keep COMPLETED meetings only (summary
+    # set) — a planned row must not count as the last 1:1, or the recency
+    # logic goes stale the moment a sheet is generated. Sorted by when the
+    # conversations happened, so summaries reach the prompt in lived order.
+    history_rows_raw = (
+        supabase.table("one_on_ones")
+        .select("summary,scheduled_at,created_at")
+        .eq("direct_report_id", direct_report_id)
+        .eq("manager_id", user_id)
+        .order("created_at", desc=True)
+        .limit(10)
+        .execute()
+        .data
+    )
+    history_rows_raw.sort(key=meeting_sort_key, reverse=True)
+    history_rows = [row for row in history_rows_raw if row.get("summary")][:3]
+    # Days since the last 1:1 actually happened — never created_at.
+    last_day = meeting_day_of(history_rows[0]) if history_rows else None
+    days_since_last = (date.today() - last_day).days if last_day else None
+    recent_summaries = [row["summary"] for row in history_rows if row.get("summary")]
+
+    # Role expectations — None when no role assigned; the prompt omits them.
+    # org_id scopes the org-wide company values, which have no role to hang
+    # a predicate on.
+    role_expectations = fetch_role_expectations(supabase, report.get("role_level_id"), org_id=org_id)
+
+    # Context Engine — org docs scoped to this report's team, cascaded up
+    # through department + company-wide. get_relevant_context filters the
+    # documents themselves by org_id.
+    retrieved_docs = (
+        context_engine.get_relevant_context(supabase, org_id, report.get("org_unit_id"), date.today())
+        if org_id
+        else []
+    )
+
+    prompt = _build_prep_prompt(
+        report_name=report["name"],
+        raw_notes=raw_notes,
+        open_commitments=open_commitments,
+        recent_summaries=recent_summaries,
+        days_since_last=days_since_last,
+        cadence_days=cadence_days,
+        role_expectations=role_expectations,
+        context_engine_block=context_engine.format_context_block(retrieved_docs),
+        carry_forward_items=carry_forward_items,
+        suggested_topics=suggested_topics,
+        secondhand_notes=fetch_secondhand_notes(supabase, user_id, direct_report_id),
+        opening_line=opening_line,
+    )
+    return {
+        "prompt": prompt,
+        "report_name": report["name"],
+        "open_commitments": open_commitments,
+        "document_ids": [doc["id"] for doc in retrieved_docs],
+    }
+
+
+def parse_prep_output(raw: str) -> tuple[str, list[dict]]:
+    """The model's JSON as (situation_summary, agenda_items). A reply that
+    won't parse yields the retry message and an empty agenda, never an
+    exception — the same fallback /prep has always shown."""
+    raw_clean = raw.strip()
+    # The model sometimes wraps JSON in ```json...``` or adds a remark.
+    start = raw_clean.find("{")
+    end = raw_clean.rfind("}") + 1
+    if start != -1 and end > start:
+        raw_clean = raw_clean[start:end]
+    try:
+        parsed = json.loads(raw_clean)
+    except json.JSONDecodeError:
+        return "Unable to generate summary — please try again.", []
+    if not isinstance(parsed, dict):
+        return "Unable to generate summary — please try again.", []
+    agenda = []
+    for item in parsed.get("agenda_items") or []:
+        if not isinstance(item, dict):
+            continue
+        questions = item.get("suggested_questions") or []
+        agenda.append({
+            "title": str(item.get("title") or ""),
+            "rationale": str(item.get("rationale") or ""),
+            "suggested_questions": [str(q) for q in questions if isinstance(q, (str, int, float))],
+        })
+    return str(parsed.get("situation_summary") or ""), agenda
+
+
+def build_prep_guide(
+    situation_summary: str,
+    agenda_items: list[dict],
+    open_commitments: list[dict],
+    *,
+    source_notes: str,
+    prepared_by: str,
+    drew_on: list[str] | None = None,
+) -> dict:
+    """The stored prep_guide. prepared_by is 'manager' (they pressed
+    Prepare) or 'overnight' (the worker prepared it ahead of the meeting);
+    drew_on is the overnight sheet's plain list of what it was built from,
+    shown on the sheet so the manager knows what to rebuild from."""
+    guide = {
+        "situation_summary": situation_summary,
+        "agenda_items": agenda_items,
+        "open_commitments_to_check": open_commitments,
+        # Preserve the source notes so "Edit prep" can reopen the workspace
+        # without losing what produced this agenda.
+        "source_notes": source_notes,
+        "prepared_by": prepared_by,
+        "prepared_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if drew_on is not None:
+        guide["drew_on"] = drew_on
+    return guide
+
+
 @router.post("/prep", response_model=PrepResponse)
 @limiter.limit("10/minute")
 def prep_one_on_one(
@@ -844,165 +1053,65 @@ def prep_one_on_one(
     suggested_topics = _clean_follow_up_items(body.suggested_topics)
     excluded_commitment_ids = set(body.excluded_commitment_ids[:100])
 
-    # Fetch direct report name (+ org_unit_id, for the Context Engine's
-    # scope cascade below)
-    try:
-        report_result = (
-            supabase.table("direct_reports")
-            .select("name,role_level_id,org_unit_id,one_on_one_cadence_days")
-            .eq("id", body.direct_report_id)
-            .eq("manager_id", user_id)
-            .single()
-            .execute()
-        )
-    except Exception as exc:
-        # .single() raises when no row matches, which is the normal 404. Logged
-        # at info so a real failure (a bad column, Supabase down) is findable.
-        logger.info("lookup failed, answering 404: %s", exc)
-        raise HTTPException(status_code=404, detail="Direct report not found")
-    if not report_result.data:
-        raise HTTPException(status_code=404, detail="Direct report not found")
-    report = report_result.data
-    # Read-only — same org.one_on_one_cadence_days -> 21 fallback resolve_
-    # cadence_days() uses everywhere else (dashboard insight, /overview).
-    # A missing org here resolves to the same "default" (21) that ensure_org()
-    # below would produce a moment later anyway, so this doesn't need to wait
-    # for the bootstrap.
-    cadence_days, _cadence_source = resolve_cadence_days(report, get_org(user_id, supabase))
-
-    # Fetch open commitments for this report
-    open_commitments = (
-        supabase.table("commitments")
-        .select("id,description,due_date,committed_by")
-        .eq("direct_report_id", body.direct_report_id)
-        .eq("status", "open")
-        .execute()
-        .data
-    )
-    open_commitments = [
-        commitment
-        for commitment in open_commitments
-        if commitment.get("id") not in excluded_commitment_ids
-    ]
-
-    # Fetch recent 1:1 history. Over-fetch and filter to COMPLETED meetings
-    # only (summary set) — a "planned" row (prep_guide only, meeting hasn't
-    # happened yet) must not count as the last 1:1, or the recency logic and
-    # /api/one-on-ones/overview's is_due badge would both go stale the
-    # moment a prep sheet is generated. See resolve_cadence_days() in
-    # utils.py: every cadence-aware call site shares that one resolver.
-    history_rows_raw = (
-        supabase.table("one_on_ones")
-        .select("summary,scheduled_at,created_at")
-        .eq("direct_report_id", body.direct_report_id)
-        .eq("manager_id", user_id)
-        .order("created_at", desc=True)
-        .limit(10)
-        .execute()
-        .data
-    )
-    # Sorted by when the conversations HAPPENED before taking the most recent
-    # three, so the summaries reach the prompt in the order they were lived.
-    history_rows_raw.sort(key=meeting_sort_key, reverse=True)
-    history_rows = [row for row in history_rows_raw if row.get("summary")][:3]
-
-    # Days since the last 1:1 actually happened. Reading created_at here made
-    # the sheet open with a recency claim about row creation: log a meeting
-    # held last week into a workspace opened a month ago and the next prep
-    # announced a month-long gap that never existed.
-    last_day = meeting_day_of(history_rows[0]) if history_rows else None
-    days_since_last = (date.today() - last_day).days if last_day else None
-
-    recent_summaries = [row["summary"] for row in history_rows if row.get("summary")]
-
-    # Role expectations (Settings backbone payoff) — None when no role assigned,
-    # and the prompt simply omits the section.
-    role_expectations = fetch_role_expectations(supabase, report.get("role_level_id"))
-
-    # Context Engine (Session IV pilot) — org docs scoped to this report's
-    # team, cascaded up through department + company-wide. org_id comes from
-    # ensure_org() (idempotent) rather than a stored column, matching the
-    # pattern documents.py already uses for the same reason: direct_reports
-    # /users' org_id can still be null for older MVP rows.
     org_id = ensure_org(user_id, supabase, get_email_from_token(authorization))
-    retrieved_docs = context_engine.get_relevant_context(
-        supabase, org_id, report.get("org_unit_id"), date.today()
+    opening_line = (
+        _clean_opening_line(body.opening_line)
+        if "opening_line" in fields_set
+        else (existing or {}).get("opening_line")
     )
-    context_engine_block = context_engine.format_context_block(retrieved_docs)
-
-    prompt = _build_prep_prompt(
-        report_name=report["name"],
+    inputs = assemble_prep_inputs(
+        supabase,
+        user_id,
+        body.direct_report_id,
+        org_id,
         raw_notes=body.raw_notes,
-        open_commitments=open_commitments,
-        recent_summaries=recent_summaries,
-        days_since_last=days_since_last,
-        cadence_days=cadence_days,
-        role_expectations=role_expectations,
-        context_engine_block=context_engine_block,
         carry_forward_items=carry_forward_items,
         suggested_topics=suggested_topics,
-        secondhand_notes=fetch_secondhand_notes(supabase, user_id, body.direct_report_id),
+        excluded_commitment_ids=excluded_commitment_ids,
+        opening_line=opening_line,
     )
+    if inputs is None:
+        raise HTTPException(status_code=404, detail="Direct report not found")
 
-    raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2000)
+    raw = generate_text(inputs["prompt"], model=AI_DEFAULT_MODEL_HEAVY, max_tokens=PREP_MAX_TOKENS)
 
     # Citations: only after the call that actually used them succeeds, and
-    # only for docs that were in fact embedded above (not broader candidates
-    # ranking dropped) — per build-plan Session IV's "write to
-    # document_citations whenever a doc is actually used in an answer".
+    # only for docs that were in fact embedded (not broader candidates
+    # ranking dropped).
     context_engine.record_citations(
         supabase,
         user_id,
-        [doc["id"] for doc in retrieved_docs],
-        context=f"1:1 prep for {report['name']}",
+        inputs["document_ids"],
+        context=f"1:1 prep for {inputs['report_name']}",
     )
 
-    # Strip markdown code fences — model sometimes wraps JSON in ```json...```
-    raw_clean = raw.strip()
-    if raw_clean.startswith("```"):
-        start = raw_clean.find("{")
-        end = raw_clean.rfind("}") + 1
-        raw_clean = raw_clean[start:end] if start != -1 else raw_clean
-
-    try:
-        parsed = json.loads(raw_clean)
-    except json.JSONDecodeError:
-        parsed = {
-            "situation_summary": "Unable to generate summary — please try again.",
-            "agenda_items": [],
-        }
-
-    agenda_items = [
-        AgendaItem(
-            title=item.get("title", ""),
-            rationale=item.get("rationale", ""),
-            suggested_questions=item.get("suggested_questions", []),
-        )
-        for item in parsed.get("agenda_items", [])
-    ]
+    situation_summary, agenda_dicts = parse_prep_output(raw)
+    agenda_items = [AgendaItem(**item) for item in agenda_dicts]
+    open_commitments = inputs["open_commitments"]
 
     # Persist the sheet so it survives the gap between prepping and the
-    # actual meeting (Andrew's pain point: prep a day or two out, lose the
-    # sheet, have to regenerate). The full response — not just the AI JSON —
-    # is stored so a resumed session shows exactly what was generated,
-    # including the open-commitments snapshot from prep time.
-    prep_guide = {
-        "situation_summary": parsed.get("situation_summary", ""),
-        "agenda_items": [item.model_dump() for item in agenda_items],
-        "open_commitments_to_check": open_commitments,
-        # Preserve the manager-reviewed source notes so "Edit prep" can
-        # reopen the workspace without losing what produced this agenda.
-        "source_notes": body.raw_notes,
-    }
+    # actual meeting. The full response — not just the AI JSON — is stored
+    # so a resumed session shows exactly what was generated, including the
+    # open-commitments snapshot from prep time.
+    prep_guide = build_prep_guide(
+        situation_summary,
+        agenda_dicts,
+        open_commitments,
+        source_notes=body.raw_notes,
+        prepared_by="manager",
+    )
     # Analytics (backend/analytics.py): was there a sheet before this one?
     # Checked before the write so the answer isn't this sheet itself.
     regenerated = bool((existing or {}).get("prep_guide"))
     had_prep_sheet = regenerated or _manager_has_prep_sheet(supabase, user_id)
 
     if existing:
+        workspace_update: dict = {"prep_guide": prep_guide, "carry_forward_items": carry_forward_items}
+        if "opening_line" in fields_set:
+            workspace_update["opening_line"] = opening_line
         saved = (
             supabase.table("one_on_ones")
-            .update({"prep_guide": prep_guide, "carry_forward_items": carry_forward_items})
+            .update(workspace_update)
             .eq("id", existing["id"])
             .execute()
             .data[0]
@@ -1047,6 +1156,9 @@ def prep_one_on_one(
         scheduled_at=scheduled_at,
         recurrence_weeks=recurrence_weeks,
         carry_forward_items=carry_forward_items,
+        opening_line=opening_line,
+        prepared_by=prep_guide["prepared_by"],
+        prepared_at=prep_guide["prepared_at"],
     )
 
 
@@ -1094,7 +1206,7 @@ def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_a
     except json.JSONDecodeError:
         # Empty draft — the review screen requires a summary before saving,
         # so the manager writes one by hand instead of getting an error.
-        parsed = {"summary": "", "commitments": [], "follow_up_items": []}
+        parsed = {"summary": "", "commitments": [], "follow_up_items": [], "opening_line": ""}
 
     commitments: list[WrapUpCommitment] = []
     for item in parsed.get("commitments", []):
@@ -1115,10 +1227,12 @@ def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_a
         )
 
     follow_up_items = _clean_follow_up_items(parsed.get("follow_up_items") or [])
+    opening_line = parsed.get("opening_line")
     return WrapUpDraft(
         summary=parsed.get("summary", "") or "",
         commitments=commitments,
         follow_up_items=follow_up_items,
+        opening_line=_clean_opening_line(opening_line if isinstance(opening_line, str) else None) or "",
     )
 
 
@@ -1244,6 +1358,9 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
             )
 
         carry_forward_items = _clean_follow_up_items(body.carry_forward_items)
+        # Only a kept, non-empty opener is written: an empty one leaves an
+        # opener the next occurrence already carries alone.
+        opening_line = _clean_opening_line(body.opening_line)
         next_session = None
         series = None
         if completed_workspace and source_session.get("series_id"):
@@ -1287,6 +1404,8 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
                 [*(open_rows[0].get("carry_forward_items") or []), *carry_forward_items]
             )
             workspace_updates: dict = {"carry_forward_items": merged}
+            if opening_line:
+                workspace_updates["opening_line"] = opening_line
             if completed_workspace:
                 # This log consumed the person's next-meeting slot, so the row we
                 # are about to touch is its replacement and inherits the series
@@ -1306,15 +1425,18 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
                 .data[0]
             )
         else:
+            next_row = {
+                "manager_id": user_id,
+                "direct_report_id": body.direct_report_id,
+                "series_id": series["id"] if series else None,
+                "scheduled_at": next_at,
+                "carry_forward_items": carry_forward_items,
+            }
+            if opening_line:
+                next_row["opening_line"] = opening_line
             next_session = (
                 supabase.table("one_on_ones")
-                .insert({
-                    "manager_id": user_id,
-                    "direct_report_id": body.direct_report_id,
-                    "series_id": series["id"] if series else None,
-                    "scheduled_at": next_at,
-                    "carry_forward_items": carry_forward_items,
-                })
+                .insert(next_row)
                 .execute()
                 .data[0]
             )
@@ -1349,6 +1471,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         "next_session": next_session,
         "commitments": created_commitments,
         "carry_forward_items": carry_forward_items,
+        "opening_line": opening_line,
     }
 
 

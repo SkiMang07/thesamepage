@@ -10,6 +10,7 @@ from routes.one_on_ones import (
     _next_occurrence_at,
     _serialize_session,
     log_one_on_one,
+    parse_prep_output,
 )
 
 
@@ -500,3 +501,104 @@ def test_failed_next_occurrence_write_removes_an_inserted_ad_hoc_meeting_and_its
     assert [row["id"] for row in client.rows["one_on_ones"]] == ["current"]
     assert client.rows["one_on_ones"][0]["summary"] is None
     assert client.rows["commitments"] == []
+
+
+# ---------------------------------------------------------------------------
+# The carried-forward opening line (B2)
+# ---------------------------------------------------------------------------
+
+def test_kept_opening_line_leads_the_prep_prompt():
+    prompt = _build_prep_prompt(
+        report_name="Maya Chen",
+        raw_notes="",
+        open_commitments=[],
+        recent_summaries=[],
+        days_since_last=14,
+        cadence_days=14,
+        carry_forward_items=["Renewal forecast"],
+        opening_line="Last time we said the forecast by the 3rd. Where did it land?",
+    )
+    assert "SUGGESTED OPENING LINE" in prompt
+    assert "Where did it land?" in prompt.body          # per-report, never in the cached prefix
+    assert "SUGGESTED OPENING LINE" not in _build_prep_prompt(
+        report_name="Maya Chen", raw_notes="", open_commitments=[], recent_summaries=[],
+        days_since_last=14, cadence_days=14,
+    )
+
+
+def test_log_saves_the_kept_opening_line_on_the_next_occurrence():
+    client = _MemoryClient()
+    result = _resolve(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                one_on_one_id="current",
+                summary="Aligned on the recovery plan.",
+                opening_line="  Last time we agreed the recovery plan by Friday.   Where did it land? ",
+                meeting_date="2026-08-25",
+            ),
+            auth=("manager", client),
+        )
+    )
+    assert result["opening_line"] == "Last time we agreed the recovery plan by Friday. Where did it land?"
+    assert result["next_session"]["opening_line"] == result["opening_line"]
+
+
+def test_an_empty_opening_line_writes_nothing_and_keeps_an_existing_one():
+    client = _MemoryClient()
+    client.rows["one_on_ones"][0].update({"series_id": None, "scheduled_at": None, "prep_guide": None})
+    client.rows["one_on_ones"].append({
+        "id": "prepped-next", "manager_id": "manager", "direct_report_id": "report", "series_id": None,
+        "scheduled_at": "2026-09-30T12:00:00+00:00", "summary": None, "prep_guide": {"situation_summary": "x"},
+        "carry_forward_items": [], "opening_line": "Kept from before", "created_at": "2026-08-24T12:00:00+00:00",
+    })
+    client.rows["one_on_ones"][0]["prep_guide"] = {"situation_summary": "Current prep"}
+    result = _resolve(
+        log_one_on_one(
+            LogOneOnOneIn(direct_report_id="report", summary="A hallway chat.", separate_occurrence=True,
+                          opening_line="   "),
+            auth=("manager", client),
+        )
+    )
+    assert result["opening_line"] is None
+    kept = [row for row in client.rows["one_on_ones"] if row["id"] == "prepped-next"][0]
+    assert kept["opening_line"] == "Kept from before"
+
+
+def test_prep_output_parser_takes_the_json_and_never_raises():
+    summary, agenda = parse_prep_output(
+        'Here you go:\n```json\n{"situation_summary": "S", "agenda_items": ['
+        '{"title": "T", "rationale": "R", "suggested_questions": ["Q", 3]}, "junk"]}\n```'
+    )
+    assert summary == "S"
+    assert agenda == [{"title": "T", "rationale": "R", "suggested_questions": ["Q", "3"]}]
+    assert parse_prep_output("no json at all") == ("Unable to generate summary — please try again.", [])
+    assert parse_prep_output("[1, 2]")[1] == []
+
+
+def test_wrap_up_drafts_an_opening_line_and_allows_none(monkeypatch):
+    import routes.one_on_ones as mod
+    from routes.one_on_ones import WrapUpRequest, wrap_up_one_on_one
+
+    class _One:
+        def __getattr__(self, _name):
+            return lambda *a, **k: self
+
+        def execute(self):
+            return SimpleNamespace(data={"name": "Maya"})
+
+    client = SimpleNamespace(table=lambda _n: _One())
+    replies = iter([
+        '{"summary": "S", "commitments": [], "follow_up_items": [], '
+        '"opening_line": "Last time we said the deck by the 3rd. Where did it land?"}',
+        '{"summary": "S", "commitments": [], "follow_up_items": [], "opening_line": 7}',
+    ])
+    prompts = []
+    monkeypatch.setattr(mod, "generate_text", lambda p, **k: prompts.append(p) or next(replies))
+    # __wrapped__ skips the rate limiter, which needs a real Request.
+    request = SimpleNamespace()
+    draft = wrap_up_one_on_one.__wrapped__(request, WrapUpRequest(direct_report_id="r", raw_notes="n"), auth=("m", client))
+    assert draft.opening_line == "Last time we said the deck by the 3rd. Where did it land?"
+    assert "opening_line" in prompts[0].prefix and "don't forget" in prompts[0].prefix.lower()
+    draft = wrap_up_one_on_one.__wrapped__(request, WrapUpRequest(direct_report_id="r", raw_notes="n"), auth=("m", client))
+    assert draft.opening_line == ""
