@@ -202,19 +202,22 @@ docs/        see the table above
 
 ## How changes are tested (pre-launch)
 
-There are no outside users yet, so **the live app is the test environment**. The
-release path is: build → verify cheaply → run the migration in Supabase → push →
-Andrew tests on the deployed app. Secrets live in Railway and Vercel only;
-`backend/.env` is intentionally empty and Andrew does not keep local keys.
+There are no outside users yet, so Andrew's acceptance testing happens **on the
+live app**. The release path is: build → test thoroughly → run the migration in
+Supabase → push → Andrew tests on the deployed app. Secrets live in Railway and
+Vercel only; `backend/.env` is intentionally empty and Andrew does not keep
+local keys.
 
-- Do not build or hand over a local run setup (local servers, `.env` files,
-  run scripts) unless Andrew asks for one. A brief saying "local experience"
-  or "don't push yet" means "don't deploy until the checks pass", not "set up
-  local hosting".
-- Right-size verification: unit tests, `tsc --noEmit` on a clean checkout, and
-  applying the migration to a throwaway Postgres (`local_verify_stub.sql`) are
-  the default gate. Vercel/Railway builds are the build gate. Anything heavier
-  (a local stack, browser automation against fixtures) needs a stated reason.
+- **Claude's own testing is required, not optional.** It has caught real bugs
+  in nearly every build. Unit tests, `tsc --noEmit` on a clean checkout, the
+  migration applied to a throwaway Postgres (`local_verify_stub.sql`),
+  functional RLS/transaction checks, and end-to-end runs of the changed flow
+  (including browser checks against fictional fixtures in the session's own
+  sandbox) all stay. Scale them to the change, but don't skip them.
+- **What Andrew doesn't need is a local environment of his own.** Don't build
+  or hand him local servers, `.env` files or run scripts, and don't ask him to
+  add keys locally, unless he asks. A brief saying "local experience" or
+  "don't push yet" means "don't deploy until your checks pass".
 - Migrations are run in the Supabase SQL editor — by Andrew, or by Claude
   through Claude in Chrome when he asks — before the push that depends on them.
 
