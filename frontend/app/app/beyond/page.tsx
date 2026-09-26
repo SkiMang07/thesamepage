@@ -57,7 +57,7 @@ function useMeasuredWidth<T extends HTMLElement>() {
 export default function BeyondPage() {
   // useSearchParams (for ?view=) needs a Suspense boundary.
   return (
-    <Suspense fallback={<PageShell maxWidth="7xl"><SkeletonSection label="Loading beyond the team" variant="cards" /></PageShell>}>
+    <Suspense fallback={<PageShell maxWidth="8xl"><SkeletonSection label="Loading beyond the team" variant="cards" /></PageShell>}>
       <Beyond />
     </Suspense>
   );
@@ -132,14 +132,16 @@ function Beyond() {
   const threeColumns = width >= 900;
 
   return (
-    <PageShell maxWidth="7xl">
-      <div ref={rootRef}>
+    // Same frame as Goals and Assessments: the 8xl shell with a 1510px inner
+    // column, so the page uses the width Team and Assessments do.
+    <PageShell maxWidth="8xl">
+      <div ref={rootRef} className="mx-auto max-w-[1510px]">
         <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
-            <h1 className="font-serif text-[2.1rem] font-normal leading-[1.12] tracking-[-0.035em] text-ink sm:text-[2.6rem]">
+            <h1 className="font-serif text-[2.6rem] font-normal leading-none tracking-[-0.03em] text-ink sm:text-[3.05rem]">
               Beyond the team
             </h1>
-            <p className="mt-2 text-base text-ink-secondary">Keep the conversations going. Move the work forward.</p>
+            <p className="mt-2.5 text-base text-ink-secondary">Keep the conversations going. Move the work forward.</p>
           </div>
           <div className="flex flex-col items-end gap-2">
             <p className={META}>Private to you</p>
