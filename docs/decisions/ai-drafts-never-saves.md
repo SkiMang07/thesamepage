@@ -59,9 +59,9 @@ back instead of a blank scorecard.
   silently. Built in the period-assessment flow (cited sources and stated limits per
   proposal, unassessed items listed with reasons, prior judgments shown separately);
   whether it is enough has not been measured.
-- **The draft call site has no eval** (nor do the picture, discussion and summary calls
-  added with it). Third AI call site to cover, behind wrap-up
-  extraction and `/prep`, both of which were flagged first.
+- **The draft, picture, discussion and summary calls are covered by
+  `eval/test_assessments.py`** on the live model. Wrap-up extraction and `/prep`
+  still have no real-model eval.
 - **A disclosure obligation attaches** once a report-facing view of their own record
   exists. `frontend/app/app/ic/page.tsx` is still a stub.
 

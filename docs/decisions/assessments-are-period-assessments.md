@@ -45,8 +45,8 @@ useful to take into the conversation.
   completed assessment supersedes them; the UI labels them as such.
 - Anchoring remains a live risk (`ai-drafts-never-saves.md`); the mitigation is the
   auditable draft, not yet measured.
-- No eval covers the four assessment AI calls, and they were not run against the live
-  model before release.
+- The four assessment AI calls shipped without an eval; `eval/test_assessments.py`
+  now covers them against the live model (see `docs/systems/assessments.md`).
 - Reopening or correcting a completed assessment is out of scope.
 
 ## What should reopen this

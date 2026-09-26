@@ -162,14 +162,28 @@ calls go through `ai_core.generate_text`.
 `backend/tests/test_assessment_reviews.py` (period/source scoping, private opt-in,
 scales, metric rules, edit preservation, revisions, resumption, stale versions,
 completion blockers, retry safety, reaffirm, consumers).
-`frontend/lib/assessment-periods.test.mjs` (`npm run test:assessments`). The SQL
+`frontend/lib/assessment-periods.test.mjs` (`npm run test:assessments`).
+`eval/test_assessments.py` runs the four AI calls (picture, draft, discuss,
+summary) through the real prompt builders, `_ai_json()`, the cleaners and
+`_merge_draft()` against the live model over a fixture review with deliberately
+uneven evidence: 14 cases, at most one miss allowed. It holds the model to the
+rules above — every contribution cites a record or is dropped, judgments stay
+on each item's own scale, thin items are left unassessed with a reason, a
+metric value is only ever a recorded reading or a number the manager typed, no
+number appears that isn't in the material, and a manager's decision survives a
+redraft untouched. `ASSESS_EVAL_MODEL` overrides the model, `ASSESS_EVAL_CASES`
+selects cases, `ASSESS_EVAL_SHOW_OUTPUT=1` prints the replies. Re-run it after
+any change to these prompts or to the heavy model. The SQL
 function, the one-draft index and RLS were exercised against local Postgres from
 both a fresh `schema.sql` and the previous schema + migration.
 
 ## Known limits
 
-- The prompts have not been evaluated against the live model or real manager data;
-  there is no eval harness for these four call sites yet.
+- The eval runs on fixture data, not real manager data; whether managers accept
+  drafts unedited (the anchoring question) is still unmeasured.
+- The summary prompt can attach a "strength" to an item the manager left
+  unassessed (seen once in the eval); the rule is stated but not enforced in
+  `_clean_summary()`.
 - Reopening or correcting a completed assessment is not supported; an off-cycle
   assessment is the way to record a later view.
 - Team meetings and Knowledge documents are not person-linked, so they are reported

@@ -129,6 +129,13 @@ persists. Prompts are also written to permit an honest empty result: an AI that
 returns nothing is correct behavior, not a failure. Do not add an AI path that
 writes directly.
 
+**Evals.** `eval/test_assistant.py` (Scribe, 30 cases, ≥28 to pass) and
+`eval/test_assessments.py` (the four assessment calls, 14 cases, ≥13 to pass)
+run the real prompts against the real model over fixture data. Both need
+`ANTHROPIC_API_KEY` in `backend/.env` or the shell; neither touches the
+database. Re-run the one that covers a prompt after changing it, and both
+before changing a model name in `config.py`.
+
 ### Entitlement and the read-only gate
 
 Each manager has one `subscriptions` row: a founding place (`founding_number`
