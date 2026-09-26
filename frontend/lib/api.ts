@@ -1039,6 +1039,12 @@ export type MissionControlBrief = {
     href: string;
   } | null;
   eligible_count: number;
+  // B3 — one sentence over the top three moves. "ready" comes from the
+  // day's cache; "pending" means call getMissionControlMorningLine. Null: no line.
+  morning_line?:
+    | { status: "ready"; text: string }
+    | { status: "pending"; fingerprint: string }
+    | null;
 };
 
 export type MissionControlVariant = MissionControlBrief | { variant: "legacy" };
@@ -1187,6 +1193,14 @@ export const recordMissionControlEvents = (
 
 export const reconcileMissionControlOutcomes = (): Promise<{ completed: number }> =>
   authedFetch("/api/dashboard/reconcile", { method: "POST" });
+
+export const getMissionControlMorningLine = (
+  fingerprint: string
+): Promise<{ status: "ok" | "failed" | "unavailable"; text: string | null }> =>
+  authedFetch("/api/dashboard/morning-line", {
+    method: "POST",
+    body: JSON.stringify({ fingerprint, local_date: browserLocalDate() }),
+  });
 
 export const explainMissionControlCandidate = (
   candidate: Pick<MissionControlCandidate, "candidate_key" | "evidence_fingerprint">

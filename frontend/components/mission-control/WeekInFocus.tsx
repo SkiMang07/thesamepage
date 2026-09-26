@@ -36,6 +36,7 @@ import {
   WeekConversationState,
   WeekGoal,
   WeekInFocus as WeekData,
+  getMissionControlMorningLine,
   reconcileMissionControlOutcomes,
   recordMissionControlEvents,
 } from "@/lib/api";
@@ -297,6 +298,22 @@ export function WeekInFocus({
   }, [week, selection]);
   useEffect(() => setOpenDay(null), [week?.week.start]);
 
+  // B3 — the morning line. Cached per day server-side; written on the first
+  // load that needs it. Failure just means no line.
+  const [morningLine, setMorningLine] = useState<string | null>(null);
+  useEffect(() => {
+    const state = brief?.morning_line;
+    if (!state) return setMorningLine(null);
+    if (state.status === "ready") return setMorningLine(state.text);
+    let live = true;
+    getMissionControlMorningLine(state.fingerprint)
+      .then((r) => live && setMorningLine(r.text))
+      .catch(() => live && setMorningLine(null));
+    return () => {
+      live = false;
+    };
+  }, [brief?.brief_id]); // morning_line is fixed within a brief
+
   const select = useCallback((next: Selection, trigger?: HTMLElement | null) => {
     triggerRef.current = trigger ?? (document.activeElement as HTMLElement | null);
     setSelection(next);
@@ -438,6 +455,12 @@ export function WeekInFocus({
             <h1 className="mt-2 font-serif text-[2rem] font-normal leading-[1.14] tracking-[-0.035em] text-ink sm:text-[2.45rem]">
               Your week, in focus.
             </h1>
+            {morningLine && (
+              <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink-secondary">
+                {morningLine}
+                <span className="ml-2 whitespace-nowrap text-2xs text-ink-muted">Written by The Same Page from today’s moves</span>
+              </p>
+            )}
           </div>
           <p className="mt-0.5 shrink-0 text-right text-2xs text-ink-muted" aria-live="polite">
             {weekLoading ? (

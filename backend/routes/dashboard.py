@@ -30,6 +30,7 @@ _token_cache, with a flat TTL (not tied to any specific write path — see
 note on _INSIGHT_CACHE_TTL_SECONDS below for the tradeoff this accepts).
 """
 import logging
+import hashlib
 import json
 import time
 import uuid
@@ -572,6 +573,7 @@ def get_action_brief(
         "stale_after": (generated_at + _BRIEF_REFRESH_AFTER).isoformat(),
         "timezone": timezone_name[:64],
         **result,
+        "morning_line": _morning_line_state(user_id, supabase, manager_date, result),
     }
 
 
@@ -1011,3 +1013,155 @@ Rules:
     if not text or text.lower() == "null":
         return {"status": "unavailable", "explanation": None}
     return {"status": "ok", "explanation": text[:500]}
+
+
+# ---------------------------------------------------------------------------
+# The morning line (B3, AI_OPPORTUNITIES.md).
+#
+# One sentence at the top of Mission Control, written from the brief's top
+# three moves. Same contract as /explain: the ranking stays deterministic,
+# the model only rewords facts the brief already holds and may decline
+# (null). Written on the manager's first load of the day — no worker — and
+# cached per manager per local day in mission_control_morning_lines.
+#
+# GET /brief answers from the cache ("ready") or says "pending"; the page
+# then calls POST /morning-line, so the brief itself never waits on a model.
+# The cache key is a fingerprint of the top three candidates: when one is
+# addressed or snoozed, or its evidence changes, the old line would describe
+# a list that is no longer on screen, so it is rewritten — at most
+# _MORNING_LINE_MAX_GENERATIONS times a day, after which no line shows.
+# ---------------------------------------------------------------------------
+
+_MORNING_LINE_MODES = {"normal", "busy", "early_use"}
+_MORNING_LINE_MAX_GENERATIONS = 4
+
+
+class MorningLineIn(BaseModel):
+    fingerprint: str = Field(min_length=1, max_length=64)
+    local_date: str
+
+
+def _morning_line_candidates(brief: dict) -> list[dict]:
+    if brief.get("mode") not in _MORNING_LINE_MODES or not brief.get("primary"):
+        return []
+    return [c for c in [brief.get("primary"), *brief.get("secondary", [])] if c]
+
+
+def _morning_line_fingerprint(candidates: list[dict]) -> str:
+    raw = "|".join(f"{c['candidate_key']}:{c['evidence_fingerprint']}" for c in candidates)
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _morning_line_row(user_id: str, supabase, local_date: date) -> dict | None:
+    rows = (
+        supabase.table("mission_control_morning_lines")
+        .select("fingerprint,line,generations")
+        .eq("manager_id", user_id)
+        .eq("local_date", local_date.isoformat())
+        .limit(1)
+        .execute()
+        .data
+    )
+    return rows[0] if rows else None
+
+
+def _morning_line_state(user_id: str, supabase, local_date: date, brief: dict) -> dict | None:
+    """Cache lookup only — never calls the model. None means no line today."""
+    candidates = _morning_line_candidates(brief)
+    if not candidates:
+        return None
+    fingerprint = _morning_line_fingerprint(candidates)
+    try:
+        row = _morning_line_row(user_id, supabase, local_date)
+    except Exception:
+        # Table missing (migration not run) or a read failure: no line, the
+        # brief still loads.
+        logger.warning("morning line cache read failed", exc_info=True)
+        return None
+    if row and row["fingerprint"] == fingerprint:
+        return {"status": "ready", "text": row.get("line")} if row.get("line") else None
+    if row and (row.get("generations") or 0) >= _MORNING_LINE_MAX_GENERATIONS:
+        return None
+    return {"status": "pending", "fingerprint": fingerprint}
+
+
+def _morning_line_prompt(candidates: list[dict], local_date: date) -> str:
+    blocks = []
+    for index, c in enumerate(candidates, start=1):
+        evidence = "\n".join(f"  - {item['label']}" for item in c.get("evidence", []))
+        blocks.append(f"{index}. {c['title']}\n  Why: {c['explanation']}\n{evidence}")
+    moves = "\n".join(blocks)
+    return f"""Write the opening line of a manager's day in The Same Page, a tool for running 1:1s and following through on commitments.
+
+TODAY: {local_date.strftime('%A, %b %-d')}
+THE MOVES ALREADY CHOSEN FOR TODAY, IN ORDER:
+{moves}
+
+Write ONE plain sentence, at most 30 words, that tells the manager what today holds, leading with move 1.
+Rules:
+- Use only the facts above. Add no fact, cause, motive, diagnosis, risk label or advice.
+- Keep names and dates exactly as written. Do not turn a date into a weekday or into "yesterday"/"tomorrow".
+- Calm and factual, like a colleague who has read the list. No greeting, no exclamation marks, no "don't forget", no "you said you'd", no "make sure".
+- You may leave out move 2 or 3 if including them would make the sentence crowded.
+- If the facts do not support a useful sentence, return exactly: null
+- Return only the sentence or null, with no quotes, JSON or markdown.
+"""
+
+
+@router.post("/morning-line")
+@limiter.limit("10/minute")
+def generate_morning_line(
+    request: Request,
+    body: MorningLineIn,
+    auth=Depends(get_authenticated_client),
+):
+    user_id, supabase = auth
+    manager_date = _manager_local_date(body.local_date)
+    snapshot, events = _load_action_snapshot(user_id, supabase, manager_date)
+    candidates = _morning_line_candidates(build_brief(snapshot, manager_date, events=events))
+    if not candidates:
+        return {"status": "unavailable", "text": None}
+    fingerprint = _morning_line_fingerprint(candidates)
+    if fingerprint != body.fingerprint:
+        raise HTTPException(status_code=409, detail="Mission Control has changed; reload the brief")
+
+    row = _morning_line_row(user_id, supabase, manager_date)
+    if row and row["fingerprint"] == fingerprint:
+        # Another tab got here first.
+        return {"status": "ok" if row.get("line") else "unavailable", "text": row.get("line")}
+    generations = (row.get("generations") or 0) if row else 0
+    if generations >= _MORNING_LINE_MAX_GENERATIONS:
+        return {"status": "unavailable", "text": None}
+
+    try:
+        text = generate_text(
+            _morning_line_prompt(candidates, manager_date),
+            model=AI_DEFAULT_MODEL_LIGHT,
+            max_tokens=120,
+        ).strip().strip('"')
+    except Exception:
+        # Not cached, so the next load tries again (rate-limited above).
+        logger.warning("morning line AI call failed", exc_info=True)
+        return {"status": "failed", "text": None}
+    line = None if not text or text.lower() == "null" else text[:300]
+
+    now = datetime.now(timezone.utc).isoformat()
+    values = {"fingerprint": fingerprint, "line": line, "generations": generations + 1, "updated_at": now}
+    try:
+        if row:
+            (
+                supabase.table("mission_control_morning_lines")
+                .update(values)
+                .eq("manager_id", user_id)
+                .eq("local_date", manager_date.isoformat())
+                .execute()
+            )
+        else:
+            supabase.table("mission_control_morning_lines").insert(
+                {"manager_id": user_id, "local_date": manager_date.isoformat(), **values}
+            ).execute()
+    except Exception:
+        # A lost race on the insert, or the table is missing: still show the line.
+        logger.warning("morning line cache write failed", exc_info=True)
+    return {"status": "ok" if line else "unavailable", "text": line}
+

@@ -990,6 +990,23 @@ create unique index mission_control_events_completion_once_idx
   on mission_control_events (manager_id, parent_event_id)
   where event_type = 'downstream_completed';
 
+-- Mission Control morning line (B3): one AI sentence over the brief's top
+-- three moves, cached per manager per local day. `fingerprint` hashes the top
+-- three candidates; a mismatch rewrites the line, capped by `generations`.
+-- `line` null = the model declined, cached so it is not asked again.
+create table mission_control_morning_lines (
+  manager_id   uuid not null references auth.users(id) on delete cascade,
+  local_date   date not null,
+  fingerprint  text not null,
+  line         text,
+  generations  smallint not null default 1,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  primary key (manager_id, local_date)
+);
+
+alter table mission_control_morning_lines enable row level security;
+
 -- ============================================================
 -- DIRECT REPORT INVITES
 -- Session 22 (2026-08-08) — Team Mission Control's "auth primitives now, IC
@@ -2016,6 +2033,15 @@ create policy "assistant_messages_all_own" on assistant_messages
 
 -- Mission Control feedback is append-only. The manager can read and insert
 -- their own events; no update/delete policy exists.
+create policy "mission_control_morning_lines_select_own" on mission_control_morning_lines
+  for select using (manager_id = auth.uid());
+
+create policy "mission_control_morning_lines_insert_own" on mission_control_morning_lines
+  for insert with check (manager_id = auth.uid());
+
+create policy "mission_control_morning_lines_update_own" on mission_control_morning_lines
+  for update using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
 create policy "mission_control_events_select_own" on mission_control_events
   for select using (manager_id = auth.uid());
 

@@ -155,6 +155,18 @@ candidate and exact evidence fingerprint before asking the light model for a
 one-sentence paraphrase. AI cannot select, reorder, add facts, infer causes, or
 write a source record. Failure leaves the deterministic brief unchanged.
 
+The morning line is the one sentence under the page heading ("Your week, in
+focus."). `GET /brief` returns `morning_line` from the day's cache
+(`mission_control_morning_lines`, one row per manager per local date) as
+`ready`, or `pending` with a fingerprint of the top three candidates; the page
+then calls `POST /api/dashboard/morning-line`, which rebuilds the brief,
+rejects a stale fingerprint (409), and asks the light model to reword those
+three moves' titles, explanations and evidence under the same no-new-facts
+rules (null allowed and cached). The brief never waits on the model. A changed
+top three (addressed, snoozed, new evidence) rewrites the line, at most four
+times a day; after that, and in empty, partial or all-clear modes, no line
+shows. There is no worker: the first Mission Control load of the day writes it.
+
 ## Dispositions and analytics
 
 `mission_control_events` is append-only and manager-scoped. RLS permits only
