@@ -110,6 +110,11 @@ def _shape_items(configs: list[dict], name_key: str, scales_by_config: dict, lat
             "expectation": c.get("expectation"),
             "measurement_period": c.get("measurement_period"),
             "value_type": c.get("value_type"),
+            # Roles & expectations: an explicit target, or a deliberately
+            # unset one ("unresolved" — never judged against a number).
+            "exceeds": c.get("exceeds"),
+            "target": c.get("target") if c.get("target_status") == "set" else None,
+            "target_status": c.get("target_status"),
             "scale_min": c.get("evaluation_scale_min"),
             "scale_max": c.get("evaluation_scale_max"),
             "scale_definitions": scales_by_config.get(c["id"], []),

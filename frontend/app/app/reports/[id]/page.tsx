@@ -697,14 +697,19 @@ function RelationshipDesk() {
             <p className={EYEBROW}>Expectations</p>
             {report.expectations ? (
               <>
-                <p className="mt-1.5 text-xs text-ink-secondary">
-                  {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
+                <p className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2 text-xs text-ink-secondary">
+                  <span>
+                    {report.expectations.role_level.job_role} · Level {report.expectations.role_level.job_level}
+                  </span>
+                  <Link href={`/app/expectations/${report.expectations.role_level.id}`} className="font-medium text-brand hover:text-brand-hover">
+                    View role expectations →
+                  </Link>
                 </p>
                 {report.expectations.metrics.length + report.expectations.skills.length + report.expectations.values.length === 0 ? (
                   <p className="mt-3 text-sm text-ink-muted">
                     No expectations configured for this role yet.{" "}
-                    <Link href="/app/settings?section=roles" className="underline hover:text-ink-secondary">
-                      Add them in Settings
+                    <Link href={`/app/expectations/${report.expectations.role_level.id}`} className="underline hover:text-ink-secondary">
+                      Define them in Roles &amp; expectations
                     </Link>
                     .
                   </p>

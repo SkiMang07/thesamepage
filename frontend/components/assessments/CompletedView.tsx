@@ -123,6 +123,8 @@ export default function CompletedView({ review, justCompleted }: { review: Perio
                         <div className="min-w-0">
                           <p className="font-medium text-ink">{i.name}</p>
                           {i.expectation && <p className="text-sm text-ink-secondary">Standard: {i.expectation}</p>}
+                          {i.target_status === "set" && i.target && <p className="text-xs text-ink-muted">Target: {i.target}</p>}
+                          {i.target_status === "unresolved" && <p className="text-xs text-ink-muted">No target was set</p>}
                         </div>
                         <div className="text-right">
                           <p className="font-semibold text-ink">{judgmentText(i)}</p>

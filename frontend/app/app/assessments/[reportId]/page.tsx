@@ -162,7 +162,7 @@ export default function PersonAssessmentsPage() {
               {configured === 0 && (
                 <p className="mt-3 text-sm text-amber-700">
                   {scorecard.role ? "No skills, values or metrics are configured for this role yet" : "No role is assigned yet"} — only the overall judgment will be available.{" "}
-                  <Link href={scorecard.role ? "/app/settings?section=roles" : "/app/settings?section=people"} className="underline">
+                  <Link href={scorecard.role ? `/app/expectations/${scorecard.role.id}` : "/app/settings?section=people"} className="underline">
                     Set up expectations
                   </Link>
                 </p>

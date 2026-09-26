@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from observability import RequestContextMiddleware, configure_logging, init_sentry
-from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
+from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
 configure_logging()
@@ -143,6 +143,7 @@ app.include_router(role_families.router, prefix="/api/role-families", tags=["rol
 # Role JD import (Session 44) — one pure-AI draft endpoint, no writes;
 # the commit runs through the role/expectation routers above.
 app.include_router(roles_import.router, prefix="/api/roles/import", tags=["roles-import"])
+app.include_router(role_expectations.router, prefix="/api/role-expectations", tags=["role-expectations"])
 app.include_router(capacity.router, prefix="/api/capacity", tags=["capacity"])
 app.include_router(settings_routes.router, prefix="/api/settings", tags=["settings"])
 app.include_router(expectations_ai.router, prefix="/api/expectations", tags=["expectations"])

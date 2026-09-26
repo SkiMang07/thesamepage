@@ -105,6 +105,16 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
       <line x1="15.6" y1="6.4" x2="8.4" y2="10.6" />
     </>
   ),
+  // Roles & expectations — a ladder with a check on the top rung.
+  expectations: (
+    <>
+      <line x1="6" y1="3.5" x2="6" y2="20.5" />
+      <line x1="14" y1="3.5" x2="14" y2="20.5" />
+      <line x1="6" y1="9" x2="14" y2="9" />
+      <line x1="6" y1="15" x2="14" y2="15" />
+      <polyline points="16.5 7.5 18.5 9.5 22 5.5" />
+    </>
+  ),
   knowledge: (
     <>
       <path d="M2.5 3.5h5.5a3.5 3.5 0 0 1 3.5 3.5v13.5a3 3 0 0 0-3-3h-6z" />
@@ -242,6 +252,9 @@ export const NAV_GROUPS: NavGroup[] = [
     blurb: "Set once, tuned rarely",
     items: [
       { id: "org", label: "Org", href: "/app/org", icon: "org" },
+      // What good looks like for every role and level — its own door, not a
+      // Settings section (docs/systems/expectations.md).
+      { id: "expectations", label: "Roles & expectations", href: "/app/expectations", icon: "expectations" },
       // Renamed from "Context" (Session 36 decision) — "Context" names the
       // mechanism, "Knowledge" names what you get.
       { id: "knowledge", label: "Knowledge", href: "/app/context", icon: "knowledge" },
@@ -256,6 +269,8 @@ const TEAM_GROUP = NAV_GROUPS.find((g) => g.group === "People")!;
 const TEAM_ITEM = TEAM_GROUP.items.find((i) => i.id === "team")!;
 const ASSESSMENTS_ITEM = TEAM_GROUP.items.find((i) => i.id === "assessments")!;
 const BEYOND_ITEM = TEAM_GROUP.items.find((i) => i.id === "beyond")!;
+const WORKSPACE_GROUP = NAV_GROUPS.find((g) => g.group === "Workspace")!;
+const EXPECTATIONS_ITEM = WORKSPACE_GROUP.items.find((i) => i.id === "expectations")!;
 
 // ---------------------------------------------------------------------------
 // Route -> nav context, for the header breadcrumb + orbit strip.
@@ -285,6 +300,9 @@ export function getNavContext(pathname: string, params: Record<string, string | 
   // they keep the Beyond door lit rather than the person breadcrumb.
   if (pathname.startsWith("/app/beyond/")) {
     return { kind: "item", group: TEAM_GROUP, item: BEYOND_ITEM };
+  }
+  if (pathname.startsWith("/app/expectations/")) {
+    return { kind: "item", group: WORKSPACE_GROUP, item: EXPECTATIONS_ITEM };
   }
   if (pathname.startsWith("/app/assessments/")) {
     const id = typeof params.reportId === "string" ? params.reportId : null;
@@ -544,6 +562,10 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
     // Only render a state when setup isn't finished — a finished
     // Settings door shows no count at all (Session 36 decision).
     if (!fullySetUp) doorStates.settings = { label: "not finished", tone: "setup" };
+    doorStates.expectations =
+      s.roles_count === 0
+        ? { label: "no roles yet" }
+        : { label: `${s.roles_with_expectations_count} of ${s.roles_count} defined` };
   } else if (profR.status === "fulfilled" && !profR.value.org_ready) {
     // Fallback if setup-status itself failed to load: org_ready is a
     // strictly weaker signal, but better than showing nothing.

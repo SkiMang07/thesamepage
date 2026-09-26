@@ -75,7 +75,7 @@ def _compute_coverage(supabase) -> dict:
     org_wide_values_count = 0
 
     for kind, (table, _) in _CONFIG_TABLES.items():
-        rows = supabase.table(table).select("id,role_level_id").execute().data
+        rows = supabase.table(table).select("id,role_level_id").is_("retired_at", "null").execute().data
         for row in rows:
             rl_id = row.get("role_level_id")
             if rl_id is None:
@@ -267,6 +267,7 @@ def draft_expectations(
                 supabase.table(table)
                 .select("*")
                 .in_("role_level_id", sibling_ids)
+                .is_("retired_at", "null")
                 .execute()
                 .data
             )
@@ -410,6 +411,7 @@ def draft_org_values(request: Request, auth=Depends(get_authenticated_client)):
         supabase.table("value_configs")
         .select("value_name,order_type,description")
         .is_("role_level_id", "null")
+        .is_("retired_at", "null")
         .execute()
         .data
     )

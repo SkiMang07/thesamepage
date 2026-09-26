@@ -152,6 +152,8 @@ def _catalog(scorecard: dict) -> list[dict]:
                 "scale": scale,
                 "measurement_period": it.get("measurement_period"),
                 "order_type": it.get("order_type"),
+                "target": it.get("target"),
+                "target_status": it.get("target_status"),
                 "prior": prior,
             })
     return out
@@ -480,6 +482,10 @@ def _item_block(catalog: list[dict], keys: dict[str, str], include_prior: bool =
         lines.append(head)
         if entry["kind"] == "metric":
             lines.append(f"      numeric metric measured per {entry.get('measurement_period') or 'unspecified period'}; scale points below rate a reading")
+            if entry.get("target_status") == "set" and entry.get("target"):
+                lines.append(f"      approved target: {entry['target']}")
+            elif entry.get("target_status") == "unresolved":
+                lines.append("      NO TARGET SET: the manager has not defined one. Record a reading if one exists, but never judge it against a number or imply one.")
         for s in entry["scale"]:
             lines.append(f"      {s['point']}: {s['meaning'] or '(no description configured)'}")
         if include_prior and entry.get("prior"):
@@ -1312,6 +1318,11 @@ def _build_completion(row: dict, scorecard: dict) -> tuple[dict, list[str]]:
         d = item.get("decision") or {}
         base = {"key": entry["key"], "kind": entry["kind"], "name": entry["name"], "expectation": entry.get("expectation"),
                 "scale": entry["scale"], "prior": entry.get("prior")}
+        if entry["kind"] == "metric" and entry.get("target_status"):
+            # Frozen with the rest of the standard: a later approved target
+            # never rewrites what this assessment was judged against.
+            base["target"] = entry.get("target")
+            base["target_status"] = entry.get("target_status")
         if d.get("state") != "include":
             unassessed.append({**base, "why": item.get("unassessed_reason")})
             continue

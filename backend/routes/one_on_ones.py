@@ -182,6 +182,13 @@ def _format_expectations_block(report_name: str, expectations: dict | None) -> s
                 parts.append(r["description"])
             if kind == "metrics" and r.get("measurement_period") and r["measurement_period"] != "none":
                 parts.append(f"measured per {r['measurement_period']}")
+            if kind == "metrics" and r.get("target_status") == "set" and r.get("target"):
+                parts.append(f"target: {r['target']}")
+            elif kind == "metrics" and r.get("target_status") == "unresolved":
+                # Deliberately unset (Roles & expectations): never assume one.
+                parts.append("no target set yet — do not assume or suggest a number")
+            if r.get("exceeds"):
+                parts.append(f"exceeds: {r['exceeds']}")
             lines.append("    • " + " — ".join(parts))
         label = {"metrics": "Metrics", "skills": "Skills", "values": "Values"}[kind]
         return f"  {label}:\n" + "\n".join(lines)

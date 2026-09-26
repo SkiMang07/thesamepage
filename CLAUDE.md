@@ -46,7 +46,7 @@ team.md             /app/team — roster, goals, meetings, callouts, IC invites
 mission-control.md  /app/dashboard — action brief, ranking, dispositions, rollback
 context-engine.md   document ingest, extraction, retrieval, the Brain
 scribe.md           conversational data entry, the agent loop, eval harness
-expectations.md     role ladders, coverage grid, JD import, AI draft
+expectations.md     /app/expectations — ladders, JD-first drafts, revisions, approval, open decisions
 assessments.md      period assessments — evidence, AI-led draft & discussion, manager-owned completion
 development.md      individual plans, team training focus
 check-ins.md        the temporal layer under goals and projects
@@ -106,6 +106,13 @@ the team design** for `/app/beyond` — implemented as four views with option A'
 continuity in the deeper views; open it before visual work on that page.
 `option-b-exchange.png` was not selected. Current behaviour is in
 `docs/systems/beyond.md`. Its example data is fictional.
+
+`docs/design-proposals/2026-09-26-role-expectations/` (`BUILD_BRIEF.md`,
+`prototype.html`) is the **selected Roles & expectations design** for
+`/app/expectations` — implemented as its own Workspace page (not the
+prototype's "Foundation" group or Settings); open it before visual work there.
+Current behaviour is in `docs/systems/expectations.md`. Its example data is
+fictional.
 
 `gtm/` holds the go-to-market discipline: positioning, personas, brand and voice, and
 the argument behind each marketing page. `website/` stays a build root with its own
@@ -192,6 +199,24 @@ docs/        see the table above
    without the manager seeing and confirming it. This applies to every surface.
 
 ---
+
+## How changes are tested (pre-launch)
+
+There are no outside users yet, so **the live app is the test environment**. The
+release path is: build → verify cheaply → run the migration in Supabase → push →
+Andrew tests on the deployed app. Secrets live in Railway and Vercel only;
+`backend/.env` is intentionally empty and Andrew does not keep local keys.
+
+- Do not build or hand over a local run setup (local servers, `.env` files,
+  run scripts) unless Andrew asks for one. A brief saying "local experience"
+  or "don't push yet" means "don't deploy until the checks pass", not "set up
+  local hosting".
+- Right-size verification: unit tests, `tsc --noEmit` on a clean checkout, and
+  applying the migration to a throwaway Postgres (`local_verify_stub.sql`) are
+  the default gate. Vercel/Railway builds are the build gate. Anything heavier
+  (a local stack, browser automation against fixtures) needs a stated reason.
+- Migrations are run in the Supabase SQL editor — by Andrew, or by Claude
+  through Claude in Chrome when he asks — before the push that depends on them.
 
 ## Handing Andrew a terminal command
 

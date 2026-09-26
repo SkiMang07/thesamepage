@@ -348,6 +348,12 @@ function JudgmentRow({
             {item.order_type === "primary" && <span className="ml-2 text-xs font-normal text-ink-muted">primary</span>}
           </p>
           {item.expectation && <p className="mt-0.5 text-sm text-ink-secondary">{item.expectation}</p>}
+          {item.kind === "metric" && item.target_status === "set" && item.target && (
+            <p className="mt-0.5 text-xs text-ink-muted">Target: {item.target}</p>
+          )}
+          {item.kind === "metric" && item.target_status === "unresolved" && (
+            <p className="mt-0.5 text-xs text-amber-700">No target set · a reading is not judged against a number</p>
+          )}
           {!open && d.reason && included && <p className="mt-1 line-clamp-2 text-sm text-ink-body">{d.reason}</p>}
         </div>
         <div className="sm:shrink-0 sm:text-right">

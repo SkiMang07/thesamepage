@@ -235,7 +235,7 @@ a query or a policy.
 |---|---|---|
 | Manager-scoped | `manager_id = auth.uid()` | direct_reports, one_on_one_series, one_on_ones, commitments, dr_capture_notes, assessments, performance_reviews, skill/value_assessments, metric_entries, team_messages, team_meetings, team_meeting_series, team_meeting_agenda_items, team_callouts, team_dev_focus, direct_report_invites, development_plans + dev_plan_*, assistant_messages, mission_control_events, capacity_profiles, time_off_entries, away_periods, away_period_shifts |
 | Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins, project_follow_throughs, outside_people, outside_meetings, outside_meeting_people, outside_meeting_links, outside_meeting_series |
-| Org-scoped | `org_id = public.current_org_id()` | organizations, users, org_units, role_families, role_levels, *_configs, *_scale_definitions, assessment_levels, capacity_settings, work_unit_configs, documents, document_series, document_scopes, document_citations |
+| Org-scoped | `org_id = public.current_org_id()` | organizations, users, org_units, role_families, role_levels, *_configs, role_expectation_drafts, role_expectation_decisions, *_scale_definitions, assessment_levels, capacity_settings, work_unit_configs, documents, document_series, document_scopes, document_citations |
 
 **Naming gotcha:** `goals` and `projects` policies are named `goals_all_own_org` /
 `projects_all_own_org` but scope by `owner_id`, not org. Never infer the scoping

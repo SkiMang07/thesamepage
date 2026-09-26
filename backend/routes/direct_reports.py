@@ -74,7 +74,9 @@ def fetch_role_expectations(supabase, role_level_id: str | None) -> dict | None:
 
     result: dict = {"role_level": role_rows[0]}
     for kind, (table, name_col) in _EXPECTATION_TABLES.items():
-        query = supabase.table(table).select("*")
+        # Retired rows (dropped by an approved revision) stay for history
+        # only; every consumer sees the active standard.
+        query = supabase.table(table).select("*").is_("retired_at", "null")
         if kind == "values":
             # Org-wide values (role_level_id IS NULL — Plan S3, see
             # docs/TEAM_SETUP_UX_REVIEW.md §6) apply to every role. Union

@@ -19,12 +19,25 @@ export class ApiError extends Error {
   /** FastAPI's `detail`, when the body was JSON. Otherwise the raw body,
    *  truncated — a gateway timeout returns an HTML page, not our schema. */
   readonly detail: string;
+  /** Itemised reasons, when the backend sends `detail: {message, problems}`
+   *  (Roles & expectations approval names every open decision). */
+  readonly problems: string[];
 
   constructor(status: number, body: string) {
     super(`API error ${status}: ${body}`);
     this.name = "ApiError";
     this.status = status;
     this.detail = parseDetail(body);
+    this.problems = parseProblems(body);
+  }
+}
+
+function parseProblems(body: string): string[] {
+  try {
+    const problems = JSON.parse(body)?.detail?.problems;
+    return Array.isArray(problems) ? problems.filter((p: unknown): p is string => typeof p === "string") : [];
+  } catch {
+    return [];
   }
 }
 
@@ -32,6 +45,7 @@ function parseDetail(body: string): string {
   try {
     const parsed = JSON.parse(body);
     if (typeof parsed?.detail === "string") return parsed.detail;
+    if (typeof parsed?.detail?.message === "string") return parsed.detail.message;
   } catch {
     /* not JSON — a proxy, a gateway error page, or an empty body */
   }
@@ -1778,6 +1792,9 @@ export type ExpectationIn = {
 export const createExpectation = (kind: ExpectationKind, body: ExpectationIn): Promise<Expectation> =>
   authedFetch(`/api/settings/expectations/${kind}`, { method: "POST", body: JSON.stringify(body) });
 
+export const updateExpectation = (kind: ExpectationKind, id: string, body: ExpectationIn): Promise<Expectation> =>
+  authedFetch(`/api/settings/expectations/${kind}/${id}`, { method: "PUT", body: JSON.stringify(body) });
+
 export const deleteExpectation = (kind: ExpectationKind, id: string): Promise<{ deleted: boolean }> =>
   authedFetch(`/api/settings/expectations/${kind}/${id}`, { method: "DELETE" });
 
@@ -1869,17 +1886,6 @@ export type ExpectationsDraft = {
   values: DraftValueItem[];
 };
 
-// AI-drafts metrics/skills/values from the role's job_responsibilities text
-// (falls back to role title + level when there's no JD text). Nothing is
-// saved — review in the UI, then commit via batchCreateExpectations. Can
-// throw (rate limit, AI failure) — callers must degrade to the manual forms
-// on error, never block them (draft-then-review rule, same as assessments).
-export const draftExpectations = (roleLevelId: string): Promise<ExpectationsDraft> =>
-  authedFetch("/api/expectations/draft", {
-    method: "POST",
-    body: JSON.stringify({ role_level_id: roleLevelId }),
-  });
-
 // Org-wide values draft (Session 43, Polish Pass B — see
 // docs/TEAM_SETUP_UX_REVIEW.md §7.3, item 8). Drafts from the company
 // name/context, not a job description — there is no role here. Same
@@ -1911,14 +1917,9 @@ export const batchCreateExpectations = (
   });
 
 // ---------------------------------------------------------------------------
-// Role JD import (Session 44 — see docs/ROLE_JD_IMPORT_SCOPING.md). One AI
-// call turns a pasted/uploaded job description into a role identity + a
-// match proposal against existing ladders + an expectations draft. NOTHING
-// is saved by this call: RoleImportPanel commits what the manager keeps
-// through createRoleFamily / createRoleLevel / updateRoleLevel and the
-// batchCreateExpectations calls above — no import-specific write endpoint
-// exists on purpose (the AI drafts, the client confirms via the same
-// endpoints the manual forms use).
+// Role placement types, shared with Define a role (composeRoleFromJd below):
+// the role identity read from a job description and the server-validated
+// proposal for where it belongs among the existing ladders.
 // ---------------------------------------------------------------------------
 
 export type RoleImportAction = "attach" | "create_new" | "exists";
@@ -1943,27 +1944,240 @@ export type RoleImportMatch = {
   rationale: string | null;
 };
 
-export type RoleImportDraft = {
-  // false => honest refusal (not a JD). `reason` is the one line to show;
-  // role/match are null and expectations are empty.
+// ---------------------------------------------------------------------------
+// Roles & expectations (/app/expectations, docs/systems/expectations.md).
+// Working drafts and revisions live in front of the approved expectations;
+// only approveRoleDraft publishes. Every draft write carries `version` and a
+// mismatch is 409 (another tab wrote first).
+// ---------------------------------------------------------------------------
+
+export type RoleSection = "responsibility" | "skill" | "value";
+
+export type RoleTarget =
+  | { status: "set"; text: string; source: "source" | "manager"; quote?: string | null }
+  | { status: "unresolved" };
+
+export type RoleItem = {
+  key: string;
+  config_id: string | null;
+  config_kind: ExpectationKind | null;
+  section: RoleSection;
+  measure: "numeric" | "judged";
+  title: string;
+  responsibility: string;
+  meets: string;
+  exceeds: string;
+  measurement_period: string | null;
+  order_type: "primary" | "secondary" | "tertiary" | null;
+  value_type?: "team" | "department" | null;
+  // null on a numeric item = configured before this workflow; any target
+  // lives in its wording (legacy_target true).
+  target: RoleTarget | null;
+  legacy_target?: boolean;
+  origin: "source" | "suggestion" | "approved" | "copied" | "manager";
+  edited: boolean;
+  source_quote: string | null;
+};
+
+export type RoleQuestion = {
+  id: string;
+  item_key: string | null;
+  topic: "target" | "measure" | "scope" | "wording" | "other";
+  question: string;
+  why: string | null;
+  answer_mode: "field" | "answer";
+  field: "target" | "title" | "responsibility" | "meets" | "exceeds" | null;
+  status: "open" | "answered" | "deferred" | "dismissed";
+  answer: string | null;
+  decision_id: string | null;
+  follow_up_on: string | null;
+  origin: "system" | "ai" | "decision";
+};
+
+export type RoleSuggestion =
+  | { id: string; type: "rewrite"; item_key: string; field: "title" | "responsibility" | "meets" | "exceeds"; text: string; why: string | null; status: string }
+  | { id: string; type: "target"; item_key: string; text: string; source: "source" | "manager"; why: string | null; status: string }
+  | { id: string; type: "add"; item: RoleItem; why: string | null; status: string };
+
+export type RoleDraft = {
+  id: string;
+  role_level_id: string;
+  kind: "new" | "revision";
+  status: "open" | "approved" | "discarded";
+  source_text: string | null;
+  source_label: string | null;
+  items: RoleItem[];
+  questions: RoleQuestion[];
+  suggestions: RoleSuggestion[];
+  analysis: {
+    status?: "idle" | "composed" | "ok" | "failed";
+    summary?: string | null;
+    error?: string;
+    notes?: string[];
+    analyzed_at?: string;
+    new_questions?: number;
+    new_suggestions?: number;
+  };
+  version: number;
+  updated_at: string;
+  approved_at: string | null;
+};
+
+export type RoleDecision = {
+  id: string;
+  role_level_id: string;
+  item_key: string | null;
+  config_id: string | null;
+  topic: RoleQuestion["topic"];
+  question: string;
+  follow_up_on: string;
+  status: "deferred" | "resolved" | "dropped";
+};
+
+export type RoleWorkspace = {
+  draft: RoleDraft | null;
+  role: {
+    id: string;
+    title: string;
+    job_level: number;
+    family: { id: string; name: string } | null;
+    job_responsibilities: string | null;
+  };
+  people: { id: string; name: string }[];
+  org_values: { id: string; name: string; description: string | null }[];
+  approved_items: RoleItem[];
+  approved_at?: string | null;
+  open_decisions: RoleDecision[];
+  resumed?: boolean;
+  analysis_failed?: boolean;
+  copied?: number;
+};
+
+export type RolesOverviewLevel = {
+  role_level_id: string;
+  role_family_id: string | null;
+  job_role: string;
+  job_level: number;
+  has_source: boolean;
+  people: { id: string; name: string }[];
+  status: "approved" | "none" | "draft" | "revision";
+  counts: { responsibilities: number; skills: number; values: number };
+  approved_at: string | null;
+  draft: {
+    id: string;
+    kind: "new" | "revision";
+    updated_at: string;
+    open_questions: number;
+    deferred: number;
+    items: number;
+    first_question: string | null;
+    focus: string | null;
+    analysis_failed: boolean;
+  } | null;
+  open_decisions: { id: string; question: string; topic: string; follow_up_on: string; due: boolean; approved: boolean; item_key: string | null }[];
+};
+
+export type RolesReviewItem = {
+  type: "draft" | "revision" | "decision";
+  role_level_id: string;
+  decision_id?: string;
+  label: string;
+  kind_label: string;
+  detail: string;
+  focus: string | null;
+  follow_up_on?: string;
+  due?: boolean;
+  updated_at?: string;
+};
+
+export type RolesOverview = {
+  families: RoleFamily[];
+  levels: RolesOverviewLevel[];
+  needs_review: RolesReviewItem[];
+  coming_back: RolesReviewItem[];
+  org_values: { id: string; name: string; description: string | null }[];
+  today: string;
+};
+
+export type RoleCompose = {
   is_job_description: boolean;
   reason: string | null;
-  // Multi-role documents: v1 extracts the primary role only and says so.
   other_roles_note: string | null;
   role: ImportedRole | null;
   match: RoleImportMatch | null;
-  expectations: ExpectationsDraft;
+  source_text: string | null;
+  source_label: string | null;
+  items: RoleItem[];
+  questions: RoleQuestion[];
+  notes: string[];
 };
 
-// Exactly one of file/text — the backend 422s on both or neither. Can throw
-// (rate limit, LibreOffice failure, AI failure); the panel keeps the pasted
-// text and shows the error rather than losing the input.
-export const draftRoleImport = (input: { file?: File; text?: string }): Promise<RoleImportDraft> => {
+export const getRolesOverview = (): Promise<RolesOverview> => authedFetch("/api/role-expectations/overview");
+
+export const getRoleWorkspace = (roleLevelId: string): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/roles/${roleLevelId}`);
+
+// One AI call: placement proposal + first draft + focused questions from a
+// job description. Nothing is saved. With roleLevelId the role is known and
+// no placement is proposed.
+export const composeRoleFromJd = (input: { file?: File; text?: string; roleLevelId?: string }): Promise<RoleCompose> => {
   const formData = new FormData();
   if (input.file) formData.append("file", input.file);
   if (input.text) formData.append("text", input.text);
-  return authedFormFetch("/api/roles/import/draft", formData);
+  if (input.roleLevelId) formData.append("role_level_id", input.roleLevelId);
+  return authedFormFetch("/api/role-expectations/import", formData);
 };
+
+// Opens (or resumes) the role's working draft. A role with approved
+// expectations gets a working revision; composed items become suggestions.
+export const openRoleDraft = (body: {
+  role_level_id: string;
+  source_text?: string | null;
+  source_label?: string | null;
+  items?: RoleItem[];
+  questions?: RoleQuestion[];
+  notes?: string[];
+}): Promise<RoleWorkspace> =>
+  authedFetch("/api/role-expectations/drafts", { method: "POST", body: JSON.stringify(body) });
+
+export type RoleDraftSave = {
+  version: number;
+  items: RoleItem[];
+  questions?: Pick<RoleQuestion, "id" | "answer" | "status">[];
+  source_text?: string | null;
+};
+
+export const saveRoleDraft = (draftId: string, body: RoleDraftSave): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}`, { method: "PUT", body: JSON.stringify(body) });
+
+// Saves first, then reanalyzes. A failed analysis still returns the saved
+// draft with analysis.status "failed" (and analysis_failed: true).
+export const reanalyzeRoleDraft = (draftId: string, body: RoleDraftSave): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/analyze`, { method: "POST", body: JSON.stringify(body) });
+
+export const actOnRoleSuggestion = (draftId: string, suggestionId: string, version: number, action: "accept" | "dismiss"): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/suggestions/${suggestionId}`, {
+    method: "POST",
+    body: JSON.stringify({ version, action }),
+  });
+
+export const deferRoleQuestion = (draftId: string, version: number, questionId: string, followUpOn: string): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/defer`, {
+    method: "POST",
+    body: JSON.stringify({ version, question_id: questionId, follow_up_on: followUpOn }),
+  });
+
+export const copyIntoRoleDraft = (draftId: string, version: number, fromRoleLevelId: string): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/copy`, {
+    method: "POST",
+    body: JSON.stringify({ version, from_role_level_id: fromRoleLevelId }),
+  });
+
+export const discardRoleDraft = (draftId: string): Promise<{ discarded: boolean }> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/discard`, { method: "POST" });
+
+export const approveRoleDraft = (draftId: string, version: number): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/approve`, { method: "POST", body: JSON.stringify({ version }) });
 
 export const assignReportRole = (reportId: string, report: DirectReport, roleLevelId: string | null): Promise<DirectReport> =>
   authedFetch(`/api/direct-reports/${reportId}`, {
@@ -2178,6 +2392,10 @@ export type CatalogItem = {
   scale: ScalePoint[];
   measurement_period: string | null;
   order_type: string | null;
+  // Roles & expectations: an approved target, or "unresolved" = deliberately
+  // no target yet (never judged against a number). null status = legacy row.
+  target?: string | null;
+  target_status?: "set" | "unresolved" | null;
   prior: (Judgment & { date?: string | null }) | null;
   state: ItemState;
   attention: string[];
@@ -2221,6 +2439,8 @@ export type SnapshotItem = {
   name: string;
   expectation: string | null;
   scale: ScalePoint[];
+  target?: string | null;
+  target_status?: "set" | "unresolved" | null;
   prior: (Judgment & { date?: string | null }) | null;
   origin?: ItemDecision["origin"];
   reason?: string | null;

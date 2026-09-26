@@ -75,10 +75,12 @@ export default function Sidebar() {
       // `canvas` (a shade BELOW the cards they frame), separated from the
       // content column by a single structural hairline. Hardcoded #DDE0E3 /
       // #F5F8FA replaced with the tokens so the rail follows the theme.
+      // 204px (was 190) so the longest label, "Roles & expectations", fits
+      // without truncating.
       className={`h-screen shrink-0 flex-col overflow-y-auto border-r border-hairline bg-canvas transition-[width] duration-150 ${
         mobileOpen
           ? "fixed inset-y-0 left-0 z-[60] flex w-[240px] shadow-xl"
-          : `sticky top-0 hidden md:flex ${collapsed ? "w-14" : "w-[190px]"}`
+          : `sticky top-0 hidden md:flex ${collapsed ? "w-14" : "w-[204px]"}`
       }`}
     >
       {/* Top row — the logo, top-left, above the nav it names (it used to

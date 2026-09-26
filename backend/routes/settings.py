@@ -232,7 +232,7 @@ def list_expectations(kind: str, role_level_id: str | None = None, auth=Depends(
     _validate_kind(kind)
     user_id, supabase = auth
     table, name_col = _CONFIG_TABLES[kind]
-    query = supabase.table(table).select("*").order(name_col)
+    query = supabase.table(table).select("*").is_("retired_at", "null").order(name_col)
     if role_level_id:
         query = query.eq("role_level_id", role_level_id)
     return query.execute().data

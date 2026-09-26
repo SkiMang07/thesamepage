@@ -563,6 +563,7 @@ def draft_role_import(
         supabase.table("value_configs")
         .select("value_name,order_type,description")
         .is_("role_level_id", "null")
+        .is_("retired_at", "null")
         .execute()
         .data
     )
@@ -579,7 +580,10 @@ def draft_role_import(
     configs_by_level: dict = {}
     if shortlisted_level_ids:
         for kind, (table, _) in _CONFIG_TABLES.items():
-            rows = supabase.table(table).select("*").in_("role_level_id", shortlisted_level_ids).execute().data
+            rows = (
+                supabase.table(table).select("*").in_("role_level_id", shortlisted_level_ids)
+                .is_("retired_at", "null").execute().data
+            )
             for row in rows:
                 configs_by_level.setdefault(
                     row["role_level_id"], {"metrics": [], "skills": [], "values": []}
