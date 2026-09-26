@@ -471,6 +471,15 @@ scope here because "production-ready" includes them.
   "Draft, needs your decision" block (the AI-training clause) that must be
   answered before it publishes; see N-10 and `gtm/site/legal.md`. Publish as a
   set once the copy is signed off.
+- [ ] **N-13 · Scribe answers can be cut off mid-sentence.** On
+  `claude-sonnet-5` the model thinks by default, and thinking tokens count
+  against the loop's `max_tokens=2000` (`assistant_engine.py`). On a long
+  final answer 1,200+ of those tokens go to thinking and the reply stops at the
+  limit (`stop_reason=max_tokens`, visible in the `ai_call` log). Found
+  2026-09-26 while running the Scribe eval, which lands at 25–27/30 on full
+  runs for this reason. Fix is one of: `thinking: {type: disabled}` on the
+  tools path (the one-shot paths already do this), or a larger budget; then a
+  fresh eval baseline. Deliberately not folded into the caching/model commits.
 - [ ] **N-12 · Homepage meta description is the old positioning.** "Define
   what good looks like for every role, then see who's meeting it... built for
   the manager, not HR." It is what Google shows under the result. One line in
@@ -695,7 +704,9 @@ Decided the same day, behind the sentence:
 - [x] ✔ AI cost visibility. Every provider call in `ai_core.py` (text,
   document, tools, the OpenAI fallback, and dictation, which
   `routes/transcribe.py` calls through it) logs one `ai_call` line: provider,
-  kind, model, input/output tokens, latency, plus audio bytes for dictation.
+  kind, model, input/output tokens, latency, plus audio bytes for dictation,
+  and `cache_read_input_tokens` / `cache_creation_input_tokens` when prompt
+  caching hits (cached prefixes and the Scribe thread, since 2026-09-26).
   Failures log `ai_call_failed` with the status. Filter Railway logs on
   `ai_call` to see the bill forming. No prompt, transcript or audio is ever
   logged.
@@ -797,6 +808,13 @@ Decided the same day, behind the sentence:
   Next.js RCE, sharp and a Next-bundled PostCSS: `next` floor raised to
   `^15.5.26` and PostCSS forced to 8.5.28 by an override, 0 vulnerabilities, and
   `next build` passes. Both audits now run in CI.
+- [x] ✔ Real-model evals gate the AI: `eval/test_assistant.py` (Scribe,
+  30 cases, ≥28) and `eval/test_assessments.py` (the four assessment calls,
+  14 cases, ≥13). Both need a key in `backend/.env`; they cannot run against
+  the deployed app. Prep, wrap-up and Librarian extraction still have none.
+  Both must pass before a model name in `config.py` changes (heavy moved to
+  `claude-sonnet-5` on 2026-09-26 on that basis; Scribe's suite sits under
+  its bar for the reason in N-13).
 - [x] ✔ A written rollback: `docs/ENGINEERING.md` → Rolling back a bad push
   (Vercel Instant Rollback, Railway rollback, `git revert`, forward-only
   migrations run by Andrew).
