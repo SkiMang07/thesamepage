@@ -55,27 +55,96 @@ def _log_failure(provider: str, kind: str, model: str, status, started: float) -
 
 _ANTHROPIC_TO_OPENAI = {
     "claude-sonnet-4-6": "gpt-4o",
+    "claude-sonnet-5": "gpt-4o",
     "claude-haiku-4-5-20251001": "gpt-4o-mini",
 }
 
+_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+_CACHE_EPHEMERAL = {"type": "ephemeral"}
+
+# The user turn a one-shot call sends when the caller gave a single prompt
+# and no separate body. The whole prompt lives in `system`.
+_PROCEED = "Proceed."
+
+
+class CachedPrompt(str):
+    """A prompt split into a stable *prefix* and a volatile *body*.
+
+    Behaves as the full prompt text (prefix + body) everywhere a plain string
+    is expected, so prompt-shape tests and fakes that inspect the prompt keep
+    working. `generate_text()` recognises it and sends the prefix as a cached
+    system block and the body as the user turn.
+
+    What goes where is a caching question, not a semantic one: the prefix is
+    whatever repeats verbatim between calls that arrive within the cache
+    window (rules, frameworks, output schemas — and for a review discussion,
+    the records under discussion), the body is whatever changes per call.
+    Anthropic caches nothing below 1,024 tokens on Sonnet or 4,096 on Haiku
+    4.5: a short prefix simply doesn't cache, and costs nothing extra.
+    """
+
+    prefix: str
+    body: str
+
+    def __new__(cls, prefix: str, body: str):
+        obj = super().__new__(cls, f"{prefix}\n\n{body}")
+        obj.prefix = prefix
+        obj.body = body
+        return obj
+
+
+def _anthropic_headers() -> dict:
+    return {
+        "x-api-key": settings.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+
+def _system_blocks(system: str, cache: bool) -> list | str:
+    """`system` as the API wants it. With `cache`, one text block carrying the
+    explicit cache breakpoint, so everything up to and including the system
+    prompt (tools come first in the cache prefix) is written once and read
+    back at a tenth of the price for the next five minutes."""
+    if not cache:
+        return system
+    return [{"type": "text", "text": system, "cache_control": _CACHE_EPHEMERAL}]
+
+
+def _split(prompt, prefix, body) -> tuple[str, str, bool]:
+    """Resolve the (prompt | prefix+body) calling conventions to
+    (system, user_text, cache_prefix)."""
+    if prefix is not None or body is not None:
+        if prefix is None or body is None:
+            raise ValueError("prefix and body must be given together")
+        return prefix, body, True
+    if isinstance(prompt, CachedPrompt):
+        return prompt.prefix, prompt.body, True
+    if prompt is None:
+        raise ValueError("generate_text needs a prompt, or prefix and body")
+    return prompt, _PROCEED, False
+
 
 def _call_anthropic(
-    prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: int = 1500, timeout: float = 60.0
+    prompt=None,
+    model: str = AI_DEFAULT_MODEL_HEAVY,
+    max_tokens: int = 1500,
+    timeout: float = 60.0,
+    *,
+    prefix: str | None = None,
+    body: str | None = None,
 ) -> dict:
+    system, user_text, cache = _split(prompt, prefix, body)
     started = time.monotonic()
     try:
         resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
+            _ANTHROPIC_URL,
+            headers=_anthropic_headers(),
             json={
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": prompt,
-                "messages": [{"role": "user", "content": "Proceed."}],
+                "system": _system_blocks(system, cache),
+                "messages": [{"role": "user", "content": user_text}],
             },
             timeout=timeout,
         )
@@ -88,11 +157,11 @@ def _call_anthropic(
         if e.response.status_code >= 500 and settings.OPENAI_API_KEY:
             logger.warning("Anthropic 5xx, falling back to OpenAI: %s", e)
             fallback_model = _ANTHROPIC_TO_OPENAI.get(model, "gpt-4o-mini")
-            return _call_openai(prompt, model=fallback_model, max_tokens=max_tokens)
+            return _call_openai(system, user_text, model=fallback_model, max_tokens=max_tokens)
         raise HTTPException(status_code=502, detail=f"AI call failed: {e}")
 
 
-def _call_openai(prompt: str, model: str = "gpt-4o-mini", max_tokens: int = 1500) -> dict:
+def _call_openai(system: str, user_text: str = _PROCEED, model: str = "gpt-4o-mini", max_tokens: int = 1500) -> dict:
     started = time.monotonic()
     resp = httpx.post(
         "https://api.openai.com/v1/chat/completions",
@@ -101,8 +170,8 @@ def _call_openai(prompt: str, model: str = "gpt-4o-mini", max_tokens: int = 1500
             "model": model,
             "max_tokens": max_tokens,
             "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": "Proceed."},
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_text},
             ],
         },
         timeout=60.0,
@@ -116,8 +185,13 @@ def _call_openai(prompt: str, model: str = "gpt-4o-mini", max_tokens: int = 1500
 
 
 def extract_text(provider: str, response: dict) -> str:
+    """Pull the text out of either provider's reply. The shape decides, not
+    the `provider` argument: a 5xx fallback hands an OpenAI reply back
+    through the Anthropic path, and before this check that reply was
+    rejected as malformed (KeyError on "content"), so the fallback never
+    actually worked."""
     try:
-        if provider == "anthropic":
+        if provider == "anthropic" and "choices" not in response:
             return response["content"][0]["text"].strip()
         return response["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError) as e:
@@ -125,12 +199,27 @@ def extract_text(provider: str, response: dict) -> str:
 
 
 def generate_text(
-    prompt: str, model: str = AI_DEFAULT_MODEL_HEAVY, max_tokens: int = 1500, timeout: float = 60.0
+    prompt=None,
+    model: str = AI_DEFAULT_MODEL_HEAVY,
+    max_tokens: int = 1500,
+    timeout: float = 60.0,
+    *,
+    prefix: str | None = None,
+    body: str | None = None,
 ) -> str:
-    """Convenience wrapper: prompt in, plain text out. Use this from route
-    handlers for the common case (no need to touch provider/response internals).
+    """Prompt in, plain text out. Use this from route handlers.
+
+    Two ways to call it:
+      generate_text(prompt)                — the whole prompt as the system
+                                             turn, "Proceed." as the user turn,
+                                             nothing cached (a one-off).
+      generate_text(prefix=..., body=...)  — or pass a CachedPrompt — the
+                                             prefix is a cached system block,
+                                             the body is the user turn.
+
     Pass a longer timeout for calls that read a long input (document extraction)."""
-    response = _call_anthropic(prompt, model=model, max_tokens=max_tokens, timeout=timeout)
+    response = _call_anthropic(prompt, model=model, max_tokens=max_tokens, timeout=timeout,
+                               prefix=prefix, body=body)
     return extract_text("anthropic", response)
 
 
@@ -152,12 +241,8 @@ def _call_anthropic_with_document(
     started = time.monotonic()
     try:
         resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
+            _ANTHROPIC_URL,
+            headers=_anthropic_headers(),
             json={
                 "model": model,
                 "max_tokens": max_tokens,
@@ -202,20 +287,25 @@ def call_anthropic_with_tools(
 ) -> dict:
     """Call Anthropic with tool definitions. Returns raw response dict (stop_reason + content).
     No OpenAI fallback — the tool-use message format is Anthropic-specific and has no
-    equivalent in the chat-completions shape."""
+    equivalent in the chat-completions shape.
+
+    Two cache breakpoints. The explicit one on the system block caches the
+    tool definitions and the system prompt across turns. The top-level
+    `cache_control` turns on automatic caching, which moves a breakpoint to
+    the last message on every call: in an agent loop each round reads the
+    whole thread so far from cache and writes only the new assistant turn and
+    tool results, instead of paying full price for the thread up to eight
+    times per turn."""
     started = time.monotonic()
     try:
         resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
+            _ANTHROPIC_URL,
+            headers=_anthropic_headers(),
             json={
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": system,
+                "cache_control": _CACHE_EPHEMERAL,
+                "system": _system_blocks(system, cache=True),
                 "messages": messages,
                 "tools": tools,
             },

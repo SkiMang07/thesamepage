@@ -43,7 +43,7 @@ from pydantic import BaseModel, Field
 
 import analytics
 import context_engine
-from ai_core import generate_text
+from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
@@ -307,29 +307,19 @@ SECONDHAND — SAID ABOUT {report_name.upper()} IN MEETINGS OUTSIDE THE TEAM (pr
 Treat each line as someone else's account, not established fact. Use it to decide what to ask about and let {report_name} give their own view. Never attribute a line to the person who said it in a suggested question, and never turn it into feedback unless the manager's own notes back it up.
 """
 
-    return f"""You are a management coach helping a manager prepare for a 1:1 with {report_name}.
+    # The frameworks and output schema never mention the report by name, so
+    # the prefix is byte-identical for every prep call in the app and is read
+    # from cache after the first one; the body carries this report's record.
+    prefix = """You are a management coach helping a manager prepare for a 1:1 with one of their direct reports. The report's name and everything known about the relationship follow in the material below.
 
 Your output must be grounded in the specific details provided. Do not give generic management advice. Every agenda item, question, and talking point must follow from something the manager actually wrote, something in recent history, or an open commitment that needs follow-up.
-
----
-RELATIONSHIP CONTEXT
-{recency_note}
-
-RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
-{history_block}
-
-OPEN COMMITMENTS (unresolved — each is marked with who owes it):
-{commitments_block}
-{carry_forward_block}{suggested_topics_block}{secondhand_block}{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
-MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
-{raw_notes or '(No additional notes were added.)'}
 
 ---
 FRAMEWORKS TO APPLY — read carefully before generating output:
 
 1. COMMITMENT REVIEW
    If any open commitments exist, the first agenda item must address them.
-   For items {report_name} owes, frame questions to create accountability without defensiveness:
+   For items the report owes, frame questions to create accountability without defensiveness:
    ✓ "Where did you land on X?" or "What happened with Y?"
    ✗ "Did you do X?" (accusatory) or ignoring them entirely (sends the wrong signal)
    For items the manager owes, prompt the manager to proactively give a status — modeling accountability is how the standard gets set.
@@ -364,30 +354,44 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
 ---
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
-{{
+{
   "situation_summary": "2–3 sentences: where things stand with this person based on history and current notes. Name any patterns, risks, or positive momentum worth calling out explicitly.",
   "agenda_items": [
-    {{
+    {
       "title": "Short label for this item (5 words or fewer)",
       "rationale": "Why this item matters right now — one sentence, grounded in the notes or history",
       "suggested_questions": ["Question 1", "Question 2"]
-    }}
+    }
   ]
-}}
+}
 
 Generate 3–5 agenda items total (including the commitment review if applicable and always the closing). Quality over quantity."""
+
+    body = f"""THIS 1:1 IS WITH {report_name}.
+
+---
+RELATIONSHIP CONTEXT
+{recency_note}
+
+RECENT 1:1 HISTORY (last 2–3 meetings, newest first):
+{history_block}
+
+OPEN COMMITMENTS (unresolved — each is marked with who owes it):
+{commitments_block}
+{carry_forward_block}{suggested_topics_block}{secondhand_block}{_format_expectations_block(report_name, role_expectations)}{context_engine_block}
+MANAGER'S NOTES ON WHAT'S HAPPENING RIGHT NOW:
+{raw_notes or '(No additional notes were added.)'}
+
+---
+Apply the frameworks and return the JSON described above."""
+    return CachedPrompt(prefix, body)
 
 
 def _build_wrapup_prompt(report_name: str, raw_notes: str, today_iso: str) -> str:
     """Distill raw in-call notes (typed live or pasted from a recorder) into a
     draft summary, commitments from BOTH sides, and possible carry-forward
     topics. The manager reviews and edits everything before it is saved."""
-    return f"""You are helping a manager log a 1:1 they just had with {report_name}. Distill the raw call notes below into a clean, reviewable record. The manager will edit your draft before saving — be precise, not exhaustive.
-
-Today's date: {today_iso} (use it to resolve relative deadlines like "by Friday" or "end of month").
-
-RAW CALL NOTES (typed during the call, or pasted from a transcript/recording tool — may be messy, fragmentary, or verbatim):
-{raw_notes}
+    prefix = """You are helping a manager log a 1:1 they just had with one of their direct reports. Distill the raw call notes into a clean, reviewable record. The manager will edit your draft before saving — be precise, not exhaustive. The report's name, today's date and the notes follow in the material below.
 
 Produce:
 
@@ -395,7 +399,7 @@ Produce:
 
 2. commitments — every explicit commitment made by either person. Rules:
    - Include only things someone actually agreed to DO. Topics discussed, open questions, and vague intentions ("we should think about...") are NOT commitments unless clearly accepted as an action.
-   - committed_by: "manager" if the manager owes it, "direct_report" if {report_name} owes it.
+   - committed_by: "manager" if the manager owes it, "direct_report" if the report owes it.
    - due_date: ISO date (YYYY-MM-DD) only when a deadline was stated or clearly implied — resolve relative dates from today's date. Otherwise null. Never guess a date.
    - Phrase each as one short actionable sentence starting with a verb ("Send intro to the design team").
    - Do NOT invent commitments. An empty list is a valid answer.
@@ -408,7 +412,17 @@ Produce:
 
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
-{{"summary": "...", "commitments": [{{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"]}}"""
+{"summary": "...", "commitments": [{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"]}"""
+
+    body = f"""THIS 1:1 WAS WITH {report_name}.
+
+Today's date: {today_iso} (use it to resolve relative deadlines like "by Friday" or "end of month").
+
+RAW CALL NOTES (typed during the call, or pasted from a transcript/recording tool — may be messy, fragmentary, or verbatim):
+{raw_notes}
+
+Return the JSON described above."""
+    return CachedPrompt(prefix, body)
 
 
 # ---------------------------------------------------------------------------

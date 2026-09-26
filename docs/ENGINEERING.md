@@ -72,19 +72,56 @@ checks that two requests get separate tokens on the same transport.
 ### AI calls
 
 All Anthropic calls go through `ai_core.py`. Route modules never import the
-Anthropic SDK directly.
+Anthropic SDK directly (`ai_core.py` itself uses raw `httpx`, not the SDK).
 
-- `generate_text()` — the default path.
+- `generate_text()` — the default path. Two calling conventions:
+  - `generate_text(prompt)` sends the whole prompt as `system` with a
+    `"Proceed."` user turn and caches nothing. For one-offs.
+  - `generate_text(prefix=..., body=...)`, or a `CachedPrompt(prefix, body)`
+    returned by a prompt builder, sends the prefix as one system block with
+    `cache_control` and the body as the user turn. The prefix is written to
+    Anthropic's prompt cache and read back at a tenth of the input price for
+    five minutes.
 - `generate_text_from_document()` — sends a base64 PDF as a native Claude
   `document` content block. No OpenAI fallback (chat-completions has no
-  equivalent native PDF input).
+  equivalent native PDF input). Uncached.
 - `call_anthropic_with_tools()` — the raw tool-use call, used only by
   `assistant_engine.py` for the Scribe loop. Anthropic-only by design; the
-  tool-use message format is provider-specific.
+  tool-use message format is provider-specific. Two cache breakpoints: an
+  explicit one on the system block (tool definitions + system prompt, shared
+  across turns) and the top-level `cache_control` that turns on automatic
+  caching, so each round of the loop reads the thread so far from cache and
+  pays full price only for the new assistant turn and tool results.
+
+**Prompt caching: what goes in the prefix.** The split is about repetition,
+not meaning. The prefix is whatever is byte-identical between calls that
+arrive within the cache window; the body is whatever changes per call.
+`CachedPrompt` is a `str` subclass equal to the full prompt text, so tests and
+fakes that inspect a prompt see the whole thing.
+
+- 1:1 prep and wrap-up: the coaching frameworks and output schema are the
+  prefix and mention no one by name, so every prep call in the app shares one
+  cache entry; the report's record is the body.
+- Assessments (draft, discuss, summary): the rules, the items with their
+  scales, the gathered records and the manager's context are the prefix — a
+  discussion is a loop over the same records, and a redraft or refreshed
+  summary re-reads them; the current draft, conversation and message are the
+  body. The picture call's prefix is the rules alone.
+- Everything else still uses the single-prompt form.
+
+Anthropic caches nothing below **1,024 tokens on Sonnet** and **4,096 on
+Haiku 4.5**; a shorter prefix is silently sent uncached at the normal price
+(no write surcharge). That floor is why the light-model calls (Mission
+Control explain, Beyond suggestions, ~350 tokens) are not split, and why a
+prefix has to be measured, not assumed: `usage.cache_read_input_tokens` in
+the `ai_call` log line is the proof. Cache writes cost 1.25× input, so never
+put `cache_control` on a one-off prompt.
 
 `AI_DEFAULT_MODEL_HEAVY` / `AI_DEFAULT_MODEL_LIGHT` in `config.py` must be valid
 Anthropic model names. The fallback path only triggers on 5xx, not 4xx — a bad
-model name errors hard, it does not degrade.
+model name errors hard, it does not degrade. On a 5xx, `generate_text` retries
+once against OpenAI (`_ANTHROPIC_TO_OPENAI` maps each Anthropic name to a
+chat-completions model); the tool and document paths have no fallback.
 
 **Draft-then-review is a product rule, not a per-feature choice.** Every AI write
 path in the app produces a draft the manager sees and confirms before anything

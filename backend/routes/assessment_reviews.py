@@ -45,7 +45,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
-from ai_core import generate_text
+from ai_core import CachedPrompt, generate_text
 from assessment_evidence import gather_evidence
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.assessments import _fetch_scorecard
@@ -427,14 +427,13 @@ _RULES = """RULES (these are not negotiable):
 # AI: picture, draft, discussion, summary
 # ---------------------------------------------------------------------------
 
-def _picture_prompt(row: dict, scorecard: dict, items: list[dict]) -> str:
+def _picture_prompt(row: dict, scorecard: dict, items: list[dict]) -> CachedPrompt:
     name = scorecard["direct_report"]["name"]
-    return f"""You are helping a manager check the picture before assessing {name} ({_role_label(scorecard) or 'no role assigned'}) for {row['review_period']}.
+    prefix = f"""You are helping a manager check the picture before assessing {name} ({_role_label(scorecard) or 'no role assigned'}) for {row['review_period']}.
 Write a short account of what the records show about their work, effort, outcomes and impact in this period, BEFORE any rating is discussed. The manager will then say what is missing.
 
-{_RULES}
-
-RECORDS
+{_RULES}"""
+    body = f"""RECORDS
 {_evidence_block(items)}
 
 Return ONLY JSON, no commentary:
@@ -447,6 +446,7 @@ Return ONLY JSON, no commentary:
   "questions": ["at most 2 consequential questions the manager could answer, only if genuinely useful"]
 }}
 Every contribution needs at least one source ref. Keep contributions to the 2-5 most meaningful. "impact" may be null."""
+    return CachedPrompt(prefix, body)
 
 
 def _clean_picture(parsed: dict, ref_map: dict[str, str]) -> dict:
@@ -495,9 +495,12 @@ def _item_block(catalog: list[dict], keys: dict[str, str], include_prior: bool =
     return "\n".join(lines)
 
 
-def _draft_prompt(row: dict, scorecard: dict, catalog: list[dict], keys: dict[str, str], items: list[dict]) -> str:
+def _draft_prompt(row: dict, scorecard: dict, catalog: list[dict], keys: dict[str, str], items: list[dict]) -> CachedPrompt:
     name = scorecard["direct_report"]["name"]
-    return f"""You are drafting {name}'s assessment for {row['review_period']} against their role's configured expectations ({_role_label(scorecard) or 'no role assigned'}). The manager reviews and decides every judgment; nothing you write is saved as a rating.
+    # Everything the draft reasons over — rules, the scales, the records, the
+    # manager's context — is the prefix; a redraft of the same review within
+    # the cache window reads it back. Only the output schema is the body.
+    prefix = f"""You are drafting {name}'s assessment for {row['review_period']} against their role's configured expectations ({_role_label(scorecard) or 'no role assigned'}). The manager reviews and decides every judgment; nothing you write is saved as a rating.
 
 {_RULES}
 - Judge each item ONLY against its own scale and standard. Scales differ between items; never convert between them.
@@ -514,15 +517,15 @@ RECORDS
 {_evidence_block(items)}
 
 MANAGER CONTEXT
-{_context_block(row)}
-
-Return ONLY JSON:
-{{
-  "narrative": {{"headline": "at most 10 words", "overview": "2-4 sentences describing the period's contribution and where evidence is limited"}},
-  "judgments": [{{"key": "K1", "point": 3, "value": null, "period": null, "reason": "1-2 sentences grounded in cited records", "sources": ["S2", "M"], "limitations": "what the evidence does not establish, or null", "needs_attention": null}}],
-  "unassessed": [{{"key": "K4", "why": "short reason"}}]
-}}
+{_context_block(row)}"""
+    body = """Return ONLY JSON:
+{
+  "narrative": {"headline": "at most 10 words", "overview": "2-4 sentences describing the period's contribution and where evidence is limited"},
+  "judgments": [{"key": "K1", "point": 3, "value": null, "period": null, "reason": "1-2 sentences grounded in cited records", "sources": ["S2", "M"], "limitations": "what the evidence does not establish, or null", "needs_attention": null}],
+  "unassessed": [{"key": "K4", "why": "short reason"}]
+}
 Use "point" for overall/skill/value items and "value"+"period" for metrics."""
+    return CachedPrompt(prefix, body)
 
 
 def _clean_proposal(entry: dict, j: dict, ref_map: dict[str, str], evidence_by_id: dict[str, dict],
@@ -620,7 +623,7 @@ def _merge_draft(draft: dict, catalog: list[dict], proposals: dict[str, dict], u
 
 
 def _discuss_prompt(row: dict, scorecard: dict, catalog: list[dict], keys: dict[str, str], items: list[dict],
-                    draft: dict, conversation: list[dict], message: str, focus_key: str | None) -> str:
+                    draft: dict, conversation: list[dict], message: str, focus_key: str | None) -> CachedPrompt:
     name = scorecard["direct_report"]["name"]
     focus = next((e for e in catalog if e["key"] == focus_key), None)
     current = []
@@ -636,7 +639,11 @@ def _discuss_prompt(row: dict, scorecard: dict, catalog: list[dict], keys: dict[
         if (not focus_key or m.get("item_key") in (None, focus_key))
     ) or "  (no earlier discussion)"
     scope = f"the judgment on [{keys[focus['key']]}] {focus['name']}" if focus else "the whole assessment"
-    return f"""You are discussing {name}'s draft assessment for {row['review_period']} with their manager. The topic is {scope}.
+    # A discussion is a loop over the same records: the rules, the items in
+    # scope, the records and the manager's context are the prefix and stay
+    # cached from one message to the next; the draft as it stands, the
+    # conversation and the new message are the body.
+    prefix = f"""You are discussing {name}'s draft assessment for {row['review_period']} with their manager.
 You can explain a judgment, challenge it, or propose a revision. The manager owns the judgment.
 
 {_RULES}
@@ -648,14 +655,15 @@ You can explain a judgment, challenge it, or propose a revision. The manager own
 ITEMS
 {_item_block([e for e in catalog if not focus or e['key'] == focus['key']], keys)}
 
-CURRENT DRAFT
-{chr(10).join(current)}
-
 RECORDS
 {_evidence_block(items)}
 
 MANAGER CONTEXT
-{_context_block(row)}
+{_context_block(row)}"""
+    body = f"""The topic is {scope}.
+
+CURRENT DRAFT
+{chr(10).join(current)}
 
 DISCUSSION SO FAR
 {history}
@@ -669,9 +677,10 @@ Return ONLY JSON:
   "revisions": [{{"key": "K2", "point": 3, "value": null, "period": null, "reason": "the revised reason", "sources": ["S3", "U"]}}]
 }}
 "revisions" may be empty. Only propose a revision when you are actually suggesting a different level or wording."""
+    return CachedPrompt(prefix, body)
 
 
-def _summary_prompt(row: dict, scorecard: dict, catalog: list[dict], keys: dict[str, str], items: list[dict], draft: dict) -> str:
+def _summary_prompt(row: dict, scorecard: dict, catalog: list[dict], keys: dict[str, str], items: list[dict], draft: dict) -> CachedPrompt:
     name = scorecard["direct_report"]["name"]
     included, unassessed = [], []
     for entry in catalog:
@@ -682,24 +691,25 @@ def _summary_prompt(row: dict, scorecard: dict, catalog: list[dict], keys: dict[
         else:
             unassessed.append(f"  [{keys[entry['key']]}] {entry['name']}"
                               + (f" (prior: {_describe(entry['kind'], entry, entry['prior'])}, {entry['prior'].get('date')}; not reassessed)" if entry.get("prior") else ""))
-    return f"""Write the finished assessment summary for {name}, {row['review_period']}, from the manager's reviewed judgments below. It will help the manager explain their view and start a useful conversation. It is not shared with {name} automatically.
+    # The summary is rewritten whenever the manager changes a judgment; the
+    # rules and records (prefix) hold still, the judgments (body) are what moved.
+    prefix = f"""Write the finished assessment summary for {name}, {row['review_period']}, from the manager's reviewed judgments given below. It will help the manager explain their view and start a useful conversation. It is not shared with {name} automatically.
 
 {_RULES}
 - The summary must agree exactly with the judgments listed. Do not add, raise or lower any judgment.
 - Do not invent positive impact to make the summary feel complete. If evidence is thin, say so.
 - Unassessed items are gaps or prior context, not findings for this period.
 
-JUDGMENTS THE MANAGER IS CONFIRMING
-{chr(10).join(included) or '  (none)'}
-
-LEFT UNASSESSED
-{chr(10).join(unassessed) or '  (none)'}
-
 RECORDS
 {_evidence_block(items)}
 
 MANAGER CONTEXT
-{_context_block(row)}
+{_context_block(row)}"""
+    body = f"""JUDGMENTS THE MANAGER IS CONFIRMING
+{chr(10).join(included) or '  (none)'}
+
+LEFT UNASSESSED
+{chr(10).join(unassessed) or '  (none)'}
 
 Return ONLY JSON:
 {{
@@ -711,6 +721,7 @@ Return ONLY JSON:
   "gaps": ["an acknowledged limit of the evidence"],
   "discussion": "one open question or opening line for the conversation with {name}, or null"
 }}"""
+    return CachedPrompt(prefix, body)
 
 
 def _clean_summary(parsed: dict, ref_map: dict[str, str], key_back: dict[str, str]) -> dict:
@@ -740,7 +751,7 @@ def _keys_for(catalog: list[dict]) -> tuple[dict[str, str], dict[str, str]]:
     return keys, {v: k for k, v in keys.items()}
 
 
-def _ai_json(prompt: str, max_tokens: int) -> dict:
+def _ai_json(prompt, max_tokens: int) -> dict:
     raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=max_tokens)
     return _parse_json(raw)
 
