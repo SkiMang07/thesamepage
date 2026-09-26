@@ -168,6 +168,8 @@ function RelationshipDesk() {
   // expectations with inline role assignment.
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [devBundle, setDevBundle] = useState<DevelopmentBundle | null>(null);
+  // Bumped by the Relationship view's "Draft one…" link; Growth runs its draft.
+  const [draftRequest, setDraftRequest] = useState(0);
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
   const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
   const [assigningRole, setAssigningRole] = useState(false);
@@ -666,6 +668,10 @@ function RelationshipDesk() {
             developmentFailed={failed(S.development)}
             onOpenWork={() => setView("work")}
             onOpenGrowth={() => setView("growth")}
+            onDraftGrowth={() => {
+              setView("growth");
+              setDraftRequest((n) => n + 1);
+            }}
           />
           <PastConversations
             sessions={completed}
@@ -698,7 +704,7 @@ function RelationshipDesk() {
         <div className="grid gap-5 lg:grid-cols-2">
           <AssessmentCard scorecard={scorecard} reportId={id} hasExpectations={!!report.expectations} />
           {devBundle ? (
-            <DevelopmentSection section="growth" directReportId={id} reportName={report.name} bundle={devBundle} onRefresh={refreshDevBundle} />
+            <DevelopmentSection section="growth" directReportId={id} reportName={report.name} bundle={devBundle} onRefresh={refreshDevBundle} draftRequest={draftRequest} />
           ) : (
             <p className="rounded-xl border border-hairline bg-surface px-4 py-4 text-sm text-amber-700">
               Development couldn&apos;t load. Refresh to try again.

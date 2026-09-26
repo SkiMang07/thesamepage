@@ -11,6 +11,7 @@ import type { CapacityOverviewItem, DevelopmentBundle, Goal, GoalStatus, Project
 import { instantDate, shortDate } from "@/components/team/dates";
 import { EYEBROW } from "@/lib/tokens";
 import { excerpt, firstName } from "./desk";
+import { draftPrompt, growthDirection } from "@/lib/development-preview";
 
 const STATUS_LABEL: Record<GoalStatus, string> = {
   active: "Active",
@@ -51,6 +52,7 @@ export function DeskPreviews({
   developmentFailed,
   onOpenWork,
   onOpenGrowth,
+  onDraftGrowth,
 }: {
   personName: string;
   goals: Goal[];
@@ -60,11 +62,12 @@ export function DeskPreviews({
   developmentFailed: boolean;
   onOpenWork: () => void;
   onOpenGrowth: () => void;
+  /** Opens Growth and runs the existing "Draft with AI" there (A4). */
+  onDraftGrowth: () => void;
 }) {
   const first = firstName(personName);
   const work = currentWork(goals, projects);
-  const plan = development?.development_plan.plan_text?.trim() ?? "";
-  const aspiration = development?.aspiration?.desired_role?.trim() ?? "";
+  const growth = growthDirection(development, developmentFailed);
 
   return (
     <div className="grid gap-8 border-t border-hairline py-8 md:grid-cols-2">
@@ -98,20 +101,25 @@ export function DeskPreviews({
         <button type="button" onClick={onOpenGrowth} className="text-2xs font-medium uppercase tracking-[0.16em] text-ink-muted hover:text-brand">
           Growth direction <span aria-hidden="true">↗</span>
         </button>
-        {developmentFailed ? (
+        {growth.kind === "failed" ? (
           <p className="mt-2 text-sm text-amber-700">The development plan couldn&apos;t load.</p>
-        ) : plan ? (
+        ) : growth.kind === "plan" ? (
           <>
-            <p className="mt-2 text-base text-ink">{excerpt(plan, 140)}</p>
+            <p className="mt-2 text-base text-ink">{excerpt(growth.text, 140)}</p>
             <p className="mt-1 text-xs text-ink-secondary">From {first}&apos;s saved development plan.</p>
           </>
-        ) : aspiration ? (
+        ) : growth.kind === "aspiration" ? (
           <>
-            <p className="mt-2 text-base text-ink">{aspiration}</p>
+            <p className="mt-2 text-base text-ink">{growth.text}</p>
             <p className="mt-1 text-xs text-ink-secondary">{first}&apos;s saved aspiration. No plan written yet.</p>
           </>
-        ) : (
-          <p className="mt-2 text-sm text-ink-secondary">No development plan or aspiration saved yet.</p>
+        ) : growth.kind === "none" ? (
+          <p className="mt-2 text-sm text-ink-secondary">No development plan yet.</p>
+        ) : null}
+        {growth.kind !== "failed" && growth.kind !== "loading" && growth.offerDraft && (
+          <button type="button" onClick={onDraftGrowth} className="mt-2 text-sm font-medium text-brand hover:underline">
+            {draftPrompt(first)} <span aria-hidden="true">→</span>
+          </button>
         )}
       </div>
     </div>

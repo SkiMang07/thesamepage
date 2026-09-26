@@ -7,7 +7,7 @@
 // time-off settings. Extracted unchanged from page.tsx when the Relationship
 // Desk was recomposed (2026-09-25); page.tsx composes them.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useDrawer } from "@/lib/drawer-context";
@@ -532,14 +532,18 @@ export function DevelopmentSection({
   reportName,
   bundle,
   onRefresh,
+  draftRequest = 0,
 }: {
   section: "notes" | "growth";
   directReportId: string;
   reportName: string;
   bundle: DevelopmentBundle;
   onRefresh: () => Promise<DevelopmentBundle>;
+  /** Each increment runs "Draft with AI" once (the Relationship view's link). */
+  draftRequest?: number;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const growthRef = useRef<HTMLDivElement>(null);
 
   // Aspiration — single upserted row.
   const [editingAspiration, setEditingAspiration] = useState(false);
@@ -796,6 +800,14 @@ export function DevelopmentSection({
     }
   }
 
+  useEffect(() => {
+    if (section !== "growth" || draftRequest === 0) return;
+    growthRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    void runDraft();
+    // Only a new request should draft; runDraft is recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftRequest, section]);
+
   async function reviseNote() {
     const text = newNote.trim();
     if (!text || revisingNote) return;
@@ -875,7 +887,7 @@ export function DevelopmentSection({
   // "growth" section — plan text, aspiration, opportunities, and training
   // -------------------------------------------------------------------------
   return (
-    <div className="rounded-xl border border-hairline bg-surface px-4 py-4">
+    <div ref={growthRef} className="scroll-mt-24 rounded-xl border border-hairline bg-surface px-4 py-4">
       <div className="flex items-baseline justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Development</p>
         <button

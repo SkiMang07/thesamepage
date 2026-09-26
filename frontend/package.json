@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test:projects": "node --experimental-strip-types --test lib/projects.test.mjs",
     "test:assessments": "node --experimental-strip-types --test lib/assessment-periods.test.mjs",
-    "test:ai-drafts": "node --experimental-strip-types --test lib/aiDraftTelemetry.test.mjs"
+    "test:ai-drafts": "node --experimental-strip-types --test lib/aiDraftTelemetry.test.mjs",
+    "test:growth-preview": "node --experimental-strip-types --test lib/development-preview.test.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.3",

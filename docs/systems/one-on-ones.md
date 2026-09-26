@@ -106,6 +106,10 @@ Relationship reads top to bottom:
   and a resolved list with reopen.
 - **Current work / Growth direction** previews: the most relevant live goal or
   project with its latest check-in, and the saved plan's opening sentence.
+  With no saved plan, Growth direction offers "Draft one from <name>'s 1:1s
+  and assessments →", which opens Growth and runs its existing "Draft with
+  AI" there. The result is the usual suggestion to use or dismiss
+  (`lib/development-preview.ts`).
 - **Past conversations**: completed occurrences newest first, each with its
   summary's opening, the count of commitments linked to it, and the full
   reviewed summary on expansion. Search filters the fetched summaries only.

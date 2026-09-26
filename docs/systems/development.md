@@ -49,4 +49,6 @@ synthesis note, where evidence-grounding actually applies.
 
 Every surface here is manually writable, with AI as an optional assist ("Draft
 with AI" for a first pass, "Revise with AI" for existing text). Nothing in this
-flow is AI-gated.
+flow is AI-gated. "Draft with AI" can also be started from the Relationship
+view's Growth direction preview when no plan is saved; it runs the same draft
+on the Growth tab (see one-on-ones.md → Relationship Desk).
