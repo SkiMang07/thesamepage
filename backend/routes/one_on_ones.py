@@ -849,7 +849,8 @@ def assemble_prep_inputs(
 ) -> dict | None:
     """Everything a prep call needs, or None when the direct report is not
     this manager's. Returns {prompt, report_name, open_commitments,
-    document_ids}."""
+    document_ids, document_titles, history_count, has_role_expectations,
+    secondhand_count} — the counts and titles feed prep_drew_on()."""
     report_rows = (
         supabase.table("direct_reports")
         .select("name,role_level_id,org_unit_id,one_on_one_cadence_days")
@@ -907,6 +908,7 @@ def assemble_prep_inputs(
     # org_id scopes the org-wide company values, which have no role to hang
     # a predicate on.
     role_expectations = fetch_role_expectations(supabase, report.get("role_level_id"), org_id=org_id)
+    secondhand_notes = fetch_secondhand_notes(supabase, user_id, direct_report_id)
 
     # Context Engine — org docs scoped to this report's team, cascaded up
     # through department + company-wide. get_relevant_context filters the
@@ -928,7 +930,7 @@ def assemble_prep_inputs(
         context_engine_block=context_engine.format_context_block(retrieved_docs),
         carry_forward_items=carry_forward_items,
         suggested_topics=suggested_topics,
-        secondhand_notes=fetch_secondhand_notes(supabase, user_id, direct_report_id),
+        secondhand_notes=secondhand_notes,
         opening_line=opening_line,
     )
     return {
@@ -936,7 +938,64 @@ def assemble_prep_inputs(
         "report_name": report["name"],
         "open_commitments": open_commitments,
         "document_ids": [doc["id"] for doc in retrieved_docs],
+        "document_titles": [str(doc.get("title") or "Untitled document") for doc in retrieved_docs],
+        "history_count": len(recent_summaries),
+        "has_role_expectations": bool(role_expectations),
+        "secondhand_count": len(secondhand_notes),
     }
+
+
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def prep_drew_on(
+    inputs: dict,
+    *,
+    opening_line: str | None = None,
+    carry_forward_items: list[str] | None = None,
+    has_notes: bool = False,
+    kept_thoughts: int = 0,
+    suggested_topics: int = 0,
+    at_risk_goals: int = 0,
+    development_plan: bool = False,
+) -> list[str]:
+    """The plain "Drew on: …" list shown under a prep sheet, built from what
+    assemble_prep_inputs() actually put in the prompt. Shared by the manual
+    POST /prep and the (parked) overnight worker, so the two sheets name
+    their sources the same way. Knowledge documents are named by title."""
+    labels: list[str] = []
+    if opening_line:
+        labels.append("the opening line you kept at the last wrap-up")
+    if carry_forward_items:
+        labels.append(_plural(len(carry_forward_items), "carried topic"))
+    if inputs.get("open_commitments"):
+        labels.append(_plural(len(inputs["open_commitments"]), "open commitment"))
+    if kept_thoughts:
+        labels.append(_plural(kept_thoughts, "kept thought"))
+    elif has_notes:
+        labels.append("your notes")
+    if at_risk_goals:
+        labels.append(_plural(at_risk_goals, "at-risk goal"))
+    if development_plan:
+        labels.append("the development plan")
+    if suggested_topics:
+        labels.append(_plural(suggested_topics, "suggested topic"))
+    history = inputs.get("history_count") or 0
+    if history == 1:
+        labels.append("your last 1:1")
+    elif history > 1:
+        labels.append(f"your last {history} 1:1s")
+    if inputs.get("has_role_expectations"):
+        labels.append("role expectations")
+    if inputs.get("secondhand_count"):
+        labels.append(_plural(inputs["secondhand_count"], "note") + " from meetings beyond your team")
+    titles = inputs.get("document_titles") or []
+    for title in titles[:3]:
+        labels.append(f"{title} (Knowledge)")
+    if len(titles) > 3:
+        labels.append(_plural(len(titles) - 3, "more Knowledge document"))
+    return labels
 
 
 def parse_prep_output(raw: str) -> tuple[str, list[dict]]:
@@ -979,8 +1038,8 @@ def build_prep_guide(
 ) -> dict:
     """The stored prep_guide. prepared_by is 'manager' (they pressed
     Prepare) or 'overnight' (the worker prepared it ahead of the meeting);
-    drew_on is the overnight sheet's plain list of what it was built from,
-    shown on the sheet so the manager knows what to rebuild from."""
+    drew_on is prep_drew_on()'s plain list of what the sheet was built from,
+    shown under the sheet so the manager can see its sources."""
     guide = {
         "situation_summary": situation_summary,
         "agenda_items": agenda_items,
@@ -1099,6 +1158,13 @@ def prep_one_on_one(
         open_commitments,
         source_notes=body.raw_notes,
         prepared_by="manager",
+        drew_on=prep_drew_on(
+            inputs,
+            opening_line=opening_line,
+            carry_forward_items=carry_forward_items,
+            has_notes=bool(body.raw_notes.strip()),
+            suggested_topics=len(suggested_topics),
+        ),
     )
     # Analytics (backend/analytics.py): was there a sheet before this one?
     # Checked before the write so the answer isn't this sheet itself.
@@ -1159,6 +1225,7 @@ def prep_one_on_one(
         opening_line=opening_line,
         prepared_by=prep_guide["prepared_by"],
         prepared_at=prep_guide["prepared_at"],
+        drew_on=prep_guide["drew_on"],
     )
 
 

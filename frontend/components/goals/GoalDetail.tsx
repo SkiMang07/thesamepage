@@ -30,6 +30,8 @@ import {
   sourceHref,
 } from "@/lib/goals";
 import GoalMeasure, { ReadingsTable } from "./GoalMeasure";
+import { goalContext, goalPrompt } from "./GoalSheet";
+import AskAboutButton from "@/components/AskAboutButton";
 
 const SUMMARY = "cursor-pointer select-none py-3 text-sm text-ink-body hover:text-ink";
 
@@ -208,9 +210,12 @@ export default function GoalDetail({
         )}
         <div className="mt-5">
           {updateForm ?? (
-            <button type="button" ref={updateButtonRef} onClick={onAddUpdate} className={BTN_PRIMARY_SM}>
-              Add an update
-            </button>
+            <div className="flex flex-wrap items-center gap-4">
+              <button type="button" ref={updateButtonRef} onClick={onAddUpdate} className={BTN_PRIMARY_SM}>
+                Add an update
+              </button>
+              <AskAboutButton label="Ask about this goal" prompt={goalPrompt(goal.title)} context={goalContext(goal)} />
+            </div>
           )}
         </div>
       </div>

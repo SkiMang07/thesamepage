@@ -181,6 +181,11 @@ export default function ContextEnginePage() {
         Teach The Same Page about your team — strategy, values, customers, offerings, career paths.
         The more it knows, the better your answers get.
       </p>
+      <p className="mt-2 text-sm text-ink-secondary">
+        When you upload a file, The Same Page reads it and suggests what it covers and the date it
+        speaks for. You check that and choose which teams it applies to. Only confirmed documents
+        are used, in prep sheets and in answers.
+      </p>
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 

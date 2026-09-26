@@ -548,20 +548,24 @@ function PrepFlow() {
                 <p className="mt-1 text-sm text-ink-muted">
                   {reportName ? `1:1 with ${reportName}` : "Upcoming 1:1"}
                 </p>
-                {prep.prepared_by === "overnight" && (
-                  <p className="mt-1 max-w-md text-xs text-ink-secondary">
-                    Prepared overnight
-                    {prep.drew_on && prep.drew_on.length > 0 && ` · Drew on ${prep.drew_on.join(", ")}`}
-                    {" · "}
-                    <button
-                      type="button"
-                      onClick={() => setStep(1)}
-                      className="font-medium text-brand hover:text-brand-hover hover:underline"
-                    >
-                      Rebuild
-                    </button>
-                  </p>
-                )}
+                {/* Name the author and its sources on every sheet. Sheets
+                    saved before drew_on existed show the author line only. */}
+                <p className="mt-1 max-w-md text-xs text-ink-secondary">
+                  {prep.prepared_by === "overnight" ? "Prepared overnight by The Same Page" : "Prepared by The Same Page"}
+                  {prep.drew_on && prep.drew_on.length > 0 && ` · Drew on ${prep.drew_on.join(", ")}`}
+                  {prep.prepared_by === "overnight" && (
+                    <>
+                      {" · "}
+                      <button
+                        type="button"
+                        onClick={() => setStep(1)}
+                        className="font-medium text-brand hover:text-brand-hover hover:underline"
+                      >
+                        Rebuild
+                      </button>
+                    </>
+                  )}
+                </p>
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="block">

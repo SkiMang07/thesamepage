@@ -85,8 +85,8 @@ function pageLabel(pathname: string, drawerPageContext: AssistantPageContext | n
   // that know the report's name).
   if (drawerPageContext) return drawerPageContext;
   // Generic path-based labels for common pages.
-  if (pathname === "/app/dashboard") return { label: "Mission Control (main dashboard)" };
-  if (pathname === "/app/goals") return { label: "Goals page" };
+  if (pathname === "/app/dashboard") return { label: "Mission Control (main dashboard)", entity_type: "mission_control" };
+  if (pathname === "/app/goals") return { label: "Goals page", entity_type: "goals" };
   if (pathname === "/app/projects") return { label: "Projects page" };
   if (pathname === "/app/team") return { label: "Team page" };
   if (pathname.startsWith("/app/reports/")) return { label: "a direct report's page" };
@@ -96,6 +96,37 @@ function pageLabel(pathname: string, drawerPageContext: AssistantPageContext | n
   if (pathname === "/app/org") return { label: "Org chart page" };
   if (pathname === "/app/settings") return { label: "Settings page" };
   return undefined;
+}
+
+// Starter prompts for an empty drawer, keyed on what the drawer is open over.
+// Static strings: they fill the composer, and nothing is sent until the
+// manager presses Send. Every one is answerable from Scribe's existing tools.
+function starterPrompts(ctx: AssistantPageContext | undefined): string[] {
+  switch (ctx?.entity_type) {
+    case "direct_report": {
+      const who = ctx.subject || "them";
+      return [
+        `How is ${who} doing against their role expectations?`,
+        `What's still open between ${who} and me?`,
+        `Help me get ready for my next 1:1 with ${who}.`,
+      ];
+    }
+    case "goals":
+    case "goal":
+      return [
+        "Which goals haven't had an update this month?",
+        "Which goals look at risk, and why?",
+        "Which projects aren't linked to a goal?",
+      ];
+    case "mission_control":
+      return [
+        "What should I get to first this week, and why?",
+        "Who haven't I had a 1:1 with in a while?",
+        "Help me get ready for a hard conversation.",
+      ];
+    default:
+      return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -721,7 +752,7 @@ function MessageBubble({
 // ---------------------------------------------------------------------------
 
 export default function ScribeDrawer() {
-  const { isOpen, close, messages, addTurn, clearThread, pageContext, hydrating } = useDrawer();
+  const { isOpen, close, messages, addTurn, clearThread, pageContext, prefill, clearPrefill, hydrating } = useDrawer();
   const pathname = usePathname();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -750,6 +781,26 @@ export default function ScribeDrawer() {
 
   // Resolve page context: drawer context override takes priority, then path label
   const currentPageContext = pageLabel(pathname, pageContext) ?? undefined;
+  const starters = starterPrompts(currentPageContext);
+
+  // Put a prompt in the composer (a starter, or an in-page "Ask about …"
+  // launcher) with the caret at the end. It is never sent on its own.
+  const fillComposer = useCallback((text: string) => {
+    setInput(text);
+    setSendError(null);
+    setTimeout(() => {
+      const el = composerRef.current;
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(text.length, text.length);
+    }, 80);
+  }, []);
+
+  useEffect(() => {
+    if (prefill == null) return;
+    fillComposer(prefill);
+    clearPrefill();
+  }, [prefill, fillComposer, clearPrefill]);
 
   const handleSend = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
@@ -825,9 +876,26 @@ export default function ScribeDrawer() {
           <p className="mt-8 text-center text-xs text-ink-muted">Loading…</p>
         )}
         {!hydrating && messages.length === 0 && (
-          <div className="mt-8 text-center text-sm text-ink-muted">
-            <p className="font-medium text-ink-secondary">Tell me what&apos;s happening.</p>
-            <p className="mt-1">I&apos;ll keep the pages up to date.</p>
+          <div className="mt-8 text-sm text-ink-muted">
+            <p className="text-center font-medium text-ink-secondary">Ask about your team, or tell me what happened.</p>
+            <p className="mx-auto mt-1 max-w-[19rem] text-center">
+              I answer from your notes, 1:1s, goals, projects and the documents in Knowledge.
+              When something should be saved, I draft it and you confirm.
+            </p>
+            {starters.length > 0 && (
+              <div className="mt-5 space-y-2">
+                {starters.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => fillComposer(s)}
+                    className="block w-full rounded-lg border border-hairline bg-canvas px-3 py-2 text-left text-sm text-ink-body hover:border-control hover:bg-sunken"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {messages.map((msg) => (
@@ -846,7 +914,7 @@ export default function ScribeDrawer() {
           onKeyDown={handleKeyDown}
           disabled={sending}
           rows={3}
-          placeholder="Tell me what's happening — I'll keep the pages up to date."
+          placeholder="Ask about your team, or tell me what happened."
           baseClassName="w-full resize-none rounded-lg border border-control bg-surface px-3 py-2 text-sm text-ink-body placeholder-ink-faint focus:border-control focus:outline-none disabled:opacity-50"
         />
         <div className="mt-2 flex items-center justify-between">

@@ -159,19 +159,57 @@ project IDs are checked against the authenticated manager, and the trusted label
 comes from the database rather than the client-provided prose. The context is
 ephemeral and is not stored in the thread.
 
+The frontend has more page kinds than the server verifies: `goal`, `goals`,
+`team_meeting` and `mission_control` exist to key the drawer's starters and
+launchers. `sendAssistantMessage()` in `lib/api.ts` forwards `entity_type` and
+`entity_id` only for `direct_report` and `project`; every other kind sends the
+bounded label alone, the same display-only context any generic page has.
+Scribe resolves a goal from the label with `list_goals`, like any named goal.
+
 ## Frontend
 
 `frontend/components/ScribeDrawer.tsx` renders the conversation, draft cards,
 persisted lifecycle state, receipts, discard, and the supported undo paths. A
 New button clears the server-managed conversation after confirmation.
 
+The empty drawer says what Scribe is for ("Ask about your team, or tell me what
+happened. I answer from your notes, 1:1s, goals, projects and the documents in
+Knowledge. When something should be saved, I draft it and you confirm.") and
+offers three starter prompts keyed on the page context's `entity_type`:
+
+- `direct_report` (the Relationship Desk, using the person's first name from
+  the display-only `subject` field): how they are doing against their role
+  expectations; what's still open between us; help me get ready for the next
+  1:1.
+- `goals` / `goal`: goals with no update this month; goals that look at risk;
+  projects not linked to a goal.
+- `mission_control`: what to get to first this week; who I haven't had a 1:1
+  with in a while; help me get ready for a hard conversation.
+
+Starters are static strings. Clicking one fills the composer; nothing is sent
+until the manager presses Send, so they cost nothing unused.
+
+**In-page launchers.** `components/AskAboutButton.tsx` calls
+`useDrawer().ask(prompt, context?)`, which opens the drawer with the prompt in
+the composer. They appear as "Ask about {first name}" on the Relationship Desk
+header, "Ask about this goal" on each goal card and the goal detail view, "Ask
+about this project" in each project brief's action row, and "Ask about this
+meeting" on a team meeting. A launcher may pass a narrower context (one goal on
+the Goals board, one project); that override lasts until the drawer closes or
+the route changes, then the page's own context returns. Scribe has no meeting
+tool, so the meeting launcher carries the agenda (up to six items) in its
+prompt, and a logged meeting asks what is still open from it, which Scribe
+reads from commitments.
+
 `frontend/lib/drawer-context.tsx` owns drawer state, hydrates the server thread,
-refreshes it after lifecycle changes, and carries structured page context.
+refreshes it after lifecycle changes, carries structured page context, and
+holds the launcher's pre-fill and context override (`ask`, `prefill`).
 `frontend/lib/api.ts` is the only frontend boundary for Scribe API calls and the
 normal source-record endpoints used on Confirm.
 
-The direct-report and project pages register stable entity context. Generic app
-pages may provide a bounded display label only.
+The direct-report, project and team-meeting pages register page context;
+Mission Control and the Goals board get theirs from the drawer's path fallback.
+Generic app pages may provide a bounded display label only.
 
 ## Evaluation
 

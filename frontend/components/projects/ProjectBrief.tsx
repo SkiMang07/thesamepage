@@ -9,6 +9,7 @@ import type { Project } from "@/lib/api";
 import { IDENTITY_BG, IDENTITY_TEXT, identityIndex } from "@/lib/tokens";
 import { PROJECT_STATUS_LABEL, attentionReasons, formatDay, formatMoment, initials, ownerName } from "@/lib/projects";
 import { StatusChip } from "./StatusChip";
+import AskAboutButton from "@/components/AskAboutButton";
 
 export type Panel = "update" | "record" | "follow" | "details" | "edit";
 
@@ -175,6 +176,17 @@ const ProjectBrief = forwardRef<HTMLHeadingElement, Props>(function ProjectBrief
         <button type="button" aria-expanded={panel === "follow"} onClick={() => toggle("follow")} className={btn(panel === "follow")}>
           {p.next_move ? "Your next move" : "+ Your next move"}
         </button>
+        <AskAboutButton
+          label="Ask about this project"
+          prompt={`How is "${p.title}" going, and what's getting in its way?`}
+          context={{
+            label: `Projects page — selected project: ${p.title}`,
+            entity_type: "project",
+            entity_id: p.id,
+            subject: p.title,
+          }}
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-ink-secondary hover:bg-sunken hover:text-ink"
+        />
         <button
           type="button"
           aria-expanded={panel === "details" || panel === "edit"}

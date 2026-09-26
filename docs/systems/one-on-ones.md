@@ -11,7 +11,7 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 | `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for". Returns `meeting`, `next_session`, the `commitments` actually inserted, and the cleaned `carry_forward_items` — see "Logging is all-or-nothing" |
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
-| `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one. `opening_line` omitted keeps the occurrence's; null clears it |
+| `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one. `opening_line` omitted keeps the occurrence's; null clears it. Returns the sheet's `drew_on` source list |
 | `PATCH /session/{id}/schedule` | edits an unfinished occurrence's date and 1–4 week repeat rule |
 | `POST /wrapup` | notes → draft summary, commitments, carry-forward topics, and an `opening_line` for the next 1:1 |
 | `GET`/`POST /{direct_report_id}/captures`, `DELETE /captures/{id}` | between-session capture notes |
@@ -91,7 +91,9 @@ Relationship reads top to bottom:
   the first carried topic with the rest behind a disclosure; prepared, the saved
   sheet's situation summary and first agenda titles, and any captures kept
   since. A sheet the worker prepared is badged "Prepared overnight" with a
-  line asking the manager to review it before starting. An unprepared
+  line asking the manager to review it before starting. The header's **Ask
+  about {first name}** opens the Scribe drawer on this person with an editable
+  prompt in the composer (`scribe.md` → Frontend); nothing sends until Send. An unprepared
   occurrence with a kept opening line shows it first ("Open with"). Compact disclosures show kept thoughts (removable), work check-ins,
   suggested signals and the open-commitment count. **Date & repeat** links to
   `/prep#schedule`, which focuses the canonical date control; on an existing
@@ -222,6 +224,25 @@ moment a manager prepared, and a fully prepped conversation could report
 scheduled states alone. Rationale and suggested questions stay on the prep sheet
 itself; the card carries the titles.
 
+### Naming the author and the sources
+
+Every sheet says who made it and what it was built from, under its heading:
+"Prepared by The Same Page · Drew on 1 carried topic, 2 open commitments, your
+notes, your last 3 1:1s, role expectations, Q3 CS Principles (Knowledge)" (an
+overnight sheet reads "Prepared overnight by The Same Page … · Rebuild").
+`prep_drew_on()` in `routes/one_on_ones.py` builds that list from what
+`assemble_prep_inputs()` actually put in the prompt — carry-forwards, the kept
+opening line, open commitments, the manager's notes (or, overnight, the kept
+thoughts), selected signals, the count of completed 1:1s in the history, role
+expectations, secondhand notes, and each Context Engine document by title (the
+first three, then a count). A source that was empty is not named. `/prep`
+stores it as `prep_guide.drew_on` and returns it as `PrepResponse.drew_on`; the
+overnight worker calls the same function. Sheets saved before 2026-09-26 by
+the manual path have no list and show the author line alone.
+
+The wrap-up review says "Drafted from your notes by The Same Page" above the
+editable summary and commitments.
+
 ### Prepared overnight
 
 **Parked (2026-09-26):** built, tested and deployed with the API, but not running — the Railway worker service has deliberately not been created. Until it is, no sheet is ever marked "Prepared overnight" and every
@@ -244,9 +265,8 @@ checked again in the write itself, so a manager who prepares by hand in the
 meantime always wins. A reply that doesn't parse into an agenda saves nothing.
 Once saved, the captures the prompt read are deleted (their text is now the
 sheet's `source_notes`), and any kept later stay. `prep_guide` records
-`prepared_by` (`manager` | `overnight`), `prepared_at`, and for overnight
-sheets `drew_on`, the plain list the sheet shows ("Prepared overnight · Drew on
-1 carried topic, 2 open commitments, … · Rebuild"). Rebuild is "Edit prep":
+`prepared_by` (`manager` | `overnight`), `prepared_at`, and `drew_on` (see
+"Naming the author and the sources" above). Rebuild is "Edit prep":
 the source review, with everything the worker read, then a normal generate.
 The existing "Prep ready" surfaces (`/app/1-1s`, Mission Control's "Review
 Jordan's saved 1:1 prep") light up without change.

@@ -78,6 +78,8 @@ import { deriveOutcomes, mergeLogResult } from "@/components/team/meeting-outcom
 import { inScopeCommitment, inScopeMember, makeScope } from "@/components/team/scope";
 import { createSectionLoader } from "@/lib/sectionLoader";
 import PageShell from "@/components/PageShell";
+import AskAboutButton from "@/components/AskAboutButton";
+import { useDrawer } from "@/lib/drawer-context";
 import NoteField from "@/components/NoteField";
 import {
   BADGE,
@@ -117,6 +119,22 @@ function formatMeetingDate(dateStr: string) {
     month: "long",
     day: "numeric",
   });
+}
+
+// The launcher's pre-filled prompt. Scribe has no meeting tool, so a meeting
+// still to come carries its own agenda; a logged one asks about what's open,
+// which Scribe reads from commitments.
+function meetingPrompt(meeting: TeamMeeting, dateLabel: string | null) {
+  const when = dateLabel ? ` on ${dateLabel}` : "";
+  if (meeting.status === "logged") return `What's still open from our team meeting${when}?`;
+  const items = meeting.agenda_items
+    .map((i) => i.item.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+    .map((t) => (t.length > 80 ? `${t.slice(0, 79)}…` : t));
+  return items.length
+    ? `Help me get ready for our team meeting${when}. On the agenda: ${items.join("; ")}.`
+    : `Help me get ready for our team meeting${when}.`;
 }
 
 function formatShortDate(dateStr: string) {
@@ -178,6 +196,7 @@ function clearStoredNotes(meetingId: string) {
 
 export default function TeamMeetingPage() {
   const { id } = useParams<{ id: string }>();
+  const { setPageContext } = useDrawer();
 
   const [meeting, setMeeting] = useState<TeamMeeting | null>(null);
   const [allMeetings, setAllMeetings] = useState<TeamMeeting[]>([]);
@@ -273,6 +292,20 @@ export default function TeamMeetingPage() {
     }, 600);
     return () => clearTimeout(timer);
   }, [extraNotes, outcomes, meeting]);
+
+  // Scribe context for this meeting. Display-only: the server verifies people
+  // and projects, not meetings, so the launcher carries the agenda in its prompt.
+  const meetingId = meeting?.id ?? null;
+  const meetingDay = meeting?.scheduled_at ? isoToDateStr(meeting.scheduled_at) : null;
+  useEffect(() => {
+    if (!meetingId) return;
+    setPageContext({
+      label: `Team meeting page — meeting ${meetingDay ? `on ${meetingDay}` : "with no date yet"}`,
+      entity_type: "team_meeting",
+      entity_id: meetingId,
+    });
+  }, [meetingId, meetingDay, setPageContext]);
+  useEffect(() => () => setPageContext(null), [setPageContext]);
 
   // The meeting's own team is the scope — the same rules /app/team uses
   // (components/team/scope.ts). A null org_unit_id meeting applies to all
@@ -421,7 +454,13 @@ export default function TeamMeetingPage() {
             {meeting.recurrence_weeks ? ` · ${repeatLabel(meeting.recurrence_weeks)}` : ""}
           </p>
         </div>
-        <StatusChip status={meeting.status} />
+        <div className="flex items-center gap-4">
+          <AskAboutButton
+            label="Ask about this meeting"
+            prompt={meetingPrompt(meeting, dateStr ? formatMeetingDate(dateStr) : null)}
+          />
+          <StatusChip status={meeting.status} />
+        </div>
       </div>
     </>
   );

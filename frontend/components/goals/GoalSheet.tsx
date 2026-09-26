@@ -2,17 +2,29 @@
 
 // One goal on the board: scope + status, the editorial title, the success
 // measure, the latest update, any review reasons, and two doors — "+ Add an
-// update" (opens the form in place) and "Details". Visual reference:
+// update" (opens the form in place), "Ask about this goal" (opens Scribe with
+// the goal in context) and "Details". Visual reference:
 // docs/design-proposals/2026-09-25-goals-in-view/prototype-v2.html (.goal-sheet).
 
 import type { ReactNode } from "react";
-import type { Goal } from "@/lib/api";
+import type { AssistantPageContext, Goal } from "@/lib/api";
+import AskAboutButton from "@/components/AskAboutButton";
 import { BADGE, STATUS_BAR, STATUS_GLYPH, STATUS_STYLES } from "@/lib/tokens";
 import { STATUS_LABEL, dueLabel, formatMoment, isOpen, reviewReasons, scopeLabel } from "@/lib/goals";
 import GoalMeasure from "./GoalMeasure";
 
 export const SHEET_X = "px-6";
 export const SHEET_MX = "mx-6";
+
+// Shared with GoalDetail. The context is display-only (the server verifies
+// only people and projects); Scribe finds the goal itself with list_goals.
+export const goalPrompt = (title: string) => `How is "${title}" going, and what's getting in its way?`;
+export const goalContext = (goal: Goal): AssistantPageContext => ({
+  label: `Goals page — goal: ${goal.title}`,
+  entity_type: "goal",
+  entity_id: goal.id,
+  subject: goal.title,
+});
 
 export function StatusChip({ status }: { status: Goal["status"] }) {
   return (
@@ -121,6 +133,12 @@ export default function GoalSheet({
           >
             + Add an update
           </button>
+          <AskAboutButton
+            label="Ask about this goal"
+            prompt={goalPrompt(goal.title)}
+            context={goalContext(goal)}
+            className="inline-flex items-center gap-1 py-1.5 text-xs font-medium text-ink-secondary hover:text-brand"
+          />
           <button
             type="button"
             onClick={onOpen}

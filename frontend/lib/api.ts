@@ -201,7 +201,9 @@ export type PrepGuide = {
   // ahead of the meeting). Absent on sheets saved before 2026-09-26.
   prepared_by?: "manager" | "overnight";
   prepared_at?: string;
-  // Overnight sheets only: plain labels for what the sheet was built from.
+  // Plain labels for what the sheet was built from (prep_drew_on() in
+  // routes/one_on_ones.py), Knowledge documents by title. Absent on sheets
+  // saved before 2026-09-26 by the manual path.
   drew_on?: string[];
 };
 
@@ -2658,11 +2660,27 @@ export type AssistantResponse = {
   drafts: DraftEntity[];
 };
 
+// What the drawer is open over. `direct_report` and `project` are verified
+// server-side against the manager (trusted label from the database); the other
+// kinds are display-only: they key the drawer's starter prompts and send only
+// the bounded label. `subject` is display-only too (a first name or a title
+// for starter and launcher copy) and is never sent.
+export type AssistantPageKind =
+  | "direct_report"
+  | "project"
+  | "goal"
+  | "goals"
+  | "team_meeting"
+  | "mission_control";
+
 export type AssistantPageContext = {
   label: string;
-  entity_type?: "direct_report" | "project";
+  entity_type?: AssistantPageKind;
   entity_id?: string;
+  subject?: string;
 };
+
+const VERIFIED_PAGE_KINDS = new Set<AssistantPageKind>(["direct_report", "project"]);
 
 // Shape returned by GET /api/assistant/thread
 export type StoredMessage = {
@@ -2706,8 +2724,12 @@ export const sendAssistantMessage = (
     body: JSON.stringify({
       message,
       page_context: pageContext?.label ?? null,
-      page_context_entity_type: pageContext?.entity_type ?? null,
-      page_context_entity_id: pageContext?.entity_id ?? null,
+      ...(pageContext?.entity_type && pageContext.entity_id && VERIFIED_PAGE_KINDS.has(pageContext.entity_type)
+        ? {
+            page_context_entity_type: pageContext.entity_type,
+            page_context_entity_id: pageContext.entity_id,
+          }
+        : { page_context_entity_type: null, page_context_entity_id: null }),
     }),
   });
 

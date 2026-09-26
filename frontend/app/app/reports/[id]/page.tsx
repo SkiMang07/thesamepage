@@ -23,6 +23,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useDrawer } from "@/lib/drawer-context";
+import AskAboutButton from "@/components/AskAboutButton";
 import {
   getDirectReport,
   getOneOnOneHistory,
@@ -231,7 +232,12 @@ function RelationshipDesk() {
     (data: Loaded) => {
       const { dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps, failures } = data;
       setReport(dr);
-      setPageContext({ label: `${dr.name}'s direct report page`, entity_type: "direct_report", entity_id: dr.id });
+      setPageContext({
+        label: `${dr.name}'s direct report page`,
+        entity_type: "direct_report",
+        entity_id: dr.id,
+        subject: firstName(dr.name),
+      });
       setHistory(h);
       setCommitments(c);
       setGoals(g);
@@ -552,6 +558,11 @@ function RelationshipDesk() {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
+          <AskAboutButton
+            label={`Ask about ${first}`}
+            prompt={`What should I know about ${first} going into our next 1:1?`}
+            className={`${BTN_SECONDARY} inline-flex items-center gap-1.5`}
+          />
           <button type="button" onClick={() => setSettingsOpen(true)} className={BTN_SECONDARY}>
             Person settings
           </button>

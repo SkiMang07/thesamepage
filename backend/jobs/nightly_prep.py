@@ -39,6 +39,7 @@ from routes.one_on_ones import (
     assemble_prep_inputs,
     build_prep_guide,
     parse_prep_output,
+    prep_drew_on,
 )
 from utils import get_org
 
@@ -163,10 +164,6 @@ def due_occurrences(admin, now: datetime) -> list[dict]:
 # Building one request
 # ---------------------------------------------------------------------------
 
-def _plural(n: int, one: str, many: str | None = None) -> str:
-    return f"{n} {one if n == 1 else (many or one + 's')}"
-
-
 def _snippet(text: str, limit: int = 110) -> str:
     text = text.strip()
     return f"{text[:limit].rstrip()}…" if len(text) > limit else text
@@ -240,22 +237,15 @@ def build_request(admin, occurrence: dict) -> dict | None:
     if inputs is None:
         return None
 
-    drew_on = []
-    if opening_line:
-        drew_on.append("the opening line you kept at the last wrap-up")
-    if carry:
-        drew_on.append(_plural(len(carry), "carried topic"))
-    if inputs["open_commitments"]:
-        drew_on.append(_plural(len(inputs["open_commitments"]), "open commitment"))
-    if captures:
-        drew_on.append(_plural(len(captures), "kept thought"))
-    if signal_counts["at_risk_goals"]:
-        drew_on.append(_plural(signal_counts["at_risk_goals"], "at-risk goal"))
-    if signal_counts["development_plan"]:
-        drew_on.append("the development plan")
-    drew_on.append("recent 1:1 history")
-    if inputs["document_ids"]:
-        drew_on.append(_plural(len(inputs["document_ids"]), "company document"))
+    # Same label builder as the manual POST /prep (routes/one_on_ones.py).
+    drew_on = prep_drew_on(
+        inputs,
+        opening_line=opening_line,
+        carry_forward_items=carry,
+        kept_thoughts=len(captures),
+        at_risk_goals=signal_counts["at_risk_goals"],
+        development_plan=signal_counts["development_plan"],
+    )
 
     return {
         "prompt": inputs["prompt"],

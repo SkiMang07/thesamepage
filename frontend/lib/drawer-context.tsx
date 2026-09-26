@@ -11,6 +11,12 @@
 // (e.g. "Jordan's direct report page"). Individual pages set this via
 // setPageContext so the agent can resolve pronouns correctly. Cleared when
 // the page is unmounted (set to null). Sent with every message but not stored.
+//
+// ask(prompt, ctx?): the in-page "Ask about …" launchers. Opens the drawer with
+// the composer pre-filled (never sent — the manager reads and presses Send) and,
+// optionally, a narrower context (one goal on the Goals board). That narrower
+// context lasts until the drawer closes or the route changes, then the page's
+// own context returns.
 
 import {
   createContext,
@@ -19,6 +25,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 import {
   DraftEntity,
   AssistantPageContext,
@@ -47,6 +54,10 @@ type DrawerContextType = {
   // Page context — set by individual pages; read by ScribeDrawer
   pageContext: AssistantPageContext | null;
   setPageContext: (ctx: AssistantPageContext | null) => void;
+  // In-page launchers: open with a pre-filled prompt (and optional context).
+  ask: (prompt: string, ctx?: AssistantPageContext) => void;
+  prefill: string | null;
+  clearPrefill: () => void;
   hydrating: boolean;
 };
 
@@ -64,7 +75,10 @@ function storedToDrawerMessages(rows: StoredMessage[]): DrawerMessage[] {
 export function DrawerProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<DrawerMessage[]>([]);
-  const [pageContext, setPageContext] = useState<AssistantPageContext | null>(null);
+  const [baseContext, setPageContext] = useState<AssistantPageContext | null>(null);
+  const [askContext, setAskContext] = useState<AssistantPageContext | null>(null);
+  const [prefill, setPrefill] = useState<string | null>(null);
+  const pageContext = askContext ?? baseContext;
   const [hydrating, setHydrating] = useState(true);
 
   // Hydrate isOpen from sessionStorage once on mount.
@@ -90,9 +104,26 @@ export function DrawerProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setHydrating(false));
   }, [refreshThread]);
 
-  const toggle = useCallback(() => setIsOpen((s) => !s), []);
   const open = useCallback(() => setIsOpen(true), []);
-  const close = useCallback(() => setIsOpen(false), []);
+  const close = useCallback(() => {
+    setIsOpen(false);
+    setAskContext(null);
+  }, []);
+  const toggle = useCallback(() => {
+    if (isOpen) setAskContext(null);
+    setIsOpen(!isOpen);
+  }, [isOpen]);
+
+  // A launcher's narrower context belongs to the page it was asked from.
+  const pathname = usePathname();
+  useEffect(() => setAskContext(null), [pathname]);
+
+  const ask = useCallback((prompt: string, ctx?: AssistantPageContext) => {
+    setAskContext(ctx ?? null);
+    setPrefill(prompt);
+    setIsOpen(true);
+  }, []);
+  const clearPrefill = useCallback(() => setPrefill(null), []);
 
   const addTurn = useCallback(
     (userText: string, assistantText: string, drafts: DraftEntity[]) => {
@@ -126,6 +157,7 @@ export function DrawerProvider({ children }: { children: React.ReactNode }) {
         isOpen, toggle, open, close,
         messages, addTurn, clearThread, refreshThread,
         pageContext, setPageContext,
+        ask, prefill, clearPrefill,
         hydrating,
       }}
     >

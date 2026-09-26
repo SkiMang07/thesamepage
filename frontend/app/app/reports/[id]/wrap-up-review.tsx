@@ -205,8 +205,9 @@ export default function WrapUpReview({
       </button>
       <h1 className="mt-4 text-2xl font-semibold">Review before saving</h1>
       <p className="mt-2 text-ink-secondary">
-        Drafted from your notes — fix anything that&apos;s off. The summary shows up in
-        history and next time you prep; commitments get tracked until resolved.
+        Drafted from your notes by The Same Page. Fix anything that&apos;s off — nothing is
+        saved until you do. The summary shows up in history and next time you prep;
+        commitments stay open until they&apos;re done.
       </p>
 
       <div className="mt-8">
