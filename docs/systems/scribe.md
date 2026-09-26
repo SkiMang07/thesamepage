@@ -175,7 +175,10 @@ pages may provide a bounded display label only.
 
 ## Evaluation
 
-`eval/test_assistant.py` uses mocked application data and the real Anthropic API.
+`eval/test_assistant.py` uses mocked application data and the real Anthropic API
+(`ANTHROPIC_API_KEY` in `backend/.env` or the shell; it cannot run against the
+deployed app). Each tool round reads the system prompt, tool definitions and
+the thread so far from the prompt cache (`docs/ENGINEERING.md` → AI calls).
 It contains 30 cases covering the six write verbs plus:
 
 - grounded person status;
@@ -193,7 +196,14 @@ It contains 30 cases covering the six write verbs plus:
 - empty internal evidence, duplicate names, stale records, and unsupported
   citation requests.
 
-The full-suite exit bar permits at most two misses (currently at least 28/30).
+The full-suite exit bar permits at most two misses. On `claude-sonnet-5` the
+suite currently lands at 25–27/30 on a full run, with the misses re-running
+green: the final round of a long answer hits `max_tokens=2000` after 1,200+
+tokens of the model's default thinking, and the reply is cut mid-sentence,
+which strict checkers then miss. Turning thinking off on the tools path
+(`ai_core.py` does this for one-shot calls already) scored 27/30 in one trial.
+Fixing that — thinking off or a larger budget, then a fresh baseline — is the
+next Scribe change to make; it was left out of the caching work on purpose.
 `SCRIBE_EVAL_MODEL` overrides the model for a bakeoff, `SCRIBE_EVAL_CASES`
 selects case IDs for a focused run, and `SCRIBE_EVAL_SHOW_OUTPUT=1` prints
 responses for qualitative review. Re-run the full suite after prompt, tool, or
