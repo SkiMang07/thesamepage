@@ -471,7 +471,7 @@ scope here because "production-ready" includes them.
   "Draft, needs your decision" block (the AI-training clause) that must be
   answered before it publishes; see N-10 and `gtm/site/legal.md`. Publish as a
   set once the copy is signed off.
-- [ ] **N-13 · Scribe answers can be cut off mid-sentence.** On
+- [x] **N-13 · Scribe answers can be cut off mid-sentence.** On
   `claude-sonnet-5` the model thinks by default, and thinking tokens count
   against the loop's `max_tokens=2000` (`assistant_engine.py`). On a long
   final answer 1,200+ of those tokens go to thinking and the reply stops at the
@@ -480,6 +480,13 @@ scope here because "production-ready" includes them.
   runs for this reason. Fix is one of: `thinking: {type: disabled}` on the
   tools path (the one-shot paths already do this), or a larger budget; then a
   fresh eval baseline. Deliberately not folded into the caching/model commits.
+  **Done 2026-09-26.** A larger budget, not thinking off: the loop keeps the
+  model's thinking with `max_tokens=4000` per round (longest round in the
+  suite ~2,250). Thinking off scored 27/30 on all four runs, failing the same
+  grounding cases; thinking on with 4,000 scored 30, 29, 29, 28, 28, at about
+  43% more output tokens (a quarter more per turn). Three checkers were
+  failing correct answers and were widened (see `docs/systems/scribe.md` →
+  Evaluation). No run stopped at `max_tokens` after the change.
 - [ ] **N-12 · Homepage meta description is the old positioning.** "Define
   what good looks like for every role, then see who's meeting it... built for
   the manager, not HR." It is what Google shows under the result. One line in
@@ -813,8 +820,8 @@ Decided the same day, behind the sentence:
   14 cases, ≥13). Both need a key in `backend/.env`; they cannot run against
   the deployed app. Prep, wrap-up and Librarian extraction still have none.
   Both must pass before a model name in `config.py` changes (heavy moved to
-  `claude-sonnet-5` on 2026-09-26 on that basis; Scribe's suite sits under
-  its bar for the reason in N-13).
+  `claude-sonnet-5` on 2026-09-26 on that basis; Scribe's suite has been back
+  at 28–30/30 since N-13 was fixed the same day).
 - [x] ✔ A written rollback: `docs/ENGINEERING.md` → Rolling back a bad push
   (Vercel Instant Rollback, Railway rollback, `git revert`, forward-only
   migrations run by Andrew).

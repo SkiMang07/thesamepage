@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # used by one-shot generation elsewhere. Sonnet 5 matched the Opus 5 eval
     # bar with tighter calibration; this remains environment-configurable.
     AI_SCRIBE_MODEL: str = "claude-sonnet-5"
+    # The Scribe keeps Sonnet 5's default thinking: with it off the eval held
+    # at 27/30 in three runs (grounding and honest-refusal cases), with it on
+    # and a 4,000-token round budget it scored 30 and 29 (backlog N-13).
+    # False turns it off for a bakeoff.
+    AI_SCRIBE_THINKING: bool = True
     # Dictation (talk-to-text). OpenAI rather than Anthropic because Claude
     # has no audio input modality at all, and because OPENAI_API_KEY is
     # already wired here — this adds no new vendor relationship. Alternatives
@@ -59,6 +64,7 @@ settings = Settings()
 AI_DEFAULT_MODEL_HEAVY = "claude-sonnet-5"
 AI_DEFAULT_MODEL_LIGHT = "claude-haiku-4-5-20251001"
 AI_SCRIBE_MODEL = settings.AI_SCRIBE_MODEL
+AI_SCRIBE_THINKING = settings.AI_SCRIBE_THINKING
 
 # Transcription model — an OpenAI name, NOT an Anthropic one. This never
 # routes through the Anthropic path or the provider-fallback map.

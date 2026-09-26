@@ -104,9 +104,15 @@ def test_tools_call_has_system_breakpoint_and_automatic_caching(wire):
         {"type": "text", "text": "agent rules", "cache_control": {"type": "ephemeral"}}
     ]
     assert body["messages"] == msgs and body["tools"] == tools
-    assert "thinking" not in body            # the Scribe keeps the model default
+    assert body["thinking"] == {"type": "disabled"}   # N-13: off by default
     # Only these two breakpoints; nothing on the messages themselves.
     assert "cache_control" not in json.dumps(body["messages"])
+
+
+def test_tools_call_thinking_true_keeps_model_default(wire):
+    msgs = [{"role": "user", "content": "hi"}]
+    call_anthropic_with_tools(system="s", messages=msgs, tools=[], thinking=True)
+    assert "thinking" not in wire[0]["json"]
 
 
 def test_openai_fallback_keeps_the_split(monkeypatch):
@@ -173,3 +179,22 @@ def test_extract_text_rejects_a_reply_with_no_text():
     from ai_core import extract_text
     with pytest.raises(HTTPException):
         extract_text("anthropic", {"content": [{"type": "thinking", "thinking": ""}]})
+
+
+def test_scribe_loop_keeps_thinking_and_sizes_its_budget_for_it(monkeypatch):
+    """N-13: the Scribe's final answers were cut mid-sentence when thinking
+    shared a 2,000-token round budget. It keeps thinking, with room for it."""
+    import assistant_engine
+
+    seen = []
+
+    def fake_tools(**kwargs):
+        seen.append(kwargs)
+        return {"stop_reason": "end_turn", "content": [{"type": "thinking", "thinking": ""},
+                                                       {"type": "text", "text": "Done."}]}
+
+    monkeypatch.setattr(assistant_engine, "call_anthropic_with_tools", fake_tools)
+    text, drafts = assistant_engine.run_assistant_turn([], "hi", {}, "2026-09-26")
+    assert text == "Done." and drafts == []
+    assert seen[0]["thinking"] is True
+    assert seen[0]["max_tokens"] == 4000

@@ -196,14 +196,26 @@ It contains 30 cases covering the six write verbs plus:
 - empty internal evidence, duplicate names, stale records, and unsupported
   citation requests.
 
-The full-suite exit bar permits at most two misses. On `claude-sonnet-5` the
-suite currently lands at 25–27/30 on a full run, with the misses re-running
-green: the final round of a long answer hits `max_tokens=2000` after 1,200+
-tokens of the model's default thinking, and the reply is cut mid-sentence,
-which strict checkers then miss. Turning thinking off on the tools path
-(`ai_core.py` does this for one-shot calls already) scored 27/30 in one trial.
-Fixing that — thinking off or a larger budget, then a fresh baseline — is the
-next Scribe change to make; it was left out of the caching work on purpose.
+The full-suite exit bar permits at most two misses. The Scribe runs with the
+model's default thinking and a 4,000-token budget per round
+(`AI_SCRIBE_THINKING`, `SCRIBE_MAX_TOKENS` in `assistant_engine.py`); the
+longest round in the suite uses about 2,250 output tokens. On
+`claude-sonnet-5` that configuration lands at 28–30/30; with thinking off it
+holds at 27/30, missing the same grounding and honest-refusal cases, so
+thinking stays on at roughly a quarter more cost per turn. The misses that
+remain are run-to-run: case 3 sometimes asks whether "cut onboarding time"
+duplicates the existing "Improve Onboarding Efficiency" goal instead of
+drafting it (a defensible question the checker scores as a miss), and case 22
+sometimes leaves the Leadership Principles document out.
+
+Checkers read answers, so they are string tests with the usual false
+negatives. `claims()` treats a phrase as asserted only when no negation or
+hedge precedes it ("I don't have evidence that Jordan is disengaged" is the
+answer case 16 wants), and `NO_SOURCE_PHRASES` is the shared list of honest
+"there is no source for that" phrasings for cases 27 and 30. When a miss
+looks wrong, read the full answer with `SCRIBE_EVAL_SHOW_OUTPUT=1` before
+changing the prompt; widen a checker only for an answer that meets its stated
+intent, and say so in the commit.
 `SCRIBE_EVAL_MODEL` overrides the model for a bakeoff, `SCRIBE_EVAL_CASES`
 selects case IDs for a focused run, and `SCRIBE_EVAL_SHOW_OUTPUT=1` prints
 responses for qualitative review. Re-run the full suite after prompt, tool, or

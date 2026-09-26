@@ -19,11 +19,15 @@ import logging
 from fastapi import HTTPException
 
 from ai_core import call_anthropic_with_tools
-from config import AI_SCRIBE_MODEL
+from config import AI_SCRIBE_MODEL, AI_SCRIBE_THINKING
 
 logger = logging.getLogger("assistant_engine")
 
 MAX_TOOL_LOOPS = 8
+# Output budget per round, thinking included (it bills and counts as output).
+# 2,000 cut long answers mid-sentence once thinking had spent 1,200+ of it;
+# the longest round in the eval now runs ~2,250 (backlog N-13).
+SCRIBE_MAX_TOKENS = 4000
 
 # ---------------------------------------------------------------------------
 # Tool definitions (Anthropic tool-use schema)
@@ -417,11 +421,14 @@ def run_assistant_turn(
             messages=messages,
             tools=TOOLS,
             model=AI_SCRIBE_MODEL,
-            max_tokens=2000,
+            max_tokens=SCRIBE_MAX_TOKENS,
+            thinking=AI_SCRIBE_THINKING,
         )
 
         stop_reason = response.get("stop_reason", "end_turn")
         content = response.get("content", [])
+        if stop_reason == "max_tokens":
+            logger.warning("Scribe round %d stopped at max_tokens; reply is truncated", iteration + 1)
 
         if stop_reason != "tool_use":
             # Final turn — extract all text blocks and return

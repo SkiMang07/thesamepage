@@ -62,12 +62,12 @@ _ANTHROPIC_TO_OPENAI = {
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 _CACHE_EPHEMERAL = {"type": "ephemeral"}
 
-# One-shot calls (generate_text, the document call) run with thinking off.
+# Thinking is off on the one-shot paths (generate_text, the document call).
 # Sonnet 5 thinks by default, and thinking tokens both bill as output and
 # count against max_tokens: with it on, a 1,800-token summary budget was
 # spent entirely on thinking and the JSON never arrived. Off is what Sonnet
-# 4.6 did on these prompts. The Scribe loop keeps the model default; its
-# eval bar was set with thinking on.
+# 4.6 did on these prompts. The tools path takes `thinking` explicitly: the
+# Scribe keeps the model default and sizes max_tokens for it (backlog N-13).
 _THINKING_OFF = {"type": "disabled"}
 
 # The user turn a one-shot call sends when the caller gave a single prompt
@@ -299,6 +299,7 @@ def call_anthropic_with_tools(
     tools: list,
     model: str = AI_DEFAULT_MODEL_HEAVY,
     max_tokens: int = 2000,
+    thinking: bool = False,
 ) -> dict:
     """Call Anthropic with tool definitions. Returns raw response dict (stop_reason + content).
     No OpenAI fallback — the tool-use message format is Anthropic-specific and has no
@@ -310,20 +311,28 @@ def call_anthropic_with_tools(
     the last message on every call: in an agent loop each round reads the
     whole thread so far from cache and writes only the new assistant turn and
     tool results, instead of paying full price for the thread up to eight
-    times per turn."""
+    times per turn.
+
+    `thinking=False` (the default) sends thinking disabled; True omits the
+    field so the model's own default applies, and its tokens count against
+    max_tokens. Keep one setting for a whole turn — the thread's assistant
+    blocks must match it."""
     started = time.monotonic()
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "cache_control": _CACHE_EPHEMERAL,
+        "system": _system_blocks(system, cache=True),
+        "messages": messages,
+        "tools": tools,
+    }
+    if not thinking:
+        payload["thinking"] = _THINKING_OFF
     try:
         resp = httpx.post(
             _ANTHROPIC_URL,
             headers=_anthropic_headers(),
-            json={
-                "model": model,
-                "max_tokens": max_tokens,
-                "cache_control": _CACHE_EPHEMERAL,
-                "system": _system_blocks(system, cache=True),
-                "messages": messages,
-                "tools": tools,
-            },
+            json=payload,
             timeout=60.0,
         )
         resp.raise_for_status()

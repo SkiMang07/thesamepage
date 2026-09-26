@@ -127,8 +127,12 @@ Heavy is `claude-sonnet-5`, the same model the Scribe runs (`AI_SCRIBE_MODEL`);
 light is Haiku 4.5. **Thinking is off on the one-shot paths** (`generate_text`,
 the document call): Sonnet 5 thinks by default, thinking tokens bill as output
 and count against `max_tokens`, and with it on a 1,800-token summary budget was
-spent entirely on thinking. The Scribe loop keeps the model default; its eval
-bar was set with thinking on. Sonnet 5 also occasionally quotes a number
+spent entirely on thinking. **The Scribe keeps thinking and gets room for it**:
+`call_anthropic_with_tools(thinking=...)` is explicit, `AI_SCRIBE_THINKING`
+defaults on and `SCRIBE_MAX_TOKENS` is 4,000 per round. At 2,000 a long final
+answer was cut mid-sentence once thinking had spent 1,200+ of it; with thinking
+off the eval held at 27/30 on every run, failing the same grounding cases. A
+round that still stops at the limit logs a warning from `assistant_engine`. Sonnet 5 also occasionally quotes a number
 (`"4.8"`) or puts a remark around the JSON — `_clean_proposal()` coerces
 numeric strings before the same validation, and `_parse_json()` takes the
 first decodable object. Both evals must pass before the heavy model changes
