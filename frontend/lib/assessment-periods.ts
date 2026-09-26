@@ -92,3 +92,115 @@ export function firstName(name: string | null | undefined): string {
 export function possessive(name: string): string {
   return name.endsWith("s") ? `${name}’` : `${name}’s`;
 }
+
+// ---------------------------------------------------------------------------
+// Year strip — the overview's four-quarter history per person. A record of
+// what was assessed, not a schedule: empty quarters are neutral, never overdue.
+// ---------------------------------------------------------------------------
+
+export type StripReview = {
+  id: string;
+  status: "draft" | "completed";
+  period_start: string | null;
+  period_end: string | null;
+};
+
+export type StripState = "completed" | "in_progress" | "legacy" | "none";
+
+export type StripSlot = {
+  year: number;
+  quarter: number; // 1-4
+  label: string; // "Q3"
+  current: boolean; // the quarter a manager would naturally assess now
+  state: StripState;
+  reviewId: string | null;
+  /** The same assessment also covers the next slot (a biannual spans two). */
+  joinsNext: boolean;
+  /** A short off-cycle assessment ended in this quarter without covering it. */
+  offCycle: "completed" | "in_progress" | null;
+};
+
+const DAY_MS = 86_400_000;
+
+function quarterBounds(year: number, quarter: number): { start: Date; end: Date } {
+  const m = (quarter - 1) * 3;
+  return { start: new Date(year, m, 1), end: new Date(year, m + 3, 0) };
+}
+
+function overlapDays(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): number {
+  const s = Math.max(aStart.getTime(), bStart.getTime());
+  const e = Math.min(aEnd.getTime(), bEnd.getTime());
+  return e < s ? 0 : Math.round((e - s) / DAY_MS) + 1;
+}
+
+/** The four quarters ending with the one a quarterly assessment would cover today. */
+export function stripQuarters(today: Date): { year: number; quarter: number }[] {
+  const anchor = parseDay(suggestPeriod("quarterly", today).start);
+  const out: { year: number; quarter: number }[] = [];
+  for (let back = 3; back >= 0; back--) {
+    const d = new Date(anchor.getFullYear(), anchor.getMonth() - back * 3, 1);
+    out.push({ year: d.getFullYear(), quarter: Math.floor(d.getMonth() / 3) + 1 });
+  }
+  return out;
+}
+
+/**
+ * Place a person's assessments on the four-quarter strip. An assessment covers
+ * a quarter when at least half of that quarter falls inside its period, so a
+ * quarterly fills one slot and a biannual two; a completed assessment wins over
+ * a draft. A shorter off-cycle assessment is a small mark in the quarter it
+ * ended in. A legacy rolling rating (not a period assessment) only marks an
+ * otherwise empty quarter.
+ */
+export function buildYearStrip(reviews: StripReview[], legacyAt: string | null, today: Date): StripSlot[] {
+  const quarters = stripQuarters(today);
+  const slots: StripSlot[] = quarters.map(({ year, quarter }, i) => ({
+    year,
+    quarter,
+    label: `Q${quarter}`,
+    current: i === quarters.length - 1,
+    state: "none",
+    reviewId: null,
+    joinsNext: false,
+    offCycle: null,
+  }));
+  const rank = (s: StripState) => (s === "completed" ? 2 : s === "in_progress" ? 1 : 0);
+
+  for (const r of reviews) {
+    if (!r.period_start || !r.period_end) continue;
+    const rs = parseDay(r.period_start);
+    const re = parseDay(r.period_end);
+    const state: StripState = r.status === "completed" ? "completed" : "in_progress";
+    let covered = false;
+    slots.forEach((slot) => {
+      const q = quarterBounds(slot.year, slot.quarter);
+      const qDays = Math.round((q.end.getTime() - q.start.getTime()) / DAY_MS) + 1;
+      if (overlapDays(rs, re, q.start, q.end) * 2 >= qDays) {
+        covered = true;
+        if (rank(state) > rank(slot.state)) {
+          slot.state = state;
+          slot.reviewId = r.id;
+        }
+      }
+    });
+    if (!covered) {
+      const slot = slots.find((s) => {
+        const q = quarterBounds(s.year, s.quarter);
+        return re >= q.start && re <= q.end;
+      });
+      if (slot && (slot.offCycle !== "completed")) slot.offCycle = state as "completed" | "in_progress";
+    }
+  }
+  for (let i = 0; i < slots.length - 1; i++) {
+    slots[i].joinsNext = !!slots[i].reviewId && slots[i].reviewId === slots[i + 1].reviewId;
+  }
+  if (legacyAt) {
+    const at = parseDay(legacyAt);
+    const slot = slots.find((s) => {
+      const q = quarterBounds(s.year, s.quarter);
+      return at >= q.start && at <= q.end;
+    });
+    if (slot && slot.state === "none") slot.state = "legacy";
+  }
+  return slots;
+}

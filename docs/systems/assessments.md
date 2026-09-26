@@ -38,11 +38,27 @@ rolling-scorecard rows stay as history and still count as the latest rating unti
 a completed assessment supersedes them; the UI labels them "not a period assessment".
 
 The latest-rating readers are unchanged: `GET /api/assessments` (team list, now
-also `last_review`, `open_review`, `latest_from_review`), `GET /api/assessments/{id}`
+also `last_review`, `open_review`, `latest_from_review`, and `reviews` — every period assessment
+newest first with its `rating_label` and, for completed ones only, the confirmed
+`headline` read from `completed_snapshot`), `GET /api/assessments/{id}`
 (scorecard, now also `last_review` / `open_review`), the person page's Growth card,
 Mission Control, Scribe context and development suggestions all read the same tables,
 and only completion writes to them. Both reads fail soft if `performance_reviews`
 hasn't been migrated.
+
+## The overview (`/app/assessments`)
+
+One card per person, never ranked. The card shows the open draft (a three-step
+bar and Resume), else the last completed assessment (its confirmed headline and
+overall, Open assessment, Start another), else a legacy rating labelled "not a
+period assessment", else nothing yet. Every card ends in a **year strip**: the four
+quarters ending with the one a quarterly assessment would cover today
+(`stripQuarters` / `buildYearStrip` in `lib/assessment-periods.ts`). A quarter is
+filled when a completed assessment covers at least half of it, an amber ring when
+a draft does; a biannual fills two joined dots, a shorter off-cycle assessment is a
+small diamond in the quarter it ended in, and a legacy rating is a hollow dot in an
+otherwise empty quarter. Empty quarters are neutral grey, never overdue. A single
+line above the cards counts completed / in progress / not started for that quarter.
 
 ## The flow
 

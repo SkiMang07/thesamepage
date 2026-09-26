@@ -684,3 +684,22 @@ def test_confirming_an_existing_reading_does_not_log_it_twice(db, ai):
     assert len(db.tables["metric_entries"]) == before
     item = next(i for i in done["completed_snapshot"]["items"] if i["key"] == f"metric:{METRIC}")
     assert item["existing_reading"] == "metric_entry:csat-q3" and item["value"] == 4.6
+
+
+def test_team_list_carries_history_with_confirmed_headline_only(db, ai):
+    r = _create(db)
+    k = _keys(r)
+    r = _draft(db, r, ai, [{"key": k["overall"], "point": 4, "reason": "r", "sources": [_ref(r, "one_on_one:oo-in")]}])
+    team = assessments.list_team_assessments(auth=_auth(db), authorization=None)
+    maya = next(t for t in team if t["id"] == REPORT)
+    assert [x["id"] for x in maya["reviews"]] == [r["id"]]
+    assert maya["reviews"][0]["headline"] is None                # a draft never shows a headline
+    assert "completed_snapshot" not in maya["reviews"][0]
+    done = _complete(db, r)
+    team = assessments.list_team_assessments(auth=_auth(db), authorization=None)
+    row = next(t for t in team if t["id"] == REPORT)["reviews"][0]
+    assert row["status"] == "completed" and row["rating_ordinal"] == 4 and row["rating_label"]
+    snap = done["completed_snapshot"]
+    expected = ((snap.get("summary") or {}).get("headline") or (snap.get("narrative") or {}).get("headline") or None)
+    assert row["headline"] == (expected.strip() if expected else None)
+    assert "completed_snapshot" not in row

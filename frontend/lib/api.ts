@@ -2013,6 +2013,8 @@ export type TeamAssessmentItem = {
   latest_from_review?: boolean;
   last_review?: ReviewSummaryRow | null;
   open_review?: ReviewSummaryRow | null;
+  /** Every period assessment for the person, newest first (overview year strip). */
+  reviews?: (ReviewSummaryRow & { rating_label?: string | null })[];
 };
 
 export const getTeamAssessments = (): Promise<TeamAssessmentItem[]> => authedFetch("/api/assessments");
@@ -2100,6 +2102,8 @@ export type ReviewSummaryRow = {
   review_period: string;
   rating_ordinal: number | null;
   summary?: string | null;
+  /** The confirmed headline of a completed assessment (lists only). */
+  headline?: string | null;
   completed_at: string | null;
   updated_at: string;
 };

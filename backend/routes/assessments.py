@@ -275,19 +275,47 @@ def list_team_assessments(auth=Depends(get_authenticated_client), authorization:
             "latest_from_review": latest_by_report.get(r["id"], {}).get("source_type") == "performance_review",
             "last_review": reviews.get(r["id"], {}).get("completed"),
             "open_review": reviews.get(r["id"], {}).get("draft"),
+            # Every period assessment for the person (newest first), for the
+            # overview's year strip. rating_label resolves the overall against
+            # the org's current level names.
+            "reviews": [
+                {**row, "rating_label": label_by_ordinal.get(row.get("rating_ordinal"))}
+                for row in reviews.get(r["id"], {}).get("all", [])
+            ],
         }
         for r in reports
     ]
 
 
+def _summary_row(row: dict) -> dict:
+    """A review row for lists: the confirmed headline of a completed
+    assessment (its reviewed summary, else its narrative), never a draft's."""
+    out = {k: v for k, v in row.items() if k not in ("completed_snapshot", "narrative_headline")}
+    headline = None
+    if row.get("status") == "completed":
+        snap = row.get("completed_snapshot") if isinstance(row.get("completed_snapshot"), dict) else {}
+        headline = (
+            row.get("headline")
+            or row.get("narrative_headline")
+            or ((snap.get("summary") or {}).get("headline"))
+            or ((snap.get("narrative") or {}).get("headline"))
+        )
+    out["headline"] = (headline or "").strip() or None
+    return out
+
+
 def _review_status_by_report(supabase, user_id: str, report_id: str | None = None) -> dict:
     """report_id -> {"completed": latest completed assessment, "draft": the
-    open draft}. Fails soft to {} so latest-rating readers keep working if
+    open draft, "all": every assessment newest first}. Fails soft to {} so latest-rating readers keep working if
     the period-assessment migration hasn't run yet."""
     try:
         query = (
             supabase.table("performance_reviews")
-            .select("id,direct_report_id,status,stage,review_period,period_start,period_end,cadence,rating_ordinal,completed_at,updated_at")
+            .select(
+                "id,direct_report_id,status,stage,review_period,period_start,period_end,cadence,rating_ordinal,completed_at,updated_at,"
+                # Only the confirmed headline, not the whole snapshot.
+                "headline:completed_snapshot->summary->>headline,narrative_headline:completed_snapshot->narrative->>headline"
+            )
             .eq("manager_id", user_id)
         )
         if report_id:
@@ -297,8 +325,10 @@ def _review_status_by_report(supabase, user_id: str, report_id: str | None = Non
         logger.warning("assessments: could not read performance_reviews", exc_info=True)
         return {}
     out: dict = {}
-    for row in rows:
+    for raw in rows:
+        row = _summary_row(raw)
         slot = out.setdefault(row["direct_report_id"], {})
+        slot.setdefault("all", []).append(row)
         if row.get("status") == "draft":
             slot.setdefault("draft", row)
         elif row.get("status") == "completed" and row.get("completed_at"):
