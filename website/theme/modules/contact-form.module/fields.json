@@ -1,11 +1,5 @@
 [
   {
-    "name": "eyebrow",
-    "label": "Eyebrow",
-    "type": "text",
-    "default": "Or write it out"
-  },
-  {
     "name": "heading",
     "label": "Heading",
     "type": "text",
@@ -37,6 +31,6 @@
     "name": "consent_copy",
     "label": "Consent line",
     "type": "richtext",
-    "default": "<p>I'll only use your details to reply. See the <a href=\"/legal/privacy\">privacy policy</a>.</p>"
+    "default": "<p>I'll only use your details to reply. See the <a href=\"/privacy\">privacy policy</a>.</p>"
   }
 ]

@@ -9,109 +9,56 @@
     "name": "heading",
     "label": "Heading",
     "type": "text",
-    "default": "Move your team forward."
+    "default": "The Same Page opens December 1."
   },
   {
     "name": "lede",
-    "label": "Lede",
-    "type": "text",
-    "default": "The Same Page brings goals, projects and conversations together for each person, so you can see where your attention can help and decide what to do next."
+    "label": "Body",
+    "type": "richtext",
+    "default": "<p>It's close. I'm wrapping up the last bit of product work now, and when it opens the first 20 managers get their first year free.</p><p>If you'd like to be one of them, say so in your note below and I'll be in touch before launch.</p>"
   },
   {
-    "name": "primary_label",
-    "label": "Primary button",
+    "name": "more_label",
+    "label": "Button text",
     "type": "text",
-    "default": "Start free"
+    "default": "In the meantime, see more of what I'm building"
   },
   {
-    "name": "primary_url",
-    "label": "Primary button link",
-    "type": "text",
-    "default": "https://app.thesamepage.xyz/app/login"
-  },
-  {
-    "name": "secondary_label",
-    "label": "Secondary button",
-    "type": "text",
-    "default": "See how it works"
-  },
-  {
-    "name": "secondary_url",
-    "label": "Secondary button link",
+    "name": "more_url",
+    "label": "Button link",
     "type": "text",
     "default": "/"
   },
   {
-    "name": "beta_tag",
-    "label": "Badge",
+    "name": "launch_at",
+    "label": "Launch moment (ISO, with timezone)",
     "type": "text",
-    "default": "Beta"
+    "default": "2026-12-01T00:00:00-05:00",
+    "help_text": "The countdown runs to this moment. Keep the timezone offset on the end."
   },
   {
-    "name": "beta_note",
-    "label": "Badge note",
+    "name": "launch_label",
+    "label": "Launch date as shown",
     "type": "text",
-    "default": "The first 20 managers get their first year free."
+    "default": "Tue 1 Dec 2026"
   },
   {
-    "name": "points",
-    "label": "Points",
-    "type": "group",
-    "occurrence": {
-      "min": 1,
-      "max": 4,
-      "default": 3
-    },
-    "children": [
-      {
-        "name": "icon",
-        "label": "Icon",
-        "type": "choice",
-        "choices": [
-          [
-            "person",
-            "Person"
-          ],
-          [
-            "prep",
-            "Prep sheet"
-          ],
-          [
-            "ask",
-            "Question"
-          ]
-        ],
-        "default": "person"
-      },
-      {
-        "name": "point_title",
-        "label": "Title",
-        "type": "text",
-        "default": ""
-      },
-      {
-        "name": "copy",
-        "label": "Body",
-        "type": "text",
-        "default": ""
-      }
-    ],
-    "default": [
-      {
-        "icon": "person",
-        "point_title": "Every person on one page",
-        "copy": "1:1 notes, commitments, goals and projects land together, so the history is already there when you sit down with someone."
-      },
-      {
-        "icon": "prep",
-        "point_title": "Walk into each 1:1 prepared",
-        "copy": "AI pulls the last few weeks into a prep sheet: what's open, what changed, and what's worth bringing up."
-      },
-      {
-        "icon": "ask",
-        "point_title": "Ask anything about your team",
-        "copy": "Ask in plain words across everything you've kept, and every answer links back to the notes it came from."
-      }
-    ]
+    "name": "days_fallback",
+    "label": "Days shown before the countdown starts",
+    "type": "text",
+    "default": "64",
+    "help_text": "Shown only for the split second before the countdown script runs."
+  },
+  {
+    "name": "foot_strong",
+    "label": "Card footnote (bold part)",
+    "type": "text",
+    "default": "20 founding spots."
+  },
+  {
+    "name": "foot_rest",
+    "label": "Card footnote (rest)",
+    "type": "text",
+    "default": "First year free."
   }
 ]

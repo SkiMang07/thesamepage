@@ -1,19 +1,8 @@
 {% set photo_src = module.photo.src or get_asset_url("../../images/andrew-headshot.png") %}
-{% set nl = "%0D%0A" %}
-{% set vcard = "BEGIN:VCARD" ~ nl ~ "VERSION:3.0" ~ nl
-  ~ "N:" ~ (module.last_name ~ ";" ~ module.first_name ~ ";;;")|urlencode ~ nl
-  ~ "FN:" ~ (module.first_name ~ " " ~ module.last_name)|urlencode ~ nl
-  ~ "ORG:" ~ module.company|urlencode ~ nl
-  ~ "TITLE:" ~ module.job_title|urlencode ~ nl
-  ~ "EMAIL;TYPE=INTERNET,WORK:" ~ module.work_email|urlencode ~ nl
-  ~ "EMAIL;TYPE=INTERNET,HOME:" ~ module.personal_email|urlencode ~ nl
-  ~ "URL:" ~ module.website|urlencode ~ nl
-  ~ "X-SOCIALPROFILE;TYPE=linkedin:" ~ module.linkedin_url|urlencode ~ nl
-  ~ "END:VCARD" ~ nl %}
 <section class="ct-card" aria-labelledby="ct-hi-{{ name }}">
   <div class="wrap">
     <div class="ct-who">
-      <div class="ct-portrait"><img src="{{ photo_src }}" alt="{{ module.photo.alt or (module.first_name ~ ' ' ~ module.last_name) }}"></div>
+      <div class="ct-portrait"><img src="{{ photo_src }}" alt="{{ module.photo.alt or 'Andrew Godlewski' }}"></div>
       <div>
         <span class="ct-micro">{{ module.eyebrow }}</span>
         <h1 id="ct-hi-{{ name }}">{{ module.heading }}</h1>
@@ -33,17 +22,11 @@
         <span class="ct-s">{{ module.linkedin_note }}</span>
         <svg class="ct-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
       </a></li>
-      <li><a class="ct-tile" href="mailto:{{ module.personal_email }}">
-        <span class="ct-k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/></svg>Personal email</span>
-        <span class="ct-v">{{ module.personal_email|split("@")|first }}<wbr>@{{ module.personal_email|split("@")|last }}</span>
-        <span class="ct-s">{{ module.personal_note }}</span>
-        <svg class="ct-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
-      </a></li>
-      <li><a class="ct-tile" download="{{ module.first_name }}-{{ module.last_name }}.vcf" href="data:text/vcard;charset=utf-8,{{ vcard }}">
-        <span class="ct-k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.5 3.6-5.5 7-5.5s6.2 2 7 5.5"/></svg>Save contact</span>
-        <span class="ct-v">{{ module.save_heading }}</span>
-        <span class="ct-s">{{ module.save_note }}</span>
-        <svg class="ct-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 4v12M6.5 10.5 12 16l5.5-5.5M5 20h14"/></svg>
+      <li><a class="ct-tile" href="#note">
+        <span class="ct-k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="m14 7.5 2.5 2.5"/></svg>Leave a note</span>
+        <span class="ct-v">{{ module.note_heading }}</span>
+        <span class="ct-s">{{ module.note_note }}</span>
+        <svg class="ct-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
       </a></li>
     </ul>
   </div>

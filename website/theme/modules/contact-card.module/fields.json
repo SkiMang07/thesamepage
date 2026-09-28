@@ -4,7 +4,7 @@
     "label": "Photo",
     "type": "image",
     "responsive": true,
-    "help_text": "Leave empty to use the headshot that ships with the theme (images/andrew-headshot.png).",
+    "help_text": "Leave empty to use the headshot that ships with the theme.",
     "default": {
       "src": "",
       "alt": "Andrew Godlewski",
@@ -22,23 +22,23 @@
     "name": "heading",
     "label": "Heading",
     "type": "text",
-    "default": "Let's keep talking."
+    "default": "Connect with me."
   },
   {
     "name": "lede",
-    "label": "Lede",
+    "label": "Intro",
     "type": "richtext",
-    "default": "<p>I'm building <b>The Same Page</b>, one place for what a manager knows about each person on their team, with AI that helps make sense of it. If you manage people, build with AI, or just want to compare notes, I'd love to hear from you.</p>"
+    "default": "<p>Leaders, team managers, systems and ops nerds, anyone who loves a good productivity trick or has strong feelings about their CRM... you're my kind of people. Drop me a line. I'd love to hear from you.</p><p>I'm building <b>The Same Page</b> to help people manage better and move their teams forward. It keeps the work you're doing with each person tied to their expectations, goals, projects and where they want their career to go. With the full picture in front of you, it's a lot easier to know how to help them get there.</p>"
   },
   {
     "name": "work_email",
-    "label": "Work email",
+    "label": "Email",
     "type": "text",
     "default": "AG@thesamepage.xyz"
   },
   {
     "name": "work_note",
-    "label": "Work email note",
+    "label": "Email note",
     "type": "text",
     "default": "Anything about The Same Page"
   },
@@ -61,57 +61,15 @@
     "default": "Connect, or see what I've been up to"
   },
   {
-    "name": "personal_email",
-    "label": "Personal email",
+    "name": "note_heading",
+    "label": "Leave-a-note text",
     "type": "text",
-    "default": "andrewgodlew@gmail.com"
+    "default": "Send me a message"
   },
   {
-    "name": "personal_note",
-    "label": "Personal email note",
+    "name": "note_note",
+    "label": "Leave-a-note note",
     "type": "text",
-    "default": "Everything else"
-  },
-  {
-    "name": "save_heading",
-    "label": "Save-contact text",
-    "type": "text",
-    "default": "Add me to your phone"
-  },
-  {
-    "name": "save_note",
-    "label": "Save-contact note",
-    "type": "text",
-    "default": "Both emails and LinkedIn in one card"
-  },
-  {
-    "name": "first_name",
-    "label": "Contact card: first name",
-    "type": "text",
-    "default": "Andrew"
-  },
-  {
-    "name": "last_name",
-    "label": "Contact card: last name",
-    "type": "text",
-    "default": "Godlewski"
-  },
-  {
-    "name": "job_title",
-    "label": "Contact card: title",
-    "type": "text",
-    "default": "Founder"
-  },
-  {
-    "name": "company",
-    "label": "Contact card: company",
-    "type": "text",
-    "default": "The Same Page"
-  },
-  {
-    "name": "website",
-    "label": "Contact card: website",
-    "type": "text",
-    "default": "https://thesamepage.xyz"
+    "default": "Tell me where we met and what you're working on"
   }
 ]
