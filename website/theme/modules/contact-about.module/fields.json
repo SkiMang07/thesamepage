@@ -1,0 +1,26 @@
+[
+  {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "A bit about me"
+  },
+  {
+    "name": "copy",
+    "label": "Note",
+    "type": "richtext",
+    "default": "<p>I've managed people for more than 15 years: teams of all shapes and sizes, other managers, people in their first job and people who'd been working for over 20 years. Most of that has been in Customer Success.</p><p>For a long time my system was a Google Doc per person. Once the team got past seven or so, it stopped keeping up. I clicked through every doc before each 1:1, and honestly, the people who were steady and doing well were the ones whose notes I let slide. The Same Page is the tool I wish I'd had then.</p><p>I'm always happy to talk shop about managing people, customer success, or building with AI. If you're a manager and want to try it early, even better.</p>"
+  },
+  {
+    "name": "person_name",
+    "label": "Name",
+    "type": "text",
+    "default": "Andrew Godlewski"
+  },
+  {
+    "name": "role",
+    "label": "Role",
+    "type": "text",
+    "default": "Founder"
+  }
+]

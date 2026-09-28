@@ -1,5 +1,10 @@
-<section class="sec">
-  <div class="wrap">
+<section class="ct-form" aria-labelledby="ct-form-{{ name }}">
+  <div class="wrap ct-form-grid">
+    <div>
+      <span class="ct-micro">{{ module.eyebrow }}</span>
+      <h2 class="h2" id="ct-form-{{ name }}">{{ module.heading }}</h2>
+      <div class="ct-form-lede">{{ module.lede }}</div>
+    </div>
     <div class="form-card">
       {% form
         form_to_use="{{ module.form.form_id }}"

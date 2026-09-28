@@ -1,0 +1,117 @@
+[
+  {
+    "name": "photo",
+    "label": "Photo",
+    "type": "image",
+    "responsive": true,
+    "help_text": "Leave empty to use the headshot that ships with the theme (images/andrew-headshot.png).",
+    "default": {
+      "src": "",
+      "alt": "Andrew Godlewski",
+      "width": null,
+      "height": null
+    }
+  },
+  {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "Andrew Godlewski · Founder, The Same Page"
+  },
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Let's keep talking."
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "richtext",
+    "default": "<p>I'm building <b>The Same Page</b>, one place for what a manager knows about each person on their team, with AI that helps make sense of it. If you manage people, build with AI, or just want to compare notes, I'd love to hear from you.</p>"
+  },
+  {
+    "name": "work_email",
+    "label": "Work email",
+    "type": "text",
+    "default": "AG@thesamepage.xyz"
+  },
+  {
+    "name": "work_note",
+    "label": "Work email note",
+    "type": "text",
+    "default": "Anything about The Same Page"
+  },
+  {
+    "name": "linkedin_url",
+    "label": "LinkedIn URL",
+    "type": "text",
+    "default": "https://www.linkedin.com/in/andrew-godlewski/"
+  },
+  {
+    "name": "linkedin_handle",
+    "label": "LinkedIn display text",
+    "type": "text",
+    "default": "in/andrew-godlewski"
+  },
+  {
+    "name": "linkedin_note",
+    "label": "LinkedIn note",
+    "type": "text",
+    "default": "Connect, or see what I've been up to"
+  },
+  {
+    "name": "personal_email",
+    "label": "Personal email",
+    "type": "text",
+    "default": "andrewgodlew@gmail.com"
+  },
+  {
+    "name": "personal_note",
+    "label": "Personal email note",
+    "type": "text",
+    "default": "Everything else"
+  },
+  {
+    "name": "save_heading",
+    "label": "Save-contact text",
+    "type": "text",
+    "default": "Add me to your phone"
+  },
+  {
+    "name": "save_note",
+    "label": "Save-contact note",
+    "type": "text",
+    "default": "Both emails and LinkedIn in one card"
+  },
+  {
+    "name": "first_name",
+    "label": "Contact card: first name",
+    "type": "text",
+    "default": "Andrew"
+  },
+  {
+    "name": "last_name",
+    "label": "Contact card: last name",
+    "type": "text",
+    "default": "Godlewski"
+  },
+  {
+    "name": "job_title",
+    "label": "Contact card: title",
+    "type": "text",
+    "default": "Founder"
+  },
+  {
+    "name": "company",
+    "label": "Contact card: company",
+    "type": "text",
+    "default": "The Same Page"
+  },
+  {
+    "name": "website",
+    "label": "Contact card: website",
+    "type": "text",
+    "default": "https://thesamepage.xyz"
+  }
+]

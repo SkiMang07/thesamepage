@@ -1,0 +1,117 @@
+[
+  {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "What I'm building"
+  },
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Move your team forward."
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "The Same Page brings goals, projects and conversations together for each person, so you can see where your attention can help and decide what to do next."
+  },
+  {
+    "name": "primary_label",
+    "label": "Primary button",
+    "type": "text",
+    "default": "Start free"
+  },
+  {
+    "name": "primary_url",
+    "label": "Primary button link",
+    "type": "text",
+    "default": "https://app.thesamepage.xyz/app/login"
+  },
+  {
+    "name": "secondary_label",
+    "label": "Secondary button",
+    "type": "text",
+    "default": "See how it works"
+  },
+  {
+    "name": "secondary_url",
+    "label": "Secondary button link",
+    "type": "text",
+    "default": "/"
+  },
+  {
+    "name": "beta_tag",
+    "label": "Badge",
+    "type": "text",
+    "default": "Beta"
+  },
+  {
+    "name": "beta_note",
+    "label": "Badge note",
+    "type": "text",
+    "default": "The first 20 managers get their first year free."
+  },
+  {
+    "name": "points",
+    "label": "Points",
+    "type": "group",
+    "occurrence": {
+      "min": 1,
+      "max": 4,
+      "default": 3
+    },
+    "children": [
+      {
+        "name": "icon",
+        "label": "Icon",
+        "type": "choice",
+        "choices": [
+          [
+            "person",
+            "Person"
+          ],
+          [
+            "prep",
+            "Prep sheet"
+          ],
+          [
+            "ask",
+            "Question"
+          ]
+        ],
+        "default": "person"
+      },
+      {
+        "name": "point_title",
+        "label": "Title",
+        "type": "text",
+        "default": ""
+      },
+      {
+        "name": "copy",
+        "label": "Body",
+        "type": "text",
+        "default": ""
+      }
+    ],
+    "default": [
+      {
+        "icon": "person",
+        "point_title": "Every person on one page",
+        "copy": "1:1 notes, commitments, goals and projects land together, so the history is already there when you sit down with someone."
+      },
+      {
+        "icon": "prep",
+        "point_title": "Walk into each 1:1 prepared",
+        "copy": "AI pulls the last few weeks into a prep sheet: what's open, what changed, and what's worth bringing up."
+      },
+      {
+        "icon": "ask",
+        "point_title": "Ask anything about your team",
+        "copy": "Ask in plain words across everything you've kept, and every answer links back to the notes it came from."
+      }
+    ]
+  }
+]

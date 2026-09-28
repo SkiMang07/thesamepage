@@ -1,24 +1,42 @@
 [
   {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "Or write it out"
+  },
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Leave me a note."
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "richtext",
+    "default": "<p>If we just met, tell me where so I can place the conversation. I'll reply from <a href=\"mailto:AG@thesamepage.xyz\">AG@thesamepage.xyz</a>.</p>"
+  },
+  {
     "name": "form",
     "label": "HubSpot form",
     "type": "form",
     "default": {
       "response_type": "inline",
-      "message": "Thanks — I'll get back to you within one business day."
+      "message": "Thanks. I'll get back to you soon."
     },
-    "help_text": "Pick the HubSpot form to embed (Marketing → Forms). Build it with Name, Email and Message fields, and set its submit button text to “Send message” to match the site copy."
+    "help_text": "Pick the HubSpot form to embed (Marketing → Forms). Fields: Name, Email, Where we met (optional single-line text), Message. Submit button text: “Send to Andrew”."
   },
   {
     "name": "response_note",
     "label": "Response-time note",
     "type": "text",
-    "default": "We read every message and reply within one business day."
+    "default": ""
   },
   {
     "name": "consent_copy",
     "label": "Consent line",
     "type": "richtext",
-    "default": "<p>By sending this, you agree to our <a href=\"/legal/privacy\">Privacy Policy</a>.</p>"
+    "default": "<p>I'll only use your details to reply. See the <a href=\"/legal/privacy\">privacy policy</a>.</p>"
   }
 ]

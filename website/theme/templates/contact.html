@@ -11,6 +11,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ page_meta.html_title }}</title>
   <meta name="description" content="{{ page_meta.meta_description }}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
   {{ require_css(get_asset_url("../css/main.css")) }}
   {{ standard_header_includes }}
 </head>
@@ -22,7 +23,21 @@
       {% dnd_section %}
         {% dnd_column %}
           {% dnd_row %}
-            {% dnd_module path="../modules/frame" %}{% end_dnd_module %}
+            {% dnd_module path="../modules/contact-card" %}{% end_dnd_module %}
+          {% end_dnd_row %}
+        {% end_dnd_column %}
+      {% end_dnd_section %}
+      {% dnd_section %}
+        {% dnd_column %}
+          {% dnd_row %}
+            {% dnd_module path="../modules/contact-about" %}{% end_dnd_module %}
+          {% end_dnd_row %}
+        {% end_dnd_column %}
+      {% end_dnd_section %}
+      {% dnd_section %}
+        {% dnd_column %}
+          {% dnd_row %}
+            {% dnd_module path="../modules/contact-build" %}{% end_dnd_module %}
           {% end_dnd_row %}
         {% end_dnd_column %}
       {% end_dnd_section %}

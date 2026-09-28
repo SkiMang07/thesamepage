@@ -1,0 +1,26 @@
+<section class="ct-build" aria-labelledby="ct-build-{{ name }}">
+  <div class="wrap ct-build-grid">
+    <div>
+      <span class="ct-micro ct-micro-brand">{{ module.eyebrow }}</span>
+      <h2 class="h2" id="ct-build-{{ name }}">{{ module.heading }}</h2>
+      <p class="lede">{{ module.lede }}</p>
+      <div class="ct-actions">
+        <a class="btn btn-primary" href="{{ module.primary_url }}">{{ module.primary_label }}</a>
+        {% if module.secondary_label %}<a class="btn btn-ghost" href="{{ module.secondary_url }}">{{ module.secondary_label }}</a>{% endif %}
+      </div>
+      {% if module.beta_note %}<p class="ct-beta"><b>{{ module.beta_tag }}</b> {{ module.beta_note }}</p>{% endif %}
+    </div>
+    <ul class="ct-points">
+      {% for p in module.points %}
+      <li>
+        <span class="ct-ic" aria-hidden="true">
+          {% if p.icon == "prep" %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM8.5 12h7M8.5 16h4.5"/></svg>
+          {% elif p.icon == "ask" %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M9 10h6"/></svg>
+          {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.4 3.6-5.3 7-5.3s6.2 1.9 7 5.3"/></svg>{% endif %}
+        </span>
+        <div><h3>{{ p.point_title }}</h3><p>{{ p.copy }}</p></div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
