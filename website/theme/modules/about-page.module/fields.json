@@ -1,0 +1,75 @@
+[
+  {
+    "name": "photo",
+    "label": "Photo",
+    "type": "image",
+    "responsive": true,
+    "help_text": "Leave empty to use the headshot that ships with the theme.",
+    "default": {
+      "src": "",
+      "alt": "Andrew Godlewski",
+      "width": null,
+      "height": null
+    }
+  },
+  {
+    "name": "person_name",
+    "label": "Name",
+    "type": "text",
+    "default": "Andrew Godlewski"
+  },
+  {
+    "name": "tagline",
+    "label": "One line under the name",
+    "type": "text",
+    "default": "Founder of The Same Page. Managing teams for over a decade."
+  },
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "A bit about me"
+  },
+  {
+    "name": "copy",
+    "label": "The letter",
+    "type": "richtext",
+    "default": "<p>I've been managing people for over a decade now. Teams of three and teams of 23, managers of other managers, people in their very first job and subject matter experts who'd been in their field for more than 20 years. I've been obsessed with getting better at it the whole way along, and I've tried more systems than I'd like to admit to keep myself organized and make the conversations with the person on the other side of the table (or the Zoom call) genuinely useful.</p><p>For most of that time my system was a Google Doc for every person on the team, and eventually a spreadsheet to keep all the docs straight. That worked fine until I got to about seven people, and after that it pretty much fell apart. Some weeks got written up and a lot didn't, every doc turned into its own unique mess, and I'd walk into reviews running on more memory than I was comfortable with. And honestly the bigger problem was one I didn't notice for a while: seven separate docs can't tell you who's stretched thin or who's ready for more.</p><p>I'm a big believer in a good, consistent system, and I lean on data and analysis for most of my decisions, especially when nothing's on fire. When something keeps going sideways on a team, I usually go look at the system first, because a lot of the time it's either missing or way too complicated. So I guess it's not all that surprising that I ended up blending the ops and systems side of me with the people side, which is honestly the part I like most.</p><p>I want everyone on my team to know what's expected of them and to know I'm working from the same understanding they are, and I'll take a slightly awkward conversation early over finding out at review time that we were never on the same page. I've also never really stopped thinking of myself as a student, whether it's management, history, music or maps. I'm usually reading two or three books at a time (okay, two are audiobooks, but... come on), and I try hard to pass that habit on, so learning and development usually sits front and center in my 1:1s, along with a plan for how it turns into the next step in someone's career.</p><p>Most of my career has been in Customer Success, and I love it. Figuring out how to set a team up so customers really get value from what they're paying for is a puzzle I still enjoy. I've worked on everything from a rapidly changing SaaS product to helping people who spend most of their day a long way from a computer see why a piece of technology is worth their time. When I'm not working I'm home in Maine with my family.</p><p>The Same Page is the handful of tools I'd been cobbling together for myself over the years, pulled into one place. My hope is that one day it's more than a piece of software, and becomes a way of managing that helps a lot of people be better at this than I was when I started. If you manage people and something here doesn't match how it goes for you, tell me. I'm sure I've got some of it wrong, and I'd rather hear about it now.</p>"
+  },
+  {
+    "name": "reach_heading",
+    "label": "Get in touch: heading",
+    "type": "text",
+    "default": "Say hello."
+  },
+  {
+    "name": "work_email",
+    "label": "Email",
+    "type": "text",
+    "default": "AG@thesamepage.xyz"
+  },
+  {
+    "name": "linkedin_url",
+    "label": "LinkedIn link",
+    "type": "text",
+    "default": "https://www.linkedin.com/in/andrew-godlewski/"
+  },
+  {
+    "name": "linkedin_handle",
+    "label": "LinkedIn handle",
+    "type": "text",
+    "default": "in/andrew-godlewski"
+  },
+  {
+    "name": "note_url",
+    "label": "Leave a note: link",
+    "type": "text",
+    "default": "/contact#note"
+  },
+  {
+    "name": "early_url",
+    "label": "Early access: link",
+    "type": "text",
+    "default": "/contact#early-access"
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "label": "About: letter and contact",
+  "css_assets": [],
+  "external_js": [],
+  "global": false,
+  "help_text": "The whole About page: Andrew's letter with his portrait and name in the side column, then the ways to get in touch.",
+  "content_types": [
+    "LANDING_PAGE",
+    "SITE_PAGE"
+  ],
+  "js_assets": [],
+  "other_assets": [],
+  "smart_type": "NOT_SMART",
+  "tags": [],
+  "is_available_for_new_content": true
+}

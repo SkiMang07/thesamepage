@@ -588,9 +588,15 @@ fills the first screen. The source prototype is `prototype/contact-r6.html`.
 `prototype/andrew-godlewski.vcf` uploaded to the file manager; the row hides
 when its field is empty. `contact-about` is no longer on the page.
 
-**About: not live.** Being rebuilt around the full letter that left the contact
-page, in the same grid; `prototype/about-r1.html` is the draft and
-`prototype/about-r1/` holds its theme-ready template, module and CSS.
+**About: in the theme, page not yet created.** `templates/about.html` holds one
+module, `about-page`: Andrew's portrait, name and tagline in the side column (sticky
+below the nav on desktop), the letter "A bit about me" in the main column, then "Say
+hello." with the same contents list as the contact page. It reuses the contact grid and
+pieces (`.ct-split`, `.ct-reach`, `.ct-tile`, `.ct-portrait`, `.ct-tagline`), so its
+CSS block ("ABOUT PAGE, ROUND 3") sits after the contact block in `main.css`. The
+source prototype is `prototype/about-r3.html`; r1 and r2 are earlier rounds of the
+letter. The old `frame` / `founder` / `built-for` / `close-cta` modules stay for
+`page.html`. Once the page is live at `/about`, add it to the site nav menu.
 
 **Legal: all three pages live in HubSpot** (`/legal/privacy`,
 `/legal/terms`, `/legal/security`), built by Andrew directly from the
