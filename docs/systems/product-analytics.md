@@ -41,6 +41,7 @@ What we measure about how managers use the app, how it is collected, and the rul
 |`ai_draft_resolved`|server; browser-computed surfaces arrive via `POST /api/telemetry/ai-draft`|an AI draft or proposal is saved, thrown away, or left open (see "AI-draft quality")|`surface`, `outcome`, `edited_before_save`, `edit_bucket`, `seconds_to_confirm`; `items_drafted` / `items_kept` / `items_added` on wrap-ups|
 |`prep_sheet_saved`|`POST /api/one-on-ones/prep`|every time a prep sheet is generated and saved|`is_first` (bool): no sheet existed for this manager before this one. `regenerated` (bool): this 1:1 already had a sheet and it was replaced|
 |`first_run_roster_added`|`POST /api/telemetry/first-run-roster`|the roster step on `/app/start` adds at least one direct report|`count` (int): how many were added. No names|
+|`onboarded`|server, `GET /api/onboarding/status`|the first time all five setup conditions hold and `users.onboarded_at` is stamped. Fires once per manager|`knowledge_skipped` (bool): the knowledge step was met by "nothing to import" rather than a confirmed document|
 
 `is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
 

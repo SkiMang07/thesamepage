@@ -30,6 +30,7 @@ import {
   getContextCoverage,
   getGoals,
   getOneOnOnesOverview,
+  getOnboardingStatus,
   getOrgUnits,
   getProfile,
   getProjects,
@@ -38,6 +39,7 @@ import {
   getTeamAssessments,
   GoalStatus,
   OneOnOneOverviewItem,
+  OnboardingStatus,
   RECORDS_CHANGED_EVENT,
   RECORDS_CHANGED_STORAGE_KEY,
 } from "@/lib/api";
@@ -184,6 +186,8 @@ export type NavItem = {
   // destination page exists (the 1:1s item used this in pass 1). No current
   // item sets this as of pass 2.
   disabled?: boolean;
+  // Shown but not open: opens when setup is complete (Assessments).
+  locked?: boolean;
 };
 
 export type NavGroup = {
@@ -263,19 +267,21 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// Day-one navigation (onboarding §4.8). Capacity and Org are hidden for launch;
-// Assessments appears once a first 1:1 has been logged. Routes stay reachable
-// by URL, and getNavContext still resolves them.
-const HIDDEN_FOR_LAUNCH = new Set(["capacity", "org"]);
+// Navigation before and after setup. Capacity is hidden for launch. Org is a
+// normal door again (2026-09-29): team and org setup is the first step of
+// onboarding and lives there. Assessments shows from day one but locked until
+// the manager is onboarded, so "when does the full app return" has a visible
+// answer. `onboarded` is null while unknown or when the status could not be
+// read; that state shows everything open rather than lock an existing manager
+// out. Routes stay reachable by URL, and getNavContext still resolves them.
+const HIDDEN_FOR_LAUNCH = new Set(["capacity"]);
 
-export function visibleNavGroups(firstOneOnOneLogged: boolean | null): NavGroup[] {
+export function visibleNavGroups(onboarded: boolean | null): NavGroup[] {
   return NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => {
-      if (HIDDEN_FOR_LAUNCH.has(item.id)) return false;
-      if (item.id === "assessments") return firstOneOnOneLogged === true;
-      return true;
-    }),
+    items: group.items
+      .filter((item) => !HIDDEN_FOR_LAUNCH.has(item.id))
+      .map((item) => (item.id === "assessments" && onboarded === false ? { ...item, locked: true } : item)),
   })).filter((group) => group.items.length > 0);
 }
 
@@ -424,9 +430,9 @@ export type ZoneData = {
   // needed for the Settings door's org_ready check, no extra fetch.
   profileName: string | null;
   profileEmail: string | null;
-  // True once any 1:1 has been held. Null until the roster has loaded.
-  // Assessments stays out of the nav until then (§4.8).
-  firstOneOnOneLogged: boolean | null;
+  // The five-step onboarding status. Null until loaded, or if it could not be
+  // read (the nav then leaves everything open and the chip stays away).
+  onboarding: OnboardingStatus | null;
 };
 
 // Zone data — one shared fetch for the whole authenticated app (N-5).
@@ -448,6 +454,7 @@ export type ZoneData = {
 type CoreResults = [
   PromiseSettledResult<Awaited<ReturnType<typeof getOneOnOnesOverview>>>,
   PromiseSettledResult<Awaited<ReturnType<typeof getProfile>>>,
+  PromiseSettledResult<Awaited<ReturnType<typeof getOnboardingStatus>>>,
 ];
 
 type DoorResults = [
@@ -462,7 +469,7 @@ type DoorResults = [
 ];
 
 function fetchCore(): Promise<CoreResults> {
-  return Promise.allSettled([getOneOnOnesOverview(), getProfile()]) as Promise<CoreResults>;
+  return Promise.allSettled([getOneOnOnesOverview(), getProfile(), getOnboardingStatus()]) as Promise<CoreResults>;
 }
 
 function fetchDoors(): Promise<DoorResults> {
@@ -484,7 +491,7 @@ function fetchDoors(): Promise<DoorResults> {
 // hook; only door states whose inputs have loaded are filled in.
 function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Omit<ZoneData, "loading"> {
   const unloaded = { status: "rejected", reason: null } as const;
-  const [teamR, profR] = core ?? [unloaded, unloaded];
+  const [teamR, profR, onbR] = core ?? [unloaded, unloaded, unloaded];
   const [assessR, goalsR, projectsR, capR, orgR, ctxR, setupR, beyondR] = doors ?? [
     unloaded, unloaded, unloaded, unloaded, unloaded, unloaded, unloaded, unloaded,
   ];
@@ -492,11 +499,10 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
   let roster: RosterPerson[] = [];
   let profileName: string | null = null;
   let profileEmail: string | null = null;
-  let firstOneOnOneLogged: boolean | null = null;
+  let onboarding: OnboardingStatus | null = null;
 
   if (teamR.status === "fulfilled") {
     const team = teamR.value as OneOnOneOverviewItem[];
-    firstOneOnOneLogged = team.some((r) => r.last_one_on_one_at !== null);
     doorStates.team = { label: `${team.length} ${team.length === 1 ? "person" : "people"}` };
     const dueCount = team.filter((r) => r.is_due).length;
     doorStates.oneonones = dueCount > 0 ? { label: `${dueCount} due`, tone: "warn" } : { label: "up to date" };
@@ -573,6 +579,8 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
         : { label: `${s.roles_with_expectations_count} of ${s.roles_count} defined` };
   }
 
+  if (onbR.status === "fulfilled") onboarding = onbR.value;
+
   if (profR.status === "fulfilled") {
     profileName = profR.value.full_name || null;
     profileEmail = profR.value.email || null;
@@ -580,7 +588,7 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
 
   // Door states that come from core results (team, 1:1s, Settings fallback)
   // only show alongside the rest of the doors, as they did before.
-  return { doorStates: doors ? doorStates : {}, roster, profileName, profileEmail, firstOneOnOneLogged };
+  return { doorStates: doors ? doorStates : {}, roster, profileName, profileEmail, onboarding };
 }
 
 type ZoneContextValue = {
@@ -699,14 +707,14 @@ export function useZoneData(options: { doors?: boolean } = {}): ZoneData {
 
 export function ZoneMap({
   doorStates,
-  firstOneOnOneLogged = null,
+  onboarded = null,
 }: {
   doorStates: Partial<Record<string, DoorState>>;
-  firstOneOnOneLogged?: boolean | null;
+  onboarded?: boolean | null;
 }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-      {visibleNavGroups(firstOneOnOneLogged).map((g) => (
+      {visibleNavGroups(onboarded).map((g) => (
         <div key={g.group} className={`${ZONE_CARD} p-4`}>
           <div className="text-[13px] font-semibold tracking-tight text-ink">{g.group}</div>
           <div className="mt-0.5 text-xs text-ink-muted">{g.blurb}</div>
@@ -724,7 +732,18 @@ export function ZoneMap({
                   )}
                 </>
               );
-              return item.disabled ? (
+              return item.locked ? (
+                <Link
+                  key={item.id}
+                  href="/app/dashboard#setup"
+                  className="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 opacity-60 transition hover:opacity-100"
+                  title="Opens when setup is complete"
+                >
+                  <Icon name={item.icon} className="h-[15px] w-[15px] shrink-0 text-ink-muted" />
+                  <span className="flex-1 truncate text-[13px] font-medium text-ink-body">{item.label}</span>
+                  <span className="shrink-0 text-[11.5px] text-ink-muted">Setup</span>
+                </Link>
+              ) : item.disabled ? (
                 <div
                   key={item.id}
                   className="flex cursor-default items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 opacity-60"

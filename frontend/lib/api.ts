@@ -1898,6 +1898,43 @@ export type SetupStatus = {
 
 export const getSetupStatus = (): Promise<SetupStatus> => authedFetch("/api/setup-status");
 
+// ---------------------------------------------------------------------------
+// Onboarding (docs/design-proposals/2026-09-29-onboarding-path/BUILD_BRIEF.md)
+// A manager is onboarded when five things are true. They are derived from real
+// records on the server; `steps` is null once the account is onboarded (the
+// server stops computing them). No AI is involved.
+// ---------------------------------------------------------------------------
+
+export type OnboardingStepKey = "org" | "expectations" | "knowledge" | "goals" | "log";
+
+export type OnboardingSteps = {
+  org: { done: boolean; people: number; people_without_team: number; units: number };
+  expectations: {
+    done: boolean;
+    blocked: boolean;
+    people_without_role: number;
+    roles_in_use: number;
+    roles_covered: number;
+  };
+  knowledge: { done: boolean; confirmed_documents: number; skipped: boolean };
+  goals: { done: boolean; has_org_goal: boolean; has_team_goal: boolean };
+  log: { done: boolean };
+};
+
+export type OnboardingStatus = {
+  onboarded: boolean;
+  onboarded_at: string | null;
+  done_count: number;
+  total: number;
+  steps: OnboardingSteps | null;
+};
+
+export const getOnboardingStatus = (): Promise<OnboardingStatus> => authedFetch("/api/onboarding/status");
+
+// "Nothing to import" on the knowledge step. Counts as done; skipped=false undoes it.
+export const setKnowledgeSkipped = (skipped: boolean): Promise<OnboardingStatus> =>
+  authedFetch("/api/onboarding/knowledge-skipped", { method: "PUT", body: JSON.stringify({ skipped }) });
+
 export type DraftMetricItem = {
   name: string;
   order_type: "primary" | "secondary" | "tertiary" | null;

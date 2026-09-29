@@ -123,6 +123,23 @@ export default function AppNav() {
             <Logo className="h-[22px] w-auto text-brand" />
           </Link>
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            {zone.onboarding && !zone.onboarding.onboarded && (
+              <Link
+                href="/app/dashboard#setup"
+                className={`${BTN_TOPBAR_NEUTRAL} gap-2`}
+                aria-label={`Setup, ${zone.onboarding.done_count} of ${zone.onboarding.total} done`}
+              >
+                <span>Setup</span>
+                <span aria-hidden className="flex gap-[3px]">
+                  {Array.from({ length: zone.onboarding.total }, (_, i) => (
+                    <span key={i} className={`h-1 w-3 rounded-full ${i < zone.onboarding!.done_count ? "bg-brand" : "bg-hairline"}`} />
+                  ))}
+                </span>
+                <span className="hidden text-ink-muted sm:inline">
+                  {zone.onboarding.done_count} of {zone.onboarding.total}
+                </span>
+              </Link>
+            )}
             <button
               onClick={openQuickAdd}
               className={BTN_TOPBAR_NEUTRAL}

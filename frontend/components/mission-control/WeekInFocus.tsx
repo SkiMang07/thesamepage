@@ -55,6 +55,7 @@ import {
 import PageShell from "@/components/PageShell";
 import { SkeletonBar } from "@/components/Skeleton";
 import { useZoneData } from "@/components/ZoneMap";
+import SetupPath from "@/components/SetupPath";
 import {
   CandidateControls,
   CoverageNotice,
@@ -501,6 +502,7 @@ export function WeekInFocus({
         )}
         <CoverageNotice domains={coverageGaps} />
         {toast && <p className="mb-4 text-sm text-brand" aria-live="polite">{toast}</p>}
+        <SetupPath />
 
         <div
           className="grid gap-8"

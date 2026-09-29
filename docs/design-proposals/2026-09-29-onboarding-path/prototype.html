@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Setup Path Prototype</title>
+<style>
+/* App dark theme tokens, same vocabulary as 2026-09-29-first-run/prototype.html. Fictional example data throughout. */
+:root{color-scheme:dark;--bg:#182026;--surface:#222b32;--raised:#29333a;--input:#2d373e;--line:#3d4950;--ink:#f2f5f6;--body:#d4dadd;--muted:#aab7be;--faint:#6e7b83;--teal:#72c7bf;--tint:#173d3b;--amber:#efc281;--blue:#93c1f3;--control:#77848c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;border-radius:6px;padding:9px 12px;text-align:left}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+button:disabled{opacity:.4;cursor:default}
+p{margin:8px 0 14px;color:var(--body)}
+h1,h2,h3{margin:0;font-weight:400}
+h1,h2{font-family:Georgia,serif}
+h1{font-size:38px;letter-spacing:-1px;line-height:1.12}
+h2{font-size:25px;line-height:1.25}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted);margin-bottom:10px}
+.eyebrow.teal{color:var(--teal)}
+.meta{font-size:12px;color:var(--muted)}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.primary{background:var(--teal);color:#08191b!important;font-weight:600;padding:11px 16px;display:inline-flex;align-items:center;gap:8px}
+.primary:hover:not(:disabled){background:#8fd6cf}
+.secondary{border:1px solid var(--control);color:var(--body);padding:10px 14px}
+.secondary:hover{border-color:var(--teal);color:var(--teal)}
+.quiet{color:var(--teal);padding:8px 2px;font-size:13px}
+.quiet:hover{color:#8fd6cf}
+.chip{display:inline-flex;align-items:center;gap:9px;font-size:12px;border-radius:20px;background:var(--input);color:var(--body);padding:6px 13px;white-space:nowrap;border:1px solid transparent}
+.chip:hover{border-color:var(--teal)}
+.segs{display:inline-flex;gap:3px}
+.segs i{width:14px;height:5px;border-radius:3px;background:var(--line)}
+.segs i.on{background:var(--teal)}
+.avatar{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--teal);color:#102529;font-weight:600;font-size:11px;flex-shrink:0}
+textarea,input.txt{background:var(--input);border:1px solid var(--control);border-radius:5px;padding:10px 12px;width:100%;line-height:1.55}
+textarea{resize:vertical;min-height:110px}
+textarea:focus,input.txt:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--tint)}
+.fade{animation:appear .3s ease-out both}
+@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.pbar{position:sticky;top:0;z-index:50;padding:9px 20px;background:#0f161b;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pbar b{letter-spacing:1.4px;text-transform:uppercase;color:var(--amber);font-weight:600;margin-right:4px}
+.pbar button{font-size:11px;padding:4px 8px;border:1px solid var(--line);color:var(--muted)}
+.pbar button:hover{color:var(--teal);border-color:var(--teal)}
+
+.layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:calc(100vh - 38px)}
+.rail{border-right:1px solid var(--line);padding:24px 14px}
+.wordmark{font:23px/1.05 Georgia,serif;margin:2px 10px 32px}
+.navgroup{font-size:11px;letter-spacing:1.5px;color:var(--muted);padding:20px 10px 6px}
+.navitem{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:9px 10px;color:var(--muted);font-size:13px;width:100%;margin:1px 0}
+.navitem.selected{background:var(--tint);color:var(--teal)}
+.navitem.locked{color:var(--faint)}
+.navitem .lk{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
+.navitem.unlocked{animation:unlock 1.6s ease-out 1}
+@keyframes unlock{0%,60%{background:var(--tint);color:var(--teal)}100%{background:transparent}}
+.top{height:58px;border-bottom:1px solid var(--line);padding:0 36px;display:flex;align-items:center;justify-content:space-between}
+.top .lbl{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted)}
+main{max-width:1240px;margin:0 auto;padding:34px 36px 60px}
+.head{margin-bottom:26px}
+.head .sub{font:17px/1.5 Georgia,serif;color:var(--body);max-width:60ch;margin-top:10px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:34px;align-items:start}
+.sticky{position:sticky;top:74px}
+
+.panel{background:var(--surface);border-radius:9px;padding:22px 24px;margin-bottom:16px}
+.panel h3{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:500;margin-bottom:8px}
+.step{display:flex;gap:14px;align-items:flex-start;width:100%;padding:16px 0;border-top:1px solid var(--line);border-radius:0}
+.step:first-of-type{border-top:0}
+.step:hover:not(.locked){background:linear-gradient(90deg,rgba(114,199,191,.07),transparent)}
+.step.locked{cursor:default;opacity:.62}
+.dot{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--control);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);flex-shrink:0;margin-top:1px}
+.step.done .dot{background:var(--teal);border-color:var(--teal);color:#08191b;font-weight:700}
+.step .t{font-size:15px;font-weight:500;color:var(--ink)}
+.step .w{font-size:13px;color:var(--muted);margin-top:2px}
+.step .st{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;padding-left:10px}
+.step .st.on{color:var(--teal)}
+.gate{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+
+.why{border-left:2px solid var(--amber);padding:4px 0 4px 16px;margin:18px 0 22px}
+.why .eyebrow{color:var(--amber);margin-bottom:6px}
+.why p{margin:0;font:16px/1.55 Georgia,serif}
+.ai{display:inline-block;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);border:1px solid #6b5533;border-radius:3px;padding:2px 6px;margin-left:8px;vertical-align:2px}
+.back{color:var(--muted);font-size:13px;padding:4px 0;margin-bottom:14px;display:inline-block}
+.back:hover{color:var(--teal)}
+.tree{margin:14px 0 4px}
+.unit{padding:10px 0;border-top:1px solid var(--line)}
+.unit:first-child{border-top:0}
+.unit .n{font-weight:600}
+.unit .k{font-size:12px;color:var(--muted)}
+.kids{margin-left:22px;border-left:1px solid var(--line);padding-left:16px}
+.ppl{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.ppl span{background:var(--input);border-radius:20px;padding:4px 11px;font-size:12px;color:var(--body)}
+.role{padding:14px 0;border-top:1px solid var(--line)}
+.role:first-of-type{border-top:0}
+.role .rt{display:flex;align-items:center;gap:10px}
+.role .rt b{font-weight:600;flex:1}
+.exp{margin:12px 0 4px;padding:12px 14px;background:var(--input);border-radius:6px}
+.exp div{padding:6px 0;border-top:1px solid var(--line);outline:none;font:14px/1.5 Georgia,serif}
+.exp div:first-child{border-top:0}
+.file{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
+.file:first-of-type{border-top:0}
+.file .fn{font-weight:500}
+.file .fs{font-size:12px;color:var(--muted)}
+.file p{font-size:13px;margin:4px 0 8px;color:var(--body)}
+.know{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:6px}
+.know div{font-size:13px;color:var(--faint);display:flex;gap:8px;align-items:center}
+.know div.on{color:var(--teal)}
+.know div:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--line)}
+.know div.on:before{background:var(--teal)}
+.goalbox{margin:0 0 18px}
+.goalbox label{display:block;font-size:13px;color:var(--body);margin-bottom:6px}
+.added{font-size:13px;color:var(--teal);margin-top:6px}
+.receipt{background:var(--tint);border:1px solid #36635e;border-radius:9px;padding:20px 22px;margin-bottom:16px}
+.receipt h2{font-size:23px}
+.receipt p{margin:8px 0 0;color:#cfe3df}
+
+/* the sheet: this is the meter */
+.sheet{border-radius:10px;overflow:hidden;background:var(--surface)}
+.sheet .hd{padding:22px 24px;background:linear-gradient(110deg,#1e383b,var(--surface) 75%)}
+.sheet .dt{font-family:Georgia,serif;font-size:27px;line-height:1.15}
+.sheet .who{display:flex;align-items:center;gap:10px;margin-bottom:12px;color:var(--body)}
+.built{margin-top:12px;font-size:12px;color:var(--muted)}
+.built b{color:var(--ink);font-weight:500}
+.banner{margin:0;padding:10px 24px;background:var(--tint);border-top:1px solid #36635e;border-bottom:1px solid #36635e;font-size:13px;color:#cfe3df}
+.topics{padding:4px 24px 10px}
+.topic{padding:14px 0;border-bottom:1px solid var(--line)}
+.topic:last-child{border-bottom:0}
+.topic .tt{font-weight:600;font-size:15px}
+.topic .q{font:15px/1.5 Georgia,serif;color:var(--body);margin-top:4px}
+.topic .src{font-size:12px;color:var(--muted);margin-top:6px}
+.topic.ctx .src{color:var(--teal)}
+.topic.new{animation:newline 2.4s ease-out 1}
+@keyframes newline{0%{background:rgba(114,199,191,.22);box-shadow:-24px 0 0 rgba(114,199,191,.22),24px 0 0 rgba(114,199,191,.22)}100%{background:transparent;box-shadow:none}}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--raised);border:1px solid var(--line);padding:10px 16px;border-radius:8px;font-size:13px;z-index:80;animation:appear .25s ease-out both}
+.note{font-size:12px;color:var(--faint);margin-top:18px}
+@media(max-width:900px){
+  .layout{display:block}.rail{display:none}
+  main{padding:24px 18px 48px}.top{padding:0 18px}
+  .cols{grid-template-columns:1fr;gap:22px}.sticky{position:static}
+  h1{font-size:32px}.know{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="pbar"><b>Prototype</b> Jump to:
+  <button onclick="A.preset('start')">Just finished first run</button>
+  <button onclick="A.preset('half')">Org and knowledge done</button>
+  <button onclick="A.preset('almost')">One step left</button>
+  <button onclick="A.preset('complete')">Complete</button>
+  <span style="flex:1"></span><span>Fictional example data. Nothing here is saved.</span></div>
+<div id="app"></div>
+<script>
+const ROLES = [
+  {id:'csm2', name:'Customer Success Manager, L2', people:'Priya Raman, Marcus Webb',
+   exp:['Owns the renewal forecast for a book of business','Runs executive business reviews without support','Decides discounts up to a set limit and escalates above it']},
+  {id:'csm1', name:'Customer Success Manager, L1', people:'Dana Ortiz, Jordan Park',
+   exp:['Runs onboarding for new accounts to a defined plan','Keeps account notes current after every call','Brings churn risk to the manager within a week']},
+  {id:'lead', name:'Onboarding Lead', people:'Sam Okafor',
+   exp:['Owns the onboarding playbook and keeps it current','Trains new hires to the playbook','Reports time to first value each month']}
+];
+const FILES = [
+  {n:'FY27 strategy.pdf', cat:'Strategy', sum:'Sets net revenue retention at 112% and names enterprise renewals as the first priority.'},
+  {n:'Team values.md', cat:'Values', sum:'Five working principles, including "say it to their face" and "write it down the same day".'},
+  {n:'Customer research 2026.pdf', cat:'Customers', sum:'Interviews with 14 enterprise accounts. Renewal risk clusters around missed onboarding milestones.'}
+];
+const STEPS = [
+  {id:'org', t:'Team and org', w:'Puts each person in a team and a role.', time:'About 3 minutes'},
+  {id:'exp', t:'Role expectations', w:'Gives the sheet a standard to hold each person’s work against.', time:'About 2 minutes per role'},
+  {id:'know', t:'Knowledge', w:'Lets the sheet quote strategy, values and customer research.', time:'About 2 minutes'},
+  {id:'goals', t:'Org and team goals', w:'Links each person’s work to the goals it serves.', time:'About 3 minutes'},
+  {id:'one', t:'Log the 1:1', w:'The conversation itself, and the first record.', time:'After Thursday 2:00 PM'}
+];
+const WHY = {
+  org:'Without a team and an org, the sheet knows Priya as a name. With them it knows who she works alongside, what she owns and who reports to whom.',
+  exp:'Without role expectations the sheet has no standard to hold Priya’s work against. It can gather what happened, but it cannot say what was expected.',
+  know:'Without documents the sheet can only repeat what the manager has typed. With them it can quote the strategy and say which line applies to Priya.',
+  goals:'Without goals the sheet cannot say what Priya’s work is for. Org and team goals let it link her renewals to a target and see where they fall short.',
+  one:'Nothing has been recorded yet. The first logged 1:1 is what turns the sheet from a plan into a record.'
+};
+let S;
+function fresh(){return {view:'home',done:{},org:{text:'Customer Success is my department. I lead the Enterprise team (Priya, Marcus, Dana) and the SMB team (Jordan, Sam). Priya and Marcus are senior CSMs, Dana and Jordan are junior CSMs, Sam runs onboarding.',drafted:false,saved:false},
+  roles:{csm2:'none',csm1:'none',lead:'none'},files:[],none:false,goals:{org:'',team:'',orgAdded:false,teamAdded:false},one:{open:false,notes:'',logged:false},flash:[],banner:''};}
+S=fresh();
+const done=()=>({org:S.org.saved,exp:ROLES.every(r=>S.roles[r.id]==='approved'),
+  know:S.none||(S.files.length>0&&S.files.every(f=>f.st==='confirmed')),goals:S.goals.orgAdded&&S.goals.teamAdded,one:S.one.logged});
+const count=()=>Object.values(done()).filter(Boolean).length;
+const isOn=()=>count()===5;
+function lines(){
+  const d=done(), L=[
+   {id:'b1',t:'How they like to work and communicate',q:'What helps you do your best work, and what gets in the way?',src:'First 1:1 agenda'},
+   {id:'b2',t:'What they are working on and where they are stuck',q:'Walk me through your top three things this week.',src:'First 1:1 agenda'},
+   {id:'b3',t:'What they want from the role',q:'What would make this role a good one a year from now?',src:'First 1:1 agenda'},
+   {id:'b4',t:'How the two of you will run these 1:1s',q:'How often, how long, and who brings the agenda?',src:'First 1:1 agenda'}];
+  if(d.org)L.push({id:'c1',ctx:1,t:'Working alongside Marcus and Dana',q:'Priya and Marcus are both L2 on the Enterprise team. Where does she want more say, and where less?',src:'Team and org, saved by you'});
+  if(S.roles.csm2==='approved')L.push({id:'c2',ctx:1,t:'Owning the renewal forecast',q:'L2 owns the forecast for a book of business. Agree how she will report it to you.',src:'Customer Success Manager L2 expectations, approved by you'},
+   {id:'c3',ctx:1,t:'Which decisions are hers',q:'L2 decides discounts up to a set limit. Where is that limit, and what comes to you?',src:'Customer Success Manager L2 expectations, approved by you'});
+  if(S.files.some(f=>f.n==='FY27 strategy.pdf'&&f.st==='confirmed'))L.push({id:'c4',ctx:1,t:'The 112% retention target',q:'The strategy sets net revenue retention at 112%. What does that mean for her accounts?',src:'FY27 strategy.pdf, confirmed by you'});
+  if(S.goals.teamAdded)L.push({id:'c5',ctx:1,t:'Her share of the Enterprise renewal goal',q:'The team goal is 94% of enterprise renewals closed on time. Which renewals are hers, and which are at risk?',src:'Team goal, added by you'});
+  return L.filter(l=>l.ctx).concat(L.filter(l=>!l.ctx));}
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2200);}
+function sheetHTML(){
+  const d=done(), L=lines(), miss=[['org','team and org'],['exp','role expectations'],['know','knowledge'],['goals','goals']].filter(x=>!d[x[0]]).map(x=>x[1]);
+  const got=4-miss.length;
+  const built=miss.length? 'Built without: <b>'+miss.join(', ')+'</b>' : 'Built from <b>team and org, role expectations, knowledge and goals</b>';
+  return `<div class="sheet"><div class="hd"><div class="who"><span class="avatar">PR</span>Priya Raman</div>
+  <div class="dt">Thursday, 2:00 PM</div><div class="built">Sheet built from ${got} of 4 context sources. ${built}</div></div>
+  ${S.banner?`<div class="banner">${S.banner}</div>`:''}
+  <div class="topics">${L.map(l=>`<div class="topic ${l.ctx?'ctx':''} ${S.flash.includes(l.id)?'new':''}"><div class="tt">${l.t}</div><div class="q">${l.q}</div><div class="src">${l.src}</div></div>`).join('')}</div></div>
+  <p class="note">Drafted by AI. Lines from context carry the source they came from.</p>`;}
+function stepStatus(id){const d=done();
+  if(d[id])return['Done',1];
+  if(id==='exp'&&!d.org)return['Needs team and org',0,1];
+  if(id==='exp'){const n=ROLES.filter(r=>S.roles[r.id]==='approved').length;return[n+' of 3 roles',0];}
+  if(id==='know'&&S.files.length)return[S.files.filter(f=>f.st==='confirmed').length+' of '+S.files.length+' confirmed',0];
+  if(id==='goals'){const n=(S.goals.orgAdded?1:0)+(S.goals.teamAdded?1:0);return[n+' of 2 goals',0];}
+  return['Not started',0];}
+function homeHTML(){
+  const n=count();
+  if(isOn())return `<div class="receipt fade"><h2>Setup complete</h2><p>Priya’s sheet is built from all four context sources and the first 1:1 is logged. Assessments is now in the sidebar.</p></div>
+  <div class="panel"><h3>Next, when there is time</h3>
+   ${[['Projects','Link the work behind each goal.'],['Prep the other four','Build a sheet for Marcus, Dana, Jordan and Sam.'],['Check-ins','Record progress on the goals you added.']].map(x=>`<div class="step"><span class="dot">→</span><div><div class="t">${x[0]}</div><div class="w">${x[1]}</div></div></div>`).join('')}
+   <div class="gate">None of these is required.</div></div>`;
+  return `<div class="panel"><h3>Setup · ${n} of 5</h3>${STEPS.map((s,i)=>{const st=stepStatus(s.id),dn=done()[s.id];
+   return `<button class="step ${dn?'done':''} ${st[2]?'locked':''}" ${st[2]?'disabled style="opacity:.62"':`onclick="A.go('${s.id}')"`}><span class="dot">${dn?'✓':i+1}</span><div><div class="t">${s.t}</div><div class="w">${s.w}</div></div><span class="st ${dn?'on':''}">${st[0]}</span></button>`}).join('')}
+   <div class="gate">Assessments opens when all five are done. Steps can be done in any order once available.</div></div>`;}
+function head(id){const i=STEPS.findIndex(s=>s.id===id),s=STEPS[i];
+  return `<button class="back" onclick="A.go('home')">← Setup path</button><div class="eyebrow teal">Step ${i+1} of 5 · ${s.time}</div><h2>${s.t}</h2>
+  <div class="why"><div class="eyebrow">What this changes</div><p>${WHY[id]}</p></div>`;}
+function stepHTML(id){
+  if(id==='org'){
+    if(S.org.saved)return head(id)+`<p class="added">Saved. Two teams, five people and three roles are in.</p><button class="secondary" onclick="A.go('home')">Back to setup path</button>`;
+    if(!S.org.drafted)return head(id)+`<label class="meta" for="ot">Describe the org in your own words. Paste, dictate or type.</label><textarea id="ot" oninput="S.org.text=this.value" style="margin-top:8px">${S.org.text}</textarea>
+      <div class="row" style="margin-top:14px"><button class="primary" onclick="A.draftOrg()">Draft structure</button><button class="quiet" onclick="toast('Org chart upload is part of this step in the build')">Upload an org chart instead</button></div>`;
+    return head(id)+`<div class="eyebrow">Draft structure<span class="ai">Drafted by AI</span></div><div class="tree">
+      <div class="unit"><div class="n">Customer Success</div><div class="k">Department · led by you</div>
+       <div class="kids"><div class="unit"><div class="n">Enterprise</div><div class="k">Team · led by you</div><div class="ppl"><span>Priya Raman · CSM L2</span><span>Marcus Webb · CSM L2</span><span>Dana Ortiz · CSM L1</span></div></div>
+       <div class="unit"><div class="n">SMB</div><div class="k">Team · led by you</div><div class="ppl"><span>Jordan Park · CSM L1</span><span>Sam Okafor · Onboarding Lead</span></div></div></div></div></div>
+      <p class="meta">Nothing is saved until you save it. Names, teams and roles are editable.</p>
+      <div class="row"><button class="primary" onclick="A.saveOrg()">Save structure</button><button class="secondary" onclick="S.org.drafted=false;A.render()">Edit description</button></div>`;}
+  if(id==='exp'){
+    if(!S.org.saved)return head(id)+`<p>Roles come from the team and org step.</p><button class="primary" onclick="A.go('org')">Go to team and org</button>`;
+    return head(id)+`<div class="panel" style="padding:6px 20px;margin:0">${ROLES.map(r=>{const st=S.roles[r.id];
+     return `<div class="role"><div class="rt"><b>${r.name}</b><span class="meta">${st==='approved'?'Approved':st==='drafted'?'Review':'No expectations'}</span></div><div class="meta">${r.people}</div>
+      ${st==='none'?`<div class="row" style="margin-top:10px"><button class="secondary" onclick="A.jd('${r.id}')">Add job description</button><button class="quiet" onclick="toast('Writing expectations by hand is also available in the build')">Write them instead</button></div>`:''}
+      ${st==='drafted'?`<div class="exp"><div class="eyebrow" style="margin-bottom:4px">Drafted from the job description<span class="ai">Drafted by AI</span></div>${r.exp.map(e=>`<div contenteditable="true">${e}</div>`).join('')}</div><button class="primary" onclick="A.approve('${r.id}')">Approve expectations</button>`:''}
+      ${st==='approved'?`<div class="added">Approved. Three expectations saved for this role.</div>`:''}</div>`}).join('')}</div>`;}
+  if(id==='know'){
+    const cov=['Strategy','Values','Customers','Pricing','Org chart'].map(c=>`<div class="${S.files.some(f=>f.cat===c&&f.st==='confirmed')?'on':''}">${c}</div>`).join('');
+    return head(id)+(S.files.length?`<div class="panel" style="padding:6px 20px;margin:0 0 16px">${S.files.map((f,i)=>`<div class="file"><span class="dot" style="margin-top:2px">${f.st==='confirmed'?'✓':'…'}</span><div style="flex:1"><div class="fn">${f.n}</div>
+      ${f.st==='processing'?`<div class="fs">Reading and filing…</div>`:`<div class="fs">${f.cat}${f.st==='confirmed'?' · confirmed':''}</div><p>${f.sum}</p>${f.st==='review'?`<div class="row"><button class="primary" onclick="A.conf(${i})">Confirm</button><button class="quiet" onclick="A.disc(${i})">Discard</button></div>`:''}`}</div></div>`).join('')}</div>`:`<div class="row"><button class="primary" onclick="A.addDocs()">Add documents</button><button class="quiet" onclick="A.noDocs()">Nothing to import</button></div><p class="meta" style="margin-top:14px">Strategy decks, values, customer research, pricing. PDF, PowerPoint, Markdown or text.</p>`)
+      +`<div class="panel" style="margin-top:14px"><h3>What it knows</h3><div class="know">${cov}</div></div>`+(S.none?`<p class="added">Marked as nothing to import. This can change later in Knowledge.</p>`:'');}
+  if(id==='goals'){
+    const kd=done().know&&!S.none, g=S.goals;
+    return head(id)+`<div class="goalbox"><label>Org goal</label><input class="txt" id="go" value="${g.org}" oninput="S.goals.org=this.value;document.getElementById('ao').disabled=!this.value.trim()" ${g.orgAdded?'disabled':''}>
+      ${g.orgAdded?`<div class="added">Added.</div>`:`<div class="row" style="margin-top:8px"><button class="primary" id="ao" onclick="A.addGoal('org')" ${g.org.trim()?'':'disabled'}>Add org goal</button></div>`}</div>
+     <div class="goalbox"><label>Team goal, Enterprise</label><input class="txt" id="gt" value="${g.team}" oninput="S.goals.team=this.value;document.getElementById('at').disabled=!this.value.trim()" ${g.teamAdded?'disabled':''}>
+      ${g.teamAdded?`<div class="added">Added.</div>`:`<div class="row" style="margin-top:8px"><button class="primary" id="at" onclick="A.addGoal('team')" ${g.team.trim()?'':'disabled'}>Add team goal</button></div>`}</div>
+     ${(!g.orgAdded||!g.teamAdded)?(kd?`<div class="row"><button class="secondary" onclick="A.draftGoals()">Draft from the strategy document</button><span class="ai" style="margin:0">Drafted by AI</span></div>`:`<p class="meta">Goals can be drafted once a strategy document is confirmed. Until then, write them directly.</p>`):''}`;}
+  if(id==='one'){
+    if(S.one.logged)return head(id)+`<p class="added">Logged. The first 1:1 with Priya is on the record.</p>`;
+    return head(id)+`<div class="panel" style="margin:0"><div class="who row"><span class="avatar">PR</span><div><b>Priya Raman</b><div class="meta">Thursday, 2:00 PM · sheet saved</div></div></div>
+      ${S.one.open?`<textarea id="on" oninput="S.one.notes=this.value" placeholder="What was said, what was agreed.">${S.one.notes}</textarea><div class="row" style="margin-top:12px"><button class="primary" onclick="A.logOne()">Save to the record</button></div>`
+      :`<p>Nothing to do here until the conversation happens.</p><div class="row"><button class="secondary" onclick="toast('Opens the prep sheet in the build')">Open the sheet</button><button class="secondary" onclick="S.one.open=true;A.render()">Log the 1:1 now</button></div>`}</div>`;}
+}
+const NAV=[['Mission Control','home'],['#People'],['Team'],['1:1s'],['Assessments','lock'],['Beyond the team'],['#Work'],['Goals'],['Projects'],['#Workspace'],['Roles & expectations'],['Knowledge'],['Settings']];
+function shell(){
+  const on=isOn(), n=count();
+  const nav=NAV.map(x=>x[0][0]==='#'?`<div class="navgroup">${x[0].slice(1).toUpperCase()}</div>`:
+    x[1]==='lock'?(on?`<div class="navitem unlocked"><span>${x[0]}</span></div>`:`<button class="navitem locked" onclick="toast('Assessments opens when setup is complete.')"><span>${x[0]}</span><span class="lk">Setup</span></button>`):
+    `<div class="navitem ${x[1]==='home'?'selected':''}"><span>${x[0]}</span></div>`).join('');
+  const chip=on?'':`<button class="chip" onclick="A.go('home')" aria-label="Setup, ${n} of 5 done"><span>Setup</span><span class="segs">${[0,1,2,3,4].map(i=>`<i class="${i<n?'on':''}"></i>`).join('')}</span><span>${n} of 5</span></button>`;
+  const left=S.view==='home'?homeHTML():`<div class="fade">${stepHTML(S.view)}</div>`;
+  return `<div class="layout"><aside class="rail"><div class="wordmark">The Same<br>Page</div>${nav}</aside><div><div class="top"><span class="lbl">Mission Control</span>${chip}</div>
+   <main><div class="head"><div class="eyebrow teal">${on?'Setup complete':'Setup'}</div><h1>${on?'Thursday’s 1:1 with Priya':'Priya’s sheet is built from '+(4-['org','exp','know','goals'].filter(k=>!done()[k]).length)+' of 4 sources'}</h1>
+   <div class="sub">${on?'Everything the sheet draws on is in.':'The sheet for Thursday is saved. Each step below adds what it was built without, and the lines appear on the right.'}</div></div>
+   <div class="cols"><div>${left}</div><div class="sticky">${sheetHTML()}</div></div></main></div></div>`;}
+const A={
+  render(){document.getElementById('app').innerHTML=shell();},
+  go(v){S.view=v;S.flash=[];S.banner='';A.render();window.scrollTo(0,0);},
+  after(before,label){
+    const b=new Set(before), added=lines().filter(l=>!b.has(l.id)).map(l=>l.id);
+    S.flash=added; S.banner=added.length?`${added.length} ${added.length===1?'line':'lines'} added from ${label}.`:'';
+    if(isOn()){S.view='home';window.scrollTo(0,0);} else if(done()[S.view]&&added.length===0){}
+    A.render();},
+  ids(){return lines().map(l=>l.id);},
+  draftOrg(){S.org.drafted=true;A.render();},
+  saveOrg(){const b=A.ids();S.org.saved=true;A.after(b,'team and org');},
+  jd(id){S.roles[id]='drafted';A.render();},
+  approve(id){const b=A.ids();S.roles[id]='approved';A.after(b,'role expectations');},
+  addDocs(){S.files=FILES.map(f=>({...f,st:'processing'}));A.render();
+    S.files.forEach((f,i)=>setTimeout(()=>{f.st='review';if(S.view==='know')A.render();},700*(i+1)));},
+  noDocs(){S.none=true;const b=A.ids();A.after(b,'knowledge');},
+  conf(i){const b=A.ids();S.files[i].st='confirmed';A.after(b,S.files[i].n);},
+  disc(i){S.files.splice(i,1);A.render();},
+  draftGoals(){if(!S.goals.orgAdded)S.goals.org='Reach 112% net revenue retention by Q4';if(!S.goals.teamAdded)S.goals.team='Close 94% of enterprise renewals on time';A.render();},
+  addGoal(k){const b=A.ids();S.goals[k+'Added']=true;A.after(b,k==='team'?'the team goal':'the org goal');},
+  logOne(){const b=A.ids();S.one.logged=true;A.after(b,'the 1:1');},
+  preset(p){S=fresh();
+    const org=()=>{S.org.drafted=S.org.saved=true;},
+     know=()=>{S.files=FILES.map(f=>({...f,st:'confirmed'}));},
+     exp=()=>{ROLES.forEach(r=>S.roles[r.id]='approved');},
+     goals=()=>{S.goals={org:'Reach 112% net revenue retention by Q4',team:'Close 94% of enterprise renewals on time',orgAdded:true,teamAdded:true};};
+    if(p==='half'){org();know();}
+    if(p==='almost'||p==='complete'){org();know();exp();goals();}
+    if(p==='complete')S.one={open:true,notes:'',logged:true};
+    A.render();window.scrollTo(0,0);}
+};
+A.render();
+</script>
+</body>
+</html>

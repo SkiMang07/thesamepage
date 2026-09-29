@@ -50,7 +50,8 @@ export default function Sidebar() {
   // The slide-over is always the full rail; the collapse preference is a
   // desktop choice.
   const collapsed = collapsedPref && !mobileOpen;
-  const { firstOneOnOneLogged } = useZoneData();
+  const { onboarding } = useZoneData();
+  const onboarded = onboarding ? onboarding.onboarded : null;
 
   // Close the slide-over on navigation and on Escape.
   useEffect(() => { setMobileOpen(false); }, [pathname, setMobileOpen]);
@@ -122,7 +123,7 @@ export default function Sidebar() {
 
         <div className={`my-2 h-px shrink-0 bg-hairline ${collapsed ? "w-6" : "mx-2.5"}`} />
 
-        {visibleNavGroups(firstOneOnOneLogged).map((group) => {
+        {visibleNavGroups(onboarded).map((group) => {
           const visibleItems = group.items.filter((item) => item.id !== SETTINGS_ITEM.id);
           return (
             <div key={group.group} className={collapsed ? "contents" : "mt-1"}>
@@ -130,6 +131,26 @@ export default function Sidebar() {
               {visibleItems.map((item) => {
             const active = item.id === activeItemId;
             const hue = ZONE_STYLE;
+            if (item.locked) {
+              return (
+                <Link
+                  key={item.id}
+                  href="/app/dashboard#setup"
+                  title={`${item.label}: opens when setup is complete`}
+                  className={`flex items-center gap-2.5 rounded-lg text-[13px] text-ink-muted transition hover:bg-sunken hover:text-ink-secondary ${
+                    collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
+                  }`}
+                >
+                  <Icon name={item.icon} className="h-4 w-4 shrink-0" />
+                  {!collapsed && (
+                    <>
+                      <span className="truncate">{item.label}</span>
+                      <span className="ml-auto shrink-0 rounded border border-hairline px-1.5 text-[10px] uppercase tracking-wide text-ink-muted">Setup</span>
+                    </>
+                  )}
+                </Link>
+              );
+            }
             return (
               <Link
                 key={item.id}

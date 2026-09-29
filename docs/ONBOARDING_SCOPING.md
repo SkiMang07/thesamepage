@@ -128,6 +128,8 @@ Changes to the existing review step, not a new page.
 
 ### 4.8 Navigation on day one (P2-5)
 
+> Superseded 2026-09-29 by §11: Assessments now shows locked until onboarded, and Org is a normal door again. The table below is the rule as first built.
+
 Proposed rule: show a door once there's something behind it or a first 1:1 has been logged.
 
 | Door | Day one | Appears when |
@@ -198,3 +200,26 @@ No schema change in either session.
 2. **Nav on day one (§4.8).** Hide Assessments until the first 1:1 is logged, and hide Capacity and Org for launch?
 3. **Password toggle.** Keep it with the better error (proposed), or hide it for anyone who doesn't already have a password?
 4. **Founding line date.** "Free until December 24." shows the end date, not a countdown. OK?
+
+## 11. After the first prep sheet: the setup path (2026-09-29)
+
+Design: `docs/design-proposals/2026-09-29-onboarding-path/` (`BUILD_BRIEF.md`, `prototype.html`).
+
+**Onboarded means five things are true** (Andrew, 2026-09-29):
+
+1. Team and org: at least one org unit, and every active direct report sits in one.
+2. Role expectations: every active direct report has a role, and every role in use has expectations configured (a job description can supply them).
+3. Knowledge: at least one confirmed document, or the manager has said there is nothing to import.
+4. Goals: an org-level goal (company or department level) and a team goal. Cancelled goals do not count.
+5. Log: a first 1:1 logged (a session with a summary).
+
+**Decisions (2026-09-29).** "Nothing to import" counts as the knowledge step. Existing accounts with reports are marked onboarded by the migration. The Org door comes back, because org setup is now required. No AI call unless one is needed: every status and every line derived from saved records is computed, not drafted. The step is called "Log", not "record"; recording waits on notes ingestion.
+
+**Built (pass 1).**
+- Migration `2026-09-29_onboarding_state.sql` and `schema.sql`: `users.onboarded_at`, `users.knowledge_skipped_at`; grandfathers existing accounts.
+- `GET /api/onboarding/status` derives the five from real records. The first time all five hold it stamps `onboarded_at` (set once, sticky: archiving a goal later does not undo it) and fires the `onboarded` event. Once stamped it answers from the user row alone. `PUT /api/onboarding/knowledge-skipped` records or clears "nothing to import".
+- `ZoneMap.tsx`: the status rides with the core zone data. `visibleNavGroups(onboarded)` shows Assessments locked (with a "Setup" label, linking to the path) until onboarded; Org is a normal door; Capacity stays hidden for launch. An unreadable status leaves everything open.
+- `components/SetupPath.tsx` on Mission Control (above the week): five steps, each with what it changes and a live status, linking to the surface that does the work. Header chip "Setup n of 5" on every page until onboarded.
+
+**Not built yet (from the prototype).** The split view where a step opens beside the prep sheet; the sheet's "Built without" line and source-tagged context lines (deterministic, no AI); the completion receipt and "next, when there is time" list; per-step analytics. Steps link to the existing pages for now.
+

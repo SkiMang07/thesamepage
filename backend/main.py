@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from observability import RequestContextMiddleware, configure_logging, init_sentry
-from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
+from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, one_on_ones, onboarding, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
 configure_logging()
@@ -165,6 +165,8 @@ app.include_router(invites.router, prefix="/api/invites", tags=["invites"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(assistant.router, prefix="/api/assistant", tags=["assistant"])
 app.include_router(setup_status.router, prefix="/api/setup-status", tags=["setup-status"])
+# Onboarding: five derived conditions and the sticky onboarded_at stamp.
+app.include_router(onboarding.router, prefix="/api/onboarding", tags=["onboarding"])
 app.include_router(transcribe.router, prefix="/api/transcribe", tags=["transcribe"])
 app.include_router(entitlement.router, prefix="/api/entitlement", tags=["entitlement"])
 app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"])

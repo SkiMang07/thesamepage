@@ -47,6 +47,11 @@ create table users (
   full_name  text not null default '',
   role       text not null default 'manager' check (role in ('manager', 'director', 'vp', 'ic')),
   manager_id uuid references users(id),
+  -- Onboarding (2026-09-29): stamped once, the first time all five setup
+  -- conditions hold (routes/onboarding.py). knowledge_skipped_at is the
+  -- manager's "nothing to import" answer.
+  onboarded_at timestamptz,
+  knowledge_skipped_at timestamptz,
   created_at timestamptz not null default now()
 );
 
