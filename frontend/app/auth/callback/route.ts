@@ -1,52 +1,23 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import { createRouteClient } from "@/lib/supabase-route";
+import { landingPath, safeNext } from "@/lib/auth-landing";
 
-const DEFAULT_NEXT = "/app/dashboard";
-
-// `next` comes from the magic-link URL, so anyone can put anything in it.
-// Only an in-app path under /app/ is honoured; anything else falls back to the
-// dashboard. A double slash or a backslash is refused too, since browsers read
-// both as protocol-relative, so the check doesn't rely on the `origin` prefix
-// the redirect below happens to add.
-function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/app/") || raw.includes("\\") || raw.includes("//")) {
-    return DEFAULT_NEXT;
-  }
-  return raw;
-}
-
+// The PKCE code flow. The code only exchanges in the browser that asked for
+// it, so a sign-in link opened on another device fails here. Sign-in and
+// sign-up emails now link to /auth/confirm instead (any device); this route
+// stays for invites and anything else still on the code flow.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = safeNext(searchParams.get("next"));
 
   if (code) {
-    const cookieStore = await cookies();
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          },
-        },
-      }
-    );
-
+    const supabase = await createRouteClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${origin}${next ?? (await landingPath(supabase))}`);
     }
   }
 
-  // Code missing or exchange failed — back to login with an error flag
   return NextResponse.redirect(`${origin}/app/login?error=auth_failed`);
 }

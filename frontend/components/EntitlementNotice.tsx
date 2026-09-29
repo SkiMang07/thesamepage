@@ -71,7 +71,7 @@ export default function EntitlementNotice() {
   const left = daysLeft(ent.trial_ends_at);
   if (left > WARN_DAYS) return null;
 
-  const what = ent.founding_number ? "Your founding 3 months end" : "Your free trial ends";
+  const what = ent.founding_number ? "Your founding year ends" : "Your free trial ends";
   const when = left === 0 ? "today" : left === 1 ? "tomorrow" : `in ${left} days`;
   return (
     <div role="status" className="border-b border-hairline bg-sunken px-6 py-2 text-sm text-ink-secondary">

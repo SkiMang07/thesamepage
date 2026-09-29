@@ -38,6 +38,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuickAdd } from "@/lib/quick-add-context";
 import { TrendArrow, isStale } from "@/components/CheckInPanel";
 import {
@@ -220,6 +221,7 @@ type PerformanceRow = TeamOverviewItem & {
 // than rendered as an empty or all-clear state. The rollout flag still
 // returns the legacy dashboard below.
 export default function DashboardPage() {
+  const router = useRouter();
   const [variant, setVariant] = useState<Awaited<ReturnType<typeof getMissionControlBrief>> | null>(null);
   const [failed, setFailed] = useState(false);
   const [week, setWeek] = useState<WeekInFocusData | null>(null);
@@ -244,6 +246,12 @@ export default function DashboardPage() {
     getMissionControlBrief()
       .then((result) => {
         if (cancelled) return;
+        // No direct reports yet: first run asks who the next 1:1 is with
+        // instead of showing an empty Mission Control (ONBOARDING_SCOPING §4.2).
+        if (result.variant === "action_first" && result.mode === "empty") {
+          router.replace("/app/start");
+          return;
+        }
         setVariant(result);
         setFailed(false);
       })
@@ -251,7 +259,7 @@ export default function DashboardPage() {
         if (!cancelled) setFailed(true);
       });
     return () => { cancelled = true; };
-  }, [reload]);
+  }, [reload, router]);
 
   useEffect(() => {
     let cancelled = false;

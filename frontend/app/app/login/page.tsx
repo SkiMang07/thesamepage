@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
+const PASSWORD_KEY = "tsp:signs-in-with-password";
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -14,10 +16,24 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Show an error if the auth callback redirected here with ?error=
+  // The password option is only offered to someone who already signs in with
+  // one: a new manager has no password, and trying one only earns Supabase's
+  // "Invalid login credentials" (docs/ONBOARDING_SCOPING.md, §4.1). It shows
+  // after a password sign-in on this browser, or with /app/login?password.
+  const [passwordOffered, setPasswordOffered] = useState(false);
+  useEffect(() => {
+    let remembered = false;
+    try {
+      remembered = window.localStorage.getItem(PASSWORD_KEY) === "1";
+    } catch {}
+    setPasswordOffered(remembered || searchParams.has("password"));
+    if (searchParams.has("password")) setMethod("password");
+  }, [searchParams]);
+
+  // Show an error if the auth routes redirected here with ?error=
   useEffect(() => {
     if (searchParams.get("error")) {
-      setError("The login link didn't work — it may have expired. Try again.");
+      setError("That login link didn't work. It may have expired or already been used. Send a new one below.");
     }
   }, [searchParams]);
 
@@ -33,10 +49,17 @@ function LoginForm() {
         password,
       });
       if (authError) {
-        setError(authError.message);
+        setError(
+          /invalid login credentials/i.test(authError.message)
+            ? "That email and password don't match an account. New here? Use the login link instead."
+            : authError.message
+        );
         setLoading(false);
         return;
       }
+      try {
+        window.localStorage.setItem(PASSWORD_KEY, "1");
+      } catch {}
       router.replace("/app/dashboard");
       router.refresh();
       return;
@@ -111,7 +134,7 @@ function LoginForm() {
               ? method === "magic-link" ? "Sending…" : "Signing in…"
               : method === "magic-link" ? "Send login link" : "Sign in"}
           </button>
-          <button
+          {passwordOffered && <button
             type="button"
             onClick={() => {
               setMethod(method === "magic-link" ? "password" : "magic-link");
@@ -120,8 +143,8 @@ function LoginForm() {
             }}
             className="w-full text-sm text-ink-secondary underline hover:text-ink"
           >
-            {method === "magic-link" ? "Use a password instead" : "Use a magic link instead"}
-          </button>
+            {method === "magic-link" ? "Use a password instead" : "Use a login link instead"}
+          </button>}
         </form>
       )}
     </main>

@@ -11,6 +11,11 @@
 // that page can call POST /api/invites/{token}/accept once the session
 // exists. /auth/callback/route.ts needed no changes for this — it already
 // supports a `next` query param.
+//
+// 2026-09-29: sign-in and sign-up emails now link to /auth/confirm with
+// {{ .SiteURL }}, which drops emailRedirectTo and so this `next`. Invites are
+// hidden (IC_INVITES_ENABLED = false); before turning them back on, carry the
+// invite token another way (docs/ONBOARDING_SCOPING.md, §4.1).
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";

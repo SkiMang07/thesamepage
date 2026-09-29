@@ -191,7 +191,8 @@ It never mutates those records.
 
 The brief has normal-week, busy-week, early-use, empty, all-clear, loading,
 partial-source, AI-failure, and aged-response states. Early use makes no team
-judgment. Empty accounts receive one Add direct report action. Confirmed source
+judgment. An empty account (no direct reports) is sent to first run at
+`/app/start` instead of seeing the brief. Confirmed source
 writes in the same browser refresh the brief automatically, including writes from
 another tab. After 24 hours the full brief remains usable and gains a quiet,
 optional refresh prompt; content never disappears merely because time passed.

@@ -198,6 +198,8 @@ module.exports = {
       // (Mission Control's side column). Pair with motion-reduce:animate-none.
       keyframes: {
         "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        // First run: a question or a new roster row settling into place.
+        "rise-in": { from: { opacity: "0", transform: "translateY(6px)" }, to: { opacity: "1", transform: "none" } },
         // A saved goal update: one brief teal ring that fades out.
         "save-glow": {
           "0%": { boxShadow: "0 0 0 2px rgb(var(--c-brand))" },
@@ -206,6 +208,7 @@ module.exports = {
       },
       animation: {
         "fade-in": "fade-in 120ms ease-out",
+        "rise-in": "rise-in 300ms ease-out",
         "save-glow": "save-glow 1.3s ease-out",
       },
       ringColor: { DEFAULT: v("focus") },

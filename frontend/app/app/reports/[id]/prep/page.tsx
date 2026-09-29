@@ -112,6 +112,9 @@ function PrepFlow() {
   const searchParams = useSearchParams();
   const resumeId = searchParams.get("resume");
   const editSources = searchParams.get("edit") === "1";
+  // First run (/app/start) hands over the meeting date it asked for.
+  const dateParam = searchParams.get("date");
+  const startDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : "";
 
   const [step, setStep] = useState<Step>(1);
   const [notes, setNotes] = useState("");
@@ -186,7 +189,10 @@ function PrepFlow() {
         const capturedNotes = [...captured].reverse().map((note) => note.content).join("\n");
         setNotes([savedNotes, capturedNotes].filter(Boolean).join("\n"));
 
-        if (!session) return;
+        if (!session) {
+          if (startDate) setScheduleDate(startDate);
+          return;
+        }
         setOneOnOneId(session.id);
         setScheduleDate(scheduledAtToDate(session.scheduled_at));
         setRecurrenceWeeks(session.recurrence_weeks ?? null);
@@ -217,7 +223,7 @@ function PrepFlow() {
         );
       })
       .finally(() => setResumeLoading(false));
-  }, [resumeId, editSources, id]);
+  }, [resumeId, editSources, id, startDate]);
 
   // "Date & repeat" on the Relationship Desk links here with #schedule: land
   // on the canonical date control instead of a second scheduling editor.

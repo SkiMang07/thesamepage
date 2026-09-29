@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>First Run Prototype</title>
+<style>
+/* The app's dark theme (frontend/app/globals.css .theme-dark), in the vocabulary of the approved
+   Relationship Desk prototype (docs/design-proposals/2026-09-25-relationship-continuity). */
+:root{color-scheme:dark;--bg:#182026;--surface:#222b32;--raised:#29333a;--input:#2d373e;--line:#3d4950;--ink:#f2f5f6;--body:#d4dadd;--muted:#aab7be;--faint:#6e7b83;--teal:#72c7bf;--tint:#173d3b;--amber:#efc281;--blue:#93c1f3;--control:#77848c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;border-radius:6px;padding:9px 12px;text-align:left}
+:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
+button:disabled{opacity:.45;cursor:default}
+p{margin:8px 0 16px;color:var(--body)}
+h1,h2,h3{margin:0;font-weight:400}
+h1,h2{font-family:Georgia,serif}
+h1{font-size:46px;letter-spacing:-1.3px;line-height:1.1}
+h2{font-size:27px;line-height:1.25}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted);margin-bottom:12px}
+.eyebrow.teal{color:var(--teal)}
+.meta{font-size:12px;color:var(--muted)}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.primary{background:var(--teal);color:#08191b!important;font-weight:600;padding:12px 18px;display:inline-flex;align-items:center;gap:10px}
+.primary:hover:not(:disabled){background:#8fd6cf}
+.primary kbd{font:600 10px/1 -apple-system,sans-serif;border:1px solid rgba(8,25,27,.35);border-radius:3px;padding:3px 5px}
+.quiet{color:var(--teal);padding:8px 2px;font-size:13px}
+.quiet:hover{color:#8fd6cf}
+.chip{display:inline-block;font-size:12px;border-radius:20px;background:var(--input);color:var(--body);padding:6px 12px;white-space:nowrap;border:1px solid transparent}
+.chip[aria-pressed=true]{background:var(--tint);color:var(--teal);border-color:#36635e}
+.avatar{width:55px;height:55px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--teal);color:#102529;font-weight:600;font-size:19px;flex-shrink:0}
+.avatar.mini{width:28px;height:28px;font-size:11px}
+input.name,textarea{background:var(--input);border:1px solid var(--control);border-radius:5px;padding:10px 12px;width:100%}
+input.name{font:24px/1.3 Georgia,serif;padding:12px 14px}
+textarea{resize:vertical;min-height:120px;line-height:1.6;font-size:14px}
+input.name:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--tint)}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+.formlabel{display:block;font-size:13px;color:var(--body);margin:22px 0 8px}
+.formlabel .opt{color:var(--muted)}
+
+/* prototype bar: not part of the design */
+.pbar{position:sticky;top:0;z-index:50;padding:9px 20px;background:#0f161b;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pbar b{letter-spacing:1.4px;text-transform:uppercase;color:var(--amber);font-weight:600}
+.pbar button{font-size:11px;padding:4px 8px;border:1px solid var(--line);color:var(--muted)}
+.pbar button[aria-current=true]{background:var(--tint);color:var(--teal);border-color:#36635e}
+.pbar .sp{flex:1}
+
+/* shell: the rail is hidden during first run and slides in at the end */
+.layout{display:grid;grid-template-columns:0 minmax(0,1fr);transition:grid-template-columns .6s cubic-bezier(.2,.8,.2,1);min-height:calc(100vh - 38px)}
+.layout.arrived{grid-template-columns:175px minmax(0,1fr)}
+.rail{border-right:1px solid var(--line);padding:27px 17px;overflow:hidden;opacity:0;transition:opacity .4s ease .25s;white-space:nowrap}
+.arrived .rail{opacity:1}
+.wordmark{font:25px/1.05 Georgia,serif;margin:3px 10px 42px}
+.navitem{display:block;padding:10px;color:var(--muted);font-size:13px;width:100%;margin:2px 0}
+.navitem.selected{background:var(--tint);color:var(--teal)}
+.navgroup{font-size:11px;letter-spacing:1.5px;color:var(--muted);padding:25px 10px 8px}
+.top{height:63px;border-bottom:1px solid var(--line);padding:0 42px;display:flex;align-items:center;justify-content:space-between}
+.top .brand{font:21px/1 Georgia,serif}
+.arrived .top .brand{visibility:hidden}
+main{max-width:1180px;margin:0 auto;padding:44px 42px 60px}
+.first{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:56px;align-items:start}
+.askcol{position:sticky;top:90px;max-width:470px}
+.askcol h1{margin-bottom:12px}
+.lede{font-size:15px;color:var(--body);max-width:44ch}
+.actions{margin-top:26px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.privacy{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:14px}
+.privacy a{color:var(--muted)}
+.fade{animation:appear .3s ease-out both}
+@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* right column: real app surfaces */
+.panel{background:var(--surface);border-radius:9px;padding:24px 25px;margin:0 0 18px}
+.panel h2{margin-bottom:4px}
+.welcome{border-left:2px solid var(--teal)}
+.welcome p{font:16px/1.6 Georgia,serif;color:var(--body);margin:0 0 10px}
+.welcome p.eyebrow{font:11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:1.6px;color:var(--muted);margin-bottom:12px}
+.welcome p.meta{font:12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--muted)}
+.welcome .sig{font:italic 18px/1.2 Georgia,serif;color:var(--ink);margin:14px 0 2px}
+.draft{display:inline-block;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);border:1px solid #6b5533;border-radius:3px;padding:2px 6px;margin-left:8px;vertical-align:2px}
+.roster{margin-top:14px}
+.person{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);animation:appear .3s ease-out both}
+.person:last-child{border-bottom:0}
+.person .n{flex:1;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.person .s{font-size:12px;color:var(--muted);white-space:nowrap}
+.person .s.on{color:var(--teal)}
+.person.ghost .n{color:var(--faint)}
+.person.ghost .avatar{background:var(--input);color:var(--faint)}
+.person.sel{background:linear-gradient(90deg,var(--tint),transparent);margin:0 -25px;padding:13px 25px;border-left:2px solid var(--teal)}
+
+/* the person view + next conversation card, as on the Relationship Desk */
+.identity{display:flex;gap:16px;align-items:center;margin-bottom:18px}
+.identity h2{font-size:34px;letter-spacing:-.8px;line-height:1.1}
+.conversation{border-radius:10px;overflow:hidden;background:var(--surface)}
+.next{padding:24px 25px;background:linear-gradient(110deg,#1e383b,var(--surface) 75%)}
+.dateHeading{font-family:Georgia,serif;font-size:30px;line-height:1.15}
+.summary{font:italic 15px/1.55 Georgia,serif;color:var(--body);margin:14px 0 6px}
+.topic{padding:15px 0;border-bottom:1px solid var(--line);opacity:0;transform:translateY(5px);transition:opacity .35s ease,transform .35s ease}
+.topic.shown{opacity:1;transform:none}
+.topic:last-child{border-bottom:0}
+.topic .t{font-weight:600;font-size:15px;outline:none;border-radius:4px}
+.topic .q{font:15px/1.5 Georgia,serif;color:var(--body);margin-top:5px;outline:none;border-radius:4px}
+.topic [contenteditable]:hover,.topic [contenteditable]:focus{background:rgba(114,199,191,.08);box-shadow:0 0 0 4px rgba(114,199,191,.08)}
+.sources{margin-top:16px;display:flex;gap:8px 18px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.sources .ai{color:var(--teal)}
+.mynote{background:var(--input);border-radius:6px;padding:10px 12px;font-size:13px;color:var(--body);margin:12px 0 4px;white-space:pre-wrap}
+.empty{padding:14px 0 4px;color:var(--muted);font-size:13px}
+.caret{display:inline-block;width:2px;height:1em;background:var(--teal);vertical-align:-2px;margin-left:3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.receipt{background:var(--tint);border:1px solid #36635e;border-radius:9px;padding:20px 22px;margin:0 0 18px}
+.receipt h2{font-size:23px}
+.receipt p{margin:6px 0 0;font-size:14px;color:#cfe3df}
+
+/* Mission Control after arrival */
+.mc h1{font-size:40px;margin-bottom:10px}
+.morning{font:19px/1.5 Georgia,serif;color:var(--body);max-width:62ch;margin:0 0 26px}
+.mcgrid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:28px}
+.card{background:var(--surface);border-radius:9px;padding:20px 22px;margin-bottom:16px}
+.card h3{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:500;margin-bottom:6px}
+.move{display:flex;gap:12px;align-items:center;padding:13px 0;border-top:1px solid var(--line)}
+.move:first-of-type{border-top:0}
+.move .n{flex:1}
+.move .n b{display:block;font-weight:500;font-size:15px}
+.move .n span{font-size:12px;color:var(--muted)}
+.note-proto{font-size:12px;color:var(--faint);margin-top:18px}
+
+@media(max-width:900px){
+  .top{padding:0 18px;height:56px}
+  main{padding:26px 18px 48px}
+  .first{grid-template-columns:1fr;gap:28px}
+  .askcol{position:static;max-width:none}
+  h1{font-size:36px}
+  .layout,.layout.arrived{display:block}
+  .rail{display:none}
+  .arrived .top .brand{visibility:visible}
+  [data-step="4"] .preview,[data-step="5"] .preview{order:-1}
+  .first{display:flex;flex-direction:column}
+  .mcgrid{grid-template-columns:1fr}
+  .primary kbd{display:none}
+  .person.sel{margin:0 -25px;padding:13px 25px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.topic{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="pbar" role="region" aria-label="Prototype controls">
+  <b>Prototype · First run in the app</b>
+  <span>Jump to</span><span id="jump" class="row" style="gap:4px"></span>
+  <span class="sp"></span>
+  <button id="restart">Restart</button>
+</div>
+
+<div class="layout" id="layout">
+  <nav class="rail" aria-label="Main">
+    <div class="wordmark">The Same<br>Page</div>
+    <button class="navitem selected">Mission Control</button>
+    <button class="navitem">Team</button>
+    <button class="navitem">1:1s</button>
+    <div class="navgroup">WORK</div>
+    <button class="navitem">Goals</button>
+    <button class="navitem">Projects</button>
+    <button class="navitem">Knowledge</button>
+    <div class="navgroup">MORE</div>
+    <button class="navitem">Beyond the team</button>
+    <button class="navitem">Settings</button>
+  </nav>
+  <div>
+    <div class="top"><span class="brand">The Same Page</span><span class="meta" id="topmeta"></span></div>
+    <main id="main"></main>
+  </div>
+</div>
+
+<script>
+const FOUNDING_N = 7;
+const today = new Date();
+const oneYear = new Date(today); oneYear.setFullYear(today.getFullYear()+1);
+const fmtLong = d => d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+const fmtShort = d => d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+const fmtDay = d => d.toLocaleDateString('en-US',{weekday:'long'});
+function nextWeekdays(n){const o=[];const d=new Date(today);while(o.length<n){d.setDate(d.getDate()+1);if(d.getDay()%6)o.push(new Date(d));}return o;}
+const DAYS = nextWeekdays(4);
+const ID = ['#72c7bf','#93c1f3','#c3cdd2','#56bdb6','#5c9ce0','#cbd3d7'];
+
+let S;
+function reset(){ S={step:1,name:'',dateIdx:null,rosterText:'',notes:'',agenda:null,written:0,arrived:false}; }
+reset();
+
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const first = n => (n||'').trim().split(/\s+/)[0]||'';
+const initials = n => (n||'').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+const dateLabel = () => S.dateIdx===null?null:fmtShort(DAYS[S.dateIdx]);
+const word = n => ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten'][n]||String(n);
+function roster(){
+  const seen=new Set([S.name.trim().toLowerCase()]);
+  return S.rosterText.split(/[\n,]/).map(s=>s.replace(/^\s*([-•*]|\d+[.)])\s*/,'').trim())
+    .filter(s=>{const k=s.toLowerCase();if(!s||seen.has(k))return false;seen.add(k);return true;}).slice(0,25);
+}
+function listNames(a){if(a.length<=1)return a.join('');if(a.length===2)return a.join(' and ');if(a.length<=4)return a.slice(0,-1).join(', ')+' and '+a[a.length-1];return `${a.slice(0,3).join(', ')} and ${a.length-3} more`;}
+const av = (n,i,mini) => `<span class="avatar${mini?' mini':''}" style="background:${ID[i%ID.length]}">${esc(initials(n))||'·'}</span>`;
+
+function buildAgenda(){
+  const f=first(S.name);
+  const items=[
+    {t:`How ${f} likes to work`,q:`How do you like to get feedback: in the moment, or saved for these 1:1s? What's the best way to reach you when something's urgent?`},
+    {t:`What's on ${f}'s plate`,q:`What's taking most of your week? Where are you stuck, or waiting on someone?`},
+    {t:`What ${f} wants from the role`,q:`What would make the next six months a good stretch for you? What would you like to be doing more of?`},
+    {t:`How you'll run these 1:1s`,q:`How often should we meet, and what should this time be for?`},
+    {t:`Close`,q:`Is there anything on your mind we haven't covered?`}
+  ];
+  if(S.notes.trim()){
+    const line=S.notes.trim().split('\n')[0].slice(0,140).replace(/[.\s]+$/,'');
+    items.splice(1,0,{t:`From your notes`,q:`You wrote: "${line}". Ask ${f} how it looks from their side.`});
+  }
+  return {items, summary: S.notes.trim()
+    ? `First recorded 1:1 with ${f}. The only thing on record is your note, so most of this is about how the two of you will work together.`
+    : `First recorded 1:1 with ${f}. Nothing else is on record yet, so this agenda is about how the two of you will work together.`};
+}
+
+/* ---------- left: the question ---------- */
+function askHTML(){
+  const f=first(S.name)||'them';
+  if(S.step===1) return `
+    <p class="eyebrow teal">Founding manager ${FOUNDING_N} of 20 · Free until ${fmtLong(oneYear)}</p>
+    <h1>Who's your next 1:1 with?</h1>
+    <label class="formlabel" for="nameIn">Name</label>
+    <input class="name" id="nameIn" autocomplete="off" placeholder="Priya Patel" value="${esc(S.name)}">
+    <span class="formlabel">When <span class="opt">· optional</span></span>
+    <div class="row" style="gap:8px">${DAYS.map((d,i)=>`<button class="chip" data-d="${i}" aria-pressed="${S.dateIdx===i}">${fmtShort(d)}</button>`).join('')}<button class="chip" data-d="x" aria-pressed="false">Other date</button></div>
+    <div class="actions"><button class="primary" id="go" ${S.name.trim()?'':'disabled'}>Continue <kbd>↵</kbd></button></div>`;
+  if(S.step===2){const n=roster().length; return `
+    <h1>Who else do you have 1:1s with?</h1>
+    <p class="lede">One name per line. Roles and teams can come later.</p>
+    <textarea id="rosterIn" placeholder="Sam Okafor&#10;Lena Ruiz&#10;Theo Marsh">${esc(S.rosterText)}</textarea>
+    <div class="actions"><button class="primary" id="go">${n?`Add ${n} and continue`:'Continue'} <kbd>⌘↵</kbd></button><button class="quiet" id="skip">Skip</button></div>`;}
+  if(S.step===3) return `
+    <p class="eyebrow">${dateLabel()?`1:1 · ${dateLabel()}`:'Next 1:1'}</p>
+    <h1>Your first 1:1 with ${esc(f)}.</h1>
+    <p class="lede">Nothing is on record yet, so the agenda starts with how you'll work together.</p>
+    <label class="formlabel" for="notesIn">Anything you already know about ${esc(f)}'s work <span class="opt">· optional</span></label>
+    <textarea id="notesIn" style="min-height:96px" placeholder="Just moved over from support. Owns the Brightline renewal.">${esc(S.notes)}</textarea>
+    <div class="actions"><button class="primary" id="go">Build agenda <kbd>⌘↵</kbd></button></div>`;
+  if(S.step===4){const busy=S.written<S.agenda.items.length; return `
+    <h1>${esc(f)}'s first agenda.</h1>
+    <p class="lede">Drafted from what you wrote. Click any line to change it. Nothing is saved until you save it.</p>
+    <div class="actions"><button class="primary" id="go" ${busy?'disabled':''}>Save prep sheet <kbd>⌘↵</kbd></button><button class="quiet" id="redo">Build again</button></div>
+    <p class="meta" id="hint" style="margin-top:12px">${busy?'Writing…':''}</p>`;}
+  if(S.step===5){const r=roster(); const others=r.length?`${listNames(r.map(first))} ${r.length===1?'is':'are'} on your team too, with no 1:1 set yet.`:''; return `
+    <p class="eyebrow teal">Saved</p>
+    <h1>Ready for ${dateLabel()?fmtDay(DAYS[S.dateIdx]):'your 1:1'}.</h1>
+    <p class="lede">The agenda is on ${esc(f)}'s page. ${esc(others)}</p>
+    <div class="actions"><button class="primary" id="go">Go to Mission Control <kbd>↵</kbd></button></div>`;}
+}
+
+/* ---------- right: real app surfaces, filling in ---------- */
+function teamPanel(){
+  const r=roster(); const has=S.name.trim();
+  const count=(has?1:0)+r.length;
+  let rows='';
+  const firstStatus = S.step>=5 ? `<span class="s on">Prep ready${dateLabel()?' · '+dateLabel():''}</span>`
+    : dateLabel() ? `<span class="s on">1:1 · ${dateLabel()}</span>` : `<span class="s">${has?'No date yet':''}</span>`;
+  rows += has ? `<div class="person sel">${av(S.name,0,true)}<span class="n">${esc(S.name.trim())}</span>${firstStatus}</div>`
+              : `<div class="person ghost"><span class="avatar mini">·</span><span class="n">Your next 1:1</span></div>`;
+  rows += r.map((n,i)=>`<div class="person">${av(n,i+1,true)}<span class="n">${esc(n)}</span><span class="s">No 1:1 set</span></div>`).join('');
+  if(S.step===2 && !r.length) rows += `<div class="person ghost"><span class="avatar mini">·</span><span class="n">Everyone else</span></div>`;
+  return `<section class="panel"><p class="eyebrow">Team</p><h2>${count?`${word(count)} ${count===1?'person':'people'}`:'Your team'}</h2><div class="roster">${rows}</div></section>`;
+}
+function welcome(){
+  return `<section class="panel welcome fade"><p class="eyebrow">From Andrew <span class="draft">Draft · your words</span></p>
+    <p>I kept a Google Doc for every person on my team for years, and it held up until about seven people.</p>
+    <p>This is what I built instead. You're one of the first twenty in, and it's free for your first year. If something's off, write to me.</p>
+    <p class="sig">Andrew</p><p class="meta" style="margin:0">AG@thesamepage.xyz</p></section>`;
+}
+function conversation(){
+  const f=first(S.name);
+  const when = dateLabel()?fmtShort(DAYS[S.dateIdx]):'Next 1:1';
+  let inner='';
+  if(S.step===3){
+    inner = `<p class="empty">No earlier 1:1s with ${esc(f)} are recorded.</p>${S.notes.trim()?`<div class="mynote">${esc(S.notes)}</div>`:''}`;
+  } else {
+    const busy=S.step===4&&S.written<S.agenda.items.length; const ed=S.step===4?'contenteditable="true" spellcheck="false"':'';
+    inner = `<p class="summary">${esc(S.agenda.summary)}${busy?'<span class="caret"></span>':''}</p>
+      ${S.agenda.items.map((it,i)=>`<div class="topic ${i<S.written?'shown':''}"><div class="t" ${ed}>${esc(it.t)}</div><div class="q" ${ed}>${esc(it.q)}</div></div>`).join('')}
+      <div class="sources"><span class="ai">Drafted by AI · you review before it saves</span><span>Drew on: ${S.notes.trim()?'your note':'nothing on record yet'}</span></div>`;
+  }
+  return `<div class="identity">${av(S.name,0)}<div><h2>${esc(S.name.trim())}</h2><p class="meta" style="margin:6px 0 0">Only you can see this page. Nothing here is shared with ${esc(f)}.</p></div></div>
+    ${S.step===5?`<div class="receipt"><h2>Prep sheet saved</h2><p>${esc(S.agenda.items.length)} items for ${esc(when)}. Open it from ${esc(f)}'s page or Mission Control.</p></div>`:''}
+    <div class="conversation"><div class="next"><p class="eyebrow">Next conversation</p><div class="dateHeading">${esc(when)}</div>${inner}</div></div>`;
+}
+function previewHTML(){
+  if(S.step===1) return welcome() + (S.name.trim()?teamPanel():'');
+  if(S.step===2) return teamPanel();
+  return conversation();
+}
+
+/* ---------- Mission Control ---------- */
+function missionControl(){
+  const r=roster(); const f=first(S.name);
+  const when=dateLabel()?fmtDay(DAYS[S.dateIdx]):'your next 1:1';
+  const morning = `One 1:1 on the calendar, with ${f} on ${when}, and it's prepped.` + (r.length?` ${r.length===1?first(r[0])+' has':word(r.length)+' people have'} no 1:1 set yet.`:'');
+  return `<div class="mc fade">
+    <p class="eyebrow">${today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</p>
+    <h1>Mission Control</h1><p class="morning">${esc(morning)}</p>
+    <div class="mcgrid"><div>
+      <section class="card"><h3>Today's moves</h3>
+        <div class="move">${av(S.name,0,true)}<div class="n"><b>1:1 with ${esc(S.name.trim())}</b><span>${dateLabel()?esc(dateLabel())+' · ':''}Prep ready</span></div><button class="quiet">Open prep</button></div>
+        ${r.slice(0,3).map((n,i)=>`<div class="move">${av(n,i+1,true)}<div class="n"><b>Set a first 1:1 with ${esc(first(n))}</b><span>No 1:1 set</span></div><button class="quiet">Set a date</button></div>`).join('')}
+      </section></div>
+      <div>${teamPanel()}</div></div>
+    <p class="note-proto">Stand-in for the real Mission Control. The line under the heading is the B3 morning line, written for day one.</p></div>`;
+}
+
+/* ---------- render + wiring ---------- */
+const main=document.getElementById('main');
+function render(){
+  document.getElementById('layout').classList.toggle('arrived',S.arrived);
+  document.getElementById('topmeta').textContent = S.arrived?'':`Step ${Math.min(S.step,3)} of 3`;
+  if(S.arrived){ main.innerHTML=missionControl(); renderJump(); return; }
+  main.innerHTML = `<div class="first" data-step="${S.step}"><div class="askcol fade">${askHTML()}
+      <div class="privacy"><span>Only you can see what you write here. Nothing is shared with the people you add.</span><a href="#" onclick="return false">Sign out</a></div></div>
+    <div class="preview" id="preview">${previewHTML()}</div></div>`;
+  wire(); renderJump();
+  if(matchMedia('(max-width:900px)').matches && S.step>=4) scrollTo(0,0);
+}
+function refreshPreview(){ document.getElementById('preview').innerHTML=previewHTML(); }
+function wire(){
+  const go=document.getElementById('go');
+  if(S.step===1){
+    const inp=document.getElementById('nameIn'); inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length);
+    inp.addEventListener('input',()=>{S.name=inp.value; go.disabled=!S.name.trim(); refreshPreview();});
+    main.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{ if(c.dataset.d==='x')return; S.dateIdx=S.dateIdx===+c.dataset.d?null:+c.dataset.d;
+      main.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.d==String(S.dateIdx)))); refreshPreview(); });
+  }
+  if(S.step===2){
+    const ta=document.getElementById('rosterIn'); ta.focus();
+    ta.addEventListener('input',()=>{S.rosterText=ta.value; const n=roster().length; go.innerHTML=(n?`Add ${n} and continue`:'Continue')+' <kbd>⌘↵</kbd>'; refreshPreview();});
+    document.getElementById('skip').onclick=()=>{S.rosterText='';next();};
+  }
+  if(S.step===3){ const ta=document.getElementById('notesIn'); ta.focus(); ta.addEventListener('input',()=>{S.notes=ta.value; refreshPreview();}); }
+  if(S.step===4) document.getElementById('redo').onclick=()=>{clearTimeout(timer);S.step=3;S.agenda=null;S.written=0;render();};
+  if(go) go.onclick=next;
+}
+function captureEdits(){ document.querySelectorAll('.topic').forEach((el,i)=>{ if(S.agenda.items[i]){S.agenda.items[i].t=el.querySelector('.t').textContent;S.agenda.items[i].q=el.querySelector('.q').textContent;} }); }
+let timer=null;
+function write(){
+  clearTimeout(timer); const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const step=()=>{ if(S.step!==4)return; S.written++; const el=document.querySelectorAll('.topic')[S.written-1]; if(el)el.classList.add('shown');
+    if(S.written<S.agenda.items.length) timer=setTimeout(step,reduce?0:520);
+    else { const g=document.getElementById('go'); if(g)g.disabled=false; const h=document.getElementById('hint'); if(h)h.textContent=''; const c=document.querySelector('.caret'); if(c)c.remove(); } };
+  timer=setTimeout(step,reduce?0:900);
+}
+function next(){
+  if(S.step===1&&!S.name.trim())return;
+  if(S.step===3){S.agenda=buildAgenda();S.written=0;S.step=4;render();write();return;}
+  if(S.step===4){if(S.written<S.agenda.items.length)return;captureEdits();S.step=5;render();return;}
+  if(S.step===5){S.arrived=true;render();return;}
+  S.step++; render();
+}
+document.addEventListener('keydown',e=>{
+  if(S.arrived)return;
+  if(S.step===1&&e.key==='Enter'&&S.name.trim()){e.preventDefault();next();return;}
+  if(S.step===5&&e.key==='Enter'){e.preventDefault();next();return;}
+  if((S.step===2||S.step===3||S.step===4)&&e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();next();}
+});
+function renderJump(){
+  const L=['Name','Team','Notes','Agenda','Saved','Mission Control'];
+  const cur=S.arrived?6:S.step;
+  document.getElementById('jump').innerHTML=L.map((l,i)=>`<button data-s="${i+1}" aria-current="${cur===i+1}">${i+1} ${l}</button>`).join('');
+  document.querySelectorAll('#jump button').forEach(b=>b.onclick=()=>jump(+b.dataset.s));
+}
+function jump(s){
+  clearTimeout(timer);
+  if(!S.name.trim()){S.name='Priya Patel';S.dateIdx=1;}
+  if(s>=3&&!S.rosterText)S.rosterText='Sam Okafor\nLena Ruiz\nTheo Marsh';
+  if(s>=4){S.agenda=S.agenda||buildAgenda();S.written=S.agenda.items.length;} else {S.agenda=null;S.written=0;}
+  S.arrived=s===6; S.step=Math.min(s,5); render();
+}
+document.getElementById('restart').onclick=()=>{clearTimeout(timer);reset();render();};
+const q=new URLSearchParams(location.search);
+if(q.get('step')) jump(+q.get('step')); else render();
+</script>
+</body>
+</html>

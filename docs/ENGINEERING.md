@@ -201,7 +201,7 @@ Railway logs carry `nightly_prep` lines per phase (counts only) and the usual
 ### Entitlement and the read-only gate
 
 Each manager has one `subscriptions` row: a founding place (`founding_number`
-1–20, 90 days), a 14-day trial, `active` (paid, or comped when there's no Stripe
+1–20, one year from sign-up), a 14-day trial, `active` (paid, or comped when there's no Stripe
 id), or read-only once `trial_ends_at` passes without `active`. The row is
 created by `ensure_entitlement()`, a SECURITY DEFINER function called with the
 user's own client the first time the app shell loads (`GET /api/entitlement`,

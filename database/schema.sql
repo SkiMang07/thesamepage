@@ -1393,7 +1393,7 @@ create unique index team_dev_focus_manager_all_teams_uq
 -- One row per manager: the free clock and, later, the Stripe subscription.
 -- Written only by ensure_entitlement() (SECURITY DEFINER, creates the row on
 -- first app load) and, once it exists, the Stripe webhook. Select-only to
--- the owner. founding_number 1-20 = a founding place (90 days); a trialing
+-- the owner. founding_number 1-20 = a founding place (one year); a trialing
 -- row without one got 14 days. 'active' with no Stripe id = comped.
 -- Past trial_ends_at and not 'active' = read-only (backend 402s writes).
 -- See docs/PRELAUNCH_BACKLOG.md §7 B.
@@ -3068,7 +3068,7 @@ grant execute on function public.accept_direct_report_invite(text) to authentica
 -- ENTITLEMENT (2026-09-24) — founding places and the free clock.
 -- Called by GET /api/entitlement and the backend's read-only gate with the
 -- user's own JWT. Creates the caller's subscriptions row on first call:
--- founding place (90 days) while fewer than 20 exist, else 14 days.
+-- founding place (one year) while fewer than 20 exist, else 14 days.
 -- Invited ICs get no row. See migrations/2026-09-24_founding_entitlement.sql.
 -- ============================================================
 
@@ -3113,7 +3113,7 @@ begin
 
       if v_next <= 20 then
         insert into subscriptions (user_id, plan, status, founding_number, trial_ends_at)
-        values (v_uid, 'manager', 'trialing', v_next, now() + interval '90 days')
+        values (v_uid, 'manager', 'trialing', v_next, now() + interval '1 year')
         returning * into v_sub;
       else
         insert into subscriptions (user_id, plan, status, trial_ends_at)

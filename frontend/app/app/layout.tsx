@@ -62,12 +62,16 @@ import { ZoneDataProvider } from "@/components/ZoneMap";
 import SentryUser from "@/components/SentryUser";
 import AnalyticsUser from "@/components/AnalyticsUser";
 
-const NO_NAV_PATHS = new Set(["/app/login", "/app/ic"]);
+const NO_NAV_PATHS = new Set(["/app/login", "/app/ic", "/app/start"]);
+// First run (/app/start) has no nav, no Scribe and no notices, but it is the
+// product, so it keeps the dark theme; login and the IC stub stay light.
+const DARK_WITHOUT_NAV = new Set(["/app/start"]);
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { isOpen, toggle, close } = useDrawer();
   const pathname = usePathname();
   const showNav = !NO_NAV_PATHS.has(pathname ?? "");
+  const dark = showNav || DARK_WITHOUT_NAV.has(pathname ?? "");
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -103,7 +107,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // nav is hidden, so /app/login and /app/ic make no zone calls.
   return (
     <ZoneDataProvider enabled={showNav}>
-      <div className={`flex min-h-screen ${showNav ? "theme-dark bg-canvas text-ink" : ""}`}>
+      <div className={`flex min-h-screen ${dark ? "theme-dark bg-canvas text-ink" : ""}`}>
         {showNav && <Sidebar />}
 
         {/* Main content — flex-1 so it gives up space to the sidebar/drawer.

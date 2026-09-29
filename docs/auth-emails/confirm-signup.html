@@ -14,7 +14,7 @@
         </tr>
         <tr>
           <td style="padding-bottom:24px;">
-            <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#087E78;color:#FFFFFF;font-size:15px;font-weight:600;text-decoration:none;padding:12px 24px;border-radius:6px;">Confirm and sign in</a>
+            <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email" style="display:inline-block;background:#087E78;color:#FFFFFF;font-size:15px;font-weight:600;text-decoration:none;padding:12px 24px;border-radius:6px;">Confirm and sign in</a>
           </td>
         </tr>
         <tr>
@@ -35,7 +35,7 @@
         <tr>
           <td style="font-size:12px;line-height:18px;color:#7A858C;border-top:1px solid #E3E8EA;padding-top:16px;word-break:break-all;">
             Button not working? Paste this into your browser:<br>
-            <a href="{{ .ConfirmationURL }}" style="color:#087E78;">{{ .ConfirmationURL }}</a>
+            <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email" style="color:#087E78;">{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email</a>
           </td>
         </tr>
       </table>

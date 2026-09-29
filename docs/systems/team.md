@@ -377,12 +377,17 @@ is not built (`/app/ic` is a static placeholder).
 - Auth reuses the existing passwordless magic link. `frontend/app/invite/[token]/`
   is public — deliberately not under `/app`, so `middleware.ts`'s gate doesn't
   apply — and sends the link with `emailRedirectTo` pointing at
-  `/auth/callback?next=/app/ic?invite={token}`.
+  `/auth/callback?next=/app/ic?invite={token}`. The sign-in emails now link to
+  `/auth/confirm` via `{{ .SiteURL }}`, which drops that `next`; carry the invite
+  token another way before invites come back (`docs/auth-emails/README.md`).
 
-Manager login at `/app/login` keeps the magic link as the default and also
-offers an explicit **Use a password instead** path backed by
-`supabase.auth.signInWithPassword()`. The password option is useful for stable
-demo and training accounts without changing the invite/claim flow above.
+Manager login at `/app/login` is the magic link. Sign-in and sign-up emails link
+to `/auth/confirm`, which verifies the token hash so the link works on any
+device; a manager with no direct reports lands on `/app/start` (first run,
+`docs/ONBOARDING_SCOPING.md`), everyone else on Mission Control. **Use a
+password instead** (`supabase.auth.signInWithPassword()`, for demo and training
+accounts) only shows on a browser that has signed in with a password before, or
+at `/app/login?password`, so a new manager never meets a password field.
 Managers can sign out either from the global avatar menu or from the explicit
 **Account** section in `/app/settings`; both clear the Supabase session and
 return to `/app/login` without changing workspace data.
