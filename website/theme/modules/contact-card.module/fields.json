@@ -22,7 +22,13 @@
     "name": "heading",
     "label": "Heading",
     "type": "text",
-    "default": "Connect with me."
+    "default": "Andrew Godlewski"
+  },
+  {
+    "name": "tagline",
+    "label": "One line under your name",
+    "type": "text",
+    "default": "Founder of The Same Page. Managing teams for over a decade."
   },
   {
     "name": "lede",
@@ -59,6 +65,31 @@
     "label": "LinkedIn note",
     "type": "text",
     "default": "Connect, or see what I've been up to"
+  },
+  {
+    "name": "vcard_url",
+    "label": "Contact card file (.vcf) link",
+    "type": "text",
+    "default": "/hubfs/andrew-godlewski.vcf",
+    "help_text": "Upload andrew-godlewski.vcf to the file manager and paste its link here. Leave empty to hide the row."
+  },
+  {
+    "name": "vcard_kicker",
+    "label": "Contact card: label",
+    "type": "text",
+    "default": "Contact card"
+  },
+  {
+    "name": "vcard_label",
+    "label": "Contact card: link text",
+    "type": "text",
+    "default": "Save my contact"
+  },
+  {
+    "name": "vcard_note",
+    "label": "Contact card: note",
+    "type": "text",
+    "default": "Adds me to your phone in one tap"
   },
   {
     "name": "note_heading",

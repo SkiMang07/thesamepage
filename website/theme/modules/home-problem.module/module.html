@@ -1,0 +1,118 @@
+<section class="h6-sec h6-problem" id="{{ module.anchor_id }}">
+  <div class="h6-wrap">
+    <div class="h6-sec-head">
+      <div class="h6-rule"></div>
+      <h2 class="h6-h2">{{ module.heading }}</h2>
+      <p class="h6-lede">{{ module.lede }}</p>
+    </div>
+
+    <input class="h6-id-w1 h6-qi" type="radio" name="{{ name }}-walk" id="{{ name }}-w1" checked>
+    <input class="h6-id-w2 h6-qi" type="radio" name="{{ name }}-walk" id="{{ name }}-w2">
+    <input class="h6-id-w3 h6-qi" type="radio" name="{{ name }}-walk" id="{{ name }}-w3">
+    <input class="h6-id-w4 h6-qi" type="radio" name="{{ name }}-walk" id="{{ name }}-w4">
+    <div class="h6-walk">
+      <ol class="h6-w-steps">
+        <li><label class="h6-for-w1 h6-w-st" for="{{ name }}-w1"><span class="h6-qn">01</span>Every week</label></li>
+        <li><label class="h6-for-w2 h6-w-st" for="{{ name }}-w2"><span class="h6-qn">02</span>Before the 1:1</label></li>
+        <li><label class="h6-for-w3 h6-w-st" for="{{ name }}-w3"><span class="h6-qn">03</span>At review time</label></li>
+        <li class="h6-w-st-4"><label class="h6-for-w4 h6-w-st" for="{{ name }}-w4"><span class="h6-qn">04</span>When your boss asks</label></li>
+      </ol>
+
+      <div class="h6-w-stage">
+        <div class="h6-w-say" aria-live="polite">
+          <div class="h6-w-p h6-w-p1">
+            <p class="h6-w-big">You planned to write it up right after your meeting, but the week got away from you.</p>
+            <p class="h6-w-sub">After two 1:1s with Maya, nothing made it into your shared doc, including those major action items that need your attention.</p>
+            <label class="h6-for-w2 h6-w-next" for="{{ name }}-w2">Next: before the 1:1 <span aria-hidden="true">&rarr;</span></label>
+          </div>
+          <div class="h6-w-p h6-w-p2">
+            <p class="h6-w-big">Maya&#x27;s weekly meeting is in five minutes. You know there was a key customer issue you need to follow up on.</p>
+            <p class="h6-w-sub">So now, you&#x27;re scrolling back through last month&#x27;s notes, trying to find it.</p>
+            <label class="h6-for-w3 h6-w-next" for="{{ name }}-w3">Next: review time <span aria-hidden="true">&rarr;</span></label>
+          </div>
+          <div class="h6-w-p h6-w-p3">
+            <p class="h6-w-big">Performance review time means six months, rebuilt from half-memory, one person at a time.</p>
+            <p class="h6-w-sub">Looking at your 7 blank reviews really means hours of scrolling through multiple note docs, chat threads, and whatever data you can cobble together to help paint the picture.</p>
+            <label class="h6-for-w4 h6-w-next" for="{{ name }}-w4">Next: your boss asks <span aria-hidden="true">&rarr;</span></label>
+          </div>
+          <div class="h6-w-p h6-w-p4">
+            <p class="h6-w-big">Your boss asks how the team&#x27;s doing. You have 7 messy pages and a gut feeling.</p>
+            <p class="h6-w-sub">Each doc sees one person. None of them can tell you who&#x27;s stretched, who&#x27;s ready for more, or where the team needs help next.</p>
+            <label class="h6-for-w1 h6-w-next" for="{{ name }}-w1">Start again <span aria-hidden="true">&#8634;</span></label>
+          </div>
+        </div>
+
+        <div class="h6-w-scene" aria-label="Maya's running doc, changing with each step">
+          <div class="h6-w-layer h6-w-others" aria-hidden="true">
+            <div class="h6-w-sheet"><div class="h6-doc-bar"><span class="h6-ic"></span><b>Nina / 1:1 notes</b><span>Edited 21 Jul</span></div></div>
+            <div class="h6-w-sheet"><div class="h6-doc-bar"><span class="h6-ic"></span><b>Theo / 1:1 notes</b><span>Edited 4 Aug</span></div></div>
+            <div class="h6-w-sheet"><div class="h6-doc-bar"><span class="h6-ic"></span><b>Alex / 1:1 notes</b><span>Edited 28 Jul</span></div></div>
+            <div class="h6-w-sheet"><div class="h6-doc-bar"><span class="h6-ic"></span><b>Sam / 1:1 notes</b><span>Edited 11 Sep</span></div></div>
+            <div class="h6-w-sheet"><div class="h6-doc-bar"><span class="h6-ic"></span><b>Priya / 1:1 notes</b><span>Edited 10 Sep</span></div></div>
+            <div class="h6-w-sheet"><div class="h6-doc-bar"><span class="h6-ic"></span><b>James / 1:1 notes</b><span>Edited 15 Sep</span></div></div>
+          </div>
+
+          <div class="h6-w-layer h6-w-docwin">
+            <div class="h6-doc-bar"><span class="h6-ic" aria-hidden="true"></span><b>Maya / 1:1 notes</b><span>Edited 15 Sep</span></div>
+            <div class="h6-w-dwrap"><div class="h6-w-dscroll">
+              <div class="h6-w-blk h6-w-b-open">
+                <p class="h6-w-open-h">Open</p>
+                <ul><li>billing scope, Maya w/ Product</li><li>CS lead expectations</li><li>onboarding survey?</li></ul>
+              </div>
+              <div class="h6-w-blk h6-w-b-15">
+                <h4>Sep 15</h4>
+                <ul><li>onboarding launch still Oct 2? status is in the project tool</li><li>billing screens - she'll check scope w/ Product, fri</li><li class="h6-dim">(stand-up wed? didn't write it down)</li></ul>
+              </div>
+              <div class="h6-w-blk h6-w-b-gap">
+                <h4>Sep 8</h4>
+                <ul><li class="h6-blank"><span class="h6-w-caret" aria-hidden="true"></span></li></ul>
+                <h4>Sep 1</h4>
+                <ul><li class="h6-blank"><span class="h6-w-caret" aria-hidden="true"></span></li></ul>
+              </div>
+              <div class="h6-w-blk h6-w-b-25">
+                <h4>Aug 25</h4>
+                <ul><li>good week. renewal calls went fine</li><li><mark>Brightline escalation - I need to follow up w/ their CS lead</mark></li><li>billing still not assigned??</li></ul>
+              </div>
+              <div class="h6-w-blk h6-w-b-old">
+                <h4>Aug 18</h4>
+                <ul><li>asked about the CS lead expectations again</li></ul>
+                <h4>Aug 11</h4>
+                <ul><li>project kickoff, Maya owns it</li><li>...</li></ul>
+                <h4>Aug 4</h4>
+                <ul><li>...</li></ul>
+              </div>
+            </div></div>
+          </div>
+
+          <div class="h6-w-layer h6-w-toast" aria-hidden="true">
+            <p class="h6-micro">Calendar · 9:55 AM</p>
+            <p><b>1:1 with Maya</b> starts in 5 minutes</p>
+          </div>
+
+          <div class="h6-w-layer h6-w-review" aria-hidden="true">
+            <div class="h6-w-rv-h"><b>Maya · Q3 review</b><span class="h6-chip h6-chip-risk">Due Fri</span></div>
+            <p class="h6-w-rv-l">What went well</p><div class="h6-w-rv-f"><span class="h6-w-caret"></span></div>
+            <p class="h6-w-rv-l">Where to grow</p><div class="h6-w-rv-f"></div>
+            <p class="h6-w-rv-l">Overall</p><div class="h6-w-rv-f h6-w-rv-sel">Choose a rating</div>
+          </div>
+
+          <div class="h6-w-layer h6-w-team" aria-hidden="true">
+            <div class="h6-w-msg">
+              <div class="h6-w-who"><span class="h6-av h6-w-av-boss">DK</span><b>Dana, your manager</b><span>4:12 PM</span></div>
+              <p>Quick one before Thursday's leadership sync: how's the team doing? Anyone who needs support or training going into Q4?</p>
+            </div>
+            <div class="h6-w-minis">
+              <div class="h6-w-mini"><b>Maya</b><i></i><i></i><i></i><i></i></div>
+              <div class="h6-w-mini"><b>James</b><i></i><i></i><i></i><i></i></div>
+              <div class="h6-w-mini"><b>Priya</b><i></i><i></i><i></i><i></i></div>
+              <div class="h6-w-mini"><b>Sam</b><i></i><i></i><i></i><i></i></div>
+              <div class="h6-w-mini"><b>Alex</b><i></i><i></i><i></i><i></i></div>
+              <div class="h6-w-mini"><b>Nina</b><i></i><i></i><i></i><i></i></div>
+              <div class="h6-w-mini"><b>Theo</b><i></i><i></i><i></i><i></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

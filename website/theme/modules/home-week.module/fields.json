@@ -1,0 +1,26 @@
+[
+  {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "One week with Maya"
+  },
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "From a busy week to a better 1:1"
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "You jot things down as the week happens. By Friday they're together on Maya's page, and The Same Page has drafted your prep for Tuesday from all of it."
+  },
+  {
+    "name": "anchor_id",
+    "label": "Anchor id (for links like #week)",
+    "type": "text",
+    "default": "week"
+  }
+]

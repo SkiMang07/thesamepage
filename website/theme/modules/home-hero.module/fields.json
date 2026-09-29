@@ -1,0 +1,63 @@
+[
+  {
+    "name": "heading",
+    "label": "Headline",
+    "type": "text",
+    "default": "See where your team stands and what they need from you next."
+  },
+  {
+    "name": "copy",
+    "label": "Supporting line",
+    "type": "text",
+    "default": "Each person's expectations sit next to their results, alongside the commitments running both ways, so feedback and recognition start from something real. Step back and the whole team comes into view: where people could use you, and where the work is going well."
+  },
+  {
+    "name": "launch_label",
+    "label": "Launch box: label",
+    "type": "text",
+    "default": "Opens 1 December"
+  },
+  {
+    "name": "launch_note",
+    "label": "Launch box: note",
+    "type": "text",
+    "default": "The first 20 managers get their first year free. Want to be one of them? Send us a note and we'll be in touch before launch."
+  },
+  {
+    "name": "cta_text",
+    "label": "Button text",
+    "type": "text",
+    "default": "Get early access"
+  },
+  {
+    "name": "link_text",
+    "label": "Secondary link text",
+    "type": "text",
+    "default": "See a first week"
+  },
+  {
+    "name": "launch_at",
+    "label": "Launch moment (ISO, with timezone)",
+    "type": "text",
+    "default": "2026-12-01T00:00:00-05:00",
+    "help_text": "The day count runs to this moment. Keep the timezone offset on the end."
+  },
+  {
+    "name": "days_fallback",
+    "label": "Days shown before the count starts",
+    "type": "text",
+    "default": "64"
+  },
+  {
+    "name": "cta_url",
+    "label": "Button link",
+    "type": "text",
+    "default": "/contact"
+  },
+  {
+    "name": "link_url",
+    "label": "Secondary link",
+    "type": "text",
+    "default": "#week"
+  }
+]

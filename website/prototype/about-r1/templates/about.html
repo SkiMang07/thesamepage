@@ -1,9 +1,11 @@
 <!--
   templateType: page
   isAvailableForNewContent: true
-  label: Page — Contact
-  screenshotPath: ../images/contact-screenshot.png
+  label: Page — About
+  screenshotPath: ../images/about-screenshot.png
 -->
+{# About, round 1 (The Page): the letter from Andrew, with his portrait and name in the side
+   column, then every way to get in touch. Same header, footer and grid as the contact page. #}
 <!doctype html>
 <html lang="{{ html_lang }}">
 <head>
@@ -16,9 +18,6 @@
   {{ standard_header_includes }}
 </head>
 <body class="body-wrapper">
-  {# Same header and footer as the rest of the site. On this page the header button
-     jumps to the early-access section below instead of reloading the page. #}
-  {% set nav_cta_url = "#early-access" %}
   {% include "./partials/header.html" %}
 
   <main id="main-content">
@@ -26,21 +25,7 @@
       {% dnd_section %}
         {% dnd_column %}
           {% dnd_row %}
-            {% dnd_module path="../modules/contact-card" %}{% end_dnd_module %}
-          {% end_dnd_row %}
-        {% end_dnd_column %}
-      {% end_dnd_section %}
-      {% dnd_section %}
-        {% dnd_column %}
-          {% dnd_row %}
-            {% dnd_module path="../modules/contact-build" %}{% end_dnd_module %}
-          {% end_dnd_row %}
-        {% end_dnd_column %}
-      {% end_dnd_section %}
-      {% dnd_section %}
-        {% dnd_column %}
-          {% dnd_row %}
-            {% dnd_module path="../modules/contact-form" %}{% end_dnd_module %}
+            {% dnd_module path="../modules/about-page" %}{% end_dnd_module %}
           {% end_dnd_row %}
         {% end_dnd_column %}
       {% end_dnd_section %}

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "It's all in there… somewhere."
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "Some weeks get written up, many don't, and every doc develops into a unique mess. You end up managing from memory, hoping you haven't missed something critical."
+  },
+  {
+    "name": "anchor_id",
+    "label": "Anchor id (for links like #problem)",
+    "type": "text",
+    "default": "problem"
+  }
+]

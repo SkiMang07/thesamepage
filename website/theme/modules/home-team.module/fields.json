@@ -1,0 +1,26 @@
+[
+  {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "Your team this quarter"
+  },
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "What needs you, what's going well, what's next"
+  },
+  {
+    "name": "lede",
+    "label": "Lede",
+    "type": "text",
+    "default": "One view of the quarter, built from what you wrote down, so your attention goes where it counts."
+  },
+  {
+    "name": "anchor_id",
+    "label": "Anchor id (for links like #team-view)",
+    "type": "text",
+    "default": "team-view"
+  }
+]

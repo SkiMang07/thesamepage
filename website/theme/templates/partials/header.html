@@ -5,8 +5,8 @@
       {% menu "site_nav", id=161905968520, max_levels=2, flow="horizontal" %}
     </nav>
     <div class="nav-cta">
-      <a class="signin" href="https://app.thesamepage.xyz/app/login">Sign in</a>
-      <a class="btn btn-primary" href="https://app.thesamepage.xyz/app/login">Start free</a>
+      {# Pre-launch (opens 1 Dec 2026): no Sign in / Start free. Early access goes through the contact page. #}
+      <a class="btn btn-primary" href="{{ nav_cta_url or '/contact' }}">Get early access</a>
     </div>
   </div>
 </header>

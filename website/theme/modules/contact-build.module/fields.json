@@ -3,7 +3,7 @@
     "name": "eyebrow",
     "label": "Eyebrow",
     "type": "text",
-    "default": "What I'm building"
+    "default": "Early access"
   },
   {
     "name": "heading",

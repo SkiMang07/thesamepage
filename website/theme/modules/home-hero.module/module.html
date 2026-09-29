@@ -1,0 +1,59 @@
+<section class="h6-hero h6-pg-hero">
+  <div class="h6-wrap">
+    <h1>{{ module.heading }}</h1>
+    <div class="h6-pg-hero-grid">
+      <div class="h6-pg-copy">
+        <p class="h6-lede">{{ module.copy }}</p>
+        <div class="h6-lx h6-pg-lx" id="{{ name }}-cd-hero" data-cd-end="{{ module.launch_at }}">
+          <div class="h6-lx-top"><span class="h6-micro">{{ module.launch_label }}</span><i class="h6-pg-lead" aria-hidden="true"></i><span class="h6-lx-days" role="timer" aria-label="Days until launch"><b data-u="d">{{ module.days_fallback }}</b> days to go</span></div>
+          <div class="h6-lx-body">
+            <p>{{ module.launch_note }}</p>
+            <div class="h6-lx-actions"><a class="h6-btn h6-btn-primary" href="{{ module.cta_url }}">{{ module.cta_text }}</a><a class="h6-lx-link" href="{{ module.link_url }}">{{ module.link_text }}</a></div>
+          </div>
+        </div>
+      </div>
+
+      <figure class="h6-pg-fig" aria-label="Maya's page, open beside the contents page for the whole team, where each person is marked as could use you, going well or steady.">
+        <div class="h6-pg-sheet h6-pg-index">
+          <div class="h6-pg-ix-h"><b>Your team</b><span>7 people</span></div>
+          <ol class="h6-pg-ix">
+            <li class="h6-on"><span class="h6-nm">Maya</span><i class="h6-pg-lead"></i><span class="h6-st h6-st-n"><i class="h6-glyph h6-g-risk"></i>Could use you</span></li>
+            <li><span class="h6-nm">James</span><i class="h6-pg-lead"></i><span class="h6-st h6-st-w"><i class="h6-glyph h6-g-ok"></i>Going well</span></li>
+            <li><span class="h6-nm">Priya</span><i class="h6-pg-lead"></i><span class="h6-st h6-st-n"><i class="h6-glyph h6-g-risk"></i>Could use you</span></li>
+            <li><span class="h6-nm">Sam</span><i class="h6-pg-lead"></i><span class="h6-st h6-st-n"><i class="h6-glyph h6-g-risk"></i>Could use you</span></li>
+            <li><span class="h6-nm">Alex</span><i class="h6-pg-lead"></i><span class="h6-st h6-st-w"><i class="h6-glyph h6-g-ok"></i>Going well</span></li>
+            <li><span class="h6-nm">Nina</span><i class="h6-pg-lead"></i><span class="h6-st h6-st-s"><i class="h6-glyph h6-g-open"></i>Steady</span></li>
+            <li><span class="h6-nm">Theo</span><i class="h6-pg-lead"></i><span class="h6-st h6-st-w"><i class="h6-glyph h6-g-ok"></i>Going well</span></li>
+          </ol>
+        </div>
+        <div class="h6-pg-sheet h6-pg-page">
+          <div class="h6-pg-ph"><div><p class="h6-pg-name">Maya Reyes</p><p class="h6-pg-role">Customer Success Manager · next 1:1 Tue 22 Sep</p></div><svg class="h6-pg-av" viewBox="-20 -20 40 40" aria-hidden="true"><g transform="translate(0 0)"><clipPath id="{{ name }}-av9"><circle r="20"/></clipPath><circle class="h6-f-home-e4eeec" r="20"/><g clip-path="url(#{{ name }}-av9)"><g transform="translate(0 -2.4) scale(0.4166666666666667)"><rect class="h6-f-person-hair-maya" x="-26" y="-20" width="52" height="66" rx="22"/><rect class="h6-f-person-top-indigo" x="-32" y="30" width="64" height="90" rx="26"/><path class="h6-f-person-skin-maya" d="M-9 30 Q0 40 9 30Z" opacity=".9"/><rect class="h6-f-person-skin-maya" x="-7" y="16" width="14" height="18" rx="6"/><circle class="h6-f-person-skin-maya" cx="0" cy="0" r="22"/><path class="h6-f-person-hair-maya" d="M-23 4 C-24 -18 -9 -26 2 -25 C15 -24 24 -15 23 4 C20 -6 12 -13 4 -14 C-6 -12 -16 -6 -23 4Z"/></g></g></g></svg></div>
+          <div class="h6-pg-cols"><p class="h6-pg-k">Expected</p><p class="h6-pg-k">So far</p></div>
+          <ul class="h6-pg-er">
+            <li><span>Owns her renewals end to end</span><span><i class="h6-glyph h6-g-ok"></i>Brightline renewed, 12 Sep</span></li>
+            <li><span>Leads one cross-team project</span><span><i class="h6-glyph h6-g-risk"></i>Onboarding launch at risk, moved to 9 Oct</span></li>
+            <li><span>Writes handoffs others can use</span><span class="h6-pg-gap">Nothing written down since July</span></li>
+          </ul>
+          <div class="h6-pg-two">
+            <div><p class="h6-pg-k">You owe her</p><p>Senior title timing<span class="h6-src">open since 15 Sep</span></p></div>
+            <div><p class="h6-pg-k">She owes you</p><p>Billing scope from Product<span class="h6-src">due Fri</span></p></div>
+          </div>
+          <p class="h6-pg-next"><b>Next</b>Packets are due 15 Dec. Plan hers on Tuesday.</p>
+        </div>
+      </figure>
+    </div>
+  </div>
+</section>
+<script>
+(function(){
+  var box=document.getElementById("{{ name }}-cd-hero"); if(!box) return;
+  var end=new Date(box.getAttribute("data-cd-end")).getTime(); if(isNaN(end)) return;
+  function el(u){return box.querySelector('[data-u="'+u+'"]');}
+  var D=el("d"),H=el("h"),M=el("m"),S=el("s");
+  function pad(n){return (n<10?"0":"")+n;}
+  function tick(){var t=Math.max(0,end-Date.now());
+    if(D)D.textContent=Math.floor(t/864e5); if(H)H.textContent=pad(Math.floor(t/36e5)%24);
+    if(M)M.textContent=pad(Math.floor(t/6e4)%60); if(S)S.textContent=pad(Math.floor(t/1e3)%60);}
+  tick(); setInterval(tick,1000);
+})();
+</script>

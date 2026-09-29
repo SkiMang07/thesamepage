@@ -1,0 +1,57 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "Start with one person and your next 1:1."
+  },
+  {
+    "name": "sub",
+    "label": "Subline",
+    "type": "text",
+    "default": "The Same Page opens 1 December, and the first 20 managers get their first year free. Want to be one of them? Send us a note."
+  },
+  {
+    "name": "launch_label",
+    "label": "Launch date as shown",
+    "type": "text",
+    "default": "Tue 1 Dec 2026"
+  },
+  {
+    "name": "foot_strong",
+    "label": "Card footnote (bold part)",
+    "type": "text",
+    "default": "20 founding spots."
+  },
+  {
+    "name": "foot_rest",
+    "label": "Card footnote (rest)",
+    "type": "text",
+    "default": "First year free."
+  },
+  {
+    "name": "cta_text",
+    "label": "Button text",
+    "type": "text",
+    "default": "Get early access"
+  },
+  {
+    "name": "launch_at",
+    "label": "Launch moment (ISO, with timezone)",
+    "type": "text",
+    "default": "2026-12-01T00:00:00-05:00",
+    "help_text": "The countdown runs to this moment. Keep the timezone offset on the end."
+  },
+  {
+    "name": "days_fallback",
+    "label": "Days shown before the countdown starts",
+    "type": "text",
+    "default": "64"
+  },
+  {
+    "name": "cta_url",
+    "label": "Button link",
+    "type": "text",
+    "default": "/contact"
+  }
+]

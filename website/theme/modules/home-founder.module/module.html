@@ -1,0 +1,9 @@
+<section class="h6-founder h6-pg-founder">
+  <div class="h6-wrap">
+    <article class="h6-pg-sheet h6-pg-letter">
+      <span class="h6-micro">{{ module.eyebrow }}</span>
+      <div class="h6-f-copy">{{ module.copy }}</div>
+      <div class="h6-pg-sig"><img class="h6-avatar-img" src="{% if module.photo.src %}{{ module.photo.src }}{% else %}{{ get_asset_url('/tsp-theme/images/andrew-headshot.png') }}{% endif %}" alt="{{ module.person_name }}" loading="lazy"><p><b>{{ module.person_name }}</b><span>{{ module.role }}</span></p></div>
+    </article>
+  </div>
+</section>

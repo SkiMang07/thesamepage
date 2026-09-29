@@ -231,6 +231,586 @@
           "opacity": 100
         },
         "help_text": "Text and buttons on carbon. Kept a field so nothing is hard-coded."
+      },
+      {
+        "name": "home_8a530d",
+        "label": "Homepage accent #8A530D",
+        "type": "color",
+        "default": {
+          "color": "#8A530D",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_dcebe9",
+        "label": "Homepage accent #DCEBE9",
+        "type": "color",
+        "default": {
+          "color": "#DCEBE9",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_0b5c58",
+        "label": "Homepage accent #0B5C58",
+        "type": "color",
+        "default": {
+          "color": "#0B5C58",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e4e6f2",
+        "label": "Homepage accent #E4E6F2",
+        "type": "color",
+        "default": {
+          "color": "#E4E6F2",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_3d4579",
+        "label": "Homepage accent #3D4579",
+        "type": "color",
+        "default": {
+          "color": "#3D4579",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_fafbfc",
+        "label": "Homepage accent #FAFBFC",
+        "type": "color",
+        "default": {
+          "color": "#FAFBFC",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_black",
+        "label": "Homepage: shadow black",
+        "type": "color",
+        "default": {
+          "color": "#000000",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_2b2f33",
+        "label": "Homepage accent #2B2F33",
+        "type": "color",
+        "default": {
+          "color": "#2B2F33",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_5f6468",
+        "label": "Homepage accent #5F6468",
+        "type": "color",
+        "default": {
+          "color": "#5F6468",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_8a8f94",
+        "label": "Homepage accent #8A8F94",
+        "type": "color",
+        "default": {
+          "color": "#8A8F94",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_b5babe",
+        "label": "Homepage accent #B5BABE",
+        "type": "color",
+        "default": {
+          "color": "#B5BABE",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_1d2429",
+        "label": "Homepage accent #1D2429",
+        "type": "color",
+        "default": {
+          "color": "#1D2429",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e6eaec",
+        "label": "Homepage accent #E6EAEC",
+        "type": "color",
+        "default": {
+          "color": "#E6EAEC",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_9ba3a8",
+        "label": "Homepage accent #9BA3A8",
+        "type": "color",
+        "default": {
+          "color": "#9BA3A8",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e3e6e9",
+        "label": "Homepage accent #E3E6E9",
+        "type": "color",
+        "default": {
+          "color": "#E3E6E9",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e6c592",
+        "label": "Homepage accent #E6C592",
+        "type": "color",
+        "default": {
+          "color": "#E6C592",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_ddefed",
+        "label": "Homepage accent #DDEFED",
+        "type": "color",
+        "default": {
+          "color": "#DDEFED",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e4e7ea",
+        "label": "Homepage accent #E4E7EA",
+        "type": "color",
+        "default": {
+          "color": "#E4E7EA",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_f4e6da",
+        "label": "Homepage accent #F4E6DA",
+        "type": "color",
+        "default": {
+          "color": "#F4E6DA",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_7a4a1e",
+        "label": "Homepage accent #7A4A1E",
+        "type": "color",
+        "default": {
+          "color": "#7A4A1E",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e6eedc",
+        "label": "Homepage accent #E6EEDC",
+        "type": "color",
+        "default": {
+          "color": "#E6EEDC",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_46602a",
+        "label": "Homepage accent #46602A",
+        "type": "color",
+        "default": {
+          "color": "#46602A",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_f3e3df",
+        "label": "Homepage accent #F3E3DF",
+        "type": "color",
+        "default": {
+          "color": "#F3E3DF",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_7a3a2c",
+        "label": "Homepage accent #7A3A2C",
+        "type": "color",
+        "default": {
+          "color": "#7A3A2C",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_1b232a",
+        "label": "Homepage accent #1B232A",
+        "type": "color",
+        "default": {
+          "color": "#1B232A",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_8f969c",
+        "label": "Homepage accent #8F969C",
+        "type": "color",
+        "default": {
+          "color": "#8F969C",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_3a444c",
+        "label": "Homepage accent #3A444C",
+        "type": "color",
+        "default": {
+          "color": "#3A444C",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_7a4a0e",
+        "label": "Homepage accent #7A4A0E",
+        "type": "color",
+        "default": {
+          "color": "#7A4A0E",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e9cfa3",
+        "label": "Homepage accent #E9CFA3",
+        "type": "color",
+        "default": {
+          "color": "#E9CFA3",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e4eeec",
+        "label": "Homepage accent #E4EEEC",
+        "type": "color",
+        "default": {
+          "color": "#E4EEEC",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_maya",
+        "label": "People: Maya hair",
+        "type": "color",
+        "default": {
+          "color": "#2B1D17",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_top_indigo",
+        "label": "People: indigo top",
+        "type": "color",
+        "default": {
+          "color": "#5A6190",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_maya",
+        "label": "People: Maya skin",
+        "type": "color",
+        "default": {
+          "color": "#C68E6A",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_top_slate",
+        "label": "People: slate top",
+        "type": "color",
+        "default": {
+          "color": "#4F6D7A",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_james",
+        "label": "People: James skin",
+        "type": "color",
+        "default": {
+          "color": "#E8C39E",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_james",
+        "label": "People: James hair",
+        "type": "color",
+        "default": {
+          "color": "#1C1C1F",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_priya",
+        "label": "People: Priya hair",
+        "type": "color",
+        "default": {
+          "color": "#17120F",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_top_plum",
+        "label": "People: plum top",
+        "type": "color",
+        "default": {
+          "color": "#7E6A94",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_priya",
+        "label": "People: Priya skin",
+        "type": "color",
+        "default": {
+          "color": "#A86F4C",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_top_olive",
+        "label": "People: olive top",
+        "type": "color",
+        "default": {
+          "color": "#6F7F55",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_sam",
+        "label": "People: Sam skin",
+        "type": "color",
+        "default": {
+          "color": "#6B4430",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_sam",
+        "label": "People: Sam hair",
+        "type": "color",
+        "default": {
+          "color": "#1A1210",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_top_charcoal",
+        "label": "People: charcoal top",
+        "type": "color",
+        "default": {
+          "color": "#3D4A56",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_alex",
+        "label": "People: Alex skin",
+        "type": "color",
+        "default": {
+          "color": "#F1D3BC",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_alex",
+        "label": "People: Alex hair",
+        "type": "color",
+        "default": {
+          "color": "#B5562E",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_nina",
+        "label": "People: Nina hair",
+        "type": "color",
+        "default": {
+          "color": "#1B1411",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_top_clay",
+        "label": "People: clay top",
+        "type": "color",
+        "default": {
+          "color": "#A8665A",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_nina",
+        "label": "People: Nina skin",
+        "type": "color",
+        "default": {
+          "color": "#5A3726",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_top_sand",
+        "label": "People: sand top",
+        "type": "color",
+        "default": {
+          "color": "#B89B72",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_theo",
+        "label": "People: Theo skin",
+        "type": "color",
+        "default": {
+          "color": "#EFC8A8",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_theo",
+        "label": "People: Theo hair",
+        "type": "color",
+        "default": {
+          "color": "#C9A15B",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_d9dee2",
+        "label": "Homepage accent #D9DEE2",
+        "type": "color",
+        "default": {
+          "color": "#D9DEE2",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_skin_you",
+        "label": "People: You skin",
+        "type": "color",
+        "default": {
+          "color": "#B97A56",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "person_hair_you",
+        "label": "People: You hair",
+        "type": "color",
+        "default": {
+          "color": "#2A1E18",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_dcdde4",
+        "label": "Homepage accent #DCDDE4",
+        "type": "color",
+        "default": {
+          "color": "#DCDDE4",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e7e8f1",
+        "label": "Homepage accent #E7E8F1",
+        "type": "color",
+        "default": {
+          "color": "#E7E8F1",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_c9a77a",
+        "label": "Homepage accent #C9A77A",
+        "type": "color",
+        "default": {
+          "color": "#C9A77A",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
+      },
+      {
+        "name": "home_e9eef1",
+        "label": "Homepage accent #E9EEF1",
+        "type": "color",
+        "default": {
+          "color": "#E9EEF1",
+          "opacity": 100
+        },
+        "help_text": "Used by the launch homepage (home.html)."
       }
     ]
   }

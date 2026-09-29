@@ -1,0 +1,8 @@
+[
+  {
+    "name": "heading",
+    "label": "Heading",
+    "type": "text",
+    "default": "<span class=\"h6-kp-l\">Write it down once.</span> <span class=\"h6-kp-l\">Use it all year.</span>"
+  }
+]

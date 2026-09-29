@@ -438,8 +438,25 @@ product: UI surfaces, not ink. That single idea decides most of the rules below.
 - **Register marks are rounded corner brackets**, stroke 3.5, round caps, in
   `--brand`, at the top left and bottom right of a joined record. Printer's crop
   hairlines belong to a different hand and look borrowed in this one.
-- **No people.** The register draws objects and marks, never figures, faces or
-  hands. A person is present through what they left behind.
+- **People, sparingly.** Andrew lifted the old no-people rule on 2026-09-27: a
+  consistent way of drawing people makes the site better, as long as it isn't
+  overused. A figure appears only where the moment is between people, chiefly
+  the 1:1 conversation, and a page carries a handful of these scenes at most.
+  Everywhere else a person is still present through what they left behind.
+  Figures are drawn in the same material as everything else in this hand
+  (surfaces, pills and marks from the token set), never in a borrowed
+  illustration style.
+- **Every figure comes from the people kit**, `website/prototype/people-kit/`
+  (`cast.mjs` holds the figures and the named cast, `build.mjs` renders
+  `index.html`, the reference sheet). Figures are faceless and slim, with fixed
+  proportions (head r22, torso 64 wide; scale, never stretch). Hair, skin tone,
+  glasses, a beard and clothing colour carry the person. "You" wears
+  `--brand`; everyone else a muted colour of their own, never amber, because
+  amber means still open. The cast keeps a mix of genders, skin tones and hair,
+  and each name matches the example data so a person looks the same on every
+  page. Three scenes to build from: across the table (in person), on a call
+  (remote, name tags carry the ownership dot) and as a conversation (avatars and
+  several lines of speech). Speech is set in Newsreader.
 
 ### Contrast
 
@@ -561,21 +578,19 @@ access key stored as a repository secret and never in a workflow file.
 Home (the problems, and how the product solves them) · product walkthrough · blog ·
 contact · support · legal · about · offers.
 
-**About and Contact: theme code done, pages not yet live.** Argument docs and
-standalone prototypes live in `prototype/` (`gtm/site/about.md`/`about.html`,
-`gtm/site/contact.md`/`contact.html`), reviewed and approved. `about.html` and
-`contact.html` are real templates now (see Architecture above), each seeded
-with the right modules already — `npm run verify` passes. What's left is
-manual, in HubSpot itself, not code: create the two pages by picking the
-"Page — About" and "Page — Contact" cards (each lands pre-composed — no
-module drag-and-drop needed), swap the Contact page's Page frame copy from
-About's default to the Contact lines (one-time, see Architecture), create the
-actual HubSpot form under Marketing → Forms (Name/Email/Message, "Send
-message" button) and pick it in the contact form module's field, upload the
-real founder photo (`prototype/images/andrew-headshot.png`) via the page
-editor, and — once both pages are live — repoint the nav's "About
-Us"/"Support" menu items away from
-their current "Deleted" state.
+**Contact: live**, built from `contact.html` with four modules: the card
+(`contact-card`: portrait, name, one line, then Email, LinkedIn, Save my contact
+and Leave a note as a ruled list), early access (`contact-build`: the offer and a
+one-line day count), and the note (`contact-form`: the native HubSpot form on
+paper). It is laid out for the QR code on Andrew's badge, so on a phone the card
+fills the first screen. The source prototype is `prototype/contact-r6.html`.
+"Save my contact" links to `/hubfs/andrew-godlewski.vcf`, which is
+`prototype/andrew-godlewski.vcf` uploaded to the file manager; the row hides
+when its field is empty. `contact-about` is no longer on the page.
+
+**About: not live.** Being rebuilt around the full letter that left the contact
+page, in the same grid; `prototype/about-r1.html` is the draft and
+`prototype/about-r1/` holds its theme-ready template, module and CSS.
 
 **Legal: all three pages live in HubSpot** (`/legal/privacy`,
 `/legal/terms`, `/legal/security`), built by Andrew directly from the
@@ -606,6 +621,36 @@ page that already exists. Open `/legal/security` in the page editor and drag the
 module in above the policy body, once. Privacy and Terms stay text-only, and
 because the module was never added to `legal.html` they stay that way by
 construction rather than by a conditional.
+
+## The Page: the site's visual system
+
+The homepage, contact page and About page share one look, chosen on 2026-09-28
+(`docs/decisions/site-visual-system-the-page.md`). A new page draws inside it.
+
+- **Type has three jobs.** Newsreader (`--serif`) is the voice: headlines, page
+  titles, letters, speech. The system sans is the product: UI, body copy, labels.
+  JetBrains Mono is dates, day counts and small caps labels. The H1 is the largest
+  type on a page and every H2 sits on one step below it.
+- **Paper is a white sheet with a teal margin rule** (`--teal-300`), radius 3,
+  carrying `--shadow-paper`. It is used only for things that are pages: Maya's
+  page and the team contents page in the hero, the founder letter, Friday's prep,
+  an answer in Ask, the contact card, the form. **Only paper casts a shadow.**
+  Product surfaces sit flat on a hairline, which is what stops a page reading as
+  a stack of cards.
+- **Contents lists** are ruled lines with a dotted leader between a label and its
+  value, the selected line tinted with a brand bar on its left (the hero's team
+  list, the contact card's ways to reach Andrew).
+- **Three grounds:** canvas for every light section, carbon for dark bands, teal
+  only for the homepage close. White means paper or product, never a section.
+- **On the contact page, one grid:** a side column says what a section is and a
+  main column holds it, both aligned to the nav, so every section shares the same
+  two text edges. A sheet hangs its margin (and its rule) left of the text edge
+  rather than indenting the text, so text on and off the paper lines up. Below
+  900px it stacks, and the edge moves in to the sheet's margin instead.
+- **The homepage styles** live in `main.css` under "LAUNCH HOMEPAGE, ROUND 7",
+  scoped to `.h6-root` with `h6-` classes, appended after the round-6 rules they
+  override. **The contact styles** follow as "CONTACT PAGE, ROUND 5", on the
+  unscoped `ct-` classes.
 
 ## The homepage's four drawings
 
@@ -671,10 +716,10 @@ trade.
   templates render clean through Jinja2 with stub data, which proves the loops,
   the `{% set %}` scoping and the filters, and nothing more. **Preview both
   before publishing.**
-- The nav button still says "Start free", which the homepage retired in favour
-  of "Ask for a founding place". That string is too long for the nav slot and
-  wraps to three lines on a phone, so the button wants a short string of its own
-  rather than a copy-paste.
+- The site nav menu (HubSpot, Settings → Website → Navigation, `site_nav`) points
+  "How It Works" at `/h2`, which is a 404 on every page. It wants `/#week` or `/`,
+  and an About item once that page is live. The header's own button is
+  "Get early access"; on the contact page it jumps to `#early-access`.
 - Support routing: HubSpot Knowledge Base requires Service Hub Professional, so
   support will be a form or a routed inbox rather than a KB. The Contact page
   folds support in rather than splitting it out — one form, one inbox.

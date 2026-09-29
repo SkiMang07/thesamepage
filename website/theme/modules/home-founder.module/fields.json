@@ -1,0 +1,35 @@
+[
+  {
+    "name": "eyebrow",
+    "label": "Eyebrow",
+    "type": "text",
+    "default": "Why I built it"
+  },
+  {
+    "name": "copy",
+    "label": "Note",
+    "type": "richtext",
+    "default": "<p>I&#8217;ve been managing people for over a decade: teams of three and teams of 23, managers of other managers, people in their very first job and people who&#8217;d been in their field for more than 20 years. I&#8217;ve been obsessed with getting better at it the whole way, and I&#8217;ve tried more systems than I&#8217;d like to admit.</p><p>I lean on a good, consistent system and on data for most of my decisions. The part of managing I love most is helping people learn, get better at their day-to-day and grow in their careers.</p><p>The Same Page pulls together a handful of tools I&#8217;d been cobbling together for myself over the years. My hope is that it becomes more than a piece of software: a way of managing that helps a lot of people be better at this than I was when I started.</p><p>It opens on 1 December. If you&#8217;d like to be one of the first 20 managers, or you think I&#8217;ve got something wrong, <a href=\"/contact\">send me a note</a>.</p>"
+  },
+  {
+    "name": "person_name",
+    "label": "Name",
+    "type": "text",
+    "default": "Andrew Godlewski"
+  },
+  {
+    "name": "role",
+    "label": "Role",
+    "type": "text",
+    "default": "Founder"
+  },
+  {
+    "name": "photo",
+    "label": "Photo (leave empty for the theme headshot)",
+    "type": "image",
+    "default": {
+      "src": "",
+      "alt": "Andrew Godlewski"
+    }
+  }
+]

@@ -1,0 +1,30 @@
+<section class="h6-close">
+  <div class="h6-wrap">
+    <h2>{{ module.heading }}</h2>
+    <p class="h6-sub">{{ module.sub }}</p>
+    <div class="h6-ct-countdown h6-lx-cd" id="{{ name }}-cd-close" data-cd-end="{{ module.launch_at }}" role="timer" aria-label="Countdown to launch, {{ module.launch_label }}">
+      <div class="h6-ct-cd-top"><span class="h6-ct-micro">Launch countdown</span><span class="h6-ct-cd-date">{{ module.launch_label }}</span></div>
+      <div class="h6-ct-cd-units">
+        <div class="h6-ct-cd-u"><b data-u="d">{{ module.days_fallback }}</b><span>Days</span></div>
+        <div class="h6-ct-cd-u"><b data-u="h">00</b><span>Hours</span></div>
+        <div class="h6-ct-cd-u"><b data-u="m">00</b><span>Min</span></div>
+        <div class="h6-ct-cd-u"><b data-u="s">00</b><span>Sec</span></div>
+      </div>
+      <p class="h6-ct-cd-foot"><b>{{ module.foot_strong }}</b> {{ module.foot_rest }}</p>
+    </div>
+    <a class="h6-btn h6-btn-on-brand" href="{{ module.cta_url }}">{{ module.cta_text }}</a>
+  </div>
+</section>
+<script>
+(function(){
+  var box=document.getElementById("{{ name }}-cd-close"); if(!box) return;
+  var end=new Date(box.getAttribute("data-cd-end")).getTime(); if(isNaN(end)) return;
+  function el(u){return box.querySelector('[data-u="'+u+'"]');}
+  var D=el("d"),H=el("h"),M=el("m"),S=el("s");
+  function pad(n){return (n<10?"0":"")+n;}
+  function tick(){var t=Math.max(0,end-Date.now());
+    if(D)D.textContent=Math.floor(t/864e5); if(H)H.textContent=pad(Math.floor(t/36e5)%24);
+    if(M)M.textContent=pad(Math.floor(t/6e4)%60); if(S)S.textContent=pad(Math.floor(t/1e3)%60);}
+  tick(); setInterval(tick,1000);
+})();
+</script>
