@@ -133,7 +133,7 @@ export default function ConversationPanel({
           <p className="text-2xs font-medium uppercase tracking-[0.16em] text-ink-muted">Next conversation</p>
           {next && (
             <span className={`rounded-full px-2.5 py-1 text-2xs font-medium ${prepared ? "bg-brand-tint text-brand" : "bg-sunken text-ink-secondary"}`}>
-              {prepared ? (overnight ? "Prepared overnight" : "Prep ready") : "Gathering context"}
+              {prepared ? (overnight ? "Prepared overnight" : "Prep ready") : "Prep not started"}
             </span>
           )}
         </div>
@@ -221,7 +221,7 @@ export default function ConversationPanel({
           </div>
         ) : historyFailed || openingLine ? null : (
           <p className="mt-5 text-sm text-ink-secondary">
-            {captures.length > 0 ? "Your kept thoughts are waiting for review." : "Nothing gathered yet."}
+            {captures.length > 0 ? "Your kept thoughts are waiting for review." : `Nothing recorded for ${personFirstName} yet.`}
           </p>
         )}
 

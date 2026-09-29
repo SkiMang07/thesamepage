@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import { createDirectReport, getDirectReports, getEntitlement, type Entitlement } from "@/lib/api";
+import { createDirectReport, getDirectReports, getEntitlement, reportFirstRunRoster, type Entitlement } from "@/lib/api";
 import PersonAvatar from "@/components/team/PersonAvatar";
 import { BTN_PRIMARY, EYEBROW, INPUT, TEXTAREA } from "@/lib/tokens";
 
@@ -135,6 +135,7 @@ export default function StartPage() {
     setError(null);
     const results = await Promise.allSettled(names.map((n) => createDirectReport({ name: n })));
     const failed = results.filter((r) => r.status === "rejected").length;
+    if (names.length - failed > 0) void reportFirstRunRoster(names.length - failed);
     const target = `/app/reports/${firstId}/prep${date ? `?date=${date}` : ""}`;
     if (failed > 0) {
       setError(`${failed} couldn't be added. Add them from Team later.`);

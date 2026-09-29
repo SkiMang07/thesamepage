@@ -56,7 +56,7 @@ remove from nav/UI for launch, not delete the code.
   *Done 2026-09-24:* the Account block and invite path are behind
   `IC_INVITES_ENABLED = false` in `team/page.tsx`. The invite backend and
   `/app/ic` are untouched; flip the flag when the IC view ships.
-- [ ] **CUT-2 · Hide Capacity's "By department" section; consider hiding the
+- [x] **CUT-2 · Hide Capacity's "By department" section; consider hiding the
   whole Capacity page** — [Pass 1] — `/app/capacity`
   (`frontend/app/app/capacity/page.tsx` ~360–395). The department rollup
   requires org-unit leaders no solo $20/mo manager has, and its empty state
@@ -65,6 +65,8 @@ remove from nav/UI for launch, not delete the code.
   company's product. Minimum: hide "By department" and fix the stale copy;
   stronger: drop Capacity from `NAV_GROUPS` (`ZoneMap.tsx`) for launch.
   **Effort S–M.**
+  *Done 2026-09-29:* "By department" renders only when the manager leads a unit; the empty and "Build tab" copy is gone. The nav hides Capacity for launch.
+
 - [ ] **CUT-3 · Hide the Org scope selector for single-manager orgs** —
   [Pass 1] — `/app/org` (`frontend/app/app/org/page.tsx`;
   `docs/systems/org-scoping.md`). "Units I lead" / "Entire organization"
@@ -187,21 +189,25 @@ Week-one experience (this IS the product in week one):
   under `frontend/app`, even though magic link silently creates the account.
   Say "Sign in or create your account". **Effort S.**
   **Done 2026-09-23.** "Sign in or create your account".
-- [ ] **P1-7 · The empty dashboard renders two dead cards and an unexplained
+- [x] **P1-7 · The empty dashboard renders two dead cards and an unexplained
   aside under the "start here" card** — [Pass 2] — in empty mode
   `ActionBrief.tsx` still renders "Conversation runway" → "No conversation
   records yet." (363) and "What has changed" → "No recent recorded changes."
   (386), plus the server's "TSP has limited evidence so far."
   (`mission_control_engine.py:566`). Half the first screen is empty furniture.
   Suppress the supporting cards until data exists. **Effort S.**
-- [ ] **P1-8 · Empty states send the user on a round trip to the dashboard
+  *Done 2026-09-29:* the runway and changes cards were already retired by Week in Focus. The empty card now reads "No direct reports yet." with one button, and the role nudge lost its filler copy.
+
+- [x] **P1-8 · Empty states send the user on a round trip to the dashboard
   instead of opening Quick add** — [Pass 2] — "Add your first one from
   Mission Control →" (`1-1s/page.tsx:293–294`), and `/app/dashboard` links in
   `capacity/page.tsx:295` and `assessments/page.tsx:62` — while "+ Quick add"
   sits in the header of those same pages. Week one is mostly empty states, so
   the extra hop is the main felt experience. Open the modal in place.
   **Effort S.**
-- [ ] **P1-9 · "Context is gathering automatically" reads as surveillance to
+  *Done 2026-09-29:* 1:1s, Capacity and Assessments empty states open Quick add ("Add a direct report") in place.
+
+- [x] **P1-9 · "Context is gathering automatically" reads as surveillance to
   the exact customer we court** — [Pass 2] — chip "Gathering context"
   (`1-1s/page.tsx:120`), "Context gathers here automatically. Review it before
   the agenda is built." (`reports/[id]/page.tsx:608`), then "Nothing gathered
@@ -209,13 +215,17 @@ Week-one experience (this IS the product in week one):
   from goals, development, and the last conversation." is the fix — one
   sentence naming the sources, everywhere the gathering language appears.
   **Effort S.**
-- [ ] **P1-10 · Day-one prep dead end: the suggested flow lands on a disabled
+  *Done 2026-09-29:* the chip reads "Prep not started"; the next-conversation empty lines name Goals, development and the last 1:1, and "Nothing recorded for {first name} yet."
+
+- [x] **P1-10 · Day-one prep dead end: the suggested flow lands on a disabled
   button with no explanation** — [Pass 2] — `/app/reports/[id]/prep`
   (`prep/page.tsx:466–472`): "Build agenda →" is disabled exactly when a
   report is fresh (no notes, no carry-forward, no topics, no commitments) and
   nothing says "write a line to start". Also "Add anything the record does not
   already know." — "the record" is another unnamed character. **Effort S.**
-- [ ] **P1-11 · Settings' definition of "done" demands an org chart and full
+  *Done 2026-09-29:* first-1:1 prep (585a88e), plus the notes hint.
+
+- [x] **P1-11 · Settings' definition of "done" demands an org chart and full
   expectation coverage from a manager of six** — [Pass 2] —
   `settings/page.tsx:233–240`: `peopleReady` requires `teams_count > 0` and
   zero people without role/team; `rolesReady` requires *every* role to have
@@ -225,6 +235,7 @@ Week-one experience (this IS the product in week one):
   readiness. **Effort M.**
 
 Judgment surfaces:
+  *Done 2026-09-29:* the Settings door shows no state; People and Roles never read as unfinished; the readiness banner appears only when something is broken.
 
 - [ ] **P1-12 · A bare 1–5 scale with zero calibration help, usable before any
   expectations exist** — [Pass 2] — `/app/assessments/[reportId]`
@@ -268,12 +279,14 @@ Judgment surfaces:
   use "Relationship Desk"; `/app/reports/[id]` never shows the term, and
   `1-1s/page.tsx:445,450` calls it "the relationship workspace". Put the name
   on the page or drop it from links. **Effort S.**
-- [ ] **P2-5 · Ten nav destinations on day one, unsequenced, with
+- [x] **P2-5 · Ten nav destinations on day one, unsequenced, with
   "Assessments" up front** — [Pass 2] — `ZoneMap.tsx` NAV_GROUPS +
   `Sidebar.tsx`: Team, 1:1s, Assessments, Goals, Projects, Capacity, Org,
   Knowledge, Settings on a zero-data account. For someone afraid of becoming
   a micromanager, "Assessments" before the first conversation reads as "start
   grading". Consider progressive disclosure or a suggested order. **Effort M.**
+  *Done 2026-09-29:* Assessments hidden until a first 1:1 is logged; Capacity and Org hidden for launch (`visibleNavGroups` in ZoneMap.tsx).
+
 - [ ] **P2-6 · "Check-in" means goal-progress here but human-contact
   everywhere else** — [Pass 2] — "Log check-in" (`CheckInPanel.tsx:104`),
   "Never checked in" (`CheckInPanel.tsx:158`) attach to goals/projects while
@@ -289,11 +302,13 @@ Judgment surfaces:
   (`reports/[id]/page.tsx:1265`), "Hours are the shared currency"
   (`capacity/page.tsx:289`) — no explanation of what a reasonable number is or
   what it changes. **Effort S.**
-- [ ] **P2-9 · "…ground future prep in agreed expectations" — agreed with
+- [x] **P2-9 · "…ground future prep in agreed expectations" — agreed with
   whom?** — [Pass 2] — `backend/mission_control_engine.py:666`; nothing is
   agreed with the report (they can see nothing), so the copy promises a
   shared-agreement feature that doesn't exist. Say "the expectations you set".
   **Effort S.**
+  *Done 2026-09-29:* "Add {name}’s role to prep against the expectations you set." / "Optional. Prep works without it."
+
 - [ ] **P2-10 · Decide the launch framing: the landing surface deliberately
   isn't the vision's ratings dashboard** — [Pass 1] —
   `docs/systems/mission-control.md` excludes assessment scores and inferred

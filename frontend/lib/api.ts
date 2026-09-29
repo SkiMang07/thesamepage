@@ -3561,6 +3561,13 @@ export type Entitlement = {
 
 export const getEntitlement = (): Promise<Entitlement> => authedFetch("/api/entitlement");
 
+// First-run roster size: a count, never names. Fire-and-forget.
+export const reportFirstRunRoster = (count: number): Promise<void> =>
+  authedFetch("/api/telemetry/first-run-roster", { method: "POST", body: JSON.stringify({ count }), keepalive: true }).then(
+    () => undefined,
+    () => undefined,
+  );
+
 // ── AI-draft telemetry (E7) ────────────────────────────────────────────────
 // Enums and counts only; the draft text never leaves the browser. Built by
 // lib/aiDraftTelemetry.ts. Fire-and-forget: a failure is swallowed, and

@@ -675,8 +675,8 @@ def build_brief(
             context_candidate = {
                 "candidate_key": f"early_role_grounding:{report['id']}",
                 "evidence_fingerprint": _fingerprint({"report_id": report["id"], "role_level_id": report.get("role_level_id"), "role_has_expectations": False}),
-                "title": f"Add {report['name']}’s role to ground future prep in agreed expectations.",
-                "detail": "Optional — prep still works without it.",
+                "title": f"Add {report['name']}’s role to prep against the expectations you set.",
+                "detail": "Optional. Prep works without it.",
                 "href": "/app/settings",
             }
             if not _disposition_suppresses(context_candidate, events, now):

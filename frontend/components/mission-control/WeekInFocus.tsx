@@ -1083,8 +1083,7 @@ function NextMove({
         <p className={EYEBROW}>{brief.mode === "empty" ? "Start here" : primary ? "Your next move" : brief.mode === "all_clear" ? "All clear" : "Your next move"}</p>
         {brief.mode === "empty" ? (
           <>
-            <p className="mb-1.5 mt-3 text-[17px] font-medium leading-snug text-ink">Add your first direct report.</p>
-            <p className="text-xs leading-relaxed text-ink-secondary">The Same Page needs one real working relationship before it can suggest a next move.</p>
+            <p className="mb-1.5 mt-3 text-[17px] font-medium leading-snug text-ink">No direct reports yet.</p>
             <button type="button" onClick={openQuickAdd} className={`mt-3 ${BTN_PRIMARY_SM}`}>Add a direct report</button>
           </>
         ) : primary ? (

@@ -263,6 +263,22 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+// Day-one navigation (onboarding §4.8). Capacity and Org are hidden for launch;
+// Assessments appears once a first 1:1 has been logged. Routes stay reachable
+// by URL, and getNavContext still resolves them.
+const HIDDEN_FOR_LAUNCH = new Set(["capacity", "org"]);
+
+export function visibleNavGroups(firstOneOnOneLogged: boolean | null): NavGroup[] {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (HIDDEN_FOR_LAUNCH.has(item.id)) return false;
+      if (item.id === "assessments") return firstOneOnOneLogged === true;
+      return true;
+    }),
+  })).filter((group) => group.items.length > 0);
+}
+
 export const SETTINGS_ITEM = NAV_GROUPS.flatMap((group) => group.items).find((item) => item.id === "settings")!;
 
 const TEAM_GROUP = NAV_GROUPS.find((g) => g.group === "People")!;
@@ -408,6 +424,9 @@ export type ZoneData = {
   // needed for the Settings door's org_ready check, no extra fetch.
   profileName: string | null;
   profileEmail: string | null;
+  // True once any 1:1 has been held. Null until the roster has loaded.
+  // Assessments stays out of the nav until then (§4.8).
+  firstOneOnOneLogged: boolean | null;
 };
 
 // Zone data — one shared fetch for the whole authenticated app (N-5).
@@ -473,9 +492,11 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
   let roster: RosterPerson[] = [];
   let profileName: string | null = null;
   let profileEmail: string | null = null;
+  let firstOneOnOneLogged: boolean | null = null;
 
   if (teamR.status === "fulfilled") {
     const team = teamR.value as OneOnOneOverviewItem[];
+    firstOneOnOneLogged = team.some((r) => r.last_one_on_one_at !== null);
     doorStates.team = { label: `${team.length} ${team.length === 1 ? "person" : "people"}` };
     const dueCount = team.filter((r) => r.is_due).length;
     doorStates.oneonones = dueCount > 0 ? { label: `${dueCount} due`, tone: "warn" } : { label: "up to date" };
@@ -542,34 +563,14 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
     }
   }
 
-  // Settings door (Session 41, Plan S1): previously only checked
-  // org_ready (does the org row exist at all — true the moment a
-  // manager saves Profile & Company once). That's a much lower bar than
-  // "setup is actually done," so a manager could clear this door's
-  // warning without a single person, team, role, or expectation
-  // configured. Now reads the real setup-status four-step model —
-  // people / teams / roles-assigned / expectations-covered — the same
-  // data People's progress header and roster badges read, so all three
-  // surfaces agree on what "done" means.
+  // Settings door: no state at all (onboarding P1-11). People, teams, roles
+  // and expectations are optional, so nothing here is "unfinished".
   if (setupR.status === "fulfilled") {
     const s = setupR.value;
-    const fullySetUp =
-      s.people_count > 0 &&
-      s.teams_count > 0 &&
-      s.people_without_role_count === 0 &&
-      s.roles_count > 0 &&
-      s.roles_with_expectations_count === s.roles_count;
-    // Only render a state when setup isn't finished — a finished
-    // Settings door shows no count at all (Session 36 decision).
-    if (!fullySetUp) doorStates.settings = { label: "not finished", tone: "setup" };
     doorStates.expectations =
       s.roles_count === 0
         ? { label: "no roles yet" }
         : { label: `${s.roles_with_expectations_count} of ${s.roles_count} defined` };
-  } else if (profR.status === "fulfilled" && !profR.value.org_ready) {
-    // Fallback if setup-status itself failed to load: org_ready is a
-    // strictly weaker signal, but better than showing nothing.
-    doorStates.settings = { label: "not finished", tone: "setup" };
   }
 
   if (profR.status === "fulfilled") {
@@ -579,7 +580,7 @@ function deriveZoneData(core: CoreResults | null, doors: DoorResults | null): Om
 
   // Door states that come from core results (team, 1:1s, Settings fallback)
   // only show alongside the rest of the doors, as they did before.
-  return { doorStates: doors ? doorStates : {}, roster, profileName, profileEmail };
+  return { doorStates: doors ? doorStates : {}, roster, profileName, profileEmail, firstOneOnOneLogged };
 }
 
 type ZoneContextValue = {
@@ -696,10 +697,16 @@ export function useZoneData(options: { doors?: boolean } = {}): ZoneData {
 // old stat ribbon) and inside AppNav's map overlay sheet.
 // ---------------------------------------------------------------------------
 
-export function ZoneMap({ doorStates }: { doorStates: Partial<Record<string, DoorState>> }) {
+export function ZoneMap({
+  doorStates,
+  firstOneOnOneLogged = null,
+}: {
+  doorStates: Partial<Record<string, DoorState>>;
+  firstOneOnOneLogged?: boolean | null;
+}) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-      {NAV_GROUPS.map((g) => (
+      {visibleNavGroups(firstOneOnOneLogged).map((g) => (
         <div key={g.group} className={`${ZONE_CARD} p-4`}>
           <div className="text-[13px] font-semibold tracking-tight text-ink">{g.group}</div>
           <div className="mt-0.5 text-xs text-ink-muted">{g.blurb}</div>

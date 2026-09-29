@@ -513,7 +513,7 @@ function LegacyDashboardPage() {
           grey — see components/ZoneMap.tsx. */}
       {!zone.loading && (
         <div className={SECTION_GAP}>
-          <ZoneMap doorStates={zone.doorStates} />
+          <ZoneMap doorStates={zone.doorStates} firstOneOnOneLogged={zone.firstOneOnOneLogged} />
         </div>
       )}
 

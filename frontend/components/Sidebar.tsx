@@ -34,7 +34,8 @@ import {
   HOME_ITEM,
   ZONE_STYLE,
   Icon,
-  NAV_GROUPS,
+  visibleNavGroups,
+  useZoneData,
   NAV_STRIP_HEIGHT,
   SETTINGS_ITEM,
   getNavContext,
@@ -49,6 +50,7 @@ export default function Sidebar() {
   // The slide-over is always the full rail; the collapse preference is a
   // desktop choice.
   const collapsed = collapsedPref && !mobileOpen;
+  const { firstOneOnOneLogged } = useZoneData();
 
   // Close the slide-over on navigation and on Escape.
   useEffect(() => { setMobileOpen(false); }, [pathname, setMobileOpen]);
@@ -120,7 +122,7 @@ export default function Sidebar() {
 
         <div className={`my-2 h-px shrink-0 bg-hairline ${collapsed ? "w-6" : "mx-2.5"}`} />
 
-        {NAV_GROUPS.map((group) => {
+        {visibleNavGroups(firstOneOnOneLogged).map((group) => {
           const visibleItems = group.items.filter((item) => item.id !== SETTINGS_ITEM.id);
           return (
             <div key={group.group} className={collapsed ? "contents" : "mt-1"}>

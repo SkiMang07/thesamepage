@@ -65,8 +65,9 @@ It's gated by `led_org_unit_ids()`, so a caller who leads nothing gets nothing.
 org_unit — zero-filling units outside your scope would misread as "this team has
 0 capacity" instead of "you can't see this team."
 
-**"By department" shows an empty state until Andrew assigns a leader** on at
-least one unit in Org → Build. That's intentional, not a bug.
+**"By department" does not render until Andrew assigns a leader** on at
+least one unit in Org → Build. That's intentional, not a bug. Capacity and Org
+are also hidden from the nav for launch (`visibleNavGroups`).
 
 ## Placement
 

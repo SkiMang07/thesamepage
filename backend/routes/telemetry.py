@@ -29,6 +29,20 @@ class AiDraftResolvedIn(BaseModel):
     items_added: Optional[int] = Field(default=None, ge=0)
 
 
+class FirstRunRosterIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(ge=0, le=100)
+
+
+@router.post("/first-run-roster")
+def first_run_roster_added(body: FirstRunRosterIn, auth=Depends(get_authenticated_client)):
+    """How many direct reports a manager brings in on /app/start. Count only."""
+    user_id, _ = auth
+    analytics.capture(user_id, "first_run_roster_added", {"count": body.count})
+    return {"ok": True}
+
+
 @router.post("/ai-draft")
 def ai_draft_resolved(body: AiDraftResolvedIn, auth=Depends(get_authenticated_client)):
     user_id, _ = auth

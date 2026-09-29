@@ -28,6 +28,7 @@
 // on the Org page's Build tab.
 
 import { useEffect, useMemo, useState } from "react";
+import AddDirectReportButton from "@/components/AddDirectReportButton";
 import Link from "next/link";
 import {
   CapacityOverviewItem,
@@ -293,10 +294,7 @@ export default function CapacityPage() {
             {overview.length === 0 ? (
               <p className="mt-4 text-ink-secondary">
                 No direct reports yet.{" "}
-                <Link href="/app/dashboard" className="underline hover:text-ink-body">
-                  Add your first one
-                </Link>
-                .
+                <AddDirectReportButton className="underline hover:text-ink-body" />
               </p>
             ) : (
               <div className={`${CARD} mt-4 overflow-hidden`}>
@@ -358,29 +356,13 @@ export default function CapacityPage() {
             </p>
           </div>
 
-          {/* By department */}
+          {/* By department — renders only when there is a rollup to show. */}
+          {ledUnits.length > 0 && (
           <div className={SECTION_GAP}>
             <div className="flex items-baseline justify-between gap-4">
               <h2 className={EYEBROW}>By department</h2>
               <span className="text-xs text-ink-muted">Aggregate-only beyond your direct reports</span>
             </div>
-            {orgUnits.length === 0 ? (
-              <p className="mt-4 text-ink-secondary">
-                No departments or teams yet.{" "}
-                <Link href="/app/org" className="underline hover:text-ink-body">
-                  Build your org chart
-                </Link>{" "}
-                to see rollups here.
-              </p>
-            ) : ledUnits.length === 0 ? (
-              <p className="mt-4 text-ink-secondary">
-                You don&apos;t lead any departments or teams yet.{" "}
-                <Link href="/app/org" className="underline hover:text-ink-body">
-                  Assign a leader
-                </Link>{" "}
-                on the Build tab to see a rollup here.
-              </p>
-            ) : (
               <ul className="mt-4 space-y-2">
                 {ledUnits.map((led) => {
                   const node = nodesById.get(led.id);
@@ -388,12 +370,12 @@ export default function CapacityPage() {
                   return <RollupNode key={led.id} node={node} depth={0} rollupByUnit={rollupByUnit} />;
                 })}
               </ul>
-            )}
             <p className="mt-3 text-xs leading-relaxed text-ink-muted">
               Rolled up through {companyName}&apos;s org chart across every unit you lead, regardless of who manages them. Names appear only for people who
               report directly to you.
             </p>
           </div>
+          )}
         </>
       )}
     </PageShell>

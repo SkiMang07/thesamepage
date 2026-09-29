@@ -178,6 +178,13 @@ No schema change in either session.
 
 **Session 2 now follows the prototype's steps 3–5:** notes and the first-1:1 agenda written into the person's "Next conversation" card (with the §4.5 prompt branch and Build agenda enabled on empty notes), the save receipt, then Mission Control with the nav arriving, plus §4.6, §4.7, §4.8 and the golden-path walk.
 
+## 9b. Session 2, as built (2026-09-29)
+
+- §4.6: the early-use role nudge and the empty-mode card use the spec copy. The runway and "what has changed" cards no longer exist (Week in Focus), so nothing to hide.
+- §4.7: `AddDirectReportButton` opens Quick add from the 1:1s, Capacity and Assessments empty states; "Prep not started" and the "Nothing recorded for {first name} yet." lines; Capacity's "By department" renders only with a led unit; Settings readiness no longer requires teams, roles or expectations, and the Settings door shows no state.
+- §4.8: `visibleNavGroups()` (ZoneMap.tsx) drives the sidebar and the zone map.
+- `first_run_roster_added`: `POST /api/telemetry/first-run-roster`, count only, fired after the roster step adds anyone. Catalog row added; the saved PostHog funnel's step 1 still needs the OR by hand.
+
 ## 10. Open questions for Andrew (answered, kept for the record)
 
 1. **No skip on step 1.** The only way out is Sign out. OK?

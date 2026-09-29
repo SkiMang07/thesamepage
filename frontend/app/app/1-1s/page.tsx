@@ -11,6 +11,7 @@
 // cadence, due state, or session status independently.
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import AddDirectReportButton from "@/components/AddDirectReportButton";
 import Link from "next/link";
 import { OneOnOneOverviewItem, getOneOnOnesOverview } from "@/lib/api";
 import PageShell from "@/components/PageShell";
@@ -117,7 +118,7 @@ function relationshipState(item: OneOnOneOverviewItem): RelationshipState {
     };
   }
   return {
-    label: "Gathering context",
+    label: "Prep not started",
     rowMeta: "Not scheduled",
     rowClass: "text-ink-muted",
     chipClass: "bg-sunken text-ink-secondary",
@@ -154,7 +155,7 @@ function relationshipSummary(item: OneOnOneOverviewItem) {
   if (isUnpreparedDue(item)) {
     return "This conversation is due. Review the context already gathering in the workspace before generating the agenda.";
   }
-  return "No date is scheduled yet. Context is gathering automatically in the next-conversation workspace.";
+  return `Goals, development, and your last 1:1 with ${firstName(item.name)} show up here before the next one.`;
 }
 
 function continuityCue(item: OneOnOneOverviewItem) {
@@ -290,9 +291,7 @@ export default function OneOnOnesPage() {
       {items.length === 0 ? (
         <p className={`${SECTION_GAP} text-sm text-ink-secondary`}>
           No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="text-brand hover:text-brand-hover">
-            Add your first one from Mission Control →
-          </Link>
+          <AddDirectReportButton className="text-brand hover:text-brand-hover" />
         </p>
       ) : (
         <div className={`${SECTION_GAP} grid gap-5 lg:grid-cols-[minmax(20rem,.9fr)_minmax(22rem,1.1fr)]`}>

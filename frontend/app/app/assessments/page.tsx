@@ -8,6 +8,7 @@
 // context, never as a completed period assessment. See docs/systems/assessments.md.
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
+import AddDirectReportButton from "@/components/AddDirectReportButton";
 import Link from "next/link";
 import { getTeamAssessments, TeamAssessmentItem } from "@/lib/api";
 import PageShell from "@/components/PageShell";
@@ -70,10 +71,7 @@ export default function AssessmentsPage() {
       ) : !error && team.length === 0 ? (
         <p className="mt-6 text-ink-secondary">
           No direct reports yet.{" "}
-          <Link href="/app/dashboard" className="underline hover:text-ink-body">
-            Add your first one
-          </Link>
-          .
+          <AddDirectReportButton className="underline hover:text-ink-body" />
         </p>
       ) : (
         <>

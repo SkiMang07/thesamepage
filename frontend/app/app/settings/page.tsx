@@ -184,14 +184,10 @@ function SettingsFlow() {
   }
 
   const identityReady = !!profile?.full_name.trim() && !!profile?.company_name.trim();
-  const peopleReady = !!setupStatus &&
-    setupStatus.people_count > 0 &&
-    setupStatus.teams_count > 0 &&
-    setupStatus.people_without_role_count === 0 &&
-    setupStatus.people_without_team_count === 0;
-  const rolesReady = !!setupStatus &&
-    setupStatus.roles_count > 0 &&
-    setupStatus.roles_with_expectations_count === setupStatus.roles_count;
+  // People, teams, roles and expectations are optional: they never read as
+  // unfinished. A section is flagged only when something is actually broken.
+  const peopleReady = true;
+  const rolesReady = true;
   const defaultsReady = !!profile && !!capacitySummary;
   const accountReady = !!profile?.email;
   const readinessBySection: Record<SectionId, boolean> = {
@@ -219,7 +215,9 @@ function SettingsFlow() {
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
-      <FoundationReadiness readyCount={readyCount} total={FOUNDATIONS.length} loading={!readinessLoaded} />
+      {readinessLoaded && readyCount < FOUNDATIONS.length && (
+        <FoundationReadiness readyCount={readyCount} total={FOUNDATIONS.length} loading={false} />
+      )}
 
       <div className={`${SECTION_GAP} grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]`}>
         <FoundationMap
@@ -494,7 +492,7 @@ function FoundationEditorHeader({
 }) {
   const copy = EDITOR_COPY[section];
   let statusLabel = ready ? "Configured" : "Needs attention";
-  if (section === "roles" && setupStatus) statusLabel = `${setupStatus.roles_with_expectations_count} of ${setupStatus.roles_count} covered`;
+  if (section === "roles" && setupStatus) statusLabel = setupStatus.roles_count === 0 ? "Optional" : `${setupStatus.roles_with_expectations_count} of ${setupStatus.roles_count} covered`;
   if (section === "people" && setupStatus) statusLabel = `${setupStatus.people_count} active`;
   if (section === "account" && profile) statusLabel = "Active";
   return (
