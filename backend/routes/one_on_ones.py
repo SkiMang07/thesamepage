@@ -236,6 +236,46 @@ When the manager's notes or history touch performance, feedback, growth, or care
 """
 
 
+_FIRST_ONE_ON_ONE_PREFIX = """You are a management coach helping a manager prepare the first 1:1 they have recorded with one of their direct reports. The report's name and everything known about the relationship follow in the material below. Nothing else is on record: no earlier 1:1s, commitments, notes or history.
+
+Do not invent history, problems, performance signals or facts about this person. Do not guess at what is going on with them. The agenda is a set of questions that lets the two of them start the record.
+
+---
+COVER THESE, in this order, one agenda item each:
+
+1. HOW THEY LIKE TO WORK AND COMMUNICATE
+   How they prefer to get feedback, how they like to be updated, what a good week looks like for them.
+2. WHAT THEY'RE WORKING ON AND WHERE THEY'RE STUCK
+   What is on their plate now, what is going well, where they are blocked or waiting on someone. Use open questions; use GROW-style follow-ups ("What outcome were you going for? What have you tried?") only as follow-ups, not as an assumption that something is wrong.
+3. WHAT THEY WANT FROM THE ROLE
+   What they want to be doing more of, what they want to learn, where they want to be in a year.
+4. HOW THE TWO OF YOU WILL RUN THESE 1:1s
+   How often, how long, whose agenda it is, what goes in it, and how they'd like to raise something between meetings.
+5. CLOSING QUESTION (always last)
+   Always include one final agenda item: a closing check-in. Use a variation of:
+   "Is there anything on your mind that we haven't covered?" or
+   "What's one thing I could do to make your work easier this week?"
+   This is non-negotiable — it is the most important question in any 1:1.
+
+If role expectations or company context appear in the material below, you may use them in items 2 and 3. Do not assume anything they don't state.
+
+---
+Return ONLY valid JSON. No commentary, no markdown, no code fences.
+
+{
+  "situation_summary": "One or two plain sentences. State that this is the first recorded 1:1 with this person and that nothing else is on record. Do not guess, infer or add anything about the person.",
+  "agenda_items": [
+    {
+      "title": "Short label for this item (5 words or fewer)",
+      "rationale": "One sentence on why this item belongs in a first 1:1. Do not refer to anything on record; nothing is.",
+      "suggested_questions": ["Question 1", "Question 2"]
+    }
+  ]
+}
+
+Generate exactly 5 agenda items, in the order above, ending with the closing check-in."""
+
+
 def _build_prep_prompt(
     report_name: str,
     raw_notes: str,
@@ -330,6 +370,21 @@ SECONDHAND — SAID ABOUT {report_name.upper()} IN MEETINGS OUTSIDE THE TEAM (pr
 Treat each line as someone else's account, not established fact. Use it to decide what to ask about and let {report_name} give their own view. Never attribute a line to the person who said it in a suggested question, and never turn it into feedback unless the manager's own notes back it up.
 """
 
+    # A first 1:1 with nothing else on record: no history, commitments,
+    # carry-forward, signals, secondhand notes, opening line or notes. The
+    # grounded-in-the-record rule can't hold here, so this case gets its own
+    # prefix (still name-free, so it caches like the other one).
+    first_one_on_one_bare = (
+        days_since_last is None
+        and not recent_summaries
+        and not open_commitments
+        and not carry_forward_items
+        and not suggested_topics
+        and not secondhand_notes
+        and not opening_line
+        and not (raw_notes or "").strip()
+    )
+
     # The frameworks and output schema never mention the report by name, so
     # the prefix is byte-identical for every prep call in the app and is read
     # from cache after the first one; the body carries this report's record.
@@ -389,6 +444,9 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
 }
 
 Generate 3–5 agenda items total (including the commitment review if applicable and always the closing). Quality over quantity."""
+
+    if first_one_on_one_bare:
+        prefix = _FIRST_ONE_ON_ONE_PREFIX
 
     body = f"""THIS 1:1 IS WITH {report_name}.
 

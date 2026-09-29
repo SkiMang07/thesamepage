@@ -15,6 +15,7 @@ import {
   getCommitments,
   getGoals,
   getDevelopmentPlan,
+  getOneOnOneHistory,
   PrepResponse,
   AgendaItem,
   WrapUpDraft,
@@ -122,6 +123,9 @@ function PrepFlow() {
   const [error, setError] = useState<string | null>(null);
   const [prep, setPrep] = useState<PrepResponse | null>(null);
   const [reportName, setReportName] = useState("");
+  // null until the history loads. A first 1:1 means no completed one exists
+  // for this person; until we know, treat it as not first (the safer rule).
+  const [hasCompletedOneOnOne, setHasCompletedOneOnOne] = useState<boolean | null>(null);
   const [scheduleDate, setScheduleDate] = useState("");
   const [recurrenceWeeks, setRecurrenceWeeks] = useState<RecurrenceWeeks | null>(null);
   const [carryForwardItems, setCarryForwardItems] = useState<string[]>([]);
@@ -158,6 +162,12 @@ function PrepFlow() {
     // Name only — used for the "who owes this" toggle on the review screen.
     getDirectReport(id)
       .then((dr) => setReportName(dr.name))
+      .catch(() => {});
+  }, [id]);
+
+  useEffect(() => {
+    getOneOnOneHistory(id)
+      .then((rows) => setHasCompletedOneOnOne(rows.some((row) => row.status === "completed")))
       .catch(() => {});
   }, [id]);
 
@@ -241,6 +251,7 @@ function PrepFlow() {
       (commitment) => !excludedCommitmentIds.includes(commitment.id)
     );
     if (
+      hasCompletedOneOnOne !== false &&
       !notes.trim() &&
       !openingLine &&
       carryForwardItems.length === 0 &&
@@ -341,6 +352,21 @@ function PrepFlow() {
   // Step 1 — Review the automatically assembled next-meeting workspace
   // ---------------------------------------------------------------------------
   if (step === 1) {
+    const firstName = reportName.split(" ")[0] || "them";
+    const isFirstOneOnOne = hasCompletedOneOnOne === false;
+    const nothingGathered =
+      captures.length === 0 &&
+      carryForwardItems.length === 0 &&
+      suggestedTopics.length === 0 &&
+      openCommitments.length === 0 &&
+      !openingLine;
+    const noInputs =
+      !notes.trim() &&
+      !openingLine &&
+      carryForwardItems.length === 0 &&
+      suggestedTopics.length === 0 &&
+      openCommitments.every((commitment) => excludedCommitmentIds.includes(commitment.id));
+    const buildBlockedByRule = noInputs && !isFirstOneOnOne;
     return (
       <PageShell maxWidth="2xl">
         <Link href={`/app/reports/${id}`} className="text-sm text-ink-secondary hover:underline">
@@ -348,8 +374,9 @@ function PrepFlow() {
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Review next 1:1</h1>
         <p className="mt-2 text-ink-secondary">
-          The Same Page has gathered what may matter. Remove anything you don&apos;t want
-          in this conversation, add context if needed, then build the agenda.
+          {nothingGathered
+            ? `No earlier 1:1s with ${firstName} are recorded.`
+            : `Pulled from goals, development, and your last 1:1 with ${firstName}. Remove anything you don't want in this one.`}
         </p>
 
         <form onSubmit={handleGenerate} className={SECTION_GAP}>
@@ -505,7 +532,9 @@ function PrepFlow() {
             <span className="mt-1 block text-xs text-ink-muted">
               {captures.length > 0
                 ? `${captures.length} captured note${captures.length === 1 ? " is" : "s are"} already included. Edit freely.`
-                : "Add anything the record does not already know."}
+                : isFirstOneOnOne
+                  ? `Optional. Anything you already know about ${firstName}'s work, or want to raise.`
+                  : "Anything not already listed above."}
             </span>
             <NoteField
               value={notes}
@@ -518,18 +547,14 @@ function PrepFlow() {
           {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
           <button
             type="submit"
-            disabled={
-              loading ||
-              (!notes.trim() &&
-                !openingLine &&
-                carryForwardItems.length === 0 &&
-                suggestedTopics.length === 0 &&
-                openCommitments.every((commitment) => excludedCommitmentIds.includes(commitment.id)))
-            }
+            disabled={loading || buildBlockedByRule}
             className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
           >
             {loading ? "Building agenda…" : "Build agenda →"}
           </button>
+          {buildBlockedByRule && !loading && (
+            <p className="mt-2 text-xs text-ink-muted">Add a note or keep an item above to build an agenda.</p>
+          )}
         </form>
       </PageShell>
     );
