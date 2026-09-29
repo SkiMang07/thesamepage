@@ -870,3 +870,14 @@ Decided the same day, behind the sentence:
   the email, what they reply, how the account is provisioned, and by when.
 - [ ] ✘ Support path exists: a `support@` or `hello@` address that reaches
   you, linked from Settings → Your account and the marketing footer.
+
+## First-run live walk — 2026-09-29
+
+Rough spots from walking `/app/start` on the live app as a new manager.
+
+- [x] **Mission Control on day one shows three zeros.** In `early_use` with nothing recorded, the stat tiles and the empty Follow-through block don't render.
+- [x] **No save receipt after the first agenda.** With `?first=1` the prep sheet leads with "Prep sheet saved" and a "Go to Mission Control" button.
+- [x] **The product talks about itself.** "Written by The Same Page…" is now "Drafted by AI from today’s records"; "Prepared by The Same Page" is "Drafted by AI"; the brief's "in The Same Page" details are plain.
+- [x] **Placeholders.** The prep notes placeholder is split first 1:1 / later; the call-notes placeholder no longer uses the Acme/QBR sales example.
+- [x] **"Step N of 3" with no step 3.** The prep screen carries "Step 3 of 3" in first run.
+- [ ] Reset the test account `andrewgodlew+test@gmail.com` (holds founding slot 1 of 20). Andrew decides.

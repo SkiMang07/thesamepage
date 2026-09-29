@@ -444,6 +444,17 @@ export function WeekInFocus({
     </aside>
   );
 
+  // Early use with nothing recorded yet: three zero tiles and an empty
+  // Follow-through block say nothing, so neither renders (DESIGN.md, Empty
+  // states). Both return with the first recorded 1:1, check-in or commitment.
+  const nothingRecorded =
+    brief?.mode === "early_use" &&
+    !!week &&
+    ok("commitments") &&
+    week.commitments.length === 0 &&
+    week.undated_open_commitments.mine + week.undated_open_commitments.team === 0 &&
+    week.conversations.every((c) => c.state !== "completed");
+
   return (
     <PageShell maxWidth="8xl">
       <div ref={rootRef}>
@@ -458,7 +469,7 @@ export function WeekInFocus({
             {morningLine && (
               <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink-secondary">
                 {morningLine}
-                <span className="ml-2 whitespace-nowrap text-2xs text-ink-muted">Written by The Same Page from today’s moves</span>
+                <span className="ml-2 whitespace-nowrap text-2xs text-ink-muted">Drafted by AI from today’s records</span>
               </p>
             )}
           </div>
@@ -503,7 +514,7 @@ export function WeekInFocus({
               </>
             ) : (
               <div aria-busy={weekLoading} className={`transition-opacity motion-reduce:transition-none ${weekLoading ? "opacity-60" : ""}`}>
-                <Metrics week={week} ok={ok} selection={selection} onSelect={select} stacked={rootWidth < 460} />
+                {!nothingRecorded && <Metrics week={week} ok={ok} selection={selection} onSelect={select} stacked={rootWidth < 460} />}
                 {!twoColumn && <div className="mb-8 border-b border-hairline pb-8">{side}</div>}
                 <ConversationWeek
                   week={week}
@@ -516,7 +527,7 @@ export function WeekInFocus({
                   onStepWeek={onWeekOf ? stepWeek : undefined}
                   stepping={weekLoading}
                 />
-                <FollowThrough week={week} ok={ok("commitments")} selection={selection} onSelect={select} />
+                {!nothingRecorded && <FollowThrough week={week} ok={ok("commitments")} selection={selection} onSelect={select} />}
               </div>
             )}
           </div>

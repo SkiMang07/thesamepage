@@ -231,9 +231,9 @@ itself; the card carries the titles.
 ### Naming the author and the sources
 
 Every sheet says who made it and what it was built from, under its heading:
-"Prepared by The Same Page · Drew on 1 carried topic, 2 open commitments, your
+"Drafted by AI · Drew on 1 carried topic, 2 open commitments, your
 notes, your last 3 1:1s, role expectations, Q3 CS Principles (Knowledge)" (an
-overnight sheet reads "Prepared overnight by The Same Page … · Rebuild").
+overnight sheet reads "Drafted overnight by AI … · Rebuild").
 `prep_drew_on()` in `routes/one_on_ones.py` builds that list from what
 `assemble_prep_inputs()` actually put in the prompt — carry-forwards, the kept
 opening line, open commitments, the manager's notes (or, overnight, the kept

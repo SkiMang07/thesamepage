@@ -87,6 +87,11 @@ function localDateStr(d: Date = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+function longDayLabel(value: string) {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
 // The first release schedules a calendar day, not a clock time. Noon UTC
 // keeps that date stable while preserving the existing timestamptz field for
 // the later calendar-sync pass.
@@ -115,6 +120,8 @@ function PrepFlow() {
   const editSources = searchParams.get("edit") === "1";
   // First run (/app/start) hands over the meeting date it asked for.
   const dateParam = searchParams.get("date");
+  // First run is step 3 of 3 and ends in a save receipt.
+  const firstRun = searchParams.get("first") === "1";
   const startDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : "";
 
   const [step, setStep] = useState<Step>(1);
@@ -372,7 +379,8 @@ function PrepFlow() {
         <Link href={`/app/reports/${id}`} className="text-sm text-ink-secondary hover:underline">
           ← Back
         </Link>
-        <h1 className="mt-4 text-2xl font-semibold">Review next 1:1</h1>
+        {firstRun && <p className="mt-4 text-xs text-ink-muted">Step 3 of 3</p>}
+        <h1 className={`${firstRun ? "mt-1" : "mt-4"} text-2xl font-semibold`}>Review next 1:1</h1>
         <p className="mt-2 text-ink-secondary">
           {nothingGathered
             ? `No earlier 1:1s with ${firstName} are recorded.`
@@ -539,7 +547,11 @@ function PrepFlow() {
             <NoteField
               value={notes}
               onChange={setNotes}
-              placeholder="Anything else worth discussing, celebrating, or checking on…"
+              placeholder={
+                isFirstOneOnOne
+                  ? "– Joined in March, came over from support\n– Wants more ownership of onboarding\n– Ask how they like to get feedback"
+                  : "– Something noticed since the last 1:1\n– A question to ask\n– A win to mention"
+              }
               rows={6}
               className="mt-2"
             />
@@ -570,6 +582,22 @@ function PrepFlow() {
           ← Edit prep
         </button>
 
+        {firstRun && (
+          <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-brand bg-brand/10 px-5 py-4">
+            <div>
+              <p className="text-xs text-ink-muted">Step 3 of 3</p>
+              <h2 className="mt-1 text-lg font-semibold text-ink">Prep sheet saved</h2>
+              <p className="mt-1 text-sm text-ink-body">
+                {prep.agenda_items.length} {prep.agenda_items.length === 1 ? "item" : "items"}
+                {scheduleDate ? ` for ${longDayLabel(scheduleDate)}` : ""}. It’s on {reportName.split(" ")[0] || "their"}’s page.
+              </p>
+            </div>
+            <Link href="/app/dashboard" className="rounded-md bg-brand px-4 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-hover">
+              Go to Mission Control
+            </Link>
+          </div>
+        )}
+
         <div className={`${SECTION_GAP} grid gap-10 lg:grid-cols-2`}>
           {/* Left — the prep sheet, what you planned to talk about */}
           <div>
@@ -582,7 +610,7 @@ function PrepFlow() {
                 {/* Name the author and its sources on every sheet. Sheets
                     saved before drew_on existed show the author line only. */}
                 <p className="mt-1 max-w-md text-xs text-ink-secondary">
-                  {prep.prepared_by === "overnight" ? "Prepared overnight by The Same Page" : "Prepared by The Same Page"}
+                  {prep.prepared_by === "overnight" ? "Drafted overnight by AI" : "Drafted by AI"}
                   {prep.drew_on && prep.drew_on.length > 0 && ` · Drew on ${prep.drew_on.join(", ")}`}
                   {prep.prepared_by === "overnight" && (
                     <>
@@ -694,7 +722,7 @@ function PrepFlow() {
             <NoteField
               value={callNotes}
               onChange={setCallNotes}
-              placeholder={"– Pipeline looking thin for Q4, she's worried about the Acme renewal\n– I'll intro her to Sam on the design team\n– She'll draft the QBR deck by Friday"}
+              placeholder={"– Wants more ownership of onboarding, unsure how to ask for it\n– I'll set up time with Sam on the design team\n– They'll send me a draft plan by Friday"}
               rows={18}
               className="mt-4"
             />

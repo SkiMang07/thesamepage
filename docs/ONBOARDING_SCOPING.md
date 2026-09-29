@@ -185,6 +185,13 @@ No schema change in either session.
 - §4.8: `visibleNavGroups()` (ZoneMap.tsx) drives the sidebar and the zone map.
 - `first_run_roster_added`: `POST /api/telemetry/first-run-roster`, count only, fired after the roster step adds anyone. Catalog row added; the saved PostHog funnel's step 1 still needs the OR by hand.
 
+## 9c. Live-walk fixes (2026-09-29)
+
+- Mission Control: in `early_use` with no commitments and no completed 1:1, the three stat tiles and Follow-through don't render (`nothingRecorded` in `WeekInFocus.tsx`).
+- Save receipt (prototype step 4–5): `/app/start` sends `?first=1`; the prep sheet then shows "Step 3 of 3" and a "Prep sheet saved" block with a "Go to Mission Control" button. The sheet is already saved when it is built, so the receipt states what is true.
+- Bylines read "Drafted by AI" (prep sheet) and "Drafted by AI from today’s records" (morning line).
+- Placeholders fit a first 1:1 with a direct report.
+
 ## 10. Open questions for Andrew (answered, kept for the record)
 
 1. **No skip on step 1.** The only way out is Sign out. OK?
