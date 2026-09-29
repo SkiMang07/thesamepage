@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 import routes.onboarding as onboarding
-from routes.onboarding import STEP_ORDER, build_status, evaluate
+from routes.onboarding import STEP_ORDER, build_status, carried_forward, evaluate, next_step
 
 
 def _reports(n, *, role="r1", unit="u1"):
@@ -15,10 +15,7 @@ def _all_true(**over):
         reports=_reports(2),
         unit_count=1,
         covered_role_ids={"r1"},
-        confirmed_docs=1,
-        knowledge_skipped=False,
         goal_levels={"company", "team"},
-        logged=True,
     )
     base.update(over)
     return evaluate(**base)
@@ -28,7 +25,8 @@ def _done(steps):
     return {k: steps[k]["done"] for k in STEP_ORDER}
 
 
-def test_everything_true_is_all_done():
+def test_setup_is_org_expectations_and_goals():
+    assert STEP_ORDER == ("org", "expectations", "goals")
     assert all(_done(_all_true()).values())
 
 
@@ -67,9 +65,14 @@ def test_a_role_nobody_holds_does_not_block():
     assert _all_true(covered_role_ids={"r1", "unused"})["expectations"]["done"]
 
 
-def test_knowledge_counts_a_confirmed_document_or_nothing_to_import():
-    assert not _all_true(confirmed_docs=0)["knowledge"]["done"]
-    assert _all_true(confirmed_docs=0, knowledge_skipped=True)["knowledge"]["done"]
+def test_people_ready_counts_people_whose_role_has_expectations():
+    people = [
+        {"id": "a", "role_level_id": "r1", "org_unit_id": "u1"},
+        {"id": "b", "role_level_id": "r2", "org_unit_id": "u1"},
+        {"id": "c", "role_level_id": None, "org_unit_id": "u1"},
+    ]
+    assert _all_true(reports=people, covered_role_ids={"r1"})["expectations"]["people_ready"] == 1
+    assert _all_true(reports=[], covered_role_ids={"r1"})["expectations"]["people_ready"] == 0
 
 
 def test_goals_need_an_org_level_goal_and_a_team_goal():
@@ -79,8 +82,49 @@ def test_goals_need_an_org_level_goal_and_a_team_goal():
     assert _all_true(goal_levels={"department", "team"})["goals"]["done"]
 
 
-def test_log_step_is_the_first_logged_one_on_one():
-    assert not _all_true(logged=False)["log"]["done"]
+# ---- next_step --------------------------------------------------------------
+
+
+def test_next_step_is_the_first_undone_step_and_skips_blocked_ones():
+    # Nothing set up: org comes first; expectations are blocked behind it.
+    assert next_step(_all_true(reports=[], goal_levels=set())) == "org"
+    # Org done, expectations not: expectations is next.
+    assert next_step(_all_true(covered_role_ids=set(), goal_levels=set())) == "expectations"
+    # Org and expectations done: goals.
+    assert next_step(_all_true(goal_levels=set())) == "goals"
+    assert next_step(_all_true()) is None
+
+
+def test_next_step_skips_a_blocked_step_rather_than_pointing_at_it():
+    # Org is not done, so expectations is blocked; goals (any order) is next
+    # only once org itself is done. With org undone, org stays the pointer.
+    steps = _all_true(reports=_reports(1, unit=None), goal_levels=set())
+    assert steps["expectations"]["blocked"] is True
+    assert next_step(steps) == "org"
+
+
+# ---- carried_forward --------------------------------------------------------
+
+
+def _row(rid, who, when):
+    return {"id": rid, "direct_report_id": who, "scheduled_at": when, "created_at": "2026-01-01T00:00:00+00:00"}
+
+
+def test_a_later_sheet_for_the_same_person_carries_forward():
+    logged = [_row("a", "p1", "2026-09-01T15:00:00+00:00")]
+    assert carried_forward(logged, [_row("b", "p1", "2026-09-15T15:00:00+00:00")])
+
+
+def test_the_logged_row_is_not_its_own_later_sheet():
+    logged = [_row("a", "p1", "2026-09-01T15:00:00+00:00")]
+    assert not carried_forward(logged, [_row("a", "p1", "2026-09-01T15:00:00+00:00")])
+
+
+def test_a_sheet_for_someone_else_or_from_before_the_log_does_not_count():
+    logged = [_row("a", "p1", "2026-09-10T15:00:00+00:00")]
+    assert not carried_forward(logged, [_row("b", "p2", "2026-09-20T15:00:00+00:00")])
+    assert not carried_forward(logged, [_row("c", "p1", "2026-09-01T15:00:00+00:00")])
+    assert not carried_forward([], [_row("b", "p1", "2026-09-20T15:00:00+00:00")])
 
 
 # ---- build_status against a fake client -------------------------------------
@@ -96,8 +140,8 @@ class _Not:
 
 
 class _Q:
-    def __init__(self, rows):
-        self.rows, self.filters, self.values, self.cap = rows, [], None, None
+    def __init__(self, rows, log):
+        self.rows, self.filters, self.values, self.cap, self.log = rows, [], None, None, log
 
     def select(self, *_a):
         return self
@@ -139,57 +183,117 @@ class _Q:
 class _Client:
     def __init__(self, tables):
         self.tables = tables
+        self.touched = []
 
     def table(self, name):
-        return _Q(self.tables[name])
+        self.touched.append(name)
+        return _Q(self.tables[name], self.touched)
+
+
+def _user(**over):
+    row = {
+        "id": "m",
+        "set_up_at": None,
+        "onboarded_at": None,
+        "setup_org_at": None,
+        "setup_expectations_at": None,
+        "setup_goals_at": None,
+    }
+    row.update(over)
+    return row
 
 
 def _tables(**over):
     t = {
-        "users": [{"id": "m", "onboarded_at": None, "knowledge_skipped_at": None}],
+        "users": [_user()],
         "direct_reports": [{"id": "p1", "manager_id": "m", "role_level_id": "r1", "org_unit_id": "u1", "archived_at": None}],
         "org_units": [{"id": "u1"}],
-        "documents": [{"id": "d", "status": "confirmed"}],
         "goals": [{"level": "company", "status": "active"}, {"level": "team", "status": "active"}],
-        "one_on_ones": [{"id": "s", "manager_id": "m", "summary": "held"}],
+        "one_on_ones": [],
     }
     t.update(over)
     return t
 
 
+def _sheet(rid="s1", who="p1", when="2026-09-20T15:00:00+00:00", *, summary=None, prep=True):
+    return {
+        "id": rid,
+        "manager_id": "m",
+        "direct_report_id": who,
+        "scheduled_at": when,
+        "created_at": when,
+        "summary": summary,
+        "prep_guide": {"topics": []} if prep else None,
+    }
+
+
 @pytest.fixture(autouse=True)
 def _coverage_and_events(monkeypatch):
-    monkeypatch.setattr(onboarding, "_compute_coverage", lambda _c: {"roles": [{"role_level_id": "r1", "metrics_count": 2, "skills_count": 0, "values_count": 0}]})
+    monkeypatch.setattr(
+        onboarding,
+        "_compute_coverage",
+        lambda _c: {"roles": [{"role_level_id": "r1", "metrics_count": 2, "skills_count": 0, "values_count": 0}]},
+    )
     sent = []
     monkeypatch.setattr(onboarding.analytics, "capture", lambda uid, ev, props=None: sent.append((uid, ev, props)))
     return sent
 
 
-def test_complete_account_is_stamped_once_and_stays_onboarded(_coverage_and_events):
-    tables = _tables()
+def test_a_complete_setup_is_stamped_once_and_stays_set_up(_coverage_and_events):
+    tables = _tables(one_on_ones=[_sheet()])
     client = _Client(tables)
 
     first = build_status("m", client)
-    assert first["onboarded"] is True and first["done_count"] == 5
-    assert tables["users"][0]["onboarded_at"]
-    assert _coverage_and_events == [("m", "onboarded", {"knowledge_skipped": False})]
+    assert first["set_up"] is True and first["onboarded"] is False
+    assert first["activated"] is True
+    assert first["steps"] is None and first["next_step"] is None
+    assert first["done_count"] == first["total"] == 3
+    user = tables["users"][0]
+    assert user["set_up_at"] and all(user[c] for c in onboarding.STEP_COLUMN.values())
+    events = [(e, p) for _u, e, p in _coverage_and_events]
+    assert [e for e, _ in events] == ["setup_step_completed"] * 3 + ["set_up"]
+    assert [p["step"] for e, p in events if e == "setup_step_completed"] == list(STEP_ORDER)
 
-    # A goal archived later must not take it back, and no second event fires.
+    # A goal archived later must not take it back, and nothing fires twice.
     tables["goals"].clear()
     second = build_status("m", client)
-    assert second["onboarded"] is True and second["steps"] is None
-    assert len(_coverage_and_events) == 1
+    assert second["set_up"] is True and second["steps"] is None
+    assert len(_coverage_and_events) == 4
 
 
-def test_incomplete_account_reports_progress_and_is_not_stamped(_coverage_and_events):
-    tables = _tables(goals=[{"level": "team", "status": "active"}], one_on_ones=[])
+def test_knowledge_documents_are_not_required():
+    # No documents table at all: nothing in setup reads it.
+    build_status("m", _Client(_tables(one_on_ones=[_sheet()])))
+
+
+def test_incomplete_setup_reports_progress_and_points_at_the_next_step(_coverage_and_events):
+    tables = _tables(goals=[{"level": "team", "status": "active"}])
     status = build_status("m", _Client(tables))
-    assert status["onboarded"] is False
-    assert status["done_count"] == 3
+    assert status["set_up"] is False and status["onboarded"] is False
+    assert status["done_count"] == 2
+    assert status["next_step"] == "goals"
     assert status["steps"]["goals"]["has_org_goal"] is False
-    assert status["steps"]["log"]["done"] is False
-    assert tables["users"][0]["onboarded_at"] is None
-    assert _coverage_and_events == []
+    assert status["assessable_people"] == 1
+    assert tables["users"][0]["set_up_at"] is None
+    # The two finished steps each fire once; set_up does not.
+    assert [(e, p["step"]) for _u, e, p in _coverage_and_events] == [
+        ("setup_step_completed", "org"),
+        ("setup_step_completed", "expectations"),
+    ]
+
+
+def test_a_step_that_completed_once_does_not_fire_again_when_it_flips(_coverage_and_events):
+    tables = _tables(goals=[{"level": "team", "status": "active"}])
+    client = _Client(tables)
+    build_status("m", client)
+    before = len(_coverage_and_events)
+
+    # Org stops holding (a person is moved out of every unit), then holds again.
+    tables["direct_reports"][0]["org_unit_id"] = None
+    build_status("m", client)
+    tables["direct_reports"][0]["org_unit_id"] = "u1"
+    build_status("m", client)
+    assert len(_coverage_and_events) == before
 
 
 def test_cancelled_goals_do_not_count():
@@ -197,20 +301,96 @@ def test_cancelled_goals_do_not_count():
     assert build_status("m", _Client(tables))["steps"]["goals"]["done"] is False
 
 
-def test_archived_reports_and_unsummarised_sessions_do_not_count():
+def test_archived_reports_do_not_count():
     tables = _tables(
-        direct_reports=[{"id": "p1", "manager_id": "m", "role_level_id": "r1", "org_unit_id": "u1", "archived_at": "2026-09-01"}],
-        one_on_ones=[{"id": "s", "manager_id": "m", "summary": None}],
+        direct_reports=[{"id": "p1", "manager_id": "m", "role_level_id": "r1", "org_unit_id": "u1", "archived_at": "2026-09-01"}]
     )
-    steps = build_status("m", _Client(tables))["steps"]
-    assert steps["org"]["done"] is False
-    assert steps["log"]["done"] is False
+    assert build_status("m", _Client(tables))["steps"]["org"]["done"] is False
 
 
-def test_nothing_to_import_completes_the_knowledge_step():
-    tables = _tables(documents=[])
-    tables["users"][0]["knowledge_skipped_at"] = "2026-09-29T00:00:00+00:00"
-    steps = build_status("m", _Client(tables))["steps"] or {}
-    # All five hold, so the account is stamped and the endpoint short-circuits next call.
+def test_activated_is_a_prep_sheet_and_nothing_more():
+    assert build_status("m", _Client(_tables(one_on_ones=[])))["activated"] is False
+    assert build_status("m", _Client(_tables(one_on_ones=[_sheet(prep=False)])))["activated"] is False
+    assert build_status("m", _Client(_tables(one_on_ones=[_sheet()])))["activated"] is True
+
+
+def test_onboarded_needs_setup_a_log_and_a_later_sheet(_coverage_and_events):
+    log = _sheet("log", when="2026-09-01T15:00:00+00:00", summary="held")
+    later = _sheet("next", when="2026-09-15T15:00:00+00:00")
+
+    # Set up and logged, but no later sheet yet.
+    tables = _tables(one_on_ones=[log])
+    status = build_status("m", _Client(tables))
+    assert status["set_up"] is True and status["onboarded"] is False
+
+    # The later sheet arrives: onboarded, stamped, one event.
+    tables["one_on_ones"].append(later)
+    client = _Client(tables)
+    status = build_status("m", client)
+    assert status["onboarded"] is True and status["onboarded_at"]
     assert tables["users"][0]["onboarded_at"]
-    assert steps["knowledge"]["skipped"] is True
+    assert [e for _u, e, _p in _coverage_and_events].count("onboarded") == 1
+
+    # Sticky: an emptied history does not undo it, and it answers from the user row.
+    tables["one_on_ones"].clear()
+    client = _Client({"users": tables["users"]})
+    again = build_status("m", client)
+    assert again["onboarded"] is True and again["set_up"] is True and again["activated"] is True
+    assert client.touched == ["users"]
+    assert [e for _u, e, _p in _coverage_and_events].count("onboarded") == 1
+
+
+def test_a_log_alone_does_not_onboard_someone_who_is_not_set_up():
+    tables = _tables(goals=[], one_on_ones=[_sheet("log", summary="held"), _sheet("next", when="2026-10-01T15:00:00+00:00")])
+    status = build_status("m", _Client(tables))
+    assert status["set_up"] is False and status["onboarded"] is False
+
+
+def test_a_grandfathered_account_is_set_up_and_onboarded_without_any_queries(_coverage_and_events):
+    client = _Client({"users": [_user(onboarded_at="2026-09-29T00:00:00+00:00", set_up_at="2026-09-29T00:00:00+00:00")]})
+    status = build_status("m", client)
+    assert status["set_up"] and status["onboarded"] and status["activated"]
+    assert client.touched == ["users"]
+    assert _coverage_and_events == []
+
+
+# ---- the setup-step-started telemetry route ---------------------------------
+
+
+def _telemetry_client():
+    import main
+    import utils
+    from fastapi.testclient import TestClient
+
+    utils.limiter.reset()
+    main.app.dependency_overrides[utils.get_authenticated_client] = lambda: ("u1", None)
+    return TestClient(main.app), main, utils
+
+
+def test_setup_step_started_sends_the_step_and_whether_it_was_next(_coverage_and_events):
+    client, main, utils = _telemetry_client()
+    try:
+        r = client.post("/api/telemetry/setup-step-started", json={"step": "goals", "is_next": True})
+        assert r.status_code == 200, r.text
+        assert _coverage_and_events == [("u1", "setup_step_started", {"step": "goals", "is_next": True})]
+    finally:
+        main.app.dependency_overrides.clear()
+        utils.limiter.reset()
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"step": "knowledge", "is_next": False},  # no longer a step
+        {"step": "goals", "is_next": False, "note": "Priya's goal"},  # no extra fields
+        {"step": "goals"},
+    ],
+)
+def test_setup_step_started_refuses_anything_but_the_enum_and_a_flag(_coverage_and_events, bad):
+    client, main, utils = _telemetry_client()
+    try:
+        assert client.post("/api/telemetry/setup-step-started", json=bad).status_code == 422
+        assert _coverage_and_events == []
+    finally:
+        main.app.dependency_overrides.clear()
+        utils.limiter.reset()

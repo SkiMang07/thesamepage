@@ -10,7 +10,7 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import AddDirectReportButton from "@/components/AddDirectReportButton";
 import Link from "next/link";
-import { getTeamAssessments, TeamAssessmentItem } from "@/lib/api";
+import { getSetupStatus, getTeamAssessments, SetupStatusPerson, TeamAssessmentItem } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import PersonAvatar from "@/components/team/PersonAvatar";
 import { SkeletonSection } from "@/components/Skeleton";
@@ -29,12 +29,18 @@ export default function AssessmentsPage() {
   const [team, setTeam] = useState<TeamAssessmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Who has a role with expectations. Left empty if it can't be read, which
+  // shows every person open rather than lock someone out on a failed fetch.
+  const [readiness, setReadiness] = useState<Record<string, SetupStatusPerson>>({});
 
   useEffect(() => {
     getTeamAssessments()
       .then(setTeam)
       .catch(() => setError("Assessments couldn’t be loaded. This is a connection problem, not an empty team."))
       .finally(() => setLoading(false));
+    getSetupStatus()
+      .then((status) => setReadiness(Object.fromEntries(status.people.map((p) => [p.id, p]))))
+      .catch(() => undefined);
   }, []);
 
   const rows = useMemo(() => {
@@ -87,7 +93,7 @@ export default function AssessmentsPage() {
           )}
           <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {rows.map(({ r, strip }) => (
-              <PersonCard key={r.id} r={r} strip={strip} />
+              <PersonCard key={r.id} r={r} strip={strip} person={readiness[r.id]} />
             ))}
           </ul>
         </>
@@ -97,7 +103,18 @@ export default function AssessmentsPage() {
   );
 }
 
-function PersonCard({ r, strip }: { r: TeamAssessmentItem; strip: StripSlot[] }) {
+// An assessment drafts against a role's expectations, so it opens per person
+// once their role has some. Until then the card says why and where to fix it.
+// This stays after setup ends: someone added later starts locked the same way.
+// Anyone with an assessment already open or completed is never locked.
+function lockFor(person: SetupStatusPerson | undefined, id: string): { label: string; href: string; action: string } | null {
+  if (!person) return null;
+  if (!person.has_role) return { label: "No role yet", href: `/app/reports/${id}`, action: "Set a role" };
+  if (person.role_has_expectations === false) return { label: "Their role has no expectations yet", href: "/app/expectations", action: "Set expectations" };
+  return null;
+}
+
+function PersonCard({ r, strip, person }: { r: TeamAssessmentItem; strip: StripSlot[]; person?: SetupStatusPerson }) {
   const open = r.open_review;
   const last = r.last_review;
   const lastFull = last ? (r.reviews || []).find((x) => x.id === last.id) : undefined;
@@ -153,6 +170,24 @@ function PersonCard({ r, strip }: { r: TeamAssessmentItem; strip: StripSlot[] })
           Start another
         </Link>
       </>
+    );
+  } else if (lockFor(person, r.id)) {
+    const lock = lockFor(person, r.id)!;
+    body = (
+      <>
+        <p className="text-xs font-semibold uppercase tracking-[0.05em] text-ink-faint">Locked · {lock.label}</p>
+        <p className="mt-2 text-sm text-ink-secondary">An assessment opens once the role has expectations to draft against.</p>
+        {r.latest_level_label && (
+          <p className="mt-2 text-xs text-ink-faint">
+            Older rating: {r.latest_level_label} · {formatDay(r.assessed_at, false)} · not a period assessment
+          </p>
+        )}
+      </>
+    );
+    actions = (
+      <Link href={lock.href} className={BTN_SECONDARY}>
+        {lock.action}
+      </Link>
     );
   } else {
     body = r.latest_level_label ? (

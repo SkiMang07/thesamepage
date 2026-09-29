@@ -2,6 +2,8 @@
 
 ## Status
 
+**Partly superseded (2026-09-29).** "Onboarded" no longer means the five below. Setup is three steps (org, expectations, goals), knowledge folds into the notes dump, and the first 1:1 and a second sheet define onboarded. Current truth: `docs/ONBOARDING_SCOPING.md` §11 and `SETUP_MODE_BRIEF.md`. Read the rest of this file as the earlier proposal.
+
 Design proposal from 2026-09-29, not built and not approved. `prototype.html` is a clickable
 preview (open in a browser; "Jump to" buttons in the top bar skip between states). All names,
 drafts and documents are fictional. Nothing in the prototype is saved.

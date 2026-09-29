@@ -35,6 +35,7 @@ import {
   ZONE_STYLE,
   Icon,
   visibleNavGroups,
+  ASSESSMENTS_LOCK_REASON,
   useZoneData,
   NAV_STRIP_HEIGHT,
   SETTINGS_ITEM,
@@ -51,7 +52,8 @@ export default function Sidebar() {
   // desktop choice.
   const collapsed = collapsedPref && !mobileOpen;
   const { onboarding } = useZoneData();
-  const onboarded = onboarding ? onboarding.onboarded : null;
+  const setUp = onboarding ? onboarding.set_up : null;
+  const assessablePeople = onboarding ? onboarding.assessable_people : null;
 
   // Close the slide-over on navigation and on Escape.
   useEffect(() => { setMobileOpen(false); }, [pathname, setMobileOpen]);
@@ -123,7 +125,7 @@ export default function Sidebar() {
 
         <div className={`my-2 h-px shrink-0 bg-hairline ${collapsed ? "w-6" : "mx-2.5"}`} />
 
-        {visibleNavGroups(onboarded).map((group) => {
+        {visibleNavGroups(setUp, assessablePeople).map((group) => {
           const visibleItems = group.items.filter((item) => item.id !== SETTINGS_ITEM.id);
           return (
             <div key={group.group} className={collapsed ? "contents" : "mt-1"}>
@@ -136,7 +138,7 @@ export default function Sidebar() {
                 <Link
                   key={item.id}
                   href="/app/dashboard#setup"
-                  title={`${item.label}: opens when setup is complete`}
+                  title={`${item.label}: ${ASSESSMENTS_LOCK_REASON}`}
                   className={`flex items-center gap-2.5 rounded-lg text-[13px] text-ink-muted transition hover:bg-sunken hover:text-ink-secondary ${
                     collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2"
                   }`}

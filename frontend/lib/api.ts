@@ -1899,13 +1899,15 @@ export type SetupStatus = {
 export const getSetupStatus = (): Promise<SetupStatus> => authedFetch("/api/setup-status");
 
 // ---------------------------------------------------------------------------
-// Onboarding (docs/design-proposals/2026-09-29-onboarding-path/BUILD_BRIEF.md)
-// A manager is onboarded when five things are true. They are derived from real
-// records on the server; `steps` is null once the account is onboarded (the
-// server stops computing them). No AI is involved.
+// Onboarding (docs/design-proposals/2026-09-29-onboarding-path/SETUP_MODE_BRIEF.md)
+// Three states, derived from real records on the server and stamped once:
+// activated (a prep sheet exists), set up (org, expectations and goals hold)
+// and onboarded (set up, a logged 1:1, and a later sheet for the same person).
+// `steps` is null once the account is set up (the server stops computing
+// them). No AI is involved.
 // ---------------------------------------------------------------------------
 
-export type OnboardingStepKey = "org" | "expectations" | "knowledge" | "goals" | "log";
+export type OnboardingStepKey = "org" | "expectations" | "goals";
 
 export type OnboardingSteps = {
   org: { done: boolean; people: number; people_without_team: number; units: number };
@@ -1915,25 +1917,39 @@ export type OnboardingSteps = {
     people_without_role: number;
     roles_in_use: number;
     roles_covered: number;
+    people_ready: number;
   };
-  knowledge: { done: boolean; confirmed_documents: number; skipped: boolean };
   goals: { done: boolean; has_org_goal: boolean; has_team_goal: boolean };
-  log: { done: boolean };
 };
 
 export type OnboardingStatus = {
+  activated: boolean;
+  set_up: boolean;
+  set_up_at: string | null;
   onboarded: boolean;
   onboarded_at: string | null;
   done_count: number;
   total: number;
+  // The one step to point at: first not done and not waiting on another.
+  next_step: OnboardingStepKey | null;
+  // People whose role has expectations. Null once set up.
+  assessable_people: number | null;
   steps: OnboardingSteps | null;
 };
 
 export const getOnboardingStatus = (): Promise<OnboardingStatus> => authedFetch("/api/onboarding/status");
 
-// "Nothing to import" on the knowledge step. Counts as done; skipped=false undoes it.
-export const setKnowledgeSkipped = (skipped: boolean): Promise<OnboardingStatus> =>
-  authedFetch("/api/onboarding/knowledge-skipped", { method: "PUT", body: JSON.stringify({ skipped }) });
+// A setup step opened from the setup card. Step name and whether it was the
+// highlighted one, nothing else. Fire-and-forget.
+export const reportSetupStepStarted = (step: OnboardingStepKey, isNext: boolean): Promise<void> =>
+  authedFetch("/api/telemetry/setup-step-started", {
+    method: "POST",
+    body: JSON.stringify({ step, is_next: isNext }),
+    keepalive: true,
+  }).then(
+    () => undefined,
+    () => undefined,
+  );
 
 export type DraftMetricItem = {
   name: string;

@@ -201,25 +201,25 @@ No schema change in either session.
 3. **Password toggle.** Keep it with the better error (proposed), or hide it for anyone who doesn't already have a password?
 4. **Founding line date.** "Free until December 24." shows the end date, not a countdown. OK?
 
-## 11. After the first prep sheet: the setup path (2026-09-29)
+## 11. After the first prep sheet: setup mode
 
-Design: `docs/design-proposals/2026-09-29-onboarding-path/` (`BUILD_BRIEF.md`, `prototype.html`).
+Design: `docs/design-proposals/2026-09-29-onboarding-path/` (`SETUP_MODE_BRIEF.md` is the current brief; `BUILD_BRIEF.md` and `prototype.html` are the earlier five-step proposal, superseded where they differ). Expert review behind the direction: the VP of Customer Success seat's `2026-09-29-onboarding-soup-to-nuts.md` and its two addenda.
 
-**Onboarded means five things are true** (Andrew, 2026-09-29):
+**Three states**, all derived from real records on every call and stamped once (`backend/routes/onboarding.py`):
 
-1. Team and org: at least one org unit, and every active direct report sits in one.
-2. Role expectations: every active direct report has a role, and every role in use has expectations configured (a job description can supply them).
-3. Knowledge: at least one confirmed document, or the manager has said there is nothing to import.
-4. Goals: an org-level goal (company or department level) and a team goal. Cancelled goals do not count.
-5. Log: a first 1:1 logged (a session with a summary).
+- **Activated:** a prep sheet exists. Reached in the first run.
+- **Set up:** three steps hold. *Org:* at least one org unit, and every active direct report sits in one. *Expectations:* every active direct report has a role, and every role in use has expectations configured (a job description can supply them). *Goals:* an org-level goal (company or department) and a team goal; cancelled goals do not count. `users.set_up_at` is stamped the first time all three hold. Archiving a goal later does not undo it.
+- **Onboarded:** set up, plus a logged 1:1 (a session with a summary), plus a later prep sheet for the same person, dated after that log by meeting date (`utils.meeting_day_of`). `users.onboarded_at` is stamped once. Accounts with reports when it first shipped were grandfathered as onboarded, and the 2026-09-29 migration marks them set up too.
 
-**Decisions (2026-09-29).** "Nothing to import" counts as the knowledge step. Existing accounts with reports are marked onboarded by the migration. The Org door comes back, because org setup is now required. No AI call unless one is needed: every status and every line derived from saved records is computed, not drafted. The step is called "Log", not "record"; recording waits on notes ingestion.
+Knowledge documents are not a setup step and the first 1:1 is not either. Documents arrive through the notes dump (chunk B) and stay optional. `users.knowledge_skipped_at` stays in the schema, unused.
 
-**Built (pass 1).**
-- Migration `2026-09-29_onboarding_state.sql` and `schema.sql`: `users.onboarded_at`, `users.knowledge_skipped_at`; grandfathers existing accounts.
-- `GET /api/onboarding/status` derives the five from real records. The first time all five hold it stamps `onboarded_at` (set once, sticky: archiving a goal later does not undo it) and fires the `onboarded` event. Once stamped it answers from the user row alone. `PUT /api/onboarding/knowledge-skipped` records or clears "nothing to import".
-- `ZoneMap.tsx`: the status rides with the core zone data. `visibleNavGroups(onboarded)` shows Assessments locked (with a "Setup" label, linking to the path) until onboarded; Org is a normal door; Capacity stays hidden for launch. An unreadable status leaves everything open.
-- `components/SetupPath.tsx` on Mission Control (above the week): five steps, each with what it changes and a live status, linking to the surface that does the work. Header chip "Setup n of 5" on every page until onboarded.
+**Decisions (Andrew, 2026-09-29).** Onboarded is set up + first 1:1 + a second, carried-forward sheet. Knowledge folds into the notes dump. Assessments unlocks per person, once their role has expectations. Org goals are fetched and added by the manager; team goals are theirs to write. No AI call unless one is needed: every status is computed, not drafted. Setup mode follows the seven design rules in `SETUP_MODE_BRIEF.md`. Nothing is locked; Andrew will iterate.
 
-**Not built yet (from the prototype).** The split view where a step opens beside the prep sheet; the sheet's "Built without" line and source-tagged context lines (deterministic, no AI); the completion receipt and "next, when there is time" list; per-step analytics. Steps link to the existing pages for now.
+**Built (chunk A).**
+- Migrations `2026-09-29_onboarding_state.sql` and `2026-09-29_setup_mode_state.sql`, with matching `schema.sql`: `users.set_up_at`, `onboarded_at`, and `setup_org_at` / `setup_expectations_at` / `setup_goals_at` (the first time each step was seen holding, so each step's analytics event fires once).
+- `GET /api/onboarding/status`: `activated`, `set_up`, `onboarded`, `done_count` and `total` (of 3), `next_step` (the first step not done and not waiting on another), `assessable_people` (people whose role has expectations; null once set up), and `steps` (null once set up). Once set up the step queries stop; once onboarded the endpoint answers from the user row alone.
+- `components/SetupPath.tsx` on Mission Control: the next step is highlighted with what it changes, a time estimate and one button; the others collapse to a line. Expectations shows locked ("Needs team and org") until org is done. The header chip reads "Setup n of 3" until set up, then goes.
+- Locked doors carry a reason. The Assessments door in the nav locks only while setup is running and nobody has a role with expectations ("Opens for a person once their role has expectations."). On `/app/assessments`, a person with no role or a role without expectations shows locked with the reason and a link to fix it; someone added later starts locked the same way, permanently and quietly. A person with an assessment already open or completed is never locked. The lock is a UI lock: the assessment routes themselves are unchanged.
+- Per-step analytics, count only (`docs/systems/product-analytics.md`): `setup_step_started` (browser click on the card, through `POST /api/telemetry/setup-step-started`), `setup_step_completed`, `set_up`, `onboarded`.
 
+**Not built (chunks B to D).** The notes dump on-ramp; role-expectation on-ramps (attach a job description, draft from a description) and org-goal ingestion; the entry, parse-and-review and completion modals; prompt fading and dismissals; the completion receipt and "next, when there is time" list; the split view; a Mission Control ranker candidate that returns a manager to the next step; the sheet's "Built without" line. Steps link to the existing pages for now.

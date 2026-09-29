@@ -47,10 +47,17 @@ create table users (
   full_name  text not null default '',
   role       text not null default 'manager' check (role in ('manager', 'director', 'vp', 'ic')),
   manager_id uuid references users(id),
-  -- Onboarding (2026-09-29): stamped once, the first time all five setup
-  -- conditions hold (routes/onboarding.py). knowledge_skipped_at is the
-  -- manager's "nothing to import" answer.
+  -- Setup mode (2026-09-29), all derived and stamped once in
+  -- routes/onboarding.py. set_up_at: team and org, role expectations and goals
+  -- all hold. onboarded_at: set up, plus a logged 1:1, plus a later prep sheet
+  -- for the same person. setup_*_at: the first time each setup step was seen
+  -- holding (fires its analytics event once). knowledge_skipped_at is unused
+  -- since knowledge stopped being a setup step.
+  set_up_at timestamptz,
   onboarded_at timestamptz,
+  setup_org_at timestamptz,
+  setup_expectations_at timestamptz,
+  setup_goals_at timestamptz,
   knowledge_skipped_at timestamptz,
   created_at timestamptz not null default now()
 );

@@ -186,7 +186,8 @@ export type NavItem = {
   // destination page exists (the 1:1s item used this in pass 1). No current
   // item sets this as of pass 2.
   disabled?: boolean;
-  // Shown but not open: opens when setup is complete (Assessments).
+  // Shown but not open, with the reason it is not (Assessments, while nobody
+  // has a role with expectations).
   locked?: boolean;
 };
 
@@ -267,21 +268,28 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// Navigation before and after setup. Capacity is hidden for launch. Org is a
+// Navigation during and after setup. Capacity is hidden for launch. Org is a
 // normal door again (2026-09-29): team and org setup is the first step of
-// onboarding and lives there. Assessments shows from day one but locked until
-// the manager is onboarded, so "when does the full app return" has a visible
-// answer. `onboarded` is null while unknown or when the status could not be
-// read; that state shows everything open rather than lock an existing manager
-// out. Routes stay reachable by URL, and getNavContext still resolves them.
+// setup and lives there. Everything that already works stays open. The one
+// door that cannot work yet is Assessments, which drafts against a role's
+// expectations: it shows locked, with the reason and what unlocks it, only
+// while setup is running and nobody has a role with expectations. Once
+// anyone does (or setup is complete) the door opens, and each person's own
+// lock lives on the Assessments page. `setUp` and `assessablePeople` are null
+// while unknown or when the status could not be read; that state shows
+// everything open rather than lock an existing manager out. Routes stay
+// reachable by URL, and getNavContext still resolves them.
 const HIDDEN_FOR_LAUNCH = new Set(["capacity"]);
 
-export function visibleNavGroups(onboarded: boolean | null): NavGroup[] {
+export const ASSESSMENTS_LOCK_REASON = "Opens for a person once their role has expectations.";
+
+export function visibleNavGroups(setUp: boolean | null, assessablePeople: number | null = null): NavGroup[] {
+  const assessmentsLocked = setUp === false && assessablePeople === 0;
   return NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items
       .filter((item) => !HIDDEN_FOR_LAUNCH.has(item.id))
-      .map((item) => (item.id === "assessments" && onboarded === false ? { ...item, locked: true } : item)),
+      .map((item) => (item.id === "assessments" && assessmentsLocked ? { ...item, locked: true } : item)),
   })).filter((group) => group.items.length > 0);
 }
 
@@ -430,7 +438,7 @@ export type ZoneData = {
   // needed for the Settings door's org_ready check, no extra fetch.
   profileName: string | null;
   profileEmail: string | null;
-  // The five-step onboarding status. Null until loaded, or if it could not be
+  // The setup / onboarded status. Null until loaded, or if it could not be
   // read (the nav then leaves everything open and the chip stays away).
   onboarding: OnboardingStatus | null;
 };
@@ -707,14 +715,16 @@ export function useZoneData(options: { doors?: boolean } = {}): ZoneData {
 
 export function ZoneMap({
   doorStates,
-  onboarded = null,
+  setUp = null,
+  assessablePeople = null,
 }: {
   doorStates: Partial<Record<string, DoorState>>;
-  onboarded?: boolean | null;
+  setUp?: boolean | null;
+  assessablePeople?: number | null;
 }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-      {visibleNavGroups(onboarded).map((g) => (
+      {visibleNavGroups(setUp, assessablePeople).map((g) => (
         <div key={g.group} className={`${ZONE_CARD} p-4`}>
           <div className="text-[13px] font-semibold tracking-tight text-ink">{g.group}</div>
           <div className="mt-0.5 text-xs text-ink-muted">{g.blurb}</div>
@@ -737,7 +747,7 @@ export function ZoneMap({
                   key={item.id}
                   href="/app/dashboard#setup"
                   className="flex items-center gap-2 rounded-lg bg-sunken px-2.5 py-2 opacity-60 transition hover:opacity-100"
-                  title="Opens when setup is complete"
+                  title={ASSESSMENTS_LOCK_REASON}
                 >
                   <Icon name={item.icon} className="h-[15px] w-[15px] shrink-0 text-ink-muted" />
                   <span className="flex-1 truncate text-[13px] font-medium text-ink-body">{item.label}</span>

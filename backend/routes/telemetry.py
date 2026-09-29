@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 
 import analytics
+from routes.onboarding import STEP_ORDER
 from utils import get_authenticated_client
 
 router = APIRouter()
@@ -33,6 +34,21 @@ class FirstRunRosterIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     count: int = Field(ge=0, le=100)
+
+
+class SetupStepStartedIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: Literal[STEP_ORDER]  # type: ignore[valid-type]
+    is_next: bool
+
+
+@router.post("/setup-step-started")
+def setup_step_started(body: SetupStepStartedIn, auth=Depends(get_authenticated_client)):
+    """The manager opened a setup step from the setup card. Step name and whether it was the highlighted one."""
+    user_id, _ = auth
+    analytics.capture(user_id, "setup_step_started", {"step": body.step, "is_next": body.is_next})
+    return {"ok": True}
 
 
 @router.post("/first-run-roster")

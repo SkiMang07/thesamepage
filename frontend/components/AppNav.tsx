@@ -123,7 +123,7 @@ export default function AppNav() {
             <Logo className="h-[22px] w-auto text-brand" />
           </Link>
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {zone.onboarding && !zone.onboarding.onboarded && (
+            {zone.onboarding && !zone.onboarding.set_up && (
               <Link
                 href="/app/dashboard#setup"
                 className={`${BTN_TOPBAR_NEUTRAL} gap-2`}

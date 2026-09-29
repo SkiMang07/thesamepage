@@ -41,7 +41,10 @@ What we measure about how managers use the app, how it is collected, and the rul
 |`ai_draft_resolved`|server; browser-computed surfaces arrive via `POST /api/telemetry/ai-draft`|an AI draft or proposal is saved, thrown away, or left open (see "AI-draft quality")|`surface`, `outcome`, `edited_before_save`, `edit_bucket`, `seconds_to_confirm`; `items_drafted` / `items_kept` / `items_added` on wrap-ups|
 |`prep_sheet_saved`|`POST /api/one-on-ones/prep`|every time a prep sheet is generated and saved|`is_first` (bool): no sheet existed for this manager before this one. `regenerated` (bool): this 1:1 already had a sheet and it was replaced|
 |`first_run_roster_added`|`POST /api/telemetry/first-run-roster`|the roster step on `/app/start` adds at least one direct report|`count` (int): how many were added. No names|
-|`onboarded`|server, `GET /api/onboarding/status`|the first time all five setup conditions hold and `users.onboarded_at` is stamped. Fires once per manager|`knowledge_skipped` (bool): the knowledge step was met by "nothing to import" rather than a confirmed document|
+|`setup_step_started`|`POST /api/telemetry/setup-step-started`|the manager opens a setup step from the setup card (browser click, sent through the server so ad blockers can't drop it)|`step` (`org`, `expectations` or `goals`), `is_next` (bool): the step was the highlighted next step|
+|`setup_step_completed`|server, `GET /api/onboarding/status`|the first time a setup step's condition is seen to hold. Fires once per step per manager; a step that stops holding later does not fire again|`step` (enum as above), `done_count` (int): steps holding at that moment|
+|`set_up`|server, `GET /api/onboarding/status`|the first time all setup steps hold and `users.set_up_at` is stamped. Fires once per manager|none|
+|`onboarded`|server, `GET /api/onboarding/status`|the first time the manager is set up, has a logged 1:1, and has a later prep sheet for the same person; `users.onboarded_at` is stamped. Fires once per manager. Accounts grandfathered by the 2026-09-29 migration never fire it|none|
 
 `is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
 
@@ -87,6 +90,16 @@ The one behaviour that says the product is working for a new user: they get in, 
     3. Saved first prep sheet: `prep_sheet_saved` where `is_first = true`.
 - **Reading it:** the drop between 1 and 2 is discovery (can they find prep?). The drop between 2 and 3 is the prep page itself (did generation work, was it worth saving?).
 - **Known gaps:** existing managers never reach step 3, so the funnel only means something for people who signed up inside the window. Step 1 misses a manager whose first page wasn't the dashboard (an invite that lands elsewhere).
+
+### Setup mode
+
+How far new managers get through setup after the first prep sheet. Count only; nothing here says why anyone stopped, the day-1 and day-7 calls do.
+
+- **Steps:** `org`, `expectations`, `goals`. Knowledge documents and the first logged 1:1 are not setup steps.
+- **Read per step:** `setup_step_started` reached, `setup_step_completed` finished. Started without a later completed for the same `step` is abandoned. There is no skip in setup yet, so no skipped count.
+- **`is_next`:** compare completion of the highlighted step against the others to see whether the highlight helps.
+- **Activation ladder:** `prep_sheet_saved` (`is_first`) is activated, `set_up` is set up, `onboarded` is onboarded. Build the PostHog funnel from those three.
+- **Known gap:** a step the manager finishes on its own page without ever clicking the card still fires `setup_step_completed`, with no matching `setup_step_started`.
 
 ### Next pathways (not built)
 
