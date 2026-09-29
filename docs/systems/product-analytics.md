@@ -45,6 +45,9 @@ What we measure about how managers use the app, how it is collected, and the rul
 |`setup_step_completed`|server, `GET /api/onboarding/status`|the first time a setup step's condition is seen to hold. Fires once per step per manager; a step that stops holding later does not fire again|`step` (enum as above), `done_count` (int): steps holding at that moment|
 |`set_up`|server, `GET /api/onboarding/status`|the first time all setup steps hold and `users.set_up_at` is stamped. Fires once per manager|none|
 |`onboarded`|server, `GET /api/onboarding/status`|the first time the manager is set up, has a logged 1:1, and has a later prep sheet for the same person; `users.onboarded_at` is stamped. Fires once per manager. Accounts grandfathered by the 2026-09-29 migration never fire it|none|
+|`notes_dump_parsed`|server, `POST /api/onboarding/notes-dump/parse`|the manager runs the notes dump and the one AI read returns (nothing is saved at this point)|`input_size` (`under_1k`, `1k_5k`, `5k_20k` or `over_20k` characters), `files` (int), `truncated` (bool), `proposed_org_units`, `proposed_roles`, `proposed_goals`, `proposed_notes` (ints, after ranking and the cap), `overflow` (int, found but not shown), `unmatched_people` (int). No text, names or file names|
+|`notes_dump_applied`|server, `POST /api/onboarding/notes-dump/apply`|the manager saves what they kept from the review|`kept_org_units`, `kept_roles`, `kept_goals`, `kept_notes` (ints, saved), `skipped_existing` (int, already there so not duplicated), `refused` (int, failed validation), `dropped` (int, proposed and not kept), `edited` (int, kept rows the manager changed)|
+|`notes_dump_skipped`|`POST /api/telemetry/notes-dump-skipped`|the manager chooses "Nothing to add" on the notes dump|none|
 
 `is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
 
@@ -65,6 +68,7 @@ What we measure about how managers use the app, how it is collected, and the rul
 |`document_extraction`|the Librarian's category, freshness and effective date for an upload|the manager confirms it|the upload is deleted while still in review|server, from `correction_log`|
 |`assessment_item`|one AI judgment, or one redraft revision, on an assessment item|accepted as proposed, or overridden (`set`, counted as edited)|unassessed, or the manager's prior judgment chosen over it; a revision dismissed|server, first manager action on an untouched AI judgment only|
 |`role_suggestion`|one AI suggestion on a role expectations draft|accepted (applied as written)|dismissed|server|
+|`notes_dump`|the notes dump's ranked drafts (team structure, roles, goals, notes about a person)|at least one row is saved from the review|the manager saves with nothing kept (closing the review without saving sends nothing, so there is no abandoned outcome)|server, counts sent with the apply call (`edited` and `proposed` are counts only)|
 
 **Properties.**
 
@@ -97,6 +101,7 @@ How far new managers get through setup after the first prep sheet. Count only; n
 
 - **Steps:** `org`, `expectations`, `goals`. Knowledge documents and the first logged 1:1 are not setup steps.
 - **Read per step:** `setup_step_started` reached, `setup_step_completed` finished. Started without a later completed for the same `step` is abandoned. There is no skip in setup yet, so no skipped count.
+- **Notes dump:** `notes_dump_parsed` (ran), then `notes_dump_applied` (saved something) or `notes_dump_skipped` (chose "Nothing to add"). Parsed without a later applied is abandoned or discarded. `proposed_*` against `kept_*` is how much of the ranked draft survived.
 - **`is_next`:** compare completion of the highlighted step against the others to see whether the highlight helps.
 - **Activation ladder:** `prep_sheet_saved` (`is_first`) is activated, `set_up` is set up, `onboarded` is onboarded. Build the PostHog funnel from those three.
 - **Known gap:** a step the manager finishes on its own page without ever clicking the card still fires `setup_step_completed`, with no matching `setup_step_started`.

@@ -51,6 +51,14 @@ def setup_step_started(body: SetupStepStartedIn, auth=Depends(get_authenticated_
     return {"ok": True}
 
 
+@router.post("/notes-dump-skipped")
+def notes_dump_skipped(auth=Depends(get_authenticated_client)):
+    """The manager chose "Nothing to add" on the notes dump. No body."""
+    user_id, _ = auth
+    analytics.capture(user_id, "notes_dump_skipped", {})
+    return {"ok": True}
+
+
 @router.post("/first-run-roster")
 def first_run_roster_added(body: FirstRunRosterIn, auth=Depends(get_authenticated_client)):
     """How many direct reports a manager brings in on /app/start. Count only."""

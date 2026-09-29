@@ -16,8 +16,10 @@
 // changes, stated as a fact.
 
 import Link from "next/link";
+import { useState } from "react";
+import NotesDumpModal from "@/components/NotesDumpModal";
 import { OnboardingStepKey, OnboardingSteps, reportSetupStepStarted } from "@/lib/api";
-import { BTN_PRIMARY_SM, EYEBROW } from "@/lib/tokens";
+import { BTN_PRIMARY_SM, BTN_SECONDARY, EYEBROW } from "@/lib/tokens";
 import { useZoneData } from "@/components/ZoneMap";
 
 type StepView = {
@@ -97,6 +99,7 @@ export function setupSteps(s: OnboardingSteps): StepView[] {
 
 export default function SetupPath() {
   const { onboarding } = useZoneData();
+  const [dumpOpen, setDumpOpen] = useState(false);
 
   if (!onboarding || onboarding.set_up || !onboarding.steps) return null;
   const steps = setupSteps(onboarding.steps);
@@ -179,6 +182,16 @@ export default function SetupPath() {
           );
         })}
       </ol>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-4">
+        <p className="min-w-0 flex-1 text-[13px] text-ink-secondary">
+          Have notes, a doc or a list already? Add them and the drafts fill in what they cover. Optional.
+        </p>
+        <button type="button" onClick={() => setDumpOpen(true)} className={`${BTN_SECONDARY} shrink-0`}>
+          Add what you already have
+        </button>
+      </div>
+      {dumpOpen && <NotesDumpModal onClose={() => setDumpOpen(false)} />}
     </section>
   );
 }

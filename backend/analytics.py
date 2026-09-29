@@ -77,7 +77,7 @@ AI_DRAFT_CLIENT_SURFACES = (
     "development_note",
     "scribe_proposal",
 )
-AI_DRAFT_SERVER_SURFACES = ("assessment_item", "role_suggestion", "document_extraction")
+AI_DRAFT_SERVER_SURFACES = ("assessment_item", "role_suggestion", "document_extraction", "notes_dump")
 AI_DRAFT_OUTCOMES = ("accepted", "discarded", "abandoned")
 EDIT_BUCKETS = ("none", "light", "moderate", "heavy")
 MAX_SECONDS_TO_CONFIRM = 86_400

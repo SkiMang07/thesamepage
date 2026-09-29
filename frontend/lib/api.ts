@@ -78,6 +78,8 @@ function announceRecordChange(path: string, method: string) {
   // An assessment draft is working state, not a record. Only completing one
   // writes ratings the rest of the app reads.
   if (path.startsWith("/api/assessments/reviews") && !path.endsWith("/complete")) return;
+  // The notes dump's parse only drafts; its apply call is the write.
+  if (path === "/api/onboarding/notes-dump/parse") return;
   // Proposing suggestions writes proposals, not records.
   if (path === "/api/beyond/suggestions/refresh") return;
   window.dispatchEvent(new Event(RECORDS_CHANGED_EVENT));
@@ -1947,6 +1949,91 @@ export const reportSetupStepStarted = (step: OnboardingStepKey, isNext: boolean)
     body: JSON.stringify({ step, is_next: isNext }),
     keepalive: true,
   }).then(
+    () => undefined,
+    () => undefined,
+  );
+
+// ---------------------------------------------------------------------------
+// Notes dump (setup mode chunk B). Parse is the one AI read: drafts only,
+// nothing saved, the input not kept. Apply saves only what the manager kept.
+// ---------------------------------------------------------------------------
+
+export type NotesDumpUnit = {
+  key: string;
+  name: string;
+  unit_type: "team" | "department";
+  parent_name: string | null;
+  excerpt: string | null;
+  low: boolean;
+};
+export type NotesDumpRole = {
+  key: string;
+  report_id: string;
+  person_name: string;
+  role_level_id: string | null;
+  role_label: string | null;
+  role_title: string | null;
+  org_unit_name: string | null;
+  excerpt: string | null;
+  low: boolean;
+};
+export type NotesDumpGoal = {
+  key: string;
+  level: "company" | "department" | "team";
+  title: string;
+  success_metrics: string | null;
+  org_unit_name: string | null;
+  due_date: string | null;
+  excerpt: string | null;
+  low: boolean;
+};
+export type NotesDumpNote = {
+  key: string;
+  report_id: string;
+  person_name: string;
+  text: string;
+  occurred_on: string | null;
+  excerpt: string | null;
+  low: boolean;
+};
+export type NotesDumpDraft = {
+  org_units: NotesDumpUnit[];
+  role_assignments: NotesDumpRole[];
+  goals: NotesDumpGoal[];
+  person_notes: NotesDumpNote[];
+  unmatched_people: { name: string; excerpt: string | null }[];
+  overflow: number;
+  truncated: boolean;
+  nothing_found: boolean;
+};
+export type NotesDumpApplyBody = {
+  org_units: { name: string; unit_type: string; parent_name: string | null }[];
+  role_assignments: { report_id: string; role_level_id: string | null; role_title: string | null; org_unit_name: string | null }[];
+  goals: { level: string; title: string; success_metrics: string | null; org_unit_name: string | null; due_date: string | null }[];
+  person_notes: { report_id: string; text: string }[];
+  proposed: number;
+  edited: number;
+  seconds_to_confirm: number;
+};
+export type NotesDumpApplyResult = {
+  saved: { org_units: number; roles: number; goals: number; notes: number };
+  skipped_existing: number;
+  refused: { kind: string; reason: string }[];
+};
+
+export const parseNotesDump = (input: { text: string; files: File[] }): Promise<NotesDumpDraft> => {
+  const formData = new FormData();
+  if (input.text.trim()) formData.append("text", input.text);
+  for (const f of input.files) formData.append("files", f);
+  return authedFormFetch("/api/onboarding/notes-dump/parse", formData);
+};
+
+export const applyNotesDump = (body: NotesDumpApplyBody): Promise<NotesDumpApplyResult> =>
+  authedFetch("/api/onboarding/notes-dump/apply", { method: "POST", body: JSON.stringify(body) });
+
+// "Nothing to add" on the notes dump. No body; fire-and-forget.
+export const reportNotesDumpSkipped = (): Promise<void> =>
+  authedFetch("/api/telemetry/notes-dump-skipped", { method: "POST", keepalive: true }).then(
     () => undefined,
     () => undefined,
   );
