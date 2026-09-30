@@ -52,7 +52,7 @@ import analytics
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
-from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, manager_side, slice_by_person
+from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, is_promise, manager_side, slice_by_person
 from routes.documents import _MAX_UPLOAD_BYTES
 from routes.expectations_ai import _compute_coverage
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
@@ -504,7 +504,10 @@ def commitments_for_held_back(drafts: dict) -> None:
                 chunks[-1].append(s)
         covered = set(proposed)
         for chunk in chunks:
-            if manager_side(chunk[0]) != "commitment" or _bigrams(" ".join(chunk)) & covered:
+            # Only a stated promise becomes a row. "He's terse so I have to ask"
+            # and "That's on me" are held back from the draft but are not
+            # something owed, and a row is pre-checked.
+            if not is_promise(chunk[0]) or _bigrams(" ".join(chunk)) & covered:
                 continue
             drafts["commitments"].append({
                 "report_id": row["report_id"], "person_name": row["person_name"],

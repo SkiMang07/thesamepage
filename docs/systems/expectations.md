@@ -252,7 +252,11 @@ is **approved**: a draft is not yet a standard.
   When the model misses a held-back commitment, code adds it verbatim
   (`commitments_for_held_back`; a promise said twice is one row; one the model
   already gave anyone is not added again, since a sentence lands in the slice
-  of whoever it names; the 1:1 rhythm is never owed). Kept rows save as open commitments the manager owns
+  of whoever it names; the 1:1 rhythm is never owed; only a stated promise
+  ("I owe", "I promised", "I said I'd") is added, never a loose "I have to ask"
+  or "that's on me", which stay held back but are not proposed, because every
+  proposed row is pre-checked). The review says "You edited this. Your notes
+  said" on a row whose text the manager changed. Kept rows save as open commitments the manager owns
   (`committed_by = 'manager'`, `source_type = 'manual'`, no migration), not
   duplicated when an open one with the same words exists for that person; the
   prep sheet and the person page already list open commitments. They used to

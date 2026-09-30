@@ -822,3 +822,21 @@ def test_a_promise_the_model_gave_someone_else_is_not_added_again():
     nd.commitments_for_held_back(drafts)
     added = [c for c in drafts["commitments"] if c["report_id"] == "ava"]
     assert [c["description"] for c in added] == ["I owe her the escalation runbook review."]
+
+
+def test_loose_manager_side_lines_are_held_back_but_never_proposed_as_commitments():
+    """2026-09-30 walkthrough: "He's terse so I have to ask." and "That's on me."
+    came back as pre-checked "What you owe people" rows. They stay out of the
+    drafter's reading (held back) but are not a promise, so no row is added."""
+    from intake_slices import is_promise, manager_side
+    for loose in ("He's terse so I have to ask.", "That's on me.", "Weekly written status is mine."):
+        assert manager_side(loose) == "commitment" and not is_promise(loose), loose
+    for promise in ("I owe her feedback on one design doc.", "I promised him a 90-day growth plan.",
+                    "I said I'd write him a growth plan.", "I'd write him a growth plan."):
+        assert is_promise(promise), promise
+
+    row = {"report_id": "tomas", "person_name": "Tomás Ibarra",
+           "held_back": ["He's terse so I have to ask.", "That's on me."]}
+    drafts = {"expectations": [row], "person_notes": [], "commitments": []}
+    nd.commitments_for_held_back(drafts)
+    assert drafts["commitments"] == []

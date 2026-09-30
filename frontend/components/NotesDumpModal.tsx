@@ -124,6 +124,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
 
   const rows = useMemo(() => (draft ? allRows(draft) : []), [draft]);
   const keptCount = rows.filter((r) => kept[r.key]).length;
+  const changed = (key: string, original: string) => edits[key] !== undefined && edits[key] !== original;
   const editedCount = rows.filter((r) => kept[r.key] && edits[r.key] !== undefined && edits[r.key] !== r.original).length;
 
   const expRows = draft?.expectations ?? [];
@@ -371,7 +372,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
 
             <Section title="Teams and departments" show={draft.org_units.length > 0}>
               {draft.org_units.map((u) => (
-                <Row key={u.key} rowKey={u.key} kept={kept} setKept={setKept} excerpt={u.excerpt} low={u.low}
+                <Row key={u.key} rowKey={u.key} kept={kept} setKept={setKept} excerpt={u.excerpt} low={u.low} edited={changed(u.key, u.name)}
                   label={`New ${u.unit_type}${u.parent_name ? `, under ${u.parent_name}` : ""}`}>
                   <input aria-label="Name" className={INPUT} value={edits[u.key] ?? u.name} onChange={(e) => setEdits({ ...edits, [u.key]: e.target.value })} />
                 </Row>
@@ -403,7 +404,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                 const blocked = blockedText(e);
                 const title = titleOf(e);
                 return (
-                  <Row key={e.key} rowKey={e.key} kept={kept} setKept={setKept} excerpt={e.excerpt} low={e.low} label={e.person_name}>
+                  <Row key={e.key} rowKey={e.key} kept={kept} setKept={setKept} excerpt={e.excerpt} low={e.low} edited={changed(e.key, e.new_role?.job_role ?? "")} label={e.person_name}>
                     {e.new_role ? (
                       <div className="flex flex-wrap items-center gap-2 text-sm text-ink">
                         <span className="text-ink-secondary">New role:</span>
@@ -473,7 +474,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
 
             <Section title="What you owe people" show={(draft.commitments ?? []).length > 0}>
               {(draft.commitments ?? []).map((c) => (
-                <Row key={c.key} rowKey={c.key} kept={kept} setKept={setKept} excerpt={c.excerpt} low={c.low}
+                <Row key={c.key} rowKey={c.key} kept={kept} setKept={setKept} excerpt={c.excerpt} low={c.low} edited={changed(c.key, c.description)}
                   label={`You owe ${firstName(c.person_name)}${c.due_date ? ` · due ${c.due_date}` : ""}`}>
                   <input
                     aria-label={`What you owe ${c.person_name}`}
@@ -490,7 +491,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
 
             <Section title="Goals" show={draft.goals.length > 0}>
               {draft.goals.map((g) => (
-                <Row key={g.key} rowKey={g.key} kept={kept} setKept={setKept} excerpt={g.excerpt} low={g.low}
+                <Row key={g.key} rowKey={g.key} kept={kept} setKept={setKept} excerpt={g.excerpt} low={g.low} edited={changed(g.key, g.title)}
                   label={`${g.level[0].toUpperCase()}${g.level.slice(1)} goal${g.org_unit_name ? ` · ${g.org_unit_name}` : ""}${g.due_date ? ` · due ${g.due_date}` : ""}`}>
                   <input aria-label="Goal" className={INPUT} value={edits[g.key] ?? g.title} onChange={(e) => setEdits({ ...edits, [g.key]: e.target.value })} />
                   {g.success_metrics && <p className="mt-1 text-xs text-ink-muted">Measure: {g.success_metrics}</p>}
@@ -500,7 +501,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
 
             <Section title="About each person" show={draft.person_notes.length > 0}>
               {draft.person_notes.map((n) => (
-                <Row key={n.key} rowKey={n.key} kept={kept} setKept={setKept} excerpt={n.excerpt} low={n.low}
+                <Row key={n.key} rowKey={n.key} kept={kept} setKept={setKept} excerpt={n.excerpt} low={n.low} edited={changed(n.key, n.text)}
                   label={`${n.person_name}${n.occurred_on ? ` · ${n.occurred_on}` : ""}`}>
                   <textarea
                     aria-label={`Note about ${n.person_name}`}
@@ -668,7 +669,7 @@ function Section({ title, show, children }: { title: string; show: boolean; chil
 }
 
 function Row({
-  rowKey, kept, setKept, label, excerpt, low, children,
+  rowKey, kept, setKept, label, excerpt, low, edited, children,
 }: {
   rowKey: string;
   kept: Record<string, boolean>;
@@ -676,6 +677,8 @@ function Row({
   label: string;
   excerpt: string | null;
   low: boolean;
+  // The manager changed the row's text: the quote is then what the notes said, not the source of what is shown.
+  edited?: boolean;
   children: React.ReactNode;
 }) {
   const id = `nd-${rowKey}`;
@@ -694,7 +697,11 @@ function Row({
           {low && <span className="ml-2 font-normal text-ink-muted">· not stated plainly</span>}
         </label>
         <div className="mt-1">{children}</div>
-        {excerpt && <p className="mt-1 text-xs text-ink-muted">From your notes: “{excerpt}”</p>}
+        {excerpt && (
+          <p className="mt-1 text-xs text-ink-muted">
+            {edited ? "You edited this. Your notes said" : "From your notes"}: “{excerpt}”
+          </p>
+        )}
       </div>
     </li>
   );

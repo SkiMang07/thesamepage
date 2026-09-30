@@ -232,6 +232,19 @@ _COMMITMENT = re.compile(
     ]),
     re.IGNORECASE,
 )
+# A plain promise, as opposed to a loose "I have to ask" or "that's on me". The
+# held-back rule above is wide on purpose (missing a manager-side sentence costs
+# a line the manager deletes), but a row proposed as a commitment is pre-checked,
+# so the net that adds one when the model missed it only trusts these.
+_PROMISE = re.compile(
+    "|".join([
+        _I + r"\s+owe\b",
+        _I + r"\s+(?:promised|committed|offered)\b",
+        _I + r"\s+said\b[^.!?]*?\bI(?:'d|\s+would|'ll|\s+will)\b",
+        _I + r"'d\s+(?:write|send|give|get|share|set\s+up|schedule|draft|book|put\s+together)\s+(?:him|her|them)\b",
+    ]),
+    re.IGNORECASE,
+)
 _ONE_ON_ONE = re.compile(r"(?<![\w:])(?:1\s*[:\-–]\s*1s?|1\s*-?on-?\s*1s?|one[- ]on[- ]ones?)(?![\w:])", re.IGNORECASE)
 _RHYTHM = re.compile(
     r"\b(?:weekly|bi-?weekly|fortnightly|monthly|daily|every\s+(?:other\s+)?\w+|(?:once|twice)\s+a\s+\w+|"
@@ -276,6 +289,12 @@ def manager_side(sentence: str) -> str | None:
     if _ONE_ON_ONE.search(s) and _RHYTHM.search(s):
         return "meeting"
     return None
+
+
+def is_promise(sentence: str) -> bool:
+    """A manager-side sentence that states a promise outright ("I owe her ...",
+    "I said I'd write him a plan"), not a loose to-do or "that's on me". Pure."""
+    return manager_side(sentence) == "commitment" and bool(_PROMISE.search(_plain(sentence)))
 
 
 def for_drafting(slice_text: str | None) -> tuple[str, list[str]]:
