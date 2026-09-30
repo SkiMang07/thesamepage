@@ -871,6 +871,40 @@ Decided the same day, behind the sentence:
 - [ ] ✘ Support path exists: a `support@` or `hello@` address that reaches
   you, linked from Settings → Your account and the marketing footer.
 
+### I. "It isn't only typing": say it on the site and build it into onboarding
+
+Added 2026-09-29 from the Digital Customers homepage interviews (Amara Nwosu,
+slot 7; Dana Kessler, slot 2; logs in `business/digital-customers/personas/*/sessions/`).
+Both read the page as all typing ("all typing"; "another place to type things
+in") and said that is where they would stop. The product does not need typing:
+call notes accept a pasted transcript from any recording tool, and dictation
+puts talk-to-text in the note fields. The page never says so. Andrew pastes in
+his own Granola transcripts. The messaging has to be true, on the site, and
+in the first-run path, or the launch repeats the miss.
+
+- [ ] **Website says how notes get in.** The homepage ("One week with Maya"
+  and the line "Yes, it's somewhere else to write things down") and How It
+  Works state that a note can be written, dictated or pasted from a
+  transcript, without hiding the honest limit: nothing arrives automatically
+  from other tools yet. Copy decided by Andrew, argued in `gtm/site/homepage.md`
+  first, then built in `website/theme/`.
+- [ ] **Onboarding teaches it, where the manager first has to get something
+  in.** The notes dump at the start, the first-1:1 log step and the call-notes
+  pane each show the ways in (paste a transcript, say it, upload a file,
+  type), not a blank box. Setup mode does not treat typing as the only path.
+- [ ] **Every claim is verified on the live app before the copy ships.**
+  Paste a real, hour-long transcript (Andrew's Granola export) through the
+  wrap-up and confirm the extraction holds; use dictation in the deployed app,
+  including the v2 tint-and-undo that has never been used live; open each
+  file type the copy names and confirm it goes in.
+- [ ] **The site and the app say the same thing.** Same list of ways in, in
+  the same words, on the homepage, How It Works, the first-run screens and the
+  empty states. A claim on one that the other cannot back is a launch blocker.
+- [ ] **Copy claims only what is built.** No "connects to Granola/Gemini/Otter"
+  or "automatic" language until notes ingestion ships
+  (`docs/NOTES_INGESTION_SCOPING.md`). "Upload" claims name the file types
+  that actually work, per surface.
+
 ## First-run live walk — 2026-09-29
 
 Rough spots from walking `/app/start` on the live app as a new manager.

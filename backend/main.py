@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from observability import RequestContextMiddleware, configure_logging, init_sentry
-from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
+from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, file_text, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
 configure_logging()
@@ -170,6 +170,7 @@ app.include_router(onboarding.router, prefix="/api/onboarding", tags=["onboardin
 app.include_router(notes_dump.router, prefix="/api/onboarding/notes-dump", tags=["onboarding"])
 app.include_router(org_goals.router, prefix="/api/onboarding/org-goals", tags=["onboarding"])
 app.include_router(transcribe.router, prefix="/api/transcribe", tags=["transcribe"])
+app.include_router(file_text.router, prefix="/api/files", tags=["files"])
 app.include_router(entitlement.router, prefix="/api/entitlement", tags=["entitlement"])
 app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"])
 

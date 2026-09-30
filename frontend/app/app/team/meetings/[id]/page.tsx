@@ -80,6 +80,7 @@ import { createSectionLoader } from "@/lib/sectionLoader";
 import PageShell from "@/components/PageShell";
 import AskAboutButton from "@/components/AskAboutButton";
 import { useDrawer } from "@/lib/drawer-context";
+import AttachFile from "@/components/AttachFile";
 import NoteField from "@/components/NoteField";
 import {
   BADGE,
@@ -686,7 +687,7 @@ export default function TeamMeetingPage() {
             </span>
           </div>
           <p className={`${META} mt-1`}>
-            Type as you go, or paste from whatever you record with. Notes are held in this browser
+            Type as you go, dictate, paste from whatever you record with, or attach a transcript. Notes are held in this browser
             until you log the meeting — they aren&apos;t saved to your account yet, and won&apos;t
             follow you to another device.
           </p>
@@ -700,6 +701,7 @@ export default function TeamMeetingPage() {
             }
             aria-label="Meeting notes"
           />
+          <AttachFile value={extraNotes} onChange={setExtraNotes} surface="team_meeting_notes" />
           {error && <p className={`${ERROR_TEXT} mt-2`}>{error}</p>}
           <button
             type="button"

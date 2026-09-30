@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import AttachFile from "@/components/AttachFile";
 import NoteField from "@/components/NoteField";
 import PageShell from "@/components/PageShell";
 import BeyondWrapUpReview from "./BeyondWrapUpReview";
@@ -584,8 +585,9 @@ export default function MeetingEditor({
             onChange={setNotes}
             rows={16}
             className="mt-2 text-sm"
-            placeholder="What was said, what was decided, who's doing what. Type, paste a transcript, or dictate."
+            placeholder="What was said, what was decided, who's doing what. Type, paste a transcript, attach one, or dictate."
           />
+          <AttachFile value={notes} onChange={setNotes} surface="beyond_meeting_notes" />
           {error && <p className={`${ERROR_TEXT} mt-3`}>{error}</p>}
           <div className="mt-4 flex flex-wrap justify-end gap-2">
             {plan && !existing ? (

@@ -305,6 +305,19 @@ we cover" and "what's actually happening" without navigation.
 
 ## Wrap-up
 
+**Getting the notes in.** The call-notes field takes typing, dictation
+(`NoteField`), a pasted transcript from any recording tool, or an attached file
+(`components/AttachFile.tsx`, `POST /api/files/extract-text`, `routes/file_text.py`).
+Attaching reads one .docx, .pdf, .txt, .md, .vtt or .srt file on the server and adds
+its text to the field after whatever is there, with an Undo until the next edit.
+Caption files lose their cue numbers and timestamps and keep speaker names. No
+model reads the file, nothing is stored, the text is not kept, and audio or video is
+refused by name. The wrap-up call that follows is unchanged: the attach only fills
+the field, and the draft-then-review rule below applies to what the model then
+extracts. The same control sits on the team-meeting notes (`team.md`) and the
+Beyond-the-team meeting notes (`beyond.md`). Text is cut at 120,000 characters
+and says so.
+
 **Always draft-then-review.** The extracted summary and commitments render on an
 editable review screen before anything saves. That screen also carries the
 **meeting date**, prefilled from the prep sheet on the prepared path and from

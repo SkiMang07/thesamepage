@@ -89,6 +89,8 @@ a meeting you just walked out of reads as something to finish.
    kind, who (pick or add inline), optional title, date, notes with dictation
    (`NoteField`). The row is created on "Save draft" or when the write-up starts;
    after that a draft's notes autosave to the server.
+   (The notes box on `MeetingEditor.tsx` also has an "Attach a transcript or file"
+   button, `components/AttachFile.tsx`; see `one-on-ones.md` → Wrap-up.)
 2. **Wrap-up** — `POST /api/beyond/meetings/{id}/wrapup` is a pure AI call
    through `ai_core.generate_text()`. **Nothing is written.** The extractor is
    given the manager's attendees, reports, live goals and live projects, and

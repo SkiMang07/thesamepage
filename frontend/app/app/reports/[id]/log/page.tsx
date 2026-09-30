@@ -27,6 +27,7 @@ import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import WrapUpReview from "../wrap-up-review";
 
+import AttachFile from "@/components/AttachFile";
 import NoteField from "@/components/NoteField";
 // Local calendar day, not the UTC one — "today" west of UTC is otherwise
 // "tomorrow" for most of the evening. Same helper goals/team already use.
@@ -190,6 +191,7 @@ export default function LogOneOnOnePage() {
           placeholder={"– Caught up after standup about the Acme renewal\n– I'll pull the usage numbers before Thursday\n– She'll set up a call with their new champion"}
           rows={10}
         />
+        <AttachFile value={notes} onChange={setNotes} surface="one_on_one_notes" disabled={wrappingUp} />
         {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
         {needsChoice && (
           <p className="mt-2 text-sm text-amber-700">

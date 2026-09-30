@@ -288,6 +288,10 @@ re-anchors a series and stays with the agenda edit on `/app/team`.
 
 ### Wrap-up
 
+The meeting-notes box on the meeting screen has an "Attach a transcript or file"
+button (`components/AttachFile.tsx`; how it reads files is in `one-on-ones.md` →
+Wrap-up). The attached text lands in the box and in the same in-browser draft.
+
 `POST /meetings/{id}/wrapup` is a pure AI call — **nothing is written**. It
 returns a draft summary, commitments, and carry-forward items;
 `components/team/MeetingWrapUpReview.tsx` is the confirm step (its summary,

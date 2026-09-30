@@ -82,6 +82,8 @@ function announceRecordChange(path: string, method: string) {
   if (path.startsWith("/api/assessments/reviews") && !path.endsWith("/complete")) return;
   // The notes dump's parse only drafts; its apply call is the write.
   if (path === "/api/onboarding/notes-dump/parse") return;
+  // Reading an attached file only returns its text; nothing is stored.
+  if (path === "/api/files/extract-text") return;
   // Proposing suggestions writes proposals, not records.
   if (path === "/api/beyond/suggestions/refresh") return;
   window.dispatchEvent(new Event(RECORDS_CHANGED_EVENT));
@@ -2094,6 +2096,17 @@ export const parseNotesDump = (input: { text: string; files: File[] }): Promise<
   if (input.text.trim()) formData.append("text", input.text);
   for (const f of input.files) formData.append("files", f);
   return authedFormFetch("/api/onboarding/notes-dump/parse", formData);
+};
+
+export type ExtractedFileText = { name: string; text: string; chars: number; truncated: boolean };
+
+// Reads one attached file and returns its text, for AttachFile. Nothing is
+// saved or kept, and no model reads it.
+export const extractFileText = (file: File, surface?: string): Promise<ExtractedFileText> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (surface) formData.append("surface", surface);
+  return authedFormFetch("/api/files/extract-text", formData);
 };
 
 export const applyNotesDump = (body: NotesDumpApplyBody): Promise<NotesDumpApplyResult> =>
