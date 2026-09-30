@@ -79,7 +79,7 @@ export default function ItemEditor({
                 patch(
                   e.target.checked
                     ? { measure: "numeric", target: item.target ?? { status: "unresolved" }, legacy_target: false, measurement_period: item.measurement_period ?? "quarter" }
-                    : { measure: "judged", target: null, legacy_target: false, measurement_period: null }
+                    : { measure: "judged", target: null, legacy_target: false, measurement_period: null, data_source: null, example: null }
                 )
               }
             />
@@ -132,6 +132,35 @@ export default function ItemEditor({
                   ))}
                 </select>
               </div>
+              <div className="sm:col-span-2">
+                <label className={LABEL} htmlFor={`source-${id}`}>
+                  Where the number comes from <span className="font-normal text-ink-muted">· optional</span>
+                </label>
+                <input
+                  id={`source-${id}`}
+                  data-field="data_source"
+                  value={item.data_source ?? ""}
+                  onChange={(e) => patch({ data_source: e.target.value })}
+                  maxLength={300}
+                  placeholder="e.g. the renewals report in the CRM, updated weekly"
+                  className={INPUT}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={LABEL} htmlFor={`example-${id}`}>
+                  One real example <span className="font-normal text-ink-muted">· optional</span>
+                </label>
+                <textarea
+                  id={`example-${id}`}
+                  data-field="example"
+                  rows={2}
+                  value={item.example ?? ""}
+                  onChange={(e) => patch({ example: e.target.value })}
+                  maxLength={600}
+                  placeholder="A time this went well or badly, in a sentence. It is added to the description when you approve."
+                  className={textareaCls}
+                />
+              </div>
               <p className="text-xs text-ink-muted sm:col-span-2">
                 {item.target?.status === "set" && item.target.source === "source" && item.target.quote
                   ? `From your job description: “${item.target.quote}”`
@@ -161,7 +190,7 @@ export default function ItemEditor({
 
       <p className="mt-2.5 text-xs text-ink-muted">
         {provenance(item)}
-        {item.source_quote && !item.edited && item.origin === "source" ? ` · from “${item.source_quote}”` : ""}
+        {item.source_quote && !item.edited && (item.origin === "source" || item.origin === "description") ? ` · from “${item.source_quote}”` : ""}
       </p>
     </article>
   );

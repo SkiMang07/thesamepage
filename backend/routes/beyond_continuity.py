@@ -56,6 +56,7 @@ from pydantic import BaseModel
 
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_LIGHT
+from routes.org_goals import pending_unknown
 from routes.beyond import (
     _ACTIVE_STATUSES,
     _MEETING_COLUMNS,
@@ -638,6 +639,8 @@ def get_continuity(auth=Depends(get_authenticated_client)):
         "brief_more": more,
         "prep_items_available": prep_items_available,
         "suggestions_available": suggestions_available,
+        # Setup mode: a question the manager owes their boss, until an org goal exists.
+        "asks": {"org_goals_unknown": pending_unknown(supabase, user_id)},
     }
 
 

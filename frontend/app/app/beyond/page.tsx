@@ -188,6 +188,12 @@ function Beyond() {
           </p>
         )}
 
+        {data?.asks?.org_goals_unknown && (
+          <p role="status" className="mt-4 rounded-md bg-sunken px-3 py-2 text-sm text-ink-body">
+            To ask your boss: this period’s company or department goals. It is added to your meetings with them. You said you don’t know them yet, and the goals step stays open until a company or department goal is added.
+          </p>
+        )}
+
         {!data && !error ? (
           <SkeletonSection label="Loading your conversations beyond the team" variant="cards" className="mt-8" />
         ) : data ? (

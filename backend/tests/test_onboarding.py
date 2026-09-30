@@ -210,6 +210,7 @@ def _tables(**over):
         "org_units": [{"id": "u1"}],
         "goals": [{"level": "company", "status": "active"}, {"level": "team", "status": "active"}],
         "one_on_ones": [],
+        "role_levels": [{"id": "r1", "job_role": "CSM", "job_level": 2}],
     }
     t.update(over)
     return t
@@ -394,3 +395,81 @@ def test_setup_step_started_refuses_anything_but_the_enum_and_a_flag(_coverage_a
     finally:
         main.app.dependency_overrides.clear()
         utils.limiter.reset()
+
+
+# ---- chunk C: who to set expectations for next, and "Don't know yet" ---------
+
+from routes.onboarding import expectation_queue  # noqa: E402
+
+
+def _people():
+    return [
+        {"id": "a", "name": "Ana", "role_level_id": "r1"},
+        {"id": "b", "name": "Ben", "role_level_id": "r2"},
+        {"id": "c", "name": "Cy", "role_level_id": "r2"},
+        {"id": "d", "name": "Di", "role_level_id": None},
+        {"id": "e", "name": "Eve", "role_level_id": "r3"},
+    ]
+
+
+def test_queue_puts_the_soonest_1on1_first_and_skips_covered_roles():
+    labels = {"r1": "CSM L2", "r2": "AE L1", "r3": "SE L3"}
+    q = expectation_queue(_people(), labels, {"r1"}, {"c": "2026-10-02", "e": "2026-10-05"})
+    assert [(x["report_id"], x["role_label"]) for x in q] == [("c", "AE L1"), ("e", "SE L3"), ("d", None)]
+    assert q[0]["next_1on1_on"] == "2026-10-02" and q[2]["next_1on1_on"] is None
+
+
+def test_a_shared_role_appears_once_and_undated_people_follow_by_name():
+    q = expectation_queue(_people(), {}, set(), {})
+    assert [x["person_name"] for x in q] == ["Ana", "Ben", "Di", "Eve"]     # Cy shares Ben's role
+
+
+def test_queue_is_capped_and_empty_when_everything_is_covered():
+    many = [{"id": f"p{i}", "name": f"P{i:02}", "role_level_id": f"r{i}"} for i in range(9)]
+    assert len(expectation_queue(many, {}, set(), {})) == 5
+    assert expectation_queue(_people()[:1], {}, {"r1"}, {}) == []
+
+
+def test_status_carries_the_next_role_and_ignores_past_meetings():
+    tables = _tables(
+        direct_reports=[
+            {"id": "p1", "name": "Priya", "manager_id": "m", "role_level_id": "r9", "org_unit_id": "u1", "archived_at": None},
+            {"id": "p2", "name": "Sam", "manager_id": "m", "role_level_id": None, "org_unit_id": "u1", "archived_at": None},
+        ],
+        role_levels=[{"id": "r9", "job_role": "AE", "job_level": 1}],
+        one_on_ones=[
+            {**_sheet("s1", "p1", "2020-01-01T15:00:00+00:00", prep=False)},
+            {**_sheet("s2", "p2", "2999-01-01T15:00:00+00:00", prep=False)},
+        ],
+    )
+    steps = build_status("m", _Client(tables))["steps"]
+    nxt = steps["expectations"]["next_role"]
+    assert nxt["report_id"] == "p2" and nxt["role_level_id"] is None and nxt["next_1on1_on"] == "2999-01-01"
+    assert [x["report_id"] for x in steps["expectations"]["queue"]] == ["p2", "p1"]
+
+
+def test_dont_know_yet_parks_the_goals_step_without_completing_it():
+    steps = evaluate(reports=_reports(2), unit_count=1, covered_role_ids={"r1"},
+                     goal_levels={"team"}, org_goals_unknown=True)
+    assert steps["goals"]["done"] is False and steps["goals"]["parked"] is True
+    assert next_step(steps) is None                       # nothing to highlight, set up stays open
+
+
+def test_dont_know_yet_does_not_park_while_the_team_goal_is_also_missing():
+    steps = evaluate(reports=_reports(2), unit_count=1, covered_role_ids={"r1"},
+                     goal_levels=set(), org_goals_unknown=True)
+    assert steps["goals"]["unknown"] is True and steps["goals"]["parked"] is False
+    assert next_step(steps) == "goals"
+
+
+def test_an_org_goal_ends_the_unknown_answer():
+    steps = evaluate(reports=_reports(2), unit_count=1, covered_role_ids={"r1"},
+                     goal_levels={"company", "team"}, org_goals_unknown=True)
+    assert steps["goals"]["done"] is True and steps["goals"]["unknown"] is False and steps["goals"]["parked"] is False
+
+
+def test_status_clears_the_flag_once_an_org_goal_exists():
+    tables = _tables(users=[_user(org_goals_unknown_at="2026-09-29T00:00:00+00:00")],
+                     goals=[{"level": "company", "status": "active"}])
+    build_status("m", _Client(tables))
+    assert tables["users"][0]["org_goals_unknown_at"] is None

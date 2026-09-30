@@ -253,6 +253,16 @@ commitments are never the manager's tasks: they appear as "recorded as open".
 Nav door state: `last Sep 18` / `nothing logged yet`, from the overview's
 `last_logged`.
 
+## Boss-meeting agenda seed
+
+When the manager answers "Don't know yet" on org goals (`users.org_goals_unknown_at`),
+`backend/routes/org_goals.py` adds one prep item, "Ask for this period's company or
+department goals.", to the next meeting with a person whose relationship is
+`manager`, and `create_meeting` seeds it into the first such meeting created later.
+It is deduplicated and never fails a meeting save. `GET /api/beyond/continuity`
+returns `asks.org_goals_unknown` while the flag is set and no org goal exists; the
+page shows one line. Adding an org goal clears the flag.
+
 ## Not built
 
 Repeating group meetings and a persistent home for a recurring group

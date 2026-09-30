@@ -456,6 +456,14 @@ export type Goal = {
   org_unit_id: string | null;
   org_unit_name?: string | null;
   created_at: string;
+  // Company and department goals only (setup mode chunk C): the period and who
+  // set the goal, in the manager's words; the last day they said it was still
+  // current; and whether it is time to ask again (a quarter, or past its end
+  // date). needs_confirmation is computed by the server.
+  period_label?: string | null;
+  set_by?: string | null;
+  confirmed_on?: string | null;
+  needs_confirmation?: boolean;
   // One optional numeric measure (2026-09-25). Null = the written
   // success_metrics is the whole criterion. See docs/systems/goals.md.
   measure?: GoalMeasure | null;
@@ -1911,6 +1919,17 @@ export const getSetupStatus = (): Promise<SetupStatus> => authedFetch("/api/setu
 
 export type OnboardingStepKey = "org" | "expectations" | "goals";
 
+// Who to set expectations for next (setup mode chunk C). Sequenced by payoff:
+// the person whose 1:1 is soonest first. A person with no role is listed as
+// themselves, and the next action is picking a role for them.
+export type ExpectationQueueEntry = {
+  report_id: string;
+  person_name: string;
+  role_level_id: string | null;
+  role_label: string | null;
+  next_1on1_on: string | null;
+};
+
 export type OnboardingSteps = {
   org: { done: boolean; people: number; people_without_team: number; units: number };
   expectations: {
@@ -1920,8 +1939,12 @@ export type OnboardingSteps = {
     roles_in_use: number;
     roles_covered: number;
     people_ready: number;
+    next_role: ExpectationQueueEntry | null;
+    queue: ExpectationQueueEntry[];
   };
-  goals: { done: boolean; has_org_goal: boolean; has_team_goal: boolean };
+  // unknown: "Don't know yet" is the recorded answer. parked: it is the only
+  // thing missing, so the step waits on the boss instead of being highlighted.
+  goals: { done: boolean; has_org_goal: boolean; has_team_goal: boolean; unknown: boolean; parked: boolean };
 };
 
 export type OnboardingStatus = {
@@ -2038,6 +2061,59 @@ export const reportNotesDumpSkipped = (): Promise<void> =>
     () => undefined,
   );
 
+// ---------------------------------------------------------------------------
+// Org goals (setup mode chunk C). Parse is the one AI read: drafts only,
+// nothing saved, the input not kept. Apply saves only what the manager kept.
+// "Don't know yet" is a recorded answer that parks the goals step and puts one
+// question on the meeting with their boss. "Still current?" is a quarterly
+// yes, no AI.
+// ---------------------------------------------------------------------------
+
+export type OrgGoalDraft = {
+  key: string;
+  level: "company" | "department";
+  title: string;
+  success_metrics: string | null;
+  org_unit_name: string | null;
+  period_label: string | null;
+  due_date: string | null;
+  set_by: string | null;
+  excerpt: string | null;
+  low: boolean;
+};
+export type OrgGoalsParsed = { goals: OrgGoalDraft[]; overflow: number; truncated: boolean; nothing_found: boolean };
+export type OrgGoalsApplyBody = {
+  goals: {
+    level: string;
+    title: string;
+    success_metrics: string | null;
+    org_unit_name: string | null;
+    period_label: string | null;
+    set_by: string | null;
+    due_date: string | null;
+  }[];
+  proposed: number;
+  edited: number;
+  seconds_to_confirm: number;
+};
+export type OrgGoalsApplyResult = { saved: number; skipped_existing: number; refused: { kind: string; reason: string }[] };
+
+export const parseOrgGoals = (input: { text: string; files: File[] }): Promise<OrgGoalsParsed> => {
+  const formData = new FormData();
+  if (input.text.trim()) formData.append("text", input.text);
+  for (const f of input.files) formData.append("files", f);
+  return authedFormFetch("/api/onboarding/org-goals/parse", formData);
+};
+
+export const applyOrgGoals = (body: OrgGoalsApplyBody): Promise<OrgGoalsApplyResult> =>
+  authedFetch("/api/onboarding/org-goals/apply", { method: "POST", body: JSON.stringify(body) });
+
+export const markOrgGoalsUnknown = (): Promise<{ recorded: boolean; added_to_meeting: boolean; meeting_id: string | null }> =>
+  authedFetch("/api/onboarding/org-goals/unknown", { method: "POST" });
+
+export const confirmOrgGoal = (goalId: string): Promise<{ id: string; confirmed_on: string }> =>
+  authedFetch(`/api/onboarding/org-goals/${goalId}/confirm`, { method: "POST" });
+
 export type DraftMetricItem = {
   name: string;
   order_type: "primary" | "secondary" | "tertiary" | null;
@@ -2152,9 +2228,16 @@ export type RoleItem = {
   // lives in its wording (legacy_target true).
   target: RoleTarget | null;
   legacy_target?: boolean;
-  origin: "source" | "suggestion" | "approved" | "copied" | "manager";
+  // "description": drawn from the manager's own description of the role.
+  // "typical": usual for the role and NOT from the manager; held as a
+  // suggestion until they use it, and marked until they edit it.
+  origin: "source" | "suggestion" | "approved" | "copied" | "manager" | "description" | "typical";
   edited: boolean;
   source_quote: string | null;
+  // Numeric responsibilities only, the manager's words. data_source is stored
+  // on the approved expectation; example is folded into its description.
+  data_source?: string | null;
+  example?: string | null;
 };
 
 export type RoleQuestion = {
@@ -3652,6 +3735,9 @@ export type BeyondContinuity = {
   brief_more: BeyondBriefItem[];
   prep_items_available: boolean;
   suggestions_available: boolean;
+  // A question the manager owes their boss: "Don't know yet" on org goals,
+  // until an org-level goal exists (setup mode chunk C).
+  asks?: { org_goals_unknown: boolean };
 };
 
 export const getBeyondContinuity = (): Promise<BeyondContinuity> => authedFetch("/api/beyond/continuity");

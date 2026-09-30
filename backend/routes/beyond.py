@@ -53,6 +53,7 @@ from pydantic import BaseModel, Field
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.check_ins import CheckInIn, create_check_in, enrich_with_check_ins
+from routes.org_goals import seed_new_boss_meeting
 from routes.team import _encode_meeting_date
 from utils import get_authenticated_client, get_org, limiter, meeting_date_of, meeting_day_of, meeting_sort_key
 
@@ -784,6 +785,9 @@ def create_meeting(body: MeetingIn, auth=Depends(get_authenticated_client)):
         .data[0]
     )
     _set_meeting_people(supabase, user_id, created["id"], person_ids)
+    # Setup mode: if the manager said they don't know their org goals yet, a
+    # meeting with their boss starts with that question on it.
+    seed_new_boss_meeting(supabase, user_id, created["id"], person_ids)
     if body.recurrence_weeks is not None:
         _, series_id = _resolve_recurrence(
             supabase,

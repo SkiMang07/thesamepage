@@ -61,6 +61,7 @@ import GoalUpdateForm, { UpdateDraft, isDraftDirty } from "@/components/goals/Go
 import GoalDetail from "@/components/goals/GoalDetail";
 import GoalForm from "@/components/goals/GoalForm";
 import UpdatesFeed from "@/components/goals/UpdatesFeed";
+import StillCurrent from "@/components/goals/StillCurrent";
 import Dialog from "@/components/goals/Dialog";
 import { ReviewPresentation, ReviewSetup } from "@/components/goals/ReviewTogether";
 import { useOpenRecord } from "@/lib/scribeCitations";
@@ -611,6 +612,16 @@ export default function GoalsPage() {
           </p>
         )}
         <PartialLoadNotice failed={partial} className="mt-4" />
+
+        {!loading && !loadError && !focused && (
+          <StillCurrent
+            goals={goals}
+            onConfirmed={(id, confirmedOn) =>
+              setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, confirmed_on: confirmedOn, needs_confirmation: false } : g)))
+            }
+            onEdit={(g) => guard(() => setEditor({ kind: "edit", id: g.id }))}
+          />
+        )}
 
         {loading ? (
           <SkeletonSection label="Loading goals" variant="cards" className="mt-8" />

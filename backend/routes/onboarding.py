@@ -28,12 +28,13 @@ lets its analytics event fire exactly once.
 
 No AI is involved anywhere in this route.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends
 
 import analytics
 from routes.expectations_ai import _compute_coverage
+from routes.org_goals import clear_unknown, read_unknown
 from utils import get_authenticated_client, meeting_day_of
 
 router = APIRouter()
@@ -49,11 +50,15 @@ def evaluate(
     unit_count: int,
     covered_role_ids: set,
     goal_levels: set,
+    org_goals_unknown: bool = False,
+    queue: list[dict] | None = None,
 ) -> dict:
     """The setup conditions as plain data. Pure, so it is tested without a database.
 
     `reports` are the manager's active direct reports (role_level_id, org_unit_id).
     `covered_role_ids` are role levels with at least one configured expectation.
+    `org_goals_unknown` is the manager's "Don't know yet" on org goals; `queue` is
+    expectation_queue() (who to set expectations for next, soonest 1:1 first).
     """
     people = len(reports)
     without_team = sum(1 for r in reports if not r.get("org_unit_id"))
@@ -83,11 +88,19 @@ def evaluate(
             # People whose role has expectations: the ones an assessment can
             # be drafted against. Feeds the Assessments door.
             "people_ready": people_ready,
+            # Whose role to set expectations for next, soonest 1:1 first (chunk C).
+            "next_role": (queue or [None])[0],
+            "queue": queue or [],
         },
         "goals": {
             "done": has_org_goal and has_team_goal,
             "has_org_goal": has_org_goal,
             "has_team_goal": has_team_goal,
+            # "Don't know yet" (chunk C): recorded, and it does not complete the
+            # step. `parked` when the org goal is the only thing missing, so the
+            # step stops being the highlighted one and reads "Waiting on your boss".
+            "unknown": bool(org_goals_unknown and not has_org_goal),
+            "parked": bool(org_goals_unknown and not has_org_goal and has_team_goal),
         },
     }
 
@@ -100,9 +113,68 @@ def next_step(steps: dict) -> str | None:
     """
     for key in STEP_ORDER:
         step = steps[key]
-        if not step["done"] and not step.get("blocked"):
+        if not step["done"] and not step.get("blocked") and not step.get("parked"):
             return key
     return None
+
+
+def expectation_queue(
+    reports: list[dict],
+    role_labels: dict,
+    covered_role_ids: set,
+    next_dates: dict,
+    limit: int = 5,
+) -> list[dict]:
+    """Who to set expectations for next. Pure.
+
+    Sequenced by payoff: the person whose 1:1 is soonest goes first, so the role
+    that improves the next sheet comes before the rest. A person with no role is
+    listed as themselves (the next action is picking a role); a role several
+    people share is listed once, at its soonest person. People with no dated 1:1
+    follow, by name.
+    """
+    covered = set(covered_role_ids)
+    pending = [r for r in reports if not (r.get("role_level_id") and r["role_level_id"] in covered)]
+    pending.sort(key=lambda r: (next_dates.get(r["id"]) is None, next_dates.get(r["id"]) or "", (r.get("name") or "").lower()))
+    out, seen_roles = [], set()
+    for r in pending:
+        role_id = r.get("role_level_id")
+        if role_id:
+            if role_id in seen_roles:
+                continue
+            seen_roles.add(role_id)
+        out.append({
+            "report_id": r["id"],
+            "person_name": r.get("name"),
+            "role_level_id": role_id,
+            "role_label": role_labels.get(role_id) if role_id else None,
+            "next_1on1_on": next_dates.get(r["id"]),
+        })
+    return out[:limit]
+
+
+def _next_1on1_dates(supabase, user_id: str) -> dict:
+    """report id -> the date of their soonest unlogged 1:1, today or later."""
+    rows = (
+        supabase.table("one_on_ones")
+        .select("direct_report_id,scheduled_at,created_at")
+        .eq("manager_id", user_id)
+        .is_("summary", "null")
+        .not_.is_("scheduled_at", "null")
+        .limit(200)
+        .execute()
+        .data
+    )
+    today = date.today()
+    out: dict = {}
+    for row in rows:
+        day = meeting_day_of(row)
+        who = row.get("direct_report_id")
+        if day is None or who is None or day < today:
+            continue
+        if who not in out or day.isoformat() < out[who]:
+            out[who] = day.isoformat()
+    return out
 
 
 def carried_forward(logged: list[dict], prepped: list[dict]) -> bool:
@@ -234,7 +306,7 @@ def build_status(user_id: str, supabase) -> dict:
     if not set_up_at:
         reports = (
             supabase.table("direct_reports")
-            .select("id,role_level_id,org_unit_id")
+            .select("id,name,role_level_id,org_unit_id")
             .eq("manager_id", user_id)
             .is_("archived_at", "null")
             .execute()
@@ -251,11 +323,21 @@ def build_status(user_id: str, supabase) -> dict:
             g["level"]
             for g in supabase.table("goals").select("level").neq("status", "cancelled").execute().data
         }
+        role_labels = {
+            r["id"]: f"{r['job_role']} L{r['job_level']}" if r.get("job_level") else str(r["job_role"])
+            for r in supabase.table("role_levels").select("id,job_role,job_level").execute().data
+        }
+        unknown = read_unknown(supabase, user_id)
+        if unknown and goal_levels & ORG_LEVELS:
+            clear_unknown(supabase, user_id)
+            unknown = False
         steps = evaluate(
             reports=reports,
             unit_count=unit_count,
             covered_role_ids=covered_role_ids,
             goal_levels=goal_levels,
+            org_goals_unknown=unknown,
+            queue=expectation_queue(reports, role_labels, covered_role_ids, _next_1on1_dates(supabase, user_id)),
         )
         done_count = sum(1 for k in STEP_ORDER if steps[k]["done"])
         assessable = steps["expectations"]["people_ready"]

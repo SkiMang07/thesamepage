@@ -104,6 +104,19 @@ Callers that predate measures (the Scribe) send only status / progress / note
 and behave as before. Project check-ins and confirmed Beyond check-ins still
 use `create_check_in()`.
 
+## Org-goal period, owner and "Still current?"
+
+Goals carry `period_label` ("FY26", "Q4 2026"), `set_by` ("CEO", "board deck"; the
+manager's words, not a user reference) and `confirmed_on`. All nullable. Org
+goals (company, department) come in through the setup card's org-goals modal
+(`backend/routes/org_goals.py`: parse, review, apply); apply stamps
+`confirmed_on`. `_shape_rows` sets `needs_confirmation` on an org goal that is
+not cancelled or completed and is past its end date or whose `confirmed_on`
+(else creation date) is 90 or more days old (`CONFIRM_AFTER_DAYS`). The page shows one "Still current?" panel
+(`components/goals/StillCurrent.tsx`); "Yes, still current" calls
+`POST /api/onboarding/org-goals/{id}/confirm`, "Edit" opens the goal. Team goals
+are never drafted.
+
 ## API notes
 
 - `PUT /api/goals/{id}` touches the measure only when the body includes

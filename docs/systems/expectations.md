@@ -154,6 +154,20 @@ approved standard.
 `GET /api/expectations/coverage` (setup status, Settings readiness) counts
 non-retired rows.
 
+## Description mode and provenance
+
+With no job description or file, `POST /import` treats the manager's notes
+(`context`, min 40 characters) as the only source. The model marks each line's
+`origin`: `description` ("from your description") or `typical` ("typical for this
+role, not from you"); `jd`, `notes` and `manager` are unchanged. The server
+enforces the rest: at most 3 typical lines, forced judged, no number, target or
+quote, and they are saved as suggestions (why: "Typical for this role, not from
+you.") rather than draft items; accepting one keeps the mark. Numeric
+responsibilities also carry `data_source` (where the number lives; stored on
+`metric_configs.data_source`) and an optional `example`, which approval folds
+into the description as a last "Example: ..." line. Every composed draft emits
+`role_draft_composed` (counts and enums only).
+
 ## Endpoints (`/api/role-expectations`)
 
 | | |

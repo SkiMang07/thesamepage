@@ -6,6 +6,12 @@
 // and the notes are where the manager says what's true now. Where the two
 // disagree, the notes win (backend/routes/role_expectations.py).
 // Everything stays in the parent's state, so a failed draft never loses it.
+//
+// Setup mode chunk C: with `onDescribe` the manager can instead describe the
+// role in a few sentences, typed or spoken, with no document. That text travels
+// as the same `context` field; with no job description the server treats it as
+// the only source and marks each drafted line as drawn from it or as only
+// typical for the role (backend/routes/role_expectations.py).
 
 import { useRef, useState } from "react";
 import { LABEL, TEXTAREA } from "@/lib/tokens";
@@ -21,6 +27,8 @@ export default function JdInput({
   context,
   onContext,
   disabled,
+  describe = false,
+  onDescribe,
 }: {
   text: string;
   onText: (t: string) => void;
@@ -29,9 +37,43 @@ export default function JdInput({
   context: string;
   onContext: (t: string) => void;
   disabled?: boolean;
+  describe?: boolean;
+  onDescribe?: (v: boolean) => void;
 }) {
+  const tabCls = (on: boolean) =>
+    `rounded-md px-3 py-1.5 text-sm font-medium transition ${on ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`;
   return (
     <div>
+      {onDescribe && (
+        <div role="tablist" aria-label="How to start" className="mb-4 inline-flex gap-1 rounded-lg border border-control p-1">
+          <button type="button" role="tab" aria-selected={!describe} disabled={disabled} onClick={() => onDescribe(false)} className={tabCls(!describe)}>
+            Attach a job description
+          </button>
+          <button type="button" role="tab" aria-selected={describe} disabled={disabled} onClick={() => onDescribe(true)} className={tabCls(describe)}>
+            Describe the role
+          </button>
+        </div>
+      )}
+      {describe ? (
+        <div>
+          <label htmlFor="jd-context" className={LABEL}>
+            Describe the role
+          </label>
+          <p className="mb-2 text-sm text-ink-muted">
+            What it owns, how you’d tell it’s going well, and any numbers you already track. Speak or type; a few sentences is enough. Lines drawn from what you write are marked as yours. A line that is only typical for the role is marked too and waits until you use it.
+          </p>
+          <NoteField
+            id="jd-context"
+            value={context}
+            onChange={onContext}
+            disabled={disabled}
+            rows={8}
+            placeholder="e.g. Priya leads six support reps. She owns first response time and keeps CSAT above 90 each month. She coaches each rep weekly."
+            className="text-sm leading-relaxed"
+          />
+        </div>
+      ) : (
+        <>
       <SourceInput text={text} onText={onText} file={file} onFile={onFile} disabled={disabled} />
       <div className="mt-5">
         <label htmlFor="jd-context" className={LABEL}>
@@ -50,6 +92,8 @@ export default function JdInput({
           className="text-sm leading-relaxed"
         />
       </div>
+        </>
+      )}
     </div>
   );
 }

@@ -91,6 +91,9 @@ _MAX_ITEMS = 40
 _MAX_TEXT = 2000
 _MAX_SOURCE = 60_000
 _MAX_CONTEXT = 20_000
+_MAX_TYPICAL = 3
+_MAX_EXAMPLE = 600
+_MAX_DATA_SOURCE = 300
 _NO_ID = "00000000-0000-0000-0000-000000000000"
 
 
@@ -144,6 +147,11 @@ def _squash(s: str | None) -> str:
 def _clean_text(v, limit: int = _MAX_TEXT) -> str:
     return v.strip()[:limit] if isinstance(v, str) else ""
 
+
+# Where a line came from. "description": drawn from the manager's own description
+# of the role. "typical": usual for the role, NOT from the manager; held as a
+# suggestion until they accept it, and marked as such in the editor.
+_ORIGINS = ("source", "suggestion", "approved", "copied", "manager", "description", "typical")
 
 _KEY_RE = re.compile(r"n-[0-9a-f]{12}")
 
@@ -205,9 +213,15 @@ def normalize_item(raw: dict, *, default_origin: str = "manager") -> dict | None
         "value_type": raw.get("value_type") if raw.get("value_type") in ("team", "department") else None,
         "target": target,
         "legacy_target": bool(raw.get("legacy_target")) and target is None,
-        "origin": raw.get("origin") if raw.get("origin") in ("source", "suggestion", "approved", "copied", "manager") else default_origin,
+        "origin": raw.get("origin") if raw.get("origin") in _ORIGINS else default_origin,
         "edited": bool(raw.get("edited")),
         "source_quote": _clean_text(raw.get("source_quote"), 600) or None,
+        # Setup mode chunk C. Where a numeric expectation's number lives, and
+        # one real example: both the manager's words, numeric responsibilities
+        # only. data_source is stored on metric_configs; example is folded into
+        # the description at approval (approve_role_expectation_draft).
+        "data_source": (_clean_text(raw.get("data_source"), _MAX_DATA_SOURCE) or None) if measure == "numeric" and section == "responsibility" else None,
+        "example": (_clean_text(raw.get("example"), _MAX_EXAMPLE) or None) if measure == "numeric" and section == "responsibility" else None,
     }
 
 
@@ -238,6 +252,7 @@ def items_from_configs(expectations: dict) -> list[dict]:
             "meets": row.get("expectation"), "exceeds": row.get("exceeds"),
             "measurement_period": row.get("measurement_period"), "order_type": row.get("order_type"),
             "target": target, "legacy_target": status is None, "origin": "approved",
+            "data_source": row.get("data_source"),
         }, default_origin="approved"))
     for row in expectations.get("skills") or []:
         items.append(normalize_item({
@@ -684,9 +699,15 @@ def _context_block(context: str | None) -> str:
     return f"\nTHE MANAGER'S NOTES (typed or dictated alongside the job description):\n{context}\n\n{_CONTEXT_RULES}\n"
 
 
+_DESCRIPTION_RULES = """THERE IS NO JOB DESCRIPTION. The manager's own description of the role (above) is the only source. Mark where every item comes from with "basis":
+- "described": the description states it or plainly implies it. Set "source_quote" to the shortest exact phrase from the description it comes from.
+- "typical": usual for the role the description names, but the description does not say it. At most three such items in total, only when the description clearly names a role. A typical item is always "measure": "judged", has an empty "source_quote", and contains no number, count, percentage, time limit or target of any kind. Leave "meets" empty rather than write something the manager did not say.
+Leave any field empty rather than invent it. If the description is too thin to draft from, return few items or none: an empty list is a good answer. Never copy the description's wording into a line it does not support."""
+
+
 def _compose_prompt(*, jd_text: str | None, role_hint: str | None, ladders_block: str | None,
                     org_values: list[dict], sibling_block: str, include_identity: bool,
-                    context: str | None = None) -> str:
+                    context: str | None = None, description_only: bool = False) -> str:
     values_line = ", ".join(v["name"] for v in org_values) if org_values else "(none defined yet)"
     identity = ""
     if include_identity:
@@ -696,18 +717,26 @@ FIRST, identify the role and where it belongs among the company's existing ladde
 {ladders_block}
 
 Include in your JSON:
-  "is_job_description": true/false (false for anything that is not a job description — then return nothing else but "reason"),
+  "is_job_description": {'always true (there is no job description to check)' if description_only else 'true/false (false for anything that is not a job description — then return nothing else but "reason")'},
   "reason": one sentence, only when false,
   "other_roles_note": one sentence when the document describes more than one role (draft the primary one only), else null,
   "role": {{"job_role": "clean title without seniority noise the level captures — the role as it is NOW (the manager's notes win over the job description's title)", "job_level": 1-10 inferred from seniority (default 1), "functional_team": null or the team named}},
   "match": {{"suggested_action": "attach" | "create_new" | "exists", "role_family_id": id or null, "existing_role_level_id": id or null, "confidence": "high" | "medium", "rationale": "one sentence"}},
 """
-    jd = f"JOB DESCRIPTION (as supplied by the manager):\n{jd_text}" if jd_text else "The job description is attached as a document."
-    return f"""You are helping a manager write down what good looks like for one role, so they can coach and assess against it. Produce a useful FIRST DRAFT from the job description{" and the manager's notes" if context else ""}, then at most {_MAX_AI_QUESTIONS} focused questions about real gaps or ambiguity in that draft. The manager edits everything before anything is used.
+    if description_only:
+        jd = "There is no job description."
+    else:
+        jd = f"JOB DESCRIPTION (as supplied by the manager):\n{jd_text}" if jd_text else "The job description is attached as a document."
+    context_block = (
+        f"\nTHE MANAGER'S DESCRIPTION OF THE ROLE (typed or spoken; the only source):\n{context}\n\n{_DESCRIPTION_RULES}\n"
+        if description_only else _context_block(context)
+    )
+    source_phrase = "the manager's description of the role" if description_only else f"the job description{' and the manager' + chr(39) + 's notes' if context else ''}"
+    return f"""You are helping a manager write down what good looks like for one role, so they can coach and assess against it. Produce a useful FIRST DRAFT from {source_phrase}, then at most {_MAX_AI_QUESTIONS} focused questions about real gaps or ambiguity in that draft. The manager edits everything before anything is used.
 {f"ROLE: {role_hint}" if role_hint else ""}
 {identity}
 {jd}
-{_context_block(context)}
+{context_block}
 Company values that already apply to every role: {values_line}
 {sibling_block}
 {_DOCUMENT_RULES}
@@ -717,7 +746,7 @@ QUESTIONS: ask only what the manager must decide and the job description and not
 Return ONLY valid JSON, no commentary:
 {{
   {'"is_job_description": true, "reason": null, "other_roles_note": null, "role": {...}, "match": {...},' if include_identity else ''}
-  "items": [{{"section": "responsibility", "measure": "numeric", "title": "...", "responsibility": "...", "meets": "...", "exceeds": "", "measurement_period": "quarter", "target": null, "source_quote": "...", "order_type": "primary"}}],
+  "items": [{{"section": "responsibility", "measure": "numeric", "title": "...", "responsibility": "...", "meets": "...", "exceeds": "", "measurement_period": "quarter", "target": null, "source_quote": "...", "order_type": "primary"{', "basis": "described"' if description_only else ''}}}],
   "questions": [{{"item_index": 0, "topic": "scope" | "wording" | "measure" | "other", "question": "...", "why": "one short sentence on why it matters"}}]
 }}
 
@@ -726,10 +755,18 @@ measurement_period is one of week, month, quarter, annual, none (numeric items o
 
 def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
                       org_value_names: list[str] | None = None,
-                      context_text: str | None = None) -> tuple[list[dict], list[dict], list[str]]:
+                      context_text: str | None = None,
+                      mode: str = "jd") -> tuple[list[dict], list[dict], list[str]]:
     """Validate the model's items/questions. Returns (items, questions, notes).
     context_text is the manager's notes: its numbers are stated, and a target
-    quoted from it is kept with source 'manager'."""
+    quoted from it is kept with source 'manager'.
+
+    mode "description" (setup mode chunk C): the manager's description of the
+    role is the only source (passed as context_text). Each item is marked
+    origin "description" (drawn from what they said) or "typical" (usual for
+    the role, NOT from them). A typical item is at most _MAX_TYPICAL in
+    number, judged rather than measured, and carries no number of any kind,
+    so nothing invented can pass as a standard."""
     context_sq = _squash(context_text)
     allowed = numbers_in(corpus_text) | numbers_in(context_text)
     stated_where = "job description or your notes" if context_sq else "job description"
@@ -739,13 +776,28 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
     items: list[dict] = []
     index_to_key: dict[int, str] = {}
     seen_keys: set[str] = set()
+    typical_count = 0
     raw_items = parsed.get("items") if isinstance(parsed.get("items"), list) else []
     for idx, raw in enumerate(raw_items[:_MAX_ITEMS]):
         if not isinstance(raw, dict):
             continue
         raw = dict(raw)
+        typical = False
+        if mode == "description":
+            basis = raw.get("basis") or ("typical" if raw.get("origin") == "typical" else "described")
+            typical = basis == "typical"
+            if typical:
+                if typical_count >= _MAX_TYPICAL:
+                    continue
+                typical_count += 1
+                raw["section"] = raw.get("section") if raw.get("section") in ("responsibility", "skill") else "skill"
+                raw["measure"] = "judged"
+                raw["measurement_period"] = None
+                raw["target"] = None
+                raw["source_quote"] = None
+        item_allowed = set() if typical else allowed
         for field in ("title", "responsibility", "meets", "exceeds"):
-            cleaned, changed = strip_unsupported(raw.get(field) if isinstance(raw.get(field), str) else "", allowed)
+            cleaned, changed = strip_unsupported(raw.get(field) if isinstance(raw.get(field), str) else "", item_allowed)
             if changed:
                 notes.append(f"Removed a number that isn't in the {stated_where} from “{_clean_text(raw.get('title'), 80)}”.")
             raw[field] = cleaned
@@ -769,13 +821,15 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
         else:
             raw["target"] = None
         quote = _clean_text(raw.get("source_quote"), 600)
-        raw["source_quote"] = quote if (quote and source_available and _squash(quote) in source_sq) else None
+        in_source = bool(quote and source_available and _squash(quote) in source_sq)
+        in_description = bool(quote and mode == "description" and not typical and context_sq and _squash(quote) in context_sq)
+        raw["source_quote"] = quote if (in_source or in_description) else None
         # Keys we minted earlier (a composed draft coming back to be stored)
         # survive, so question links hold; anything else gets a fresh key.
         key = raw.get("key")
         raw["key"] = key if isinstance(key, str) and _KEY_RE.fullmatch(key) and key not in seen_keys else _new_key()
         seen_keys.add(raw["key"])
-        raw["origin"] = "source"
+        raw["origin"] = ("typical" if typical else "description") if mode == "description" else "source"
         raw["edited"] = False
         raw.pop("config_id", None)
         item = normalize_item(raw, default_origin="source")
@@ -859,13 +913,22 @@ def _draft_context(draft: dict) -> str | None:
     return (draft.get("analysis") or {}).get("context") or None
 
 
-def _read_source(file: UploadFile | None, text: str | None) -> tuple[str | None, bytes | None, str]:
+def _input_bucket(chars: int) -> str:
+    """Fixed size buckets for analytics; same values as the notes dump's."""
+    return "under_1k" if chars < 1_000 else "1k_5k" if chars < 5_000 else "5k_20k" if chars < 20_000 else "over_20k"
+
+
+def _read_source(file: UploadFile | None, text: str | None, *, allow_none: bool = False) -> tuple[str | None, bytes | None, str]:
+    """allow_none: the manager described the role instead of attaching a job
+    description, so no source is fine (the description travels as the notes)."""
     pasted = (text or "").strip()
     has_file = file is not None and bool(file.filename)
     if has_file and pasted:
         raise HTTPException(status_code=422, detail="Send either a file or pasted text, not both")
     if not has_file and not pasted:
-        raise HTTPException(status_code=422, detail="Paste a job description or attach a file")
+        if allow_none:
+            return None, None, "Your description"
+        raise HTTPException(status_code=422, detail="Paste a job description, attach a file, or describe the role")
     if not has_file:
         if len(pasted) > _MAX_SOURCE:
             raise HTTPException(status_code=413, detail="That's longer than a job description — paste just the role.")
@@ -918,9 +981,13 @@ def compose_from_job_description(
     the role belongs (attach / new ladder / existing level) and a first draft
     with focused questions. Nothing is saved here — the manager confirms the
     placement, then POST /drafts stores the draft."""
-    _, supabase = auth
-    jd_text, pdf_bytes, label = _read_source(file, text)
+    user_id, supabase = auth
     notes_text = _read_context(context)
+    jd_text, pdf_bytes, label = _read_source(file, text, allow_none=bool(notes_text))
+    # No job description, only what the manager said about the role: that
+    # description is the one source, and each line is marked as coming from it
+    # or as typical for the role (see sanitize_composed).
+    description_only = jd_text is None and pdf_bytes is None
 
     target_role = _fetch_role(supabase, role_level_id) if role_level_id else None
     families = supabase.table("role_families").select("id,name").order("name").execute().data
@@ -945,6 +1012,7 @@ def compose_from_job_description(
         sibling_block=sibling,
         include_identity=target_role is None,
         context=notes_text,
+        description_only=description_only,
     )
     try:
         parsed = _call_model(prompt, pdf_bytes=pdf_bytes)
@@ -979,7 +1047,17 @@ def compose_from_job_description(
     corpus += f"\n{title} level {level}"
     items, questions, notes = sanitize_composed(parsed, corpus_text=corpus, source_available=jd_text is not None,
                                                 org_value_names=[v["name"] for v in org_values],
-                                                context_text=notes_text)
+                                                context_text=notes_text,
+                                                mode="description" if description_only else "jd")
+    if description_only and not items:
+        notes.insert(0, "That wasn't enough to draft from. Add what the role owns and how you'd tell it's going well, or start without a draft.")
+    analytics.capture(user_id, "role_draft_composed", {
+        "source": "description" if description_only else ("both" if notes_text else "job_description"),
+        "input_size": _input_bucket(len(notes_text or "") + len(jd_text or "")),
+        "file": bool(file is not None and file.filename),
+        "items": len(items),
+        "typical": sum(1 for i in items if i.get("origin") == "typical"),
+    })
     note = parsed.get("other_roles_note") if target_role is None else None
     if pdf_bytes is not None:
         notes.insert(0, "This PDF has no readable text layer, so the source can't be shown and no numbers were taken from it"
@@ -1043,10 +1121,13 @@ def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), au
 
     composed_items: list[dict] = []
     composed_questions: list[dict] = []
+    compose_mode = "description" if any(
+        isinstance(i, dict) and i.get("origin") in ("description", "typical") for i in body.items or []
+    ) else "jd"
     if body.items:
         composed_items, composed_questions, _ = sanitize_composed(
             {"items": body.items, "questions": []}, corpus_text=corpus, source_available=bool(source_text),
-            org_value_names=[v["name"] for v in _org_values(supabase)], context_text=context)
+            org_value_names=[v["name"] for v in _org_values(supabase)], context_text=context, mode=compose_mode)
         # Questions composed earlier reference items by key; keep those that still match.
         keys = {i["key"] for i in composed_items}
         for q in body.questions or []:
@@ -1058,21 +1139,34 @@ def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), au
                 composed_questions.append(nq)
 
     decisions = _open_decisions(supabase, body.role_level_id)
+    # Lines that are only typical for the role never go straight into a draft:
+    # they wait as suggestions, marked as not from the manager.
+    typical_items = [ci for ci in composed_items if ci.get("origin") == "typical"]
+    composed_items = [ci for ci in composed_items if ci.get("origin") != "typical"]
+
+    def _suggestion(ci: dict, why: str) -> dict:
+        return {"id": f"s-{uuid.uuid4().hex[:12]}", "type": "add", "item": ci, "why": why, "status": "pending"}
+
     if approved_items:
         kind = "revision"
         items = approved_items
+        approved_titles = {_squash(a["title"]) for a in approved_items}
         suggestions = [
-            {"id": f"s-{uuid.uuid4().hex[:12]}", "type": "add", "item": ci,
-             "why": ("From the job description and notes you supplied" if context else "From the job description you supplied")
-                    + " — not in the approved expectations.", "status": "pending"}
+            _suggestion(ci, ("From your description of the role" if ci.get("origin") == "description"
+                             else "From the job description and notes you supplied" if context
+                             else "From the job description you supplied") + " — not in the approved expectations.")
             for ci in composed_items
-            if _squash(ci["title"]) not in {_squash(a["title"]) for a in approved_items}
+            if _squash(ci["title"]) not in approved_titles
         ][:_MAX_SUGGESTIONS * 2]
+        suggestions += [
+            _suggestion(ci, "Typical for this role, not from you.")
+            for ci in typical_items if _squash(ci["title"]) not in approved_titles
+        ]
         questions = [q for q in composed_questions if q["item_key"] is None]
     else:
         kind = "new"
         items = composed_items
-        suggestions = []
+        suggestions = [_suggestion(ci, "Typical for this role, not from you.") for ci in typical_items]
         questions = composed_questions
 
     # Every open decision on this role comes along, still deferred, so the
@@ -1414,7 +1508,10 @@ def act_on_suggestion(draft_id: str, suggestion_id: str, body: SuggestionActionI
         if sug["type"] == "add":
             if len(items) >= _MAX_ITEMS:
                 raise HTTPException(status_code=422, detail="This role already has as many expectations as it can hold")
-            items.append({**sug["item"], "key": _new_key(), "origin": "suggestion", "edited": False})
+            # A "typical for this role" line keeps that mark after it is accepted,
+            # so the review still shows it did not come from the manager.
+            mark = "typical" if sug["item"].get("origin") == "typical" else "suggestion"
+            items.append({**sug["item"], "key": _new_key(), "origin": mark, "edited": False})
         else:
             idx = next((n for n, i in enumerate(items) if i["key"] == sug.get("item_key")), None)
             if idx is None:

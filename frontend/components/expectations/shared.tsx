@@ -46,6 +46,10 @@ export function provenance(item: RoleItem): string {
   switch (item.origin) {
     case "source":
       return "Drafted from your job description · review the wording";
+    case "description":
+      return "Drafted from your description · review the wording";
+    case "typical":
+      return "Typical for this role, not from you · review before you approve";
     case "suggestion":
       return "A suggestion you accepted";
     case "approved":

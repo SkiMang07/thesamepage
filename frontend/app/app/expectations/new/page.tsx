@@ -51,6 +51,7 @@ function DefineRole() {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [context, setContext] = useState("");
+  const [describe, setDescribe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composed, setComposed] = useState<RoleCompose | null>(null);
   const [families, setFamilies] = useState<RoleFamily[]>([]);
@@ -82,7 +83,7 @@ function DefineRole() {
     setError(null);
     setStep("working");
     try {
-      const out = await composeRoleFromJd(file ? { file, context } : { text: text.trim(), context });
+      const out = await composeRoleFromJd(describe ? { context } : file ? { file, context } : { text: text.trim(), context });
       if (!out.is_job_description) {
         setError(out.reason || "That doesn’t look like a job description.");
         setStep("input");
@@ -107,7 +108,7 @@ function DefineRole() {
       setError(
         e instanceof ApiError && e.status < 500 && e.status !== 502
           ? e.detail
-          : "The first draft couldn’t be written just now. Your job description is still here — try again, or start without a draft."
+          : `The first draft couldn’t be written just now. Your ${describe ? "description" : "job description"} is still here — try again, or start without a draft.`
       );
       setStep("input");
     }
@@ -140,11 +141,11 @@ function DefineRole() {
         const created = await createRoleLevel({ job_role: title.trim(), job_level: level, role_family_id: familyId });
         roleLevelId = created.id;
       }
-      const sourceText = composed?.source_text ?? (file ? null : text.trim() || null);
+      const sourceText = describe ? null : composed?.source_text ?? (file ? null : text.trim() || null);
       await openRoleDraft({
         role_level_id: roleLevelId,
         source_text: sourceText,
-        source_label: composed?.source_label ?? (file ? file.name : sourceText ? "Pasted job description" : null),
+        source_label: describe ? null : composed?.source_label ?? (file ? file.name : sourceText ? "Pasted job description" : null),
         context: composed?.context ?? (context.trim() || null),
         items: composed?.items,
         questions: composed?.questions,
@@ -166,7 +167,7 @@ function DefineRole() {
     }
   }
 
-  const canCompose = !!file || text.trim().length > 40;
+  const canCompose = describe ? context.trim().length >= 40 : !!file || text.trim().length > 40;
   const questionCount = composed?.questions.filter((q) => q.status === "open").length ?? 0;
 
   return (
@@ -175,9 +176,11 @@ function DefineRole() {
         ← All roles &amp; expectations
       </Link>
       <p className={`${EYEBROW} mt-5`}>Define a role</p>
-      <h1 className="mt-1.5 font-serif text-[2.2rem] font-normal leading-tight tracking-[-0.02em] text-ink">Start from the job description.</h1>
+      <h1 className="mt-1.5 font-serif text-[2.2rem] font-normal leading-tight tracking-[-0.02em] text-ink">
+        {describe ? "Describe the role." : "Start from the job description."}
+      </h1>
       <p className="mt-2 max-w-2xl text-sm text-ink-secondary">
-        You’ll get a first draft in plain language and a few focused questions where the description leaves something open. Numbers only come from what you supply — a missing target stays missing until you set it.
+        You’ll get a first draft in plain language and a few focused questions where the description leaves something open. Numbers only come from what you supply — a missing target stays missing until you set it. Nothing is used until you approve it.
       </p>
 
       {error && (
@@ -190,7 +193,17 @@ function DefineRole() {
 
       {step !== "placement" && (
         <section className={`${CARD} mt-6 p-5 sm:p-6`}>
-          <JdInput text={text} onText={setText} file={file} onFile={setFile} context={context} onContext={setContext} disabled={step === "working"} />
+          <JdInput
+            text={text}
+            onText={setText}
+            file={file}
+            onFile={setFile}
+            context={context}
+            onContext={setContext}
+            disabled={step === "working"}
+            describe={describe}
+            onDescribe={setDescribe}
+          />
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={startWithoutDraft} disabled={step === "working"} className={BTN_GHOST}>
               Start without a draft
@@ -201,7 +214,7 @@ function DefineRole() {
           </div>
           {step === "working" && (
             <p className="mt-4 text-sm text-ink-secondary" role="status" aria-live="polite">
-              Reading the job description, finding where the role fits, and drafting what good looks like. This usually takes under a minute.
+              {describe ? "Reading your description" : "Reading the job description"}, finding where the role fits, and drafting what good looks like. This usually takes under a minute.
             </p>
           )}
         </section>
@@ -280,7 +293,7 @@ function DefineRole() {
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={() => setStep("input")} disabled={saving} className={BTN_GHOST}>
-              ← Back to the job description
+              ← Back to the {describe ? "description" : "job description"}
             </button>
             <button type="button" onClick={openDraft} disabled={saving || !title.trim()} className={BTN_PRIMARY}>
               {saving ? "Opening…" : "Open the draft →"}

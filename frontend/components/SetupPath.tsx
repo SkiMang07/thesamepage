@@ -12,13 +12,22 @@
 // reports the step name and whether it was the highlighted one, nothing else.
 // No AI is involved here.
 //
+// Chunk C: the expectations step names whose role to set next (the person whose
+// 1:1 is soonest, from the server's queue) and, when they have no role yet, sends
+// to picking one. The goals step opens the org-goals modal (paste or attach,
+// review, save) instead of a page. "Don't know yet" is a recorded answer that
+// parks that step: it reads "Waiting on your boss" and is not highlighted, but it
+// is not done.
+//
 // Voice: literal labels, no encouragement. Each step carries one line on what it
 // changes, stated as a fact.
 
 import Link from "next/link";
 import { useState } from "react";
 import NotesDumpModal from "@/components/NotesDumpModal";
-import { OnboardingStepKey, OnboardingSteps, reportSetupStepStarted } from "@/lib/api";
+import OrgGoalsModal from "@/components/OrgGoalsModal";
+import { formatDay } from "@/components/expectations/shared";
+import { ExpectationQueueEntry, OnboardingStepKey, OnboardingSteps, reportSetupStepStarted } from "@/lib/api";
 import { BTN_PRIMARY_SM, BTN_SECONDARY, EYEBROW } from "@/lib/tokens";
 import { useZoneData } from "@/components/ZoneMap";
 
@@ -29,6 +38,10 @@ type StepView = {
   time: string;
   action: string;
   href: string;
+  // The action opens the org-goals modal instead of a page.
+  modal?: boolean;
+  // A second line under the highlighted step: what comes first, and what is next.
+  detail?: string;
   done: boolean;
   blocked: boolean;
   status: string;
@@ -38,10 +51,42 @@ function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+function first(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+// Who to set expectations for next. The person whose 1:1 is soonest first; a
+// person with no role is listed as themselves and the action is picking a role.
+function expectationsAction(next: ExpectationQueueEntry | null | undefined, rest: ExpectationQueueEntry[]) {
+  if (!next) return { action: "Set expectations", href: "/app/expectations", detail: undefined };
+  const when = next.next_1on1_on ? ` Your 1:1 with ${first(next.person_name)} is ${formatDay(next.next_1on1_on)}.` : "";
+  const then = rest.length
+    ? ` After this: ${rest
+        .slice(0, 3)
+        .map((r) => r.role_label ?? `a role for ${first(r.person_name)}`)
+        .join(", ")}${rest.length > 3 ? `, and ${rest.length - 3} more` : ""}.`
+    : "";
+  if (!next.role_level_id) {
+    return {
+      action: `Pick a role for ${first(next.person_name)}`,
+      href: `/app/expectations/new?assign=${next.report_id}`,
+      detail: `${first(next.person_name)} has no role yet.${when}${then}`,
+    };
+  }
+  return {
+    action: `Set expectations for ${next.role_label ?? "this role"}`,
+    href: `/app/expectations/${next.role_level_id}`,
+    detail: `${next.role_label ?? "This role"} is ${first(next.person_name)}’s.${when}${then}`,
+  };
+}
+
 export function setupSteps(s: OnboardingSteps): StepView[] {
   const org = s.org;
   const exp = s.expectations;
   const goals = s.goals;
+  const queue = exp.queue ?? [];
+  const nextRole = exp.next_role ?? queue[0] ?? null;
+  const expAction = expectationsAction(nextRole, queue.filter((q) => q !== nextRole && q.report_id !== nextRole?.report_id));
   return [
     {
       key: "org",
@@ -65,8 +110,9 @@ export function setupSteps(s: OnboardingSteps): StepView[] {
       title: "Role expectations",
       changes: "Gives the sheet a standard to hold each person’s work against.",
       time: "About 2 minutes per role",
-      action: "Set expectations",
-      href: "/app/expectations",
+      action: expAction.action,
+      href: expAction.href,
+      detail: expAction.detail,
       done: exp.done,
       blocked: exp.blocked,
       status: exp.done
@@ -82,17 +128,23 @@ export function setupSteps(s: OnboardingSteps): StepView[] {
       title: "Org and team goals",
       changes: "Links each person’s work to the goals it serves.",
       time: "About 3 minutes",
-      action: "Add goals",
+      action: goals.has_org_goal ? "Write a team goal" : "Add company or department goals",
       href: "/app/goals",
+      modal: !goals.has_org_goal,
+      detail: !goals.has_org_goal && !goals.has_team_goal ? "A team goal is yours to write. Add it on the Goals page." : undefined,
       done: goals.done,
       blocked: false,
       status: goals.done
         ? "Done"
-        : !goals.has_org_goal && !goals.has_team_goal
-          ? "No org or team goal"
-          : !goals.has_org_goal
-            ? "Org goal missing"
-            : "Team goal missing",
+        : goals.parked
+          ? "Waiting on your boss"
+          : !goals.has_org_goal && !goals.has_team_goal
+            ? goals.unknown
+              ? "Company goals not known yet · no team goal"
+              : "No org or team goal"
+            : !goals.has_org_goal
+              ? "Org goal missing"
+              : "Team goal missing",
     },
   ];
 }
@@ -100,6 +152,7 @@ export function setupSteps(s: OnboardingSteps): StepView[] {
 export default function SetupPath() {
   const { onboarding } = useZoneData();
   const [dumpOpen, setDumpOpen] = useState(false);
+  const [goalsOpen, setGoalsOpen] = useState(false);
 
   if (!onboarding || onboarding.set_up || !onboarding.steps) return null;
   const steps = setupSteps(onboarding.steps);
@@ -146,9 +199,23 @@ export default function SetupPath() {
                     <p className="mt-1 text-xs text-ink-muted">
                       {step.time} · {step.status}
                     </p>
-                    <Link href={step.href} onClick={() => opened(step)} className={`${BTN_PRIMARY_SM} mt-3 inline-flex`}>
-                      {step.action}
-                    </Link>
+                    {step.detail && <p className="mt-1 text-[13px] text-ink-secondary">{step.detail}</p>}
+                    {step.modal ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          opened(step);
+                          setGoalsOpen(true);
+                        }}
+                        className={`${BTN_PRIMARY_SM} mt-3 inline-flex`}
+                      >
+                        {step.action}
+                      </button>
+                    ) : (
+                      <Link href={step.href} onClick={() => opened(step)} className={`${BTN_PRIMARY_SM} mt-3 inline-flex`}>
+                        {step.action}
+                      </Link>
+                    )}
                   </div>
                 </div>
               </li>
@@ -169,6 +236,17 @@ export default function SetupPath() {
             <li key={step.key} className="py-3 first:pt-0 last:pb-0">
               {step.blocked || step.done ? (
                 <div className={`flex items-start gap-3 ${step.blocked ? "opacity-60" : ""}`}>{row}</div>
+              ) : step.modal ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    opened(step);
+                    setGoalsOpen(true);
+                  }}
+                  className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-3 rounded-lg px-2 py-1 text-left transition hover:bg-sunken"
+                >
+                  {row}
+                </button>
               ) : (
                 <Link
                   href={step.href}
@@ -192,6 +270,7 @@ export default function SetupPath() {
         </button>
       </div>
       {dumpOpen && <NotesDumpModal onClose={() => setDumpOpen(false)} />}
+      {goalsOpen && <OrgGoalsModal onClose={() => setGoalsOpen(false)} />}
     </section>
   );
 }

@@ -223,3 +223,160 @@ def test_approval_problems_name_every_open_decision():
     assert any("Set the target (“Retention”)" in p for p in problems)
     assert any("Scope?" in p for p in problems)
     assert rex.approval_problems({"items": [], "questions": []}) == ["Add at least one expectation before approving."]
+
+
+# ---- setup mode chunk C: describe the role, source marks, data source --------
+
+DESC = ("Priya leads a team of six support reps. She owns first response time and keeps CSAT above 90 each month. "
+        "She coaches reps weekly.")
+
+
+def _described(**over):
+    item = {"section": "responsibility", "measure": "numeric", "title": "CSAT", "responsibility": "Keeps CSAT up.",
+            "meets": "CSAT stays above 90.", "measurement_period": "month",
+            "target": {"text": "above 90", "quote": "keeps CSAT above 90 each month"},
+            "source_quote": "keeps CSAT above 90 each month", "basis": "described"}
+    item.update(over)
+    return item
+
+
+def _typical(**over):
+    item = {"section": "skill", "measure": "numeric", "title": "Escalation handling", "responsibility": "Handles 5 escalations a week.",
+            "meets": "Resolves escalations within 24 hours.", "target": {"text": "24 hours", "quote": "24 hours"},
+            "source_quote": "made up", "basis": "typical"}
+    item.update(over)
+    return item
+
+
+def _run(items, **kw):
+    return rex.sanitize_composed({"items": items, "questions": []}, corpus_text="Support Lead level 2",
+                                 source_available=False, context_text=DESC, mode="description", **kw)
+
+
+def test_description_lines_are_marked_from_the_description_and_keep_a_stated_target():
+    (item,), questions, _ = _run([_described()])
+    assert item["origin"] == "description"
+    assert item["target"]["status"] == "set" and item["target"]["source"] == "manager"
+    assert item["source_quote"] == "keeps CSAT above 90 each month"
+
+
+def test_a_quote_that_is_not_in_the_description_is_dropped():
+    (item,), _, _ = _run([_described(source_quote="never said this")])
+    assert item["source_quote"] is None
+
+
+def test_a_typical_line_is_judged_numberless_and_has_no_target_or_quote():
+    items, questions, notes = _run([_typical()])
+    (item,) = items
+    assert item["origin"] == "typical" and item["measure"] == "judged" and item["target"] is None
+    assert item["source_quote"] is None
+    assert not any(ch.isdigit() for ch in item["responsibility"] + item["meets"] + item["title"])
+    assert questions == [] and notes                       # numbers were removed and the manager is told
+
+
+def test_at_most_three_typical_lines_survive():
+    items, _, _ = _run([_typical(title=f"Skill {n}", responsibility="", meets="") for n in "abcde"])
+    assert len(items) == rex._MAX_TYPICAL
+
+
+def test_a_client_cannot_relabel_a_typical_line_as_described_by_omitting_basis():
+    (item,), _, _ = _run([{**_typical(), "basis": None, "origin": "typical"}])
+    assert item["origin"] == "typical" and item["target"] is None
+
+
+def test_a_job_description_draft_keeps_the_old_origin():
+    items, _, _ = rex.sanitize_composed({"items": [_composed()]}, corpus_text=JD, source_available=True)
+    assert items[0]["origin"] == "source"
+
+
+def test_description_prompt_has_no_job_description_and_states_the_typical_rules():
+    prompt = rex._compose_prompt(jd_text=None, role_hint=None, ladders_block="(none)", org_values=[],
+                                 sibling_block="", include_identity=True, context=DESC, description_only=True)
+    assert "There is no job description." in prompt and "JOB DESCRIPTION (as supplied" not in prompt
+    assert prompt.index(DESC) < prompt.index('"typical"')
+    assert "At most three such items" in prompt and "no number" in prompt
+    assert '"basis": "described"' in prompt and "always true" in prompt
+    normal = rex._compose_prompt(jd_text=JD, role_hint=None, ladders_block="(none)", org_values=[],
+                                 sibling_block="", include_identity=True, context=None)
+    assert "basis" not in normal and "THERE IS NO JOB DESCRIPTION" not in normal
+
+
+def test_read_source_allows_no_source_only_when_the_manager_described_the_role():
+    assert rex._read_source(None, "  ", allow_none=True) == (None, None, "Your description")
+    import pytest
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as err:
+        rex._read_source(None, "")
+    assert err.value.status_code == 422 and "describe the role" in err.value.detail
+
+
+def test_data_source_and_example_are_kept_for_numeric_responsibilities_only():
+    n = rex.normalize_item({"section": "responsibility", "measure": "numeric", "title": "Retention", "target": None,
+                            "data_source": "  CRM report, weekly ", "example": "Q2: kept Acme after a save call."})
+    assert n["data_source"] == "CRM report, weekly" and n["example"].startswith("Q2")
+    judged = rex.normalize_item({"section": "responsibility", "measure": "judged", "title": "Coaching",
+                                 "data_source": "x", "example": "y"})
+    assert judged["data_source"] is None and judged["example"] is None
+    assert rex.normalize_item({"title": "T", "origin": "typical"})["origin"] == "typical"
+    assert rex.normalize_item({"title": "T", "origin": "bogus"})["origin"] == "manager"
+
+
+def test_an_approved_metrics_data_source_returns_to_a_revision():
+    (item,) = rex.items_from_configs({"metrics": [{"id": "m1", "metric_name": "Retention", "description": "d", "expectation": "e",
+                                                   "target_status": "unresolved", "data_source": "CRM report"}]})
+    assert item["data_source"] == "CRM report" and item["example"] is None
+
+
+class _DraftDB:
+    """Just enough client for create_draft: no open draft yet, insert echoes the row."""
+
+    def __init__(self):
+        self.inserted = None
+
+    def table(self, _name):
+        return self
+
+    def select(self, *_a):
+        return self
+
+    def eq(self, *_a):
+        return self
+
+    def insert(self, row):
+        self.inserted = row
+        return self
+
+    def execute(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(data=[self.inserted] if self.inserted else [])
+
+
+def _create(monkeypatch, items, approved=None):
+    db = _DraftDB()
+    monkeypatch.setattr(rex, "ensure_org", lambda *a, **k: "org1")
+    monkeypatch.setattr(rex, "get_email_from_token", lambda a: "m@example.com")
+    monkeypatch.setattr(rex, "_fetch_role", lambda _s, _i: {"id": "rl1", "job_role": "Support Lead", "job_level": 2, "job_responsibilities": None})
+    monkeypatch.setattr(rex, "_approved_configs", lambda _s, _i: approved or {})
+    monkeypatch.setattr(rex, "_org_values", lambda _s: [])
+    monkeypatch.setattr(rex, "_open_decisions", lambda _s, _i: [])
+    monkeypatch.setattr(rex, "_present_draft", lambda _s, d: {"draft": d})
+    body = rex.DraftCreateIn(role_level_id="rl1", context=DESC, items=items)
+    return rex.create_draft(body, auth=("u1", db), authorization="Bearer x")["draft"]
+
+
+def test_typical_lines_wait_as_suggestions_in_a_new_draft(monkeypatch):
+    draft = _create(monkeypatch, [{**_described(), "origin": "description"}, {**_typical(), "origin": "typical"}])
+    assert [i["origin"] for i in draft["items"]] == ["description"]
+    (sug,) = draft["suggestions"]
+    assert sug["type"] == "add" and sug["status"] == "pending" and sug["item"]["origin"] == "typical"
+    assert sug["why"] == "Typical for this role, not from you."
+    assert draft["analysis"]["context"] == DESC
+
+
+def test_typical_lines_wait_as_suggestions_on_a_revision_too(monkeypatch):
+    approved = {"metrics": [{"id": "m1", "metric_name": "First response", "description": "d", "expectation": "e", "target_status": "unresolved"}]}
+    draft = _create(monkeypatch, [{**_described(), "origin": "description"}, {**_typical(), "origin": "typical"}], approved)
+    assert [i["title"] for i in draft["items"]] == ["First response"]
+    assert sorted(s["item"]["origin"] for s in draft["suggestions"]) == ["description", "typical"]
+    whys = {s["item"]["origin"]: s["why"] for s in draft["suggestions"]}
+    assert whys["description"].startswith("From your description") and whys["typical"] == "Typical for this role, not from you."

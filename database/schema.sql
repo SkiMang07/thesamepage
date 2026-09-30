@@ -58,6 +58,9 @@ create table users (
   setup_org_at timestamptz,
   setup_expectations_at timestamptz,
   setup_goals_at timestamptz,
+  -- Chunk C: the manager answered "Don't know yet" on org goals. Parks the
+  -- goals step, does not complete it. Cleared when an org goal is added.
+  org_goals_unknown_at timestamptz,
   knowledge_skipped_at timestamptz,
   created_at timestamptz not null default now()
 );
@@ -509,7 +512,9 @@ create table metric_configs (
   target_status        text check (target_status is null or target_status in ('set', 'unresolved')),
   target_source        text check (target_source is null or target_source in ('source', 'manager')),
   target_quote         text,
-  retired_at           timestamptz
+  retired_at           timestamptz,
+  -- Setup mode chunk C (2026-09-30): where the number lives, in the manager's words.
+  data_source          text
 );
 
 alter table metric_configs enable row level security;
@@ -735,6 +740,11 @@ create table goals (
   -- SMART-framework "Measurable" anchor. Meant to be read by AI/agents, not
   -- parsed or scored, so no dedicated metric table.
   success_metrics  text,
+  -- Setup mode chunk C (2026-09-30): the period an org goal covers, who set it
+  -- (both the manager's words) and the last day they confirmed it is current.
+  period_label     text,
+  set_by           text,
+  confirmed_on     date,
   level            text not null check (level in ('company', 'department', 'team', 'individual')),
   -- Which specific department/team this goal belongs to (Session 11) — null
   -- for company/individual-level goals. The org_unit picker in the UI is
@@ -2714,10 +2724,11 @@ begin
       if v_config_id is not null then
         update metric_configs
            set metric_name = v_name,
-               description = nullif(btrim(coalesce(v_item->>'responsibility', '')), ''),
+               description = nullif(btrim(coalesce(v_item->>'responsibility', '') || case when nullif(btrim(coalesce(v_item->>'example', '')), '') is not null then E'\nExample: ' || btrim(v_item->>'example') else '' end), ''),
                expectation = nullif(btrim(coalesce(v_item->>'meets', '')), ''),
                exceeds = nullif(btrim(coalesce(v_item->>'exceeds', '')), ''),
                order_type = nullif(v_item->>'order_type', ''),
+               data_source = nullif(btrim(coalesce(v_item->>'data_source', '')), ''),
                measurement_period = nullif(v_item->>'measurement_period', ''),
                target = v_target,
                target_status = v_status,
@@ -2728,12 +2739,13 @@ begin
       end if;
       if v_config_id is null then
         insert into metric_configs (org_id, role_level_id, metric_name, description, expectation, exceeds,
-                                    order_type, measurement_period, target, target_status, target_source, target_quote)
+                                    order_type, data_source, measurement_period, target, target_status, target_source, target_quote)
         values (v_draft.org_id, v_draft.role_level_id, v_name,
-                nullif(btrim(coalesce(v_item->>'responsibility', '')), ''),
+                nullif(btrim(coalesce(v_item->>'responsibility', '') || case when nullif(btrim(coalesce(v_item->>'example', '')), '') is not null then E'\nExample: ' || btrim(v_item->>'example') else '' end), ''),
                 nullif(btrim(coalesce(v_item->>'meets', '')), ''),
                 nullif(btrim(coalesce(v_item->>'exceeds', '')), ''),
                 nullif(v_item->>'order_type', ''),
+                nullif(btrim(coalesce(v_item->>'data_source', '')), ''),
                 nullif(v_item->>'measurement_period', ''),
                 v_target, v_status,
                 case when v_status = 'set' then nullif(v_item->'target'->>'source', '') end,

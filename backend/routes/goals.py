@@ -54,6 +54,7 @@ PUT only touches the measure when the body includes `measure`, so callers
 that predate it never clear one.
 """
 import math
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -77,7 +78,7 @@ _MEASURE_COLUMNS = ("measure_label", "measure_format", "measure_unit", "measure_
 
 _SELECT_COLUMNS = (
     "id,title,description,success_metrics,level,status,due_date,direct_report_id,"
-    "parent_goal_id,org_unit_id,created_at," + ",".join(_MEASURE_COLUMNS) + ","
+    "parent_goal_id,org_unit_id,created_at,period_label,set_by,confirmed_on," + ",".join(_MEASURE_COLUMNS) + ","
     "direct_reports(name),org_units(name,unit_type)"
 )
 
@@ -168,6 +169,37 @@ def _measure_columns(measure: GoalMeasureIn | None) -> dict:
     }
 
 
+# Setup mode chunk C: a company or department goal is a snapshot of what
+# someone else set. The manager is asked once a quarter whether it is still
+# current (POST /api/onboarding/org-goals/{id}/confirm); nothing is drafted.
+CONFIRM_AFTER_DAYS = 90
+ORG_LEVELS = ("company", "department")
+
+
+def days_since_confirmed(row: dict, today: date | None = None) -> int | None:
+    """Days since the manager last said this goal was current, or since it was
+    added when they never did. None when neither date is readable."""
+    today = today or date.today()
+    last = row.get("confirmed_on") or str(row.get("created_at") or "")[:10]
+    try:
+        return (today - date.fromisoformat(str(last)[:10])).days
+    except ValueError:
+        return None
+
+
+def needs_confirmation(row: dict, today: date | None = None) -> bool:
+    """True for an open company or department goal that is past its end date or
+    has not been confirmed for a quarter."""
+    if row.get("level") not in ORG_LEVELS or row.get("status") in ("cancelled", "completed"):
+        return False
+    today = today or date.today()
+    due = str(row.get("due_date") or "")[:10]
+    if due and due < today.isoformat():
+        return True
+    days = days_since_confirmed(row, today)
+    return days is not None and days >= CONFIRM_AFTER_DAYS
+
+
 def _shape_rows(rows: list[dict]) -> list[dict]:
     """Flatten the joined direct_reports.name and attach a parent goal's
     title when the parent happens to be in this same result set (true for
@@ -181,6 +213,7 @@ def _shape_rows(rows: list[dict]) -> list[dict]:
         row["direct_report_name"] = joined.get("name")
         org_unit = row.pop("org_units", None) or {}
         row["org_unit_name"] = org_unit.get("name")
+        row["needs_confirmation"] = needs_confirmation(row)
         parent = by_id.get(row.get("parent_goal_id"))
         row["parent_goal_title"] = parent["title"] if parent else None
         cols = {col: row.pop(col, None) for col in _MEASURE_COLUMNS}

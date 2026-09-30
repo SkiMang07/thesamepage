@@ -612,6 +612,7 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
   const [text, setText] = useState(ws.role.job_responsibilities ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [context, setContext] = useState("");
+  const [describe, setDescribe] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copyOptions, setCopyOptions] = useState<RolesOverviewLevel[]>([]);
@@ -628,12 +629,16 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
     setError(null);
     try {
       const composed = await composeRoleFromJd(
-        file ? { file, context, roleLevelId: ws.role.id } : { text: text.trim(), context, roleLevelId: ws.role.id }
+        describe
+          ? { context, roleLevelId: ws.role.id }
+          : file
+            ? { file, context, roleLevelId: ws.role.id }
+            : { text: text.trim(), context, roleLevelId: ws.role.id }
       );
       const next = await openRoleDraft({
         role_level_id: ws.role.id,
         source_text: composed.source_text,
-        source_label: composed.source_label,
+        source_label: composed.source_text ? composed.source_label : null,
         context: composed.context,
         items: composed.items,
         questions: composed.questions,
@@ -641,7 +646,12 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
       });
       onOpened(next);
     } catch (e) {
-      setError(errorText(e, "The first draft couldn’t be written just now. Your job description is still here — try again, or start blank."));
+      setError(
+        errorText(
+          e,
+          `The first draft couldn’t be written just now. Your ${describe ? "description" : "job description"} is still here — try again, or start blank.`
+        )
+      );
       setBusy(null);
     }
   }
@@ -652,8 +662,8 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
     try {
       let next = await openRoleDraft({
         role_level_id: ws.role.id,
-        source_text: text.trim() || null,
-        source_label: text.trim() ? "Job description" : null,
+        source_text: describe ? null : text.trim() || null,
+        source_label: !describe && text.trim() ? "Job description" : null,
         context: context.trim() || null,
       });
       if (copyRoleId && next.draft) next = await copyIntoRoleDraft(next.draft.id, next.draft.version, copyRoleId);
@@ -676,15 +686,34 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
         </div>
       )}
       <section className={`${CARD} mt-6 p-5 sm:p-6`}>
-        <h2 className="text-base font-semibold text-ink">Start from the job description</h2>
+        <h2 className="text-base font-semibold text-ink">{describe ? "Describe the role" : "Start from the job description"}</h2>
         <p className="mt-1 text-sm text-ink-secondary">
-          {ws.role.job_responsibilities ? "The description saved for this role is below — edit it or replace it." : "Paste or upload it. You’ll get a first draft and a few focused questions."}
+          {describe
+            ? "You’ll get a first draft and a few focused questions. Nothing is used until you approve it."
+            : ws.role.job_responsibilities
+              ? "The description saved for this role is below — edit it or replace it."
+              : "Paste or upload it. You’ll get a first draft and a few focused questions."}
         </p>
         <div className="mt-4">
-          <JdInput text={text} onText={setText} file={file} onFile={setFile} context={context} onContext={setContext} disabled={!!busy} />
+          <JdInput
+            text={text}
+            onText={setText}
+            file={file}
+            onFile={setFile}
+            context={context}
+            onContext={setContext}
+            disabled={!!busy}
+            describe={describe}
+            onDescribe={setDescribe}
+          />
         </div>
         <div className="mt-4 flex justify-end">
-          <button type="button" onClick={fromJd} disabled={!!busy || (!file && text.trim().length < 40)} className={BTN_PRIMARY}>
+          <button
+            type="button"
+            onClick={fromJd}
+            disabled={!!busy || (describe ? context.trim().length < 40 : !file && text.trim().length < 40)}
+            className={BTN_PRIMARY}
+          >
             {busy === "compose" ? "Reading and drafting…" : "Write the first draft"}
           </button>
         </div>
