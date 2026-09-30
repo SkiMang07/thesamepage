@@ -28,6 +28,7 @@ import {
   getRolesOverview,
   openRoleDraft,
   reanalyzeRoleDraft,
+  redraftRoleDraft,
   saveRoleDraft,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
@@ -160,6 +161,9 @@ function Workspace({
   const [copyOptions, setCopyOptions] = useState<RolesOverviewLevel[]>([]);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const savedVersion = useRef(draft.version);
+  // Batch intake: the first draft is being written in the background. The
+  // page reads again until it lands; nothing can be edited meanwhile.
+  const drafting = draft.analysis?.status === "drafting";
 
   // Take a fresh server copy: the manager's unsaved edits are only replaced
   // after they have been saved as part of the same action.
@@ -173,6 +177,26 @@ function Workspace({
     setStatuses({});
     setDirty(false);
   }
+
+  useEffect(() => {
+    if (!drafting) return;
+    const timer = window.setInterval(() => {
+      getRoleWorkspace(draft.role_level_id)
+        .then((next) => {
+          if (!next.draft || next.draft.id !== draft.id) {
+            onReplace(next);
+            return;
+          }
+          if (next.draft.analysis?.status === "drafting") return;
+          adopt(next);
+          const notes = next.draft.analysis?.notes ?? [];
+          if (next.draft.analysis?.status === "composed" && notes.length) setMessage({ tone: "brand", text: notes.join(" ") });
+        })
+        .catch(() => undefined);
+    }, 4000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafting, draft.id, draft.role_level_id]);
 
   useEffect(() => {
     getRolesOverview()
@@ -277,6 +301,11 @@ function Workspace({
       ].filter(Boolean);
       setMessage({ tone: "brand", text: `Draft saved. Your edits are preserved${bits.length ? ` · ${bits.join(" · ")}` : " · nothing new to raise"}.` });
     }
+  }
+
+  async function redraft() {
+    const next = await act("redraft", () => redraftRoleDraft(draft.id, savedVersion.current), "The draft couldn’t be restarted. Try again in a moment.");
+    if (next) adopt(next);
   }
 
   async function saveLater() {
@@ -430,10 +459,14 @@ function Workspace({
             </h2>
             <span className="text-xs text-ink-muted">{dirty ? "Unsaved changes" : "All changes saved"}</span>
           </div>
-          {items.length === 0 && (
+          {drafting ? (
+            <p className="mt-3 text-sm text-ink-secondary" role="status">
+              Writing a first draft from what you said about this role. It usually takes under a minute, and this page updates when it’s ready.
+            </p>
+          ) : items.length === 0 && (
             <p className="mt-3 text-sm text-ink-secondary">Nothing here yet. Add what the role owns, or copy expectations from another role below.</p>
           )}
-          {SECTION_ORDER.map((section) => (
+          {!drafting && SECTION_ORDER.map((section) => (
             <div key={section} className="mt-6">
               <div className="border-b border-divider pb-2">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{SECTION_COPY[section].heading}</h3>
@@ -464,7 +497,7 @@ function Workspace({
             </div>
           ))}
 
-          {copyOptions.length > 0 && (
+          {copyOptions.length > 0 && !drafting && (
             <div className="mt-8 border-t border-divider pt-4">
               <label className={LABEL} htmlFor="copy-from">
                 Reuse expectations from another role
@@ -502,13 +535,14 @@ function Workspace({
           onGoToField={goToField}
           onSuggestion={suggestion}
           onRetry={reanalyze}
+          onRedraft={redraft}
         />
       </div>
 
       <div className="z-10 -mx-6 mt-6 border-t border-hairline bg-canvas/95 px-6 py-4 backdrop-blur sm:sticky sm:bottom-0 sm:-mx-8 sm:px-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={saveLater} disabled={!!busy} className={BTN_GHOST}>
+            <button type="button" onClick={saveLater} disabled={!!busy || drafting} className={BTN_GHOST}>
               {busy === "later" ? "Saving…" : "Save & finish later"}
             </button>
             {confirmDiscard ? (
@@ -528,10 +562,10 @@ function Workspace({
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={reanalyze} disabled={!!busy} className={BTN_SECONDARY}>
+            <button type="button" onClick={reanalyze} disabled={!!busy || drafting} className={BTN_SECONDARY}>
               {busy === "analyze" ? "Saving & reanalyzing…" : "Save & reanalyze"}
             </button>
-            <button type="button" onClick={toReview} disabled={!!busy || items.length === 0} className={BTN_PRIMARY}>
+            <button type="button" onClick={toReview} disabled={!!busy || drafting || items.length === 0} className={BTN_PRIMARY}>
               {busy === "review" ? "Saving…" : "Review for approval →"}
             </button>
           </div>

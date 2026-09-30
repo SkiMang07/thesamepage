@@ -25,6 +25,8 @@ type Props = {
   onGoToField: (itemKey: string, field: string) => void;
   onSuggestion: (s: RoleSuggestion, action: "accept" | "dismiss") => void;
   onRetry: () => void;
+  // A failed batch draft is written again from what it stores (redraft).
+  onRedraft: () => void;
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -43,7 +45,10 @@ export default function CoachPanel(p: Props) {
   const titleOf = (key: string | null) => (key ? p.items.find((i) => i.key === key)?.title : undefined);
   const analysis = p.draft.analysis || {};
 
-  const heading = open.length
+  const drafting = analysis.status === "drafting";
+  const heading = drafting
+    ? "Writing the first draft"
+    : open.length
     ? `${open.length} decision${open.length === 1 ? "" : "s"} to make`
     : suggestions.length
       ? "Suggestions to consider"
@@ -56,10 +61,20 @@ export default function CoachPanel(p: Props) {
         {heading}
       </h2>
 
-      {analysis.status === "failed" ? (
+      {drafting ? (
+        <div className="mt-1.5 space-y-2 text-sm text-ink-secondary" role="status">
+          <p>From what you said about this role. Questions will appear here when it’s ready.</p>
+          {analysis.statement && <p className="text-ink-body">What you asked for: {analysis.statement}</p>}
+        </div>
+      ) : analysis.status === "failed" ? (
         <div className="mt-2 rounded-md bg-surface px-3 py-2 text-sm text-ink-body" role="alert">
           {analysis.error || "Your draft is saved. The analysis couldn’t run just now."}{" "}
-          <button type="button" onClick={p.onRetry} disabled={p.busy} className="font-medium text-brand underline hover:text-brand-hover">
+          <button
+            type="button"
+            onClick={p.draft.can_retry ? p.onRedraft : p.onRetry}
+            disabled={p.busy}
+            className="font-medium text-brand underline hover:text-brand-hover"
+          >
             Try again
           </button>
         </div>

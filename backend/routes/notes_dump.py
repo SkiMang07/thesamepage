@@ -23,21 +23,36 @@ referred to by short refs (P1, R1) so the model cannot invent an id.
 Saved as: org_units, direct_reports (role / team), goals, and dr_capture_notes
 (private notes about a person; prep, nightly prep, the Scribe and assessment
 evidence already read them). No migration.
+
+Role expectations (batch intake, Build 3a; docs/EXPECTATIONS_BATCH_INTAKE_SCOPING.md):
+the same read also proposes, per person the notes describe, the role they hold
+(an existing one, or a new {job_role, job_level} the manager can edit) and what
+the manager said good looks like. Apply creates the role level if it is new,
+assigns the person, and queues an unapproved draft for up to MAX_ROLES roles,
+written in the background (expectations_batch.py). The typed text comes back on
+apply only for that: each role's draft is written from, and stores, that
+person's slice of it (intake_slices.py), never the whole text. Attached files
+are never sent back and never stored.
 """
 import logging
 from datetime import date
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from postgrest.exceptions import APIError
 from pydantic import BaseModel, ConfigDict, Field
 
 import analytics
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
+from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
+from intake_slices import MAX_SLICE, _cap, slice_by_person
 from routes.documents import _MAX_UPLOAD_BYTES
+from routes.expectations_ai import _compute_coverage
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
 from routes.org_units import _validate_parent_assignment
-from routes.role_expectations import _extract_pdf_text, _squash
-from routes.roles_import import _extract_docx_text, _infer_import_type, _parse_json_object
+from routes.role_expectations import _extract_pdf_text, _squash, numbers_in, strip_unsupported
+from routes.roles_import import _extract_docx_text, _infer_import_type, _parse_json_object, _validate_role
 from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
 
 logger = logging.getLogger(__name__)
@@ -48,7 +63,12 @@ MAX_FILES = 5
 CAP_TOTAL = 12
 CAP_GROUP = 5
 MIN_FILE_TEXT = 50
-GROUPS = ("org_units", "role_assignments", "goals", "person_notes")
+# Expectation rows get their own budget: they are how a setup step closes, and
+# the manager needs to see more than MAX_ROLES of them to choose which roles to
+# draft first. They never compete with CAP_TOTAL.
+CAP_EXPECTATIONS = 15
+MAX_OTHER_NAMES = 30
+GROUPS = ("org_units", "role_assignments", "expectations", "goals", "person_notes")
 UNIT_TYPES = ("department", "team")
 GOAL_LEVELS = ("company", "department", "team")
 _CONTEXT_GOALS = 30
@@ -144,7 +164,10 @@ def build_context(supabase, user_id: str) -> dict:
             "org_unit_id": r.get("org_unit_id"),
             "unit_name": (unit_by_id.get(r.get("org_unit_id")) or {}).get("name"),
         }
-    role_refs = {f"R{i}": {"id": r["id"], "label": _role_label(r)} for i, r in enumerate(roles, 1)}
+    role_refs = {
+        f"R{i}": {"id": r["id"], "label": _role_label(r), "job_role": r.get("job_role"), "job_level": r.get("job_level")}
+        for i, r in enumerate(roles, 1)
+    }
     return {"people": people, "roles": role_refs, "units": units, "goals": goals}
 
 
@@ -177,6 +200,7 @@ Rules:
 - Do not repeat what already exists below.
 - Give each item a short excerpt (under 160 characters) copied from the notes that supports it.
 - confidence is "high" only when the notes state it plainly, otherwise "low".
+- expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state.
 
 Already on the manager's roster:
 {people}
@@ -194,6 +218,7 @@ Return one JSON object and nothing else:
 {{
   "org_units": [{{"name": "", "unit_type": "team" or "department", "parent_name": "" or null, "excerpt": "", "confidence": ""}}],
   "role_assignments": [{{"person": "P1", "role": "R1" or null, "role_title": "" or null, "org_unit_name": "" or null, "excerpt": "", "confidence": ""}}],
+  "expectations": [{{"person": "P1", "role": "R1" or null, "job_role": "" or null, "job_level": 1-10 or null, "statement": "", "excerpt": "", "confidence": ""}}],
   "goals": [{{"level": "company" or "department" or "team", "title": "", "success_metrics": "" or null, "org_unit_name": "" or null, "due_date": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "person_notes": [{{"person": "P1", "text": "", "occurred_on": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "unmatched_people": [{{"name": "", "excerpt": ""}}]
@@ -282,6 +307,8 @@ def validate_parse(parsed: dict, ctx: dict, notes: str) -> dict:
             "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
         })
 
+    _validate_expectations(parsed, ctx, notes_sq, out, seen)
+
     for it in parsed.get("goals") or []:
         if not isinstance(it, dict):
             continue
@@ -318,6 +345,118 @@ def validate_parse(parsed: dict, ctx: dict, notes: str) -> dict:
     return out
 
 
+def _validate_expectations(parsed: dict, ctx: dict, notes_sq: str, out: dict, seen: set) -> None:
+    """One row per person the notes describe expectations for. The role is, in
+    order: a role assignment proposed in this same read, the person's current
+    role, the role the model cites, then a new {job_role, job_level} (matched to
+    an existing level of the same name and number first). A person the row
+    covers loses the role half of their role_assignments row: the expectation
+    row carries the assignment, so it is never offered twice."""
+    people, roles = ctx["people"], ctx["roles"]
+    role_by_name = {(_squash(r.get("job_role")), r.get("job_level")): r for r in roles.values() if r.get("job_role")}
+    label_by_id = {r["id"]: r["label"] for r in roles.values()}
+    assigned = {r["report_id"]: r for r in out["role_assignments"]}
+    for it in parsed.get("expectations") or []:
+        if not isinstance(it, dict):
+            continue
+        person = people.get(it.get("person"))
+        if not person or ("e", person["id"]) in seen:
+            continue
+        proposed = assigned.get(person["id"]) or {}
+        cited = roles.get(it.get("role")) if it.get("role") else None
+        role_id = proposed.get("role_level_id") or person["role_level_id"] or (cited["id"] if cited else None)
+        new_role = None
+        if not role_id:
+            raw_level = it.get("job_level")
+            valid = _validate_role({"job_role": _s(it.get("job_role"), 80) or "", "job_level": raw_level})
+            if valid:
+                match = role_by_name.get((_squash(valid.job_role), valid.job_level))
+                if match:
+                    role_id = match["id"]
+                else:
+                    stated = isinstance(raw_level, int) and not isinstance(raw_level, bool) and 1 <= raw_level <= 10
+                    new_role = {"job_role": valid.job_role, "job_level": valid.job_level, "level_stated": stated}
+        if not role_id and not new_role:
+            continue
+        seen.add(("e", person["id"]))
+        out["expectations"].append({
+            "report_id": person["id"], "person_name": person["name"],
+            "role_level_id": role_id, "role_label": label_by_id.get(role_id) if role_id else None,
+            "new_role": new_role, "statement": _s(it.get("statement"), 400),
+            "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
+        })
+    covered = {e["report_id"] for e in out["expectations"]}
+    kept = []
+    for row in out["role_assignments"]:
+        if row["report_id"] in covered:
+            row = {**row, "role_level_id": None, "role_label": None, "role_title": None}
+            if not row["org_unit_name"]:
+                continue
+        kept.append(row)
+    out["role_assignments"] = kept
+
+
+def queue_rank(reports: list[dict], queue: list[dict]) -> dict:
+    """report id -> place in expectation_queue(): the person whose 1:1 is soonest
+    first. A person on a role the queue lists at someone else shares that place."""
+    by_report, by_role = {}, {}
+    for i, q in enumerate(queue):
+        by_report.setdefault(q["report_id"], i)
+        if q.get("role_level_id"):
+            by_role.setdefault(q["role_level_id"], i)
+    out = {}
+    for r in reports:
+        if r["id"] in by_report:
+            out[r["id"]] = by_report[r["id"]]
+        elif r.get("role_level_id") in by_role:
+            out[r["id"]] = by_role[r["role_level_id"]]
+    return out
+
+
+def role_key(row: dict) -> str:
+    """Which role a row drafts: an existing level, or a new title and level."""
+    if row.get("role_level_id"):
+        return row["role_level_id"]
+    new = row.get("new_role") or {}
+    return f"new:{_squash(new.get('job_role'))}|{new.get('job_level')}"
+
+
+def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set, covered_roles: set,
+                        rank: dict) -> list[dict]:
+    """Attach each row's slice, say plainly why a row can't be drafted, order by
+    soonest 1:1 and preselect the first MAX_ROLES roles to draft. Pure.
+
+    blocked: "open_draft" (the role has a working draft; left alone),
+             "approved"   (the role already has approved expectations),
+             "no_text"    (nothing typed is about them; files are not kept)."""
+    for r in rows:
+        piece = slices.get(r["report_id"])
+        r["slice"] = piece
+        if r.get("statement"):
+            cleaned, _ = strip_unsupported(r["statement"], numbers_in(piece) if piece else set())
+            r["statement"] = cleaned or None
+        rid = r.get("role_level_id")
+        r["blocked"] = (
+            "open_draft" if rid and rid in open_draft_roles
+            else "approved" if rid and rid in covered_roles
+            else None if piece else "no_text"
+        )
+    rows.sort(key=lambda r: (r["report_id"] not in rank, rank.get(r["report_id"], 0), (r["person_name"] or "").lower()))
+    chosen: list[str] = []
+    for r in rows:
+        key = role_key(r)
+        if r["blocked"] or r["low"]:
+            r["draft"] = False
+        elif key in chosen:
+            r["draft"] = True
+        elif len(chosen) < MAX_ROLES:
+            chosen.append(key)
+            r["draft"] = True
+        else:
+            r["draft"] = False
+    return rows
+
+
 def rank_and_cap(drafts: dict, soonest: list[str]) -> tuple[dict, int]:
     """Cap what is shown. Items that close a setup step come first, then notes
     about the person whose 1:1 is soonest, then the rest; a low-confidence item
@@ -325,6 +464,8 @@ def rank_and_cap(drafts: dict, soonest: list[str]) -> tuple[dict, int]:
     order = {rid: i for i, rid in enumerate(soonest)}
     candidates = []
     for group in GROUPS:
+        if group == "expectations":
+            continue  # its own order and budget: finish_expectations, CAP_EXPECTATIONS
         for seq, item in enumerate(drafts.get(group, [])):
             if group == "person_notes":
                 tier = 1 if item["report_id"] in order else 2
@@ -340,10 +481,12 @@ def rank_and_cap(drafts: dict, soonest: list[str]) -> tuple[dict, int]:
             continue
         shown[group].append(item)
         taken += 1
-    return shown, len(candidates) - taken
+    expectations = drafts.get("expectations", [])
+    shown["expectations"] = expectations[:CAP_EXPECTATIONS]
+    return shown, len(candidates) - taken + max(0, len(expectations) - CAP_EXPECTATIONS)
 
 
-_KEY_PREFIX = {"org_units": "unit", "role_assignments": "role", "goals": "goal", "person_notes": "note"}
+_KEY_PREFIX = {"org_units": "unit", "role_assignments": "role", "expectations": "exp", "goals": "goal", "person_notes": "note"}
 
 
 def number_items(groups: dict) -> dict:
@@ -397,9 +540,13 @@ def parse_notes_dump(
         raise HTTPException(status_code=422, detail="Add some notes or attach a file first")
 
     ctx = build_context(supabase, user_id)
-    raw = generate_text(build_prompt(ctx, notes), model=AI_DEFAULT_MODEL_HEAVY, max_tokens=4000, timeout=120.0)
-    drafts = validate_parse(_parse_json_object(raw), ctx, notes)
+    raw = generate_text(build_prompt(ctx, notes), model=AI_DEFAULT_MODEL_HEAVY, max_tokens=5000, timeout=120.0)
+    parsed = _parse_json_object(raw)
+    drafts = validate_parse(parsed, ctx, notes)
     unmatched = drafts.pop("unmatched_people")
+    if drafts["expectations"]:
+        _finish_expectations_for(supabase, user_id, ctx, drafts, typed=(text or "")[:MAX_CHARS],
+                                 other_names=_other_names(parsed))
     shown, overflow = rank_and_cap(drafts, _soonest_reports(supabase, user_id))
     number_items(shown)
 
@@ -411,6 +558,7 @@ def parse_notes_dump(
         "proposed_roles": len(shown["role_assignments"]),
         "proposed_goals": len(shown["goals"]),
         "proposed_notes": len(shown["person_notes"]),
+        "proposed_expectations": len(shown["expectations"]),
         "overflow": overflow,
         "unmatched_people": len(unmatched),
     })
@@ -419,8 +567,56 @@ def parse_notes_dump(
         "unmatched_people": unmatched,
         "overflow": overflow,
         "truncated": truncated,
+        "other_names": _other_names(parsed),
+        "max_roles": MAX_ROLES,
         "nothing_found": not any(shown[g] for g in GROUPS) and not unmatched,
     }
+
+
+def _other_names(parsed: dict) -> list[str]:
+    """Everyone the notes name who is not on the roster. They end the previous
+    person's slice (intake_slices), so their sentences reach no one's draft."""
+    names = []
+    for it in parsed.get("unmatched_people") or []:
+        name = _s(it.get("name"), 80) if isinstance(it, dict) else None
+        if name and name not in names:
+            names.append(name)
+    return names[:MAX_OTHER_NAMES]
+
+
+def _roster(supabase, user_id: str) -> list[dict]:
+    return (
+        supabase.table("direct_reports").select("id,name,role_level_id")
+        .eq("manager_id", user_id).is_("archived_at", "null").execute().data
+    )
+
+
+def _role_status(supabase) -> tuple[set, set]:
+    """-> (roles with an open draft, roles with approved expectations)."""
+    open_roles = {
+        d["role_level_id"]
+        for d in supabase.table("role_expectation_drafts").select("role_level_id").eq("status", "open").execute().data
+    }
+    covered = {
+        r["role_level_id"] for r in _compute_coverage(supabase)["roles"]
+        if r["metrics_count"] + r["skills_count"] + r["values_count"] > 0
+    }
+    return open_roles, covered
+
+
+def _finish_expectations_for(supabase, user_id: str, ctx: dict, drafts: dict, *, typed: str,
+                             other_names: list[str]) -> None:
+    # Imported here: onboarding -> org_goals -> notes_dump would be a cycle.
+    from routes.onboarding import _next_1on1_dates, expectation_queue
+
+    roster = _roster(supabase, user_id)
+    slices = slice_by_person(typed, roster, others=other_names,
+                             want={e["report_id"] for e in drafts["expectations"]})
+    open_roles, covered = _role_status(supabase)
+    labels = {r["id"]: r["label"] for r in ctx["roles"].values()}
+    queue = expectation_queue(roster, labels, covered, _next_1on1_dates(supabase, user_id), limit=len(roster))
+    finish_expectations(drafts["expectations"], slices=slices, open_draft_roles=open_roles,
+                        covered_roles=covered, rank=queue_rank(roster, queue))
 
 
 # ---------------------------------------------------------------------------
@@ -457,11 +653,29 @@ class NoteItem(_Strict):
     text: str = Field(max_length=600)
 
 
+class ExpectationItem(_Strict):
+    report_id: str
+    # An existing role, or a new one by title and level (level editable on the
+    # review row; clamped 1-10 by _validate_role).
+    role_level_id: str | None = None
+    job_role: str | None = Field(default=None, max_length=80)
+    job_level: int | None = None
+    statement: str | None = Field(default=None, max_length=400)
+    # Queue a draft now. Rows kept without it get the role and assignment only;
+    # the receipt offers them as a second pass.
+    draft: bool = False
+
+
 class ApplyIn(_Strict):
     org_units: list[OrgUnitItem] = Field(default_factory=list, max_length=CAP_TOTAL)
     role_assignments: list[RoleItem] = Field(default_factory=list, max_length=CAP_TOTAL)
+    expectations: list[ExpectationItem] = Field(default_factory=list, max_length=CAP_EXPECTATIONS)
     goals: list[GoalItem] = Field(default_factory=list, max_length=CAP_TOTAL)
     person_notes: list[NoteItem] = Field(default_factory=list, max_length=CAP_TOTAL)
+    # The typed text, sent back only when a draft is queued: each role's draft
+    # is written from, and keeps, that person's slice of it. Never files.
+    text: str | None = Field(default=None, max_length=MAX_CHARS)
+    other_names: list[Annotated[str, Field(max_length=80)]] = Field(default_factory=list, max_length=MAX_OTHER_NAMES)
     # Counts for analytics only, from the review screen.
     proposed: int = Field(default=0, ge=0, le=100)
     edited: int = Field(default=0, ge=0, le=100)
@@ -475,7 +689,26 @@ def _edit_bucket_from_share(edited: int, kept: int) -> str:
     return "light" if ratio < 0.10 else "moderate" if ratio < 0.40 else "heavy"
 
 
+def _item_role_key(item: ExpectationItem) -> str | None:
+    if item.role_level_id:
+        return item.role_level_id
+    valid = _validate_role({"job_role": item.job_role or "", "job_level": item.job_level})
+    return f"new:{_squash(valid.job_role)}|{valid.job_level}" if valid else None
+
+
+def check_draft_cap(body: ApplyIn) -> None:
+    """Before anything is written: at most MAX_ROLES roles drafted per apply."""
+    keys = {k for k in (_item_role_key(i) for i in body.expectations if i.draft) if k}
+    if len(keys) > MAX_ROLES:
+        raise HTTPException(status_code=422, detail=f"Draft up to {MAX_ROLES} roles at a time. The rest can go in a second pass.")
+
+
+def _first(name: str | None) -> str:
+    return (name or "").strip().split(" ")[0] or "They"
+
+
 def apply_items(supabase, user_id: str, org_id: str, body: ApplyIn) -> dict:
+    check_draft_cap(body)
     saved = {"org_units": 0, "roles": 0, "goals": 0, "notes": 0}
     skipped = 0
     refused: list[dict] = []
@@ -535,6 +768,8 @@ def apply_items(supabase, user_id: str, org_id: str, body: ApplyIn) -> dict:
             continue
         supabase.table("direct_reports").update(update).eq("id", item.report_id).eq("manager_id", user_id).execute()
         saved["roles"] += 1
+
+    queued = _apply_expectations(supabase, user_id, org_id, body, saved, refuse)
 
     existing_goals = {
         (g["level"], g["title"].strip().lower())
@@ -596,7 +831,108 @@ def apply_items(supabase, user_id: str, org_id: str, body: ApplyIn) -> dict:
         ).execute()
         saved["notes"] += 1
 
-    return {"saved": saved, "skipped_existing": skipped, "refused": refused}
+    return {"saved": saved, "skipped_existing": skipped, "refused": refused, **queued}
+
+
+def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, saved: dict, refuse) -> dict:
+    """Create the role level when it is new, assign the person, then queue an
+    unapproved draft per role, in that order. Returns what was queued, what was
+    not and why, and the kept rows left for a second pass."""
+    out = {"roles_created": 0, "drafting": [], "not_drafted": [], "waiting": [], "draft_ids": []}
+    if not body.expectations:
+        return out
+    roster = {r["id"]: r for r in _roster(supabase, user_id)}
+    levels = supabase.table("role_levels").select("id,job_role,job_level").execute().data
+    level_ids = {r["id"] for r in levels}
+    by_name = {(_squash(r["job_role"]), r["job_level"]): r for r in levels if r.get("job_role")}
+
+    resolved: list[tuple[ExpectationItem, str, dict]] = []
+    for item in body.expectations:
+        person = roster.get(item.report_id)
+        if not person:
+            refuse("expectation", "That person isn't on your team")
+            continue
+        if item.role_level_id:
+            if item.role_level_id not in level_ids:
+                refuse("expectation", "That role wasn't found")
+                continue
+            role_id = item.role_level_id
+        else:
+            valid = _validate_role({"job_role": " ".join((item.job_role or "").split()), "job_level": item.job_level})
+            if not valid:
+                refuse("expectation", f"Give {_first(person['name'])}'s role a name first")
+                continue
+            key = (_squash(valid.job_role), valid.job_level)
+            if key not in by_name:
+                # No ladder: batch-created levels land Ungrouped (settled 2026-09-30).
+                row = supabase.table("role_levels").insert({
+                    "org_id": org_id, "job_role": valid.job_role, "job_level": valid.job_level,
+                    "role_family_id": None,
+                }).execute().data[0]
+                by_name[key] = row
+                level_ids.add(row["id"])
+                out["roles_created"] += 1
+            role_id = by_name[key]["id"]
+        if person.get("role_level_id") != role_id:
+            supabase.table("direct_reports").update({"role_level_id": role_id}) \
+                .eq("id", person["id"]).eq("manager_id", user_id).execute()
+            person["role_level_id"] = role_id
+            saved["roles"] += 1
+        resolved.append((item, role_id, person))
+
+    to_draft = [(i, rid, p) for i, rid, p in resolved if i.draft]
+    out["waiting"] = [
+        {"report_id": p["id"], "person_name": p["name"], "role_level_id": rid}
+        for i, rid, p in resolved if not i.draft
+    ]
+    if not to_draft:
+        return out
+
+    open_roles, covered = _role_status(supabase)
+    slices = slice_by_person(body.text or "", list(roster.values()), others=body.other_names,
+                             want={p["id"] for _, _, p in to_draft})
+    groups: dict[str, dict] = {}
+    for item, role_id, person in to_draft:
+        first = _first(person["name"])
+        if role_id in open_roles:
+            out["not_drafted"].append({"person_name": person["name"], "reason": f"{first} already has a working draft — this won't change it."})
+            continue
+        if role_id in covered:
+            out["not_drafted"].append({"person_name": person["name"], "reason": f"{first}'s role already has approved expectations — this won't change them."})
+            continue
+        piece = slices.get(person["id"])
+        if not piece:
+            out["not_drafted"].append({"person_name": person["name"], "reason": f"Nothing you typed is about {first}, so there's nothing to draft from."})
+            continue
+        statement = None
+        if item.statement:
+            statement, _ = strip_unsupported(" ".join(item.statement.split()), numbers_in(piece))
+        g = groups.setdefault(role_id, {"people": [], "slices": [], "statements": []})
+        g["people"].append(person["name"])
+        g["slices"].append(piece)
+        if statement:
+            g["statements"].append(statement)
+
+    for role_id, g in groups.items():
+        context = _cap("\n\n".join(g["slices"]), MAX_SLICE)
+        row = {
+            "org_id": org_id, "role_level_id": role_id, "created_by": user_id,
+            "kind": "new", "status": "open", "source_text": None, "source_label": SOURCE_LABEL,
+            "items": [], "questions": [], "suggestions": [],
+            "analysis": drafting_analysis(context, " ".join(g["statements"])[:600] or None),
+        }
+        try:
+            created = supabase.table("role_expectation_drafts").insert(row).execute().data[0]
+        except APIError as err:
+            if getattr(err, "code", None) != "23505":
+                raise
+            # One open draft per role: someone opened one since we looked.
+            for name in g["people"]:
+                out["not_drafted"].append({"person_name": name, "reason": f"{_first(name)} already has a working draft — this won't change it."})
+            continue
+        out["draft_ids"].append(created["id"])
+        out["drafting"].append({"draft_id": created["id"], "role_level_id": role_id, "people": g["people"]})
+    return out
 
 
 @router.post("/apply")
@@ -604,21 +940,32 @@ def apply_items(supabase, user_id: str, org_id: str, body: ApplyIn) -> dict:
 def apply_notes_dump(
     request: Request,
     body: ApplyIn,
+    background_tasks: BackgroundTasks,
     auth=Depends(get_authenticated_client),
     authorization: str = Header(None),
 ):
-    """Save only what the manager kept. Each row is checked again on its own."""
+    """Save only what the manager kept. Each row is checked again on its own.
+    Queued role drafts are written after the response, in one background task
+    (expectations_batch.draft_in_background)."""
     user_id, supabase = auth
     org_id = ensure_org(user_id, supabase, get_email_from_token(authorization))
     result = apply_items(supabase, user_id, org_id, body)
+    draft_ids = result.pop("draft_ids")
+    if draft_ids:
+        background_tasks.add_task(draft_in_background, supabase, draft_ids, user_id)
 
     kept = sum(result["saved"].values())
-    offered = len(body.org_units) + len(body.role_assignments) + len(body.goals) + len(body.person_notes)
+    offered = (len(body.org_units) + len(body.role_assignments) + len(body.expectations)
+               + len(body.goals) + len(body.person_notes))
     analytics.capture(user_id, "notes_dump_applied", {
         "kept_org_units": result["saved"]["org_units"],
         "kept_roles": result["saved"]["roles"],
         "kept_goals": result["saved"]["goals"],
         "kept_notes": result["saved"]["notes"],
+        "kept_expectations": len(body.expectations),
+        "roles_created": result["roles_created"],
+        "drafts_queued": len(result["drafting"]),
+        "not_drafted": len(result["not_drafted"]),
         "skipped_existing": result["skipped_existing"],
         "refused": len(result["refused"]),
         "dropped": max(0, body.proposed - offered),

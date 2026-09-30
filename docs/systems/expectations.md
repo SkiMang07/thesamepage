@@ -181,6 +181,40 @@ responsibilities also carry `data_source` (where the number lives; stored on
 into the description as a last "Example: ..." line. Every composed draft emits
 `role_draft_composed` (counts and enums only).
 
+## Batch intake (several roles from one input)
+
+The notes box (`NotesDumpModal`, `routes/notes_dump.py`) also proposes, per person
+the input describes, a role expectations row: their role (a cited level, their
+current one, or a new `{job_role, job_level}` with the level editable on the
+review row) and a one-line statement. It is the primary action of the setup
+card's expectations step while that step is highlighted and roles are uncovered;
+the per-role route is the secondary link.
+
+- **Slices.** `intake_slices.slice_by_person` cuts the typed text into
+  per-person verbatim slices in code: a sentence goes to the one person it
+  names and the ones after it follow; several names go to each and end the run; a
+  pronoun-led sentence naming someone else goes to no one; a paragraph break ends
+  the run unless the paragraph was a bare name; anyone else named (roster or
+  `unmatched_people`) ends it too. The slice is stored as `analysis.context` and
+  is the only `context_text` the drafter's `sanitize_composed(mode="description")`
+  sees, so allowed numbers and quote provenance are per person. Never the whole
+  input. Files never go back to apply and are never stored.
+- **Apply order.** Create the level if new (deduped on `job_role` + `job_level`,
+  `role_family_id` null, so it lands Ungrouped), assign the person, then insert
+  an open draft with `analysis = {status: "drafting", source: "batch", run,
+  started_at, context, statement}`. At most 5 roles per apply (422 before any
+  write); rows kept without a draft get role and assignment only and come back
+  in `waiting` for a second pass. A role with an open draft or approved
+  expectations, or a person with no typed text, is skipped with a stated reason.
+- **Background.** One `BackgroundTask` (`expectations_batch.draft_in_background`)
+  runs up to 5 rows on a 3-thread pool with the request's authenticated client.
+  Each run claims its row (version bump, `started_at` reset), calls the model via
+  `_call_model` with 429 backoff, and writes `composed` or `failed` only if the
+  version is unchanged. A `drafting` row older than 5 minutes (its own
+  `started_at`) is presented as `failed`; `POST /drafts/{id}/redraft` re-queues
+  it from the row alone. While `drafting`, save/analyze/copy return 409, the row
+  is not in Needs review, and the role page and overview poll until it lands.
+
 ## Endpoints (`/api/role-expectations`)
 
 | | |
@@ -196,6 +230,7 @@ into the description as a last "Example: ..." line. Every composed draft emits
 | `POST /drafts/{id}/suggestions/{sid}` | accept or dismiss one suggestion |
 | `POST /drafts/{id}/copy` | copy another role's approved items in |
 | `POST /drafts/{id}/discard` | discard; approved expectations untouched |
+| `POST /drafts/{id}/redraft` | re-queue a failed or stale batch draft from its stored slice (AI in background, 10/min) |
 | `POST /drafts/{id}/approve` | approve the whole role (422 lists what still needs a decision) |
 
 Every draft write carries `version`. The older `/api/expectations/draft`,
@@ -205,6 +240,9 @@ expectations through them any more.
 
 ## Verification
 
+`backend/tests/test_intake_slices.py` and `test_expectations_batch.py` cover
+slicing, the expectations group, role creation and dedupe, apply order, the
+background state machine, retry and cross-contamination between people.
 `backend/tests/test_role_expectations.py` covers the number guard, composed-draft
 and reanalysis sanitizing, system target questions, save rules and approval
 problems. The migration, RLS isolation, the approval transaction (including

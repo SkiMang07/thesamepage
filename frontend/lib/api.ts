@@ -2026,6 +2026,10 @@ export const reportSetupStepStarted = (step: OnboardingStepKey, isNext: boolean)
 // ---------------------------------------------------------------------------
 // Notes dump (setup mode chunk B). Parse is the one AI read: drafts only,
 // nothing saved, the input not kept. Apply saves only what the manager kept.
+// Batch expectations intake (Build 3a): apply can also create role levels,
+// assign people and queue unapproved role drafts, written in the background.
+// For that, and only when a draft is queued, the typed text goes back with
+// apply; each role's draft keeps that person's slice of it. Files never do.
 // ---------------------------------------------------------------------------
 
 export type NotesDumpUnit = {
@@ -2066,21 +2070,55 @@ export type NotesDumpNote = {
   excerpt: string | null;
   low: boolean;
 };
+// One person the notes describe expectations for. The role is an existing
+// level (role_level_id) or a new one (new_role, level editable). `slice` is
+// what they said about that person: the only text their role's draft sees.
+export type NotesDumpExpectation = {
+  key: string;
+  report_id: string;
+  person_name: string;
+  role_level_id: string | null;
+  role_label: string | null;
+  new_role: { job_role: string; job_level: number; level_stated: boolean } | null;
+  statement: string | null;
+  slice: string | null;
+  // Why it can't be drafted now: the role has a working draft, the role is
+  // already approved, or nothing typed is about them.
+  blocked: "open_draft" | "approved" | "no_text" | null;
+  // Preselected to draft now (the first roles by soonest 1:1).
+  draft: boolean;
+  excerpt: string | null;
+  low: boolean;
+};
 export type NotesDumpDraft = {
   org_units: NotesDumpUnit[];
   role_assignments: NotesDumpRole[];
+  expectations: NotesDumpExpectation[];
   goals: NotesDumpGoal[];
   person_notes: NotesDumpNote[];
   unmatched_people: { name: string; excerpt: string | null }[];
+  other_names: string[];
+  max_roles: number;
   overflow: number;
   truncated: boolean;
   nothing_found: boolean;
+};
+export type NotesDumpExpectationBody = {
+  report_id: string;
+  role_level_id: string | null;
+  job_role: string | null;
+  job_level: number | null;
+  statement: string | null;
+  draft: boolean;
 };
 export type NotesDumpApplyBody = {
   org_units: { name: string; unit_type: string; parent_name: string | null }[];
   role_assignments: { report_id: string; role_level_id: string | null; role_title: string | null; org_unit_name: string | null }[];
   goals: { level: string; title: string; success_metrics: string | null; org_unit_name: string | null; due_date: string | null }[];
   person_notes: { report_id: string; text: string }[];
+  expectations?: NotesDumpExpectationBody[];
+  text?: string;
+  other_names?: string[];
   proposed: number;
   edited: number;
   seconds_to_confirm: number;
@@ -2089,6 +2127,11 @@ export type NotesDumpApplyResult = {
   saved: { org_units: number; roles: number; goals: number; notes: number };
   skipped_existing: number;
   refused: { kind: string; reason: string }[];
+  roles_created: number;
+  drafting: { draft_id: string; role_level_id: string; people: string[] }[];
+  not_drafted: { person_name: string; reason: string }[];
+  // Kept rows not drafted this time: role and assignment saved, draft next pass.
+  waiting: { report_id: string; person_name: string; role_level_id: string }[];
 };
 
 export const parseNotesDump = (input: { text: string; files: File[] }): Promise<NotesDumpDraft> => {
@@ -2329,12 +2372,20 @@ export type RoleDraft = {
   questions: RoleQuestion[];
   suggestions: RoleSuggestion[];
   analysis: {
-    status?: "idle" | "composed" | "ok" | "failed";
+    // "drafting": a batch draft being written in the background (Build 3a).
+    // A run quiet for five minutes is presented as "failed" by the server.
+    status?: "idle" | "drafting" | "composed" | "ok" | "failed";
     summary?: string | null;
     error?: string;
     notes?: string[];
-    /** The manager's notes beside the job description. They win where the two disagree. */
+    /** The manager's notes beside the job description. They win where the two disagree.
+     * For a batch draft: what they said about this role's person, and all the draft saw. */
     context?: string | null;
+    /** "batch": queued from the notes box. */
+    source?: "batch";
+    /** Batch: what the manager said they expect, restated. */
+    statement?: string | null;
+    started_at?: string;
     analyzed_at?: string;
     new_questions?: number;
     new_suggestions?: number;
@@ -2342,6 +2393,8 @@ export type RoleDraft = {
   version: number;
   updated_at: string;
   approved_at: string | null;
+  /** A failed batch draft that can be written again from what is stored. */
+  can_retry?: boolean;
 };
 
 export type RoleDecision = {
@@ -2394,6 +2447,7 @@ export type RolesOverviewLevel = {
     first_question: string | null;
     focus: string | null;
     analysis_failed: boolean;
+    drafting: boolean;
   } | null;
   open_decisions: { id: string; question: string; topic: string; follow_up_on: string; due: boolean; approved: boolean; item_key: string | null }[];
 };
@@ -2503,6 +2557,10 @@ export const copyIntoRoleDraft = (draftId: string, version: number, fromRoleLeve
     method: "POST",
     body: JSON.stringify({ version, from_role_level_id: fromRoleLevelId }),
   });
+
+// Writes a failed batch draft again, from what the draft already stores.
+export const redraftRoleDraft = (draftId: string, version: number): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/redraft`, { method: "POST", body: JSON.stringify({ version }) });
 
 export const discardRoleDraft = (draftId: string): Promise<{ discarded: boolean }> =>
   authedFetch(`/api/role-expectations/drafts/${draftId}/discard`, { method: "POST" });

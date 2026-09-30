@@ -10,14 +10,24 @@
 // "Save selected", and only the checked rows are sent (Hard Rule 6). What is
 // not found is not listed here: the setup card recomputes and shows what is left.
 //
+// Role expectations (batch intake, Build 3a): one input about several people
+// yields, per person, their role (existing, or new with an editable level), the
+// assignment, and a first draft of the role's expectations for up to max_roles
+// roles, preselected by soonest 1:1. The typed text goes back to apply only when
+// a draft is queued, because each role's draft keeps that person's slice of it.
+// The privacy box says so. Attached files are never sent back or kept.
+//
 // Voice: literal labels, no cheer. Counts and fixed values only go to analytics
 // (sent by the server; the browser sends only how many rows were edited).
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   ApiError,
   NotesDumpApplyResult,
   NotesDumpDraft,
+  NotesDumpExpectation,
+  NotesDumpExpectationBody,
   applyNotesDump,
   parseNotesDump,
   reportNotesDumpSkipped,
@@ -37,7 +47,25 @@ function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
+// The role a row drafts: an existing level, or a new title and level. Two rows
+// on the same role share one draft.
+function roleKey(row: NotesDumpExpectation, title: string, level: number) {
+  return row.role_level_id ?? `new:${title.trim().toLowerCase().replace(/\s+/g, " ")}|${level}`;
+}
+
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+function blockedText(row: NotesDumpExpectation) {
+  const who = firstName(row.person_name);
+  if (row.blocked === "open_draft") return `${who} already has a working draft — this won’t change it.`;
+  if (row.blocked === "approved") return `${who}’s role already has approved expectations — this won’t change them.`;
+  if (row.blocked === "no_text") return `Nothing you typed is about ${who}, so there’s nothing to draft from. Attached files aren’t kept.`;
+  return null;
+}
+
+export default function NotesDumpModal({ onClose, intent }: { onClose: () => void; intent?: "expectations" }) {
   const [phase, setPhase] = useState<Phase>("input");
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -46,6 +74,10 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
   const [kept, setKept] = useState<Record<string, boolean>>({});
   const [edits, setEdits] = useState<Edits>({});
   const [result, setResult] = useState<NotesDumpApplyResult | null>(null);
+  // Role expectation rows: whether to draft now, and the new role's level.
+  const [drafts, setDrafts] = useState<Record<string, boolean>>({});
+  const [levels, setLevels] = useState<Record<string, number>>({});
+  const [nextPass, setNextPass] = useState(false);
   const shownAt = useRef<number>(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const busy = phase === "reading" || phase === "saving";
@@ -71,6 +103,8 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
       setDraft(d);
       setKept(Object.fromEntries(allRows(d).map((r) => [r.key, !r.low])));
       setEdits({});
+      setDrafts(Object.fromEntries(d.expectations.map((e) => [e.key, e.draft])));
+      setLevels(Object.fromEntries(d.expectations.filter((e) => e.new_role).map((e) => [e.key, e.new_role!.job_level])));
       shownAt.current = Date.now();
       setPhase("review");
     } catch (e) {
@@ -87,6 +121,26 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
   const rows = useMemo(() => (draft ? allRows(draft) : []), [draft]);
   const keptCount = rows.filter((r) => kept[r.key]).length;
   const editedCount = rows.filter((r) => kept[r.key] && edits[r.key] !== undefined && edits[r.key] !== r.original).length;
+
+  const expRows = draft?.expectations ?? [];
+  const maxRoles = draft?.max_roles ?? 5;
+  const titleOf = (e: NotesDumpExpectation) => (edits[e.key] ?? e.new_role?.job_role ?? "").trim();
+  const levelOf = (e: NotesDumpExpectation) => levels[e.key] ?? e.new_role?.job_level ?? 1;
+  const drafting = (e: NotesDumpExpectation) => !!kept[e.key] && !!drafts[e.key] && !e.blocked;
+  const chosenRoles = new Set(expRows.filter(drafting).map((e) => roleKey(e, titleOf(e), levelOf(e))));
+  const canDraft = (e: NotesDumpExpectation) =>
+    !e.blocked && !!kept[e.key] && (drafting(e) || chosenRoles.size < maxRoles || chosenRoles.has(roleKey(e, titleOf(e), levelOf(e))));
+
+  function expectationBody(e: NotesDumpExpectation, draftNow: boolean, roleLevelId?: string): NotesDumpExpectationBody {
+    return {
+      report_id: e.report_id,
+      role_level_id: roleLevelId ?? e.role_level_id,
+      job_role: roleLevelId || e.role_level_id ? null : titleOf(e) || e.new_role?.job_role || null,
+      job_level: roleLevelId || e.role_level_id ? null : levelOf(e),
+      statement: e.statement,
+      draft: draftNow,
+    };
+  }
 
   async function save() {
     if (!draft) return;
@@ -109,6 +163,9 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
         person_notes: draft.person_notes.filter((n) => on(n.key)).map((n) => ({
           report_id: n.report_id, text: val(n.key, n.text),
         })),
+        expectations: expRows.filter((e) => on(e.key)).map((e) => expectationBody(e, drafting(e))),
+        // Only when a draft is queued: each role's draft keeps that person's part.
+        ...(expRows.some(drafting) ? { text, other_names: draft.other_names } : {}),
         proposed: rows.length,
         edited: editedCount,
         seconds_to_confirm: Math.max(0, Math.round((Date.now() - shownAt.current) / 1000)),
@@ -120,6 +177,44 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
       setPhase("review");
     }
   }
+
+  // Second pass: the kept roles not drafted last time, the next max_roles of
+  // them, from the same text (still on this screen, never stored for this).
+  async function draftNext() {
+    if (!draft || !result) return;
+    setError(null);
+    setNextPass(true);
+    const byReport = Object.fromEntries(expRows.map((e) => [e.report_id, e]));
+    const roles: string[] = [];
+    const next = result.waiting.filter((w) => {
+      if (roles.includes(w.role_level_id)) return true;
+      if (roles.length >= maxRoles) return false;
+      roles.push(w.role_level_id);
+      return true;
+    });
+    try {
+      const r = await applyNotesDump({
+        org_units: [], role_assignments: [], goals: [], person_notes: [],
+        expectations: next.filter((w) => byReport[w.report_id]).map((w) => expectationBody(byReport[w.report_id], true, w.role_level_id)),
+        text, other_names: draft.other_names,
+        proposed: 0, edited: 0, seconds_to_confirm: 0,
+      });
+      const done = new Set(next.map((w) => w.report_id));
+      setResult({
+        ...result,
+        drafting: [...result.drafting, ...r.drafting],
+        not_drafted: [...result.not_drafted, ...r.not_drafted],
+        waiting: result.waiting.filter((w) => !done.has(w.report_id)),
+        refused: [...result.refused, ...r.refused],
+      });
+    } catch (e) {
+      setError(readable(e));
+    } finally {
+      setNextPass(false);
+    }
+  }
+
+  const forRoles = intent === "expectations";
 
   return (
     <div
@@ -137,11 +232,12 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
           <>
             <p className={EYEBROW}>Setup</p>
             <h2 id="notes-dump-title" className="mt-1 font-serif text-[1.5rem] font-normal leading-tight tracking-[-0.02em] text-ink">
-              Add what you already have
+              {forRoles ? "What you expect of each person" : "Add what you already have"}
             </h2>
             <p className="mt-2 text-sm text-ink-secondary">
-              Notes from past conversations, who does what, the goals you were given. Talk, type, paste, or attach files.
-              You review everything before it is saved.
+              {forRoles
+                ? "Take them one at a time: their role, what they own, how you’d tell it’s going well, anything you ask of them on a schedule. Talk or type. Each role gets a first draft for you to review before anything is approved."
+                : "Notes from past conversations, who does what, the goals you were given. Talk, type, paste, or attach files. You review everything before it is saved."}
             </p>
 
             <NoteField
@@ -151,7 +247,11 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
               onChange={setText}
               disabled={phase === "reading"}
               rows={9}
-              placeholder="e.g. Priya joined in March from the sales team and owns onboarding. Sam runs renewals, and wants to move into management. Our goal this year is to cut churn to 8%."
+              placeholder={
+                forRoles
+                  ? "e.g. Priya, senior CSM. She owns onboarding for new accounts, and I want a written update from her every Friday. Sam runs renewals, mid-level. Good for him is no renewal surprises in the last month of a quarter."
+                  : "e.g. Priya joined in March from the sales team and owns onboarding. Sam runs renewals, and wants to move into management. Our goal this year is to cut churn to 8%."
+              }
               className="mt-4 text-sm leading-relaxed"
             />
 
@@ -200,9 +300,13 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
             <div className="mt-4 rounded-lg bg-sunken px-4 py-3 text-[13px] leading-relaxed text-ink-secondary">
               <p className="font-medium text-ink">What is stored</p>
               <p className="mt-1">
-                This is read once to draft suggestions. The text and files are not kept. Only the rows you choose to save
-                are stored, as ordinary records you can edit or delete. Leave out anything you aren’t allowed to share
-                outside your company.
+                This is read once to draft suggestions. Only the rows you choose to save are stored, as ordinary records
+                you can edit or delete.
+              </p>
+              <p className="mt-1">
+                If you keep a first draft of someone’s role expectations, what you typed about that person is stored on
+                that role’s draft and shown above it when you open it. The rest of the text is not kept, and attached
+                files are not kept. Leave out anything you aren’t allowed to share outside your company.
               </p>
             </div>
 
@@ -263,6 +367,74 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
                   )}
                 </Row>
               ))}
+            </Section>
+
+            <Section title="Role expectations" show={expRows.length > 0}>
+              <li className="px-3 py-2.5 text-[13px] text-ink-secondary">
+                Up to {maxRoles} roles get a first draft now, soonest 1:1 first ({chosenRoles.size} of {maxRoles} chosen). Every
+                draft is unapproved until you review it. Roles you keep without a draft are saved and assigned now; you can draft
+                them next.
+              </li>
+              {expRows.map((e) => {
+                const blocked = blockedText(e);
+                const title = titleOf(e);
+                return (
+                  <Row key={e.key} rowKey={e.key} kept={kept} setKept={setKept} excerpt={e.excerpt} low={e.low} label={e.person_name}>
+                    {e.new_role ? (
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-ink">
+                        <span className="text-ink-secondary">New role:</span>
+                        <input
+                          aria-label={`New role for ${e.person_name}`}
+                          className={`${INPUT} w-auto min-w-[12rem] flex-1`}
+                          value={edits[e.key] ?? e.new_role.job_role}
+                          onChange={(ev) => setEdits({ ...edits, [e.key]: ev.target.value })}
+                        />
+                        <label className="flex items-center gap-1.5 text-ink-secondary">
+                          level
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            aria-label={`Level for ${e.person_name}`}
+                            className={`${INPUT} w-16`}
+                            value={levelOf(e)}
+                            onChange={(ev) => setLevels({ ...levels, [e.key]: Math.min(10, Math.max(1, Number(ev.target.value) || 1)) })}
+                          />
+                        </label>
+                        <span className="text-xs text-ink-muted">
+                          {e.new_role.level_stated ? "Level read from how you described them. Check it." : "No seniority stated, so it starts at 1. Check it."}
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-ink">Role: {e.role_label ?? "their current role"}</p>
+                    )}
+                    {e.statement && <p className="mt-1 text-sm text-ink-body">What you expect: {e.statement}</p>}
+                    {blocked ? (
+                      <p className="mt-1 text-xs text-ink-muted">{blocked}</p>
+                    ) : (
+                      <label className="mt-2 flex items-center gap-2 text-[13px] text-ink-secondary">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={drafting(e)}
+                          disabled={!canDraft(e) || (!title && !e.role_level_id)}
+                          onChange={(ev) => setDrafts({ ...drafts, [e.key]: ev.target.checked })}
+                        />
+                        Write a first draft now
+                        {!drafting(e) && kept[e.key] && chosenRoles.size >= maxRoles && !chosenRoles.has(roleKey(e, title, levelOf(e))) && (
+                          <span className="text-ink-muted">· {maxRoles} roles chosen already. This one can go next.</span>
+                        )}
+                      </label>
+                    )}
+                    {e.slice && !e.blocked && (
+                      <details className="mt-1.5 text-xs text-ink-muted">
+                        <summary className="cursor-pointer">What the draft will read</summary>
+                        <p className="mt-1 whitespace-pre-wrap rounded-md bg-sunken px-2.5 py-2 text-ink-secondary">{e.slice}</p>
+                      </details>
+                    )}
+                  </Row>
+                );
+              })}
             </Section>
 
             <Section title="Goals" show={draft.goals.length > 0}>
@@ -341,9 +513,45 @@ export default function NotesDumpModal({ onClose }: { onClose: () => void }) {
                 ))}
               </ul>
             )}
+            {result.drafting.length > 0 && (
+              <div className="mt-3 rounded-lg bg-sunken px-4 py-3 text-sm text-ink-secondary">
+                <p className="text-ink">
+                  Writing {plural(result.drafting.length, "first draft", "first drafts")} of role expectations, for{" "}
+                  {result.drafting.map((d) => d.people.map(firstName).join(" and ")).join(", ")}.
+                </p>
+                <p className="mt-1">
+                  It takes about a minute. They’ll be on{" "}
+                  <Link href="/app/expectations" className="font-medium text-brand hover:text-brand-hover">
+                    Roles &amp; expectations
+                  </Link>
+                  , unapproved, for you to review.
+                </p>
+              </div>
+            )}
+            {result.not_drafted.length > 0 && (
+              <ul className="mt-2 list-disc pl-5 text-sm text-ink-secondary">
+                {result.not_drafted.map((r, i) => (
+                  <li key={i}>{r.reason}</li>
+                ))}
+              </ul>
+            )}
+            {result.waiting.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline px-4 py-3 text-sm">
+                <p className="min-w-0 flex-1 text-ink-secondary">
+                  {result.waiting.map((w) => firstName(w.person_name)).join(", ")}{" "}
+                  {result.waiting.length === 1 ? "has" : "have"} a role now and no draft yet.
+                </p>
+                {expRows.length > 0 && (
+                  <button type="button" onClick={draftNext} disabled={nextPass} className={`${BTN_SECONDARY} shrink-0`}>
+                    {nextPass ? "Queuing…" : `Draft the next ${Math.min(maxRoles, new Set(result.waiting.map((w) => w.role_level_id)).size)}`}
+                  </button>
+                )}
+              </div>
+            )}
+            {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
             <p className="mt-2 text-sm text-ink-secondary">What is still open stays on the setup card.</p>
             <div className="mt-5 flex justify-end">
-              <button type="button" onClick={onClose} className={BTN_PRIMARY}>
+              <button type="button" onClick={onClose} disabled={nextPass} className={BTN_PRIMARY}>
                 Done
               </button>
             </div>
@@ -362,6 +570,7 @@ function allRows(d: NotesDumpDraft): FlatRow[] {
   return [
     ...d.org_units.map((r) => ({ key: r.key, low: r.low, original: r.name })),
     ...d.role_assignments.map((r) => ({ key: r.key, low: r.low, original: "" })),
+    ...d.expectations.map((r) => ({ key: r.key, low: r.low, original: r.new_role?.job_role ?? "" })),
     ...d.goals.map((r) => ({ key: r.key, low: r.low, original: r.title })),
     ...d.person_notes.map((r) => ({ key: r.key, low: r.low, original: r.text })),
   ];
@@ -371,6 +580,7 @@ function receiptLine(r: NotesDumpApplyResult) {
   const s = r.saved;
   const parts = [
     s.org_units && plural(s.org_units, "team or department", "teams or departments"),
+    r.roles_created && plural(r.roles_created, "new role", "new roles"),
     s.roles && plural(s.roles, "role or team assignment", "role or team assignments"),
     s.goals && plural(s.goals, "goal", "goals"),
     s.notes && plural(s.notes, "note about a person", "notes about people"),

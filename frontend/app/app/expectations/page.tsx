@@ -66,6 +66,15 @@ function ExpectationsOverview() {
     load();
   }, [load]);
 
+  // Batch intake: roles whose first draft is being written. Read again until
+  // each lands, so "Writing" turns into a row to review without a reload.
+  const anyDrafting = !!data?.levels.some((l) => l.draft?.drafting);
+  useEffect(() => {
+    if (!anyDrafting) return;
+    const timer = window.setInterval(load, 5000);
+    return () => window.clearInterval(timer);
+  }, [anyDrafting, load]);
+
   useEffect(() => {
     if (!managing) return;
     Promise.all([getRoleLevels(), getRoleFamilies()])
@@ -280,8 +289,17 @@ function LevelRow({ level }: { level: RolesOverviewLevel }) {
   const openDecision = level.open_decisions.find((d) => d.approved);
   let status: string;
   let action: React.ReactNode;
-  if (level.status === "draft") {
-    status = "Draft in progress · not yet approved";
+  if (level.draft?.drafting) {
+    status = "Writing the first draft from what you said";
+    action = (
+      <Link href={href} className="text-sm font-medium text-brand hover:text-brand-hover">
+        View →
+      </Link>
+    );
+  } else if (level.status === "draft") {
+    status = level.draft?.analysis_failed && level.draft.items === 0
+      ? "The draft couldn’t be written · try again"
+      : "Draft in progress · not yet approved";
     action = (
       <Link href={href} className={BTN_SECONDARY}>
         Continue draft →

@@ -28,6 +28,11 @@
 // once when setup finishes), and opens the org-goals modal when Mission Control
 // is reached with ?setup=goals (the ranker's way back to that step).
 //
+// Batch expectations intake (Build 3a; docs/EXPECTATIONS_BATCH_INTAKE_SCOPING.md):
+// when the expectations step is the highlighted one, its primary action opens
+// the notes box aimed at roles (one input, several people, a draft per role)
+// and the one-role-at-a-time route becomes the secondary link.
+//
 // Voice: literal labels, no encouragement. Each step carries one line on what it
 // changes, stated as a fact.
 
@@ -58,8 +63,11 @@ type StepView = {
   time: string;
   action: string;
   href: string;
-  // The action opens the org-goals modal instead of a page.
-  modal?: boolean;
+  // The action opens a modal instead of a page: the org-goals modal, or the
+  // notes box aimed at role expectations.
+  modal?: "goals" | "notes";
+  // A second, quieter way in, shown under the highlighted step's action.
+  secondary?: { action: string; href: string };
   // A second line under the highlighted step: what comes first, and what is next.
   detail?: string;
   done: boolean;
@@ -100,13 +108,23 @@ function expectationsAction(next: ExpectationQueueEntry | null | undefined, rest
   };
 }
 
-export function setupSteps(s: OnboardingSteps): StepView[] {
+export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | null): StepView[] {
   const org = s.org;
   const exp = s.expectations;
   const goals = s.goals;
   const queue = exp.queue ?? [];
   const nextRole = exp.next_role ?? queue[0] ?? null;
-  const expAction = expectationsAction(nextRole, queue.filter((q) => q !== nextRole && q.report_id !== nextRole?.report_id));
+  const perRole = expectationsAction(nextRole, queue.filter((q) => q !== nextRole && q.report_id !== nextRole?.report_id));
+  const uncovered = exp.people_without_role > 0 || exp.roles_covered < exp.roles_in_use;
+  // The batch box leads when this is the step to do and roles are uncovered.
+  const batch = nextKey === "expectations" && !exp.done && !exp.blocked && uncovered;
+  const expAction = batch
+    ? {
+        action: "Describe each person’s role",
+        href: perRole.href,
+        detail: `Talk or type what you expect of each person, all in one go. Up to five roles get a first draft for you to review. Nothing is approved for you.`,
+      }
+    : perRole;
   return [
     {
       key: "org",
@@ -133,6 +151,8 @@ export function setupSteps(s: OnboardingSteps): StepView[] {
       action: expAction.action,
       href: expAction.href,
       detail: expAction.detail,
+      modal: batch ? "notes" : undefined,
+      secondary: batch ? { action: `Or one role at a time: ${perRole.action.charAt(0).toLowerCase()}${perRole.action.slice(1)}`, href: perRole.href } : undefined,
       done: exp.done,
       blocked: exp.blocked,
       status: exp.done
@@ -150,7 +170,7 @@ export function setupSteps(s: OnboardingSteps): StepView[] {
       time: "About 3 minutes",
       action: goals.has_org_goal ? "Write a team goal" : "Add company or department goals",
       href: "/app/goals",
-      modal: !goals.has_org_goal,
+      modal: goals.has_org_goal ? undefined : "goals",
       detail: !goals.has_org_goal && !goals.has_team_goal ? "A team goal is yours to write. Add it on the Goals page." : undefined,
       done: goals.done,
       blocked: false,
@@ -189,7 +209,7 @@ function SetupParamOpener({ onGoals }: { onGoals: () => void }) {
 export default function SetupPath() {
   const { onboarding } = useZoneData();
   const router = useRouter();
-  const [dumpOpen, setDumpOpen] = useState(false);
+  const [dumpOpen, setDumpOpen] = useState<false | "any" | "expectations">(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [introClosed, setIntroClosed] = useState(false);
   const [receiptClosed, setReceiptClosed] = useState(false);
@@ -221,8 +241,8 @@ export default function SetupPath() {
   }
   if (!onboarding.steps) return null;
 
-  const steps = setupSteps(onboarding.steps);
   const nextKey = onboarding.next_step;
+  const steps = setupSteps(onboarding.steps, nextKey);
   const level = revealed ? "full" : hiddenNow ? "hidden" : (onboarding.card?.level ?? "full");
   const introOpen = !!onboarding.intro_pending && !introClosed;
   const startStep = steps.find((st) => st.key === nextKey) ?? steps.find((st) => !st.done && !st.blocked) ?? steps[0];
@@ -231,9 +251,14 @@ export default function SetupPath() {
     void reportSetupStepStarted(step.key, step.key === nextKey);
   }
 
+  function openModal(step: StepView) {
+    if (step.modal === "notes") setDumpOpen("expectations");
+    else setGoalsOpen(true);
+  }
+
   function openStep(step: StepView) {
     opened(step);
-    if (step.modal) setGoalsOpen(true);
+    if (step.modal) openModal(step);
     else router.push(step.href);
   }
 
@@ -263,7 +288,7 @@ export default function SetupPath() {
           }}
         />
       )}
-      {dumpOpen && <NotesDumpModal onClose={() => setDumpOpen(false)} />}
+      {dumpOpen && <NotesDumpModal intent={dumpOpen === "expectations" ? "expectations" : undefined} onClose={() => setDumpOpen(false)} />}
       {goalsOpen && <OrgGoalsModal onClose={() => setGoalsOpen(false)} />}
     </>
   );
@@ -354,7 +379,7 @@ export default function SetupPath() {
                           type="button"
                           onClick={() => {
                             opened(step);
-                            setGoalsOpen(true);
+                            openModal(step);
                           }}
                           className={`${BTN_PRIMARY_SM} mt-3 inline-flex`}
                         >
@@ -364,6 +389,13 @@ export default function SetupPath() {
                         <Link href={step.href} onClick={() => opened(step)} className={`${BTN_PRIMARY_SM} mt-3 inline-flex`}>
                           {step.action}
                         </Link>
+                      )}
+                      {step.secondary && (
+                        <p className="mt-2 text-[13px]">
+                          <Link href={step.secondary.href} onClick={() => opened(step)} className="font-medium text-brand hover:text-brand-hover">
+                            {step.secondary.action}
+                          </Link>
+                        </p>
                       )}
                     </div>
                   </div>
@@ -390,7 +422,7 @@ export default function SetupPath() {
                     type="button"
                     onClick={() => {
                       opened(step);
-                      setGoalsOpen(true);
+                      openModal(step);
                     }}
                     className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-3 rounded-lg px-2 py-1 text-left transition hover:bg-sunken"
                   >
@@ -414,7 +446,7 @@ export default function SetupPath() {
           <p className="min-w-0 flex-1 text-[13px] text-ink-secondary">
             Have notes, a doc or a list already? Add them and the drafts fill in what they cover. Optional.
           </p>
-          <button type="button" onClick={() => setDumpOpen(true)} className={`${BTN_SECONDARY} shrink-0`}>
+          <button type="button" onClick={() => setDumpOpen("any")} className={`${BTN_SECONDARY} shrink-0`}>
             Add what you already have
           </button>
         </div>

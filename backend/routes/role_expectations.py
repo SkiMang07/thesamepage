@@ -52,11 +52,12 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
 import analytics
+import expectations_batch as batch
 from ai_core import generate_text, generate_text_from_document
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.documents import _MAX_UPLOAD_BYTES
@@ -574,6 +575,13 @@ def _require_open(draft: dict) -> None:
         raise HTTPException(status_code=409, detail="This draft is no longer open — reload to see the current expectations.")
 
 
+def _require_not_drafting(draft: dict) -> None:
+    """A batch draft still being written can't be edited: the run would land
+    on top of the edit, or the edit would silently discard the run."""
+    if batch.is_drafting(draft.get("analysis")):
+        raise HTTPException(status_code=409, detail="This draft is still being written. It takes about a minute — reload in a moment.")
+
+
 def _check_version(draft: dict, version: int | None) -> None:
     if version is not None and version != draft["version"]:
         raise HTTPException(status_code=409, detail="This draft changed in another tab. Reload to continue from the latest version.")
@@ -593,6 +601,9 @@ def _write_draft(supabase, draft: dict, patch: dict) -> dict:
 
 
 def _present_draft(supabase, draft: dict) -> dict:
+    # A batch draft whose run went quiet reads as failed (not written back).
+    draft = {**draft, "analysis": batch.presented_analysis(draft.get("analysis"))}
+    draft["can_retry"] = batch.can_retry(draft)
     role = _fetch_role(supabase, draft["role_level_id"])
     approved = _approved_configs(supabase, draft["role_level_id"])
     approved_items = items_from_configs(approved)
@@ -700,6 +711,9 @@ def get_overview(auth=Depends(get_authenticated_client)):
             first = (open_qs or deferred_qs or [None])[0]
             items = draft.get("items") or []
             first_open = first.get("question") if first else None
+            analysis = batch.presented_analysis(draft.get("analysis"))
+            drafting = analysis.get("status") == "drafting"
+            batch_failed = analysis.get("source") == "batch" and analysis.get("status") == "failed" and not items
             draft_summary = {
                 "id": draft["id"],
                 "kind": draft["kind"],
@@ -709,7 +723,10 @@ def get_overview(auth=Depends(get_authenticated_client)):
                 "items": len(items),
                 "first_question": first_open,
                 "focus": first.get("id") if first else None,
-                "analysis_failed": (draft.get("analysis") or {}).get("status") == "failed",
+                "analysis_failed": analysis.get("status") == "failed",
+                # Batch intake: being written in the background. Not actionable
+                # yet, so it stays out of Needs review.
+                "drafting": drafting,
             }
             detail_parts = []
             if draft["kind"] == "revision" and has_approved:
@@ -719,15 +736,18 @@ def get_overview(auth=Depends(get_authenticated_client)):
                 kind_label = "Draft not yet approved"
             if first_open:
                 detail_parts.insert(0, first_open)
-            needs_review.append({
-                "type": "revision" if status == "revision" else "draft",
-                "role_level_id": role["id"],
-                "label": label(role),
-                "kind_label": kind_label,
-                "detail": " · ".join(detail_parts) if detail_parts else "Ready to review",
-                "focus": draft_summary["focus"],
-                "updated_at": draft["updated_at"],
-            })
+            if batch_failed:
+                detail_parts.insert(0, "The draft couldn't be written. Try again from the role page")
+            if not drafting:
+                needs_review.append({
+                    "type": "revision" if status == "revision" else "draft",
+                    "role_level_id": role["id"],
+                    "label": label(role),
+                    "kind_label": kind_label,
+                    "detail": " · ".join(detail_parts) if detail_parts else "Ready to review",
+                    "focus": draft_summary["focus"],
+                    "updated_at": draft["updated_at"],
+                })
 
         role_dec_out = []
         for dec in role_decisions:
@@ -1214,6 +1234,36 @@ class DraftCreateIn(BaseModel):
     notes: list[str] | None = None
 
 
+def merge_open_decisions(items: list[dict], questions: list[dict], decisions: list[dict]) -> list[dict]:
+    """Every open decision on the role comes along into a new draft, still
+    deferred, so the draft is where it gets resolved. Shared by POST /drafts
+    and the batch drafter (expectations_batch.py)."""
+    questions = list(questions)
+    for dec in decisions:
+        questions.append(normalize_question({
+            "id": f"decision:{dec['id']}",
+            "item_key": dec.get("item_key"),
+            "topic": dec["topic"],
+            "question": dec["question"],
+            "why": dec.get("context"),
+            "answer_mode": "field" if dec["topic"] == "target" else "answer",
+            "field": "target" if dec["topic"] == "target" else None,
+            "status": "deferred",
+            "decision_id": dec["id"],
+            "follow_up_on": dec["follow_up_on"],
+            "origin": "system" if dec["topic"] == "target" else "decision",
+        }))
+    # A deferred target decision replaces the generic target question.
+    covered = {q["item_key"] for q in questions if q["topic"] == "target" and q.get("decision_id")}
+    questions = [q for q in questions if not (q["origin"] == "system" and q["topic"] == "target"
+                                               and not q.get("decision_id") and q["item_key"] in covered)]
+    for q in questions:
+        if q.get("decision_id") and q["topic"] == "target" and q["item_key"]:
+            q["id"] = target_question_id(q["item_key"])
+    questions = reconcile_questions(items, questions)
+    return questions
+
+
 @router.post("/drafts")
 def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)):
     """Open (or resume) the working draft for a role level. A role with
@@ -1290,30 +1340,7 @@ def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), au
         suggestions = [_suggestion(ci, "Typical for this role, not from you.") for ci in typical_items]
         questions = composed_questions
 
-    # Every open decision on this role comes along, still deferred, so the
-    # revision is where it gets resolved.
-    for dec in decisions:
-        questions.append(normalize_question({
-            "id": f"decision:{dec['id']}",
-            "item_key": dec.get("item_key"),
-            "topic": dec["topic"],
-            "question": dec["question"],
-            "why": dec.get("context"),
-            "answer_mode": "field" if dec["topic"] == "target" else "answer",
-            "field": "target" if dec["topic"] == "target" else None,
-            "status": "deferred",
-            "decision_id": dec["id"],
-            "follow_up_on": dec["follow_up_on"],
-            "origin": "system" if dec["topic"] == "target" else "decision",
-        }))
-    # A deferred target decision replaces the generic target question.
-    covered = {q["item_key"] for q in questions if q["topic"] == "target" and q.get("decision_id")}
-    questions = [q for q in questions if not (q["origin"] == "system" and q["topic"] == "target"
-                                               and not q.get("decision_id") and q["item_key"] in covered)]
-    for q in questions:
-        if q.get("decision_id") and q["topic"] == "target" and q["item_key"]:
-            q["id"] = target_question_id(q["item_key"])
-    questions = reconcile_questions(items, questions)
+    questions = merge_open_decisions(items, questions, decisions)
 
     analysis = {"status": "composed" if body.items else "idle", "notes": (body.notes or [])[:5]}
     if context:
@@ -1392,6 +1419,7 @@ class DraftSaveIn(BaseModel):
 
 def _apply_save(supabase, draft: dict, body: DraftSaveIn) -> dict:
     _require_open(draft)
+    _require_not_drafting(draft)
     _check_version(draft, body.version)
     items = [i for i in (normalize_item(r) for r in body.items[:_MAX_ITEMS]) if i]
     keys = [i["key"] for i in items]
@@ -1400,6 +1428,10 @@ def _apply_save(supabase, draft: dict, body: DraftSaveIn) -> dict:
     stored_qs = [q for q in (normalize_question(q) for q in draft.get("questions") or []) if q]
     questions = reconcile_questions(items, merge_client_questions(stored_qs, body.questions))
     patch = {"items": items, "questions": questions}
+    analysis = draft.get("analysis") or {}
+    if analysis.get("source") == "batch" and batch.presented_analysis(analysis).get("status") == "failed":
+        # The manager is writing it themselves now; the failed run is history.
+        patch["analysis"] = {**{k: v for k, v in analysis.items() if k != "error"}, "status": "idle"}
     if body.source_text is not None:
         patch["source_text"] = _clean_text(body.source_text, _MAX_SOURCE) or None
     return _write_draft(supabase, draft, patch)
@@ -1426,6 +1458,32 @@ def discard_draft(draft_id: str, auth=Depends(get_authenticated_client)):
     supabase.table("role_expectation_decisions").update({"status": "dropped", "resolved_at": _now_iso()}) \
         .eq("draft_id", draft_id).eq("status", "deferred").is_("config_id", "null").execute()
     return {"discarded": True}
+
+
+class RedraftIn(BaseModel):
+    version: int
+
+
+@router.post("/drafts/{draft_id}/redraft")
+@limiter.limit("10/minute")
+def redraft(request: Request, draft_id: str, body: RedraftIn, background_tasks: BackgroundTasks,
+            auth=Depends(get_authenticated_client)):
+    """Retry a batch draft that failed (or went quiet past its own five
+    minutes). Everything the run needs is on the row — the manager's words for
+    this role are analysis.context — so nothing is re-sent. The re-queue bumps
+    the version, so a late first run can no longer land on top of it."""
+    user_id, supabase = auth
+    draft = _load_draft(supabase, draft_id)
+    _require_open(draft)
+    _check_version(draft, body.version)
+    if not batch.can_retry(draft):
+        raise HTTPException(status_code=409, detail="This draft isn't waiting on a retry. Reload to see where it is.")
+    analysis = draft.get("analysis") or {}
+    queued = _write_draft(supabase, draft, {
+        "analysis": batch.drafting_analysis(analysis["context"], analysis.get("statement")),
+    })
+    background_tasks.add_task(batch.draft_in_background, supabase, [draft_id], user_id)
+    return _present_draft(supabase, queued)
 
 
 # ---------------------------------------------------------------------------
@@ -1783,6 +1841,7 @@ def copy_from_role(draft_id: str, body: CopyIn, auth=Depends(get_authenticated_c
     _, supabase = auth
     draft = _load_draft(supabase, draft_id)
     _require_open(draft)
+    _require_not_drafting(draft)
     _check_version(draft, body.version)
     if body.from_role_level_id == draft["role_level_id"]:
         raise HTTPException(status_code=422, detail="Choose a different role to copy from")
