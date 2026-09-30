@@ -434,6 +434,9 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
    "What's one thing I could do to make your work easier this week?"
    This is non-negotiable — it is the most important question in any 1:1.
 
+6. WHOSE LINE IS IT
+   The manager's notes mix things about the report with things about the manager's own situation: their time, calendar, workload, habits, or how they feel about the meeting (for example, that this 1:1 keeps getting squeezed). A line about the manager's own situation is not a question for the report. Do not turn it into a suggested question, agenda item or rationale aimed at the report. Use it only when the manager clearly needs to tell the report something; otherwise leave it out.
+
 ---
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 

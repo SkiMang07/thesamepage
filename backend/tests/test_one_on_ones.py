@@ -622,3 +622,20 @@ def test_wrap_up_drafts_an_opening_line_and_allows_none(monkeypatch):
     assert "opening_line" in prompts[0].prefix and "don't forget" in prompts[0].prefix.lower()
     draft = wrap_up_one_on_one.__wrapped__(request, WrapUpRequest(direct_report_id="r", raw_notes="n"), auth=("m", client))
     assert draft.opening_line == ""
+
+
+def test_the_managers_own_scheduling_gripe_is_not_handed_to_the_report():
+    # Walkthrough 2026-09-30: "this 1:1 is the one that usually gets squeezed"
+    # was about the manager, and came back as a question to put to Tomás.
+    prompt = _build_prep_prompt(
+        report_name="Tomás Ibarra",
+        raw_notes="This 1:1 is the one that usually gets squeezed.",
+        open_commitments=[],
+        recent_summaries=[],
+        days_since_last=None,
+        cadence_days=21,
+    )
+    body = str(prompt)
+    assert "WHOSE LINE IS IT" in body
+    assert "not a question for the report" in body
+    assert "keeps getting squeezed" in body
