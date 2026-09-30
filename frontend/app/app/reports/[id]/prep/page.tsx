@@ -21,6 +21,8 @@ import {
   WrapUpDraft,
   CaptureNote,
   Commitment,
+  FIRST_RUN_STEPS,
+  PATH_STEPS,
 } from "@/lib/api";
 import WrapUpReview from "../wrap-up-review";
 import PageShell from "@/components/PageShell";
@@ -389,7 +391,7 @@ function PrepFlow() {
         <Link href={`/app/reports/${id}`} className="text-sm text-ink-secondary hover:underline">
           ← Back
         </Link>
-        {firstRun && <p className="mt-4 text-xs text-ink-muted">Step 3 of 3</p>}
+        {firstRun && <p className="mt-4 text-xs text-ink-muted">Step 3 of {PATH_STEPS}</p>}
         <h1 className={`${firstRun ? "mt-1" : "mt-4"} text-2xl font-semibold`}>Review next 1:1</h1>
         <p className="mt-2 text-ink-secondary">
           {nothingGathered
@@ -595,11 +597,14 @@ function PrepFlow() {
         {firstRun && (
           <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-brand bg-brand/10 px-5 py-4">
             <div>
-              <p className="text-xs text-ink-muted">Step 3 of 3</p>
+              <p className="text-xs text-ink-muted">Step 3 of {PATH_STEPS}</p>
               <h2 className="mt-1 text-lg font-semibold text-ink">Prep sheet saved</h2>
               <p className="mt-1 text-sm text-ink-body">
                 {prep.agenda_items.length} {prep.agenda_items.length === 1 ? "item" : "items"}
                 {scheduleDate ? ` for ${longDayLabel(scheduleDate)}` : ""}. It’s on {reportName.split(" ")[0] || "their"}’s page.
+              </p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Steps {FIRST_RUN_STEPS + 1} to {PATH_STEPS} are next, on Mission Control: team and roles, expectations, goals.
               </p>
             </div>
             <Link href="/app/dashboard" className="rounded-md bg-brand px-4 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-hover">

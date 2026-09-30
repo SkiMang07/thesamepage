@@ -9,6 +9,7 @@
 // Voice: literal labels, no cheer. One line per part on what it changes.
 
 import { useEffect, useRef } from "react";
+import { FIRST_RUN_STEPS, PATH_STEPS } from "@/lib/api";
 import { BTN_GHOST, BTN_PRIMARY, EYEBROW } from "@/lib/tokens";
 
 export type SetupIntroPart = { title: string; changes: string };
@@ -50,10 +51,10 @@ export default function SetupIntroModal({
       >
         <p className={EYEBROW}>Setup</p>
         <h2 id="setup-intro-title" className="mt-1 font-serif text-[1.5rem] font-normal leading-tight tracking-[-0.02em] text-ink">
-          Three things for the next sheets to work from
+          Steps {FIRST_RUN_STEPS + 1} to {PATH_STEPS}: three things for the next sheets to work from
         </h2>
         <p className="mt-2 text-sm text-ink-secondary">
-          Your first prep sheet is saved. Setup adds what later sheets and assessments hold each person’s work against.
+          Your first prep sheet is saved, which finishes steps 1 to {FIRST_RUN_STEPS}. Setup adds what later sheets and assessments hold each person’s work against.
         </p>
 
         <ol className="mt-4 divide-y divide-hairline">
@@ -63,7 +64,7 @@ export default function SetupIntroModal({
                 aria-hidden="true"
                 className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-control text-xs text-ink-muted"
               >
-                {i + 1}
+                {FIRST_RUN_STEPS + i + 1}
               </span>
               <div className="min-w-0">
                 <p className="text-[15px] font-medium text-ink">{part.title}</p>
@@ -75,7 +76,7 @@ export default function SetupIntroModal({
 
         <p className="mt-4 text-[13px] text-ink-secondary">
           Each step takes a few minutes; role expectations take about 2 minutes per role. Do them in any order that
-          suits you and in as many sittings as you like. Setup stays at the top of every page until all three are done.
+          suits you and in as many sittings as you like. You can skip any step for now. Setup shows in the header until each step is done or skipped.
         </p>
         <p className="mt-2 text-[13px] text-ink-secondary">
           If you have notes or a document already, “Add what you already have” on the setup card fills in what they cover.

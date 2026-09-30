@@ -195,7 +195,7 @@ def test_setup_candidate_carries_the_step_and_a_real_workflow_link():
     assert candidate["entity_type"] == "setup" and candidate["entity_id"] == "11111111-1111-1111-1111-111111111111"
     assert candidate["action"] == {"label": "Add company or department goals", "href": "/app/dashboard?setup=goals"}
     assert candidate["score"] == 10 and [c["code"] for c in candidate["rank_basis"]] == ["setup"]
-    assert "2 of 3 setup steps are done" in candidate["explanation"]
+    assert "5 of 6 steps are done" in candidate["explanation"]
 
 
 def test_setup_ranks_below_anything_with_a_date_and_never_changes_the_mode():

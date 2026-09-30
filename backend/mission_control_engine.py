@@ -501,6 +501,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
 
 
 SETUP_CANDIDATE = "resume_setup_step"
+FIRST_RUN_STEPS = 3  # same number as routes/onboarding.py and lib/api.ts
 
 
 def _setup_candidate(setup: dict[str, Any], today: date) -> dict[str, Any] | None:
@@ -514,18 +515,19 @@ def _setup_candidate(setup: dict[str, Any], today: date) -> dict[str, Any] | Non
     """
     if not setup or setup.get("card_level") == "full" or not setup.get("next_step") or not setup.get("user_id"):
         return None
-    done, total = int(setup.get("done_count") or 0), int(setup.get("total") or 3)
+    # Setup is steps 4 to 6 of one path; the first three are first run.
+    done, total = FIRST_RUN_STEPS + int(setup.get("done_count") or 0), FIRST_RUN_STEPS + int(setup.get("total") or 3)
     return _candidate(
         candidate_type=SETUP_CANDIDATE,
         entity_type="setup",
         entity_id=str(setup["user_id"]),
         subject_key="setup",
         title="Finish setting up.",
-        explanation=f"{done} of {total} setup steps are done. {setup.get('changes') or ''}".strip(),
+        explanation=f"{done} of {total} steps are done. {setup.get('changes') or ''}".strip(),
         action_label=str(setup.get("label") or "Continue setup"),
         action_href=str(setup.get("href") or "/app/dashboard"),
         components=[{"code": "setup", "label": "Setup step waiting", "points": 10}],
-        evidence=[_evidence("setup_state", f"{done} of {total} setup steps are done", "Setup state", today, today)],
+        evidence=[_evidence("setup_state", f"{done} of {total} steps are done", "Setup state", today, today)],
         facts={"step": setup["next_step"], "done_count": done},
         attention_since=None,
         exact_workflow=True,

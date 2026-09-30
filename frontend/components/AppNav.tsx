@@ -38,7 +38,7 @@ import { useQuickAdd } from "@/lib/quick-add-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase";
-import { SETUP_REVEAL_EVENT } from "@/lib/api";
+import { PATH_STEPS, SETUP_REVEAL_EVENT, pathStepsDone } from "@/lib/api";
 import { Icon, NAV_STRIP_HEIGHT, getNavContext, useZoneData } from "@/components/ZoneMap";
 import QuickAddModal from "@/components/QuickAddModal";
 import { BTN_TOPBAR_NEUTRAL, BTN_TOPBAR_SCRIBE, BTN_TOPBAR_SCRIBE_OPEN, ELEVATED } from "@/lib/tokens";
@@ -129,16 +129,16 @@ export default function AppNav() {
                 href="/app/dashboard#setup"
                 onClick={() => window.dispatchEvent(new Event(SETUP_REVEAL_EVENT))}
                 className={`${BTN_TOPBAR_NEUTRAL} gap-2`}
-                aria-label={`Setup, ${zone.onboarding.done_count} of ${zone.onboarding.total} done`}
+                aria-label={`Setup, ${pathStepsDone(zone.onboarding)} of ${PATH_STEPS} steps done`}
               >
                 <span>Setup</span>
                 <span aria-hidden className="flex gap-[3px]">
-                  {Array.from({ length: zone.onboarding.total }, (_, i) => (
-                    <span key={i} className={`h-1 w-3 rounded-full ${i < zone.onboarding!.done_count ? "bg-brand" : "bg-hairline"}`} />
+                  {Array.from({ length: PATH_STEPS }, (_, i) => (
+                    <span key={i} className={`h-1 w-3 rounded-full ${i < pathStepsDone(zone.onboarding!) ? "bg-brand" : "bg-hairline"}`} />
                   ))}
                 </span>
                 <span className="hidden text-ink-muted sm:inline">
-                  {zone.onboarding.done_count} of {zone.onboarding.total}
+                  {pathStepsDone(zone.onboarding)} of {PATH_STEPS}
                 </span>
               </Link>
             )}

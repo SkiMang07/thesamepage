@@ -64,6 +64,16 @@ function announceReadOnly(status: number) {
   }
 }
 
+// One numbered path: first run (/app/start, then the first prep sheet) is steps
+// 1 to 3, and setup (team and roles, expectations, goals) is steps 4 to 6.
+// backend/routes/onboarding.py carries the same FIRST_RUN_STEPS.
+export const FIRST_RUN_STEPS = 3;
+export const PATH_STEPS = 6;
+// Steps finished on the whole path. Before the first prep sheet is saved, only
+// the two /app/start questions are behind the manager.
+export const pathStepsDone = (o: { activated: boolean; done_count: number }): number =>
+  (o.activated ? FIRST_RUN_STEPS : FIRST_RUN_STEPS - 1) + o.done_count;
+
 export const RECORDS_CHANGED_EVENT = "tsp:records-changed";
 // The header Setup chip asks Mission Control to show the setup card even when it is snoozed.
 export const SETUP_REVEAL_EVENT = "tsp:setup-reveal";
@@ -1940,9 +1950,10 @@ export type ExpectationQueueEntry = {
 };
 
 export type OnboardingSteps = {
-  org: { done: boolean; people: number; people_without_team: number; people_without_role: number; units: number };
+  org: { done: boolean; skipped: boolean; people: number; people_without_team: number; people_without_role: number; units: number };
   expectations: {
     done: boolean;
+    skipped: boolean;
     blocked: boolean;
     people_without_role: number;
     roles_in_use: number;
@@ -1958,7 +1969,7 @@ export type OnboardingSteps = {
   };
   // unknown: "Don't know yet" is the recorded answer. parked: it is the only
   // thing missing, so the step waits on the boss instead of being highlighted.
-  goals: { done: boolean; has_org_goal: boolean; has_team_goal: boolean; unknown: boolean; parked: boolean };
+  goals: { done: boolean; skipped: boolean; has_org_goal: boolean; has_team_goal: boolean; unknown: boolean; parked: boolean };
 };
 
 export type OnboardingStatus = {
@@ -1992,6 +2003,15 @@ export const getOnboardingStatus = (): Promise<OnboardingStatus> => authedFetch(
 // manager chose the first step, `later` for anything else.
 export const markSetupIntroSeen = (action: "started" | "later"): Promise<void> =>
   authedFetch("/api/onboarding/intro-seen", { method: "POST", body: JSON.stringify({ action }) }).then(
+    () => undefined,
+    () => undefined,
+  );
+
+// "Skip for now" on a setup step, or undo it. A skipped step counts toward
+// ending setup but is not done. Announces a record change, so Mission Control
+// and the header chip refresh.
+export const skipSetupStep = (step: OnboardingStepKey, skipped = true): Promise<void> =>
+  authedFetch("/api/onboarding/skip-step", { method: "POST", body: JSON.stringify({ step, skipped }) }).then(
     () => undefined,
     () => undefined,
   );

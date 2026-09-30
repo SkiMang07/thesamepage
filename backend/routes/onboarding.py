@@ -22,6 +22,12 @@ SETUP_MODE_BRIEF.md):
 Knowledge documents are not a setup step: they arrive through the notes dump
 and stay optional. The first logged 1:1 belongs to onboarded, not to setup.
 
+A manager can skip a step for now (POST /skip-step; users.setup_skipped_steps,
+read softly with the prompt columns). A skipped step counts toward ending setup
+but is not "done": it is never stamped, it shows as skipped, and the manager can
+undo the skip. Skipping org also unblocks expectations, so a manager with no
+teams can still reach the later steps.
+
 Both set up and onboarded are sticky. The first time each holds,
 users.set_up_at / users.onboarded_at is stamped, and archiving a goal later
 does not undo it. Once set up, the step queries stop; once onboarded, the
@@ -62,7 +68,13 @@ ORG_LEVELS = {"company", "department"}
 # it is one quiet line instead of the full card. Completing a step resets both.
 SNOOZE_DAYS = (1, 3, 7, 14)
 QUIET_AFTER_DAYS = 7
+# Setup is steps 4 to 6 of one numbered path: first run (/app/start and the first
+# prep sheet) is steps 1 to 3. The frontend numbers with the same constant
+# (FIRST_RUN_STEPS in lib/api.ts).
+FIRST_RUN_STEPS = 3
+
 PROMPT_COLUMNS = (
+    "setup_skipped_steps",
     "setup_intro_seen_at",
     "setup_receipt_seen_at",
     "setup_card_dismissals",
@@ -79,6 +91,7 @@ def evaluate(
     org_goals_unknown: bool = False,
     queue: list[dict] | None = None,
     open_drafts: dict | None = None,
+    skipped: set | None = None,
 ) -> dict:
     """The setup conditions as plain data. Pure, so it is tested without a database.
 
@@ -88,7 +101,9 @@ def evaluate(
     expectation_queue() (who to set expectations for next, soonest 1:1 first).
     `open_drafts` is role level id -> "review" (an unapproved draft the manager
     can review now) or "writing" (a batch draft still being written).
+    `skipped` is the steps the manager chose to skip for now.
     """
+    skipped = set(skipped or ())
     people = len(reports)
     without_team = sum(1 for r in reports if not r.get("org_unit_id"))
     without_role = sum(1 for r in reports if not r.get("role_level_id"))
@@ -112,6 +127,7 @@ def evaluate(
     return {
         "org": {
             "done": org_done,
+            "skipped": "org" in skipped and not org_done,
             "people": people,
             "people_without_team": without_team,
             "people_without_role": without_role,
@@ -119,7 +135,9 @@ def evaluate(
         },
         "expectations": {
             "done": exp_done,
-            "blocked": not org_done,
+            "skipped": "expectations" in skipped and not exp_done,
+            # Waits on team and roles, unless the manager skipped that step.
+            "blocked": not (org_done or "org" in skipped),
             "people_without_role": without_role,
             "roles_in_use": len(roles_in_use),
             "roles_covered": roles_covered,
@@ -138,6 +156,7 @@ def evaluate(
         },
         "goals": {
             "done": has_org_goal and has_team_goal,
+            "skipped": "goals" in skipped and not (has_org_goal and has_team_goal),
             "has_org_goal": has_org_goal,
             "has_team_goal": has_team_goal,
             # "Don't know yet" (chunk C): recorded, and it does not complete the
@@ -157,7 +176,7 @@ def next_step(steps: dict) -> str | None:
     """
     for key in STEP_ORDER:
         step = steps[key]
-        if not step["done"] and not step.get("blocked") and not step.get("parked"):
+        if not step["done"] and not step.get("skipped") and not step.get("blocked") and not step.get("parked"):
             return key
     return None
 
@@ -197,6 +216,8 @@ def snooze_days(dismissals: int) -> int:
     """How long the nth dismissal hides the card (1-based, capped)."""
     return SNOOZE_DAYS[max(0, min(dismissals - 1, len(SNOOZE_DAYS) - 1))]
 
+
+STEP_NAME = {"org": "team and roles", "expectations": "role expectations", "goals": "org and team goals"}
 
 STEP_LINE = {
     "org": "Puts each person in a team and gives them a role, so a prep sheet knows who they work alongside and what they do.",
@@ -350,6 +371,11 @@ def _user_row(supabase, user_id: str) -> dict:
     row = dict(rows[0]) if rows else {}
     row["_prompt"] = available
     return row
+
+
+def _skipped(user: dict) -> set:
+    """The steps the manager skipped for now. Empty when the column is not there yet."""
+    return {k for k in (user.get("setup_skipped_steps") or []) if k in STEP_ORDER}
 
 
 def _stamp(supabase, user_id: str, column: str) -> bool:
@@ -531,8 +557,10 @@ def build_status(user_id: str, supabase) -> dict:
             queue=expectation_queue(reports, role_labels, covered_role_ids, _next_1on1_dates(supabase, user_id),
                                     drafted_role_ids=set(open_drafts)),
             open_drafts=open_drafts,
+            skipped=_skipped(user),
         )
-        done_count = sum(1 for k in STEP_ORDER if steps[k]["done"])
+        # A skipped step counts toward ending setup; only a done step is stamped.
+        done_count = sum(1 for k in STEP_ORDER if steps[k]["done"] or steps[k]["skipped"])
         assessable = steps["expectations"]["people_ready"]
 
         for key in STEP_ORDER:
@@ -644,6 +672,34 @@ def card_dismissed(auth=Depends(get_authenticated_client)):
     return {"ok": True, "snoozed_until": until}
 
 
+class SkipStepIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: Literal["org", "expectations", "goals"]
+    skipped: bool = True
+
+
+@router.post("/skip-step")
+def skip_step(body: SkipStepIn, auth=Depends(get_authenticated_client)):
+    """"Skip for now" on a setup step, or undo it. A skipped step counts toward
+    ending setup; it is not done, and undoing puts it back. Does nothing once
+    set up, or before the prompt-layer migration has run (`ok` false then)."""
+    user_id, supabase = auth
+    user = _user_row(supabase, user_id)
+    if user.get("set_up_at"):
+        return {"ok": True, "skipped": sorted(_skipped(user))}
+    if not user.get("_prompt"):
+        return {"ok": False, "skipped": []}
+    current = _skipped(user)
+    updated = (current | {body.step}) if body.skipped else (current - {body.step})
+    if updated != current:
+        supabase.table("users").update({"setup_skipped_steps": [k for k in STEP_ORDER if k in updated]}).eq("id", user_id).execute()
+        analytics.capture(user_id, "setup_step_skipped", {"step": body.step, "skipped": body.skipped})
+        if body.skipped:
+            _reset_card(supabase, user_id, user)
+    return {"ok": True, "skipped": [k for k in STEP_ORDER if k in updated]}
+
+
 def _plural(n: int, one: str, many: str) -> str:
     return f"{n} {one if n == 1 else many}"
 
@@ -658,6 +714,7 @@ def compose_receipt(
     prepped_report_ids: set,
     project_count: int,
     check_in_count: int,
+    skipped_steps: list[str] | None = None,
 ) -> dict:
     """The completion receipt as plain data. Pure: counts in, fixed sentences out.
 
@@ -674,6 +731,9 @@ def compose_receipt(
         f"{_plural(org_goals, 'org goal', 'org goals')} and {_plural(team_goals, 'team goal', 'team goals')} on record.",
         "Assessments are open for each person whose role has expectations.",
     ]
+    if skipped_steps:
+        names = [STEP_NAME[k] for k in STEP_ORDER if k in skipped_steps]
+        lines.append(f"Skipped for now: {', '.join(names)}. Each can still be done from its own page.")
     unprepped = [p for p in people if p["id"] not in prepped_report_ids]
     nxt = []
     if unprepped:
@@ -744,7 +804,7 @@ def get_receipt(auth=Depends(get_authenticated_client)):
     user = _user_row(supabase, user_id)
     if not _receipt_pending(user):
         return None
-    return compose_receipt(**_receipt_data(supabase, user_id))
+    return compose_receipt(**_receipt_data(supabase, user_id), skipped_steps=sorted(_skipped(user)))
 
 
 @router.post("/receipt-seen")

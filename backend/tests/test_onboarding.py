@@ -816,3 +816,70 @@ def test_a_revision_on_an_approved_role_or_a_role_nobody_holds_is_not_setup_work
 def test_evaluate_without_drafts_is_unchanged():
     steps = _all_true()
     assert steps["expectations"]["drafts_to_review"] == 0 and steps["expectations"]["drafts_writing"] == 0
+
+
+# ---- skip for now ----------------------------------------------------------
+
+
+def test_a_skipped_step_is_not_done_and_the_next_step_moves_on():
+    steps = _all_true(goal_levels=set(), skipped={"goals"})
+    assert steps["goals"]["skipped"] is True and steps["goals"]["done"] is False
+    assert next_step(steps) is None
+    # A step that is done is never reported as skipped.
+    assert _all_true(skipped={"org"})["org"]["skipped"] is False
+
+
+def test_skipping_team_and_roles_unblocks_expectations():
+    steps = _all_true(reports=_reports(2, unit=None), covered_role_ids=set(), skipped={"org"})
+    assert steps["expectations"]["blocked"] is False
+    assert next_step(steps) == "expectations"
+
+
+def test_skipping_every_unfinished_step_ends_setup_without_stamping_them(_coverage_and_events):
+    tables = _tables(
+        users=[_user(setup_skipped_steps=["goals"], setup_intro_seen_at=_ago(1))],
+        goals=[{"level": "team", "status": "active"}],
+    )
+    status = build_status("m", _Client(tables))
+    assert status["set_up"] is True and status["done_count"] == status["total"] == 3
+    user = tables["users"][0]
+    assert user["set_up_at"] and user["setup_goals_at"] is None
+    assert "set_up" in [e for _u, e, _p in _coverage_and_events]
+
+
+def test_a_skip_is_ignored_for_a_step_name_it_does_not_know():
+    tables = _tables(users=[_user(setup_skipped_steps=["nonsense"], setup_intro_seen_at=_ago(1))], goals=[])
+    assert build_status("m", _Client(tables))["set_up"] is False
+
+
+def test_skip_step_records_undoes_and_reports_the_step_only(_coverage_and_events):
+    users = [_prompt_user(setup_skipped_steps=[])]
+    client, main, utils = _route_client(users)
+    try:
+        assert client.post("/api/onboarding/skip-step", json={"step": "goals"}).json() == {"ok": True, "skipped": ["goals"]}
+        assert users[0]["setup_skipped_steps"] == ["goals"]
+        assert client.post("/api/onboarding/skip-step", json={"step": "goals", "skipped": False}).json()["skipped"] == []
+        assert [e[2] for e in _coverage_and_events] == [
+            {"step": "goals", "skipped": True},
+            {"step": "goals", "skipped": False},
+        ]
+        assert client.post("/api/onboarding/skip-step", json={"step": "goals", "note": "x"}).status_code == 422
+        assert client.post("/api/onboarding/skip-step", json={"step": "bogus"}).status_code == 422
+    finally:
+        _teardown(main, utils)
+
+
+def test_skip_step_does_nothing_once_set_up(_coverage_and_events):
+    done = [_prompt_user(set_up_at=_ago(1), setup_skipped_steps=[])]
+    client, main, utils = _route_client(done)
+    try:
+        assert client.post("/api/onboarding/skip-step", json={"step": "goals"}).json()["ok"] is True
+        assert done[0]["setup_skipped_steps"] == [] and _coverage_and_events == []
+    finally:
+        _teardown(main, utils)
+
+
+def test_the_receipt_names_what_was_skipped():
+    assert not any("Skipped" in line for line in _receipt()["lines"])
+    lines = _receipt(skipped_steps=["goals", "org"])["lines"]
+    assert any(line.startswith("Skipped for now: team and roles, org and team goals.") for line in lines)

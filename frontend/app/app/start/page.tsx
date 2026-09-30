@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import { createDirectReport, getDirectReports, getEntitlement, reportFirstRunRoster, type Entitlement } from "@/lib/api";
+import { PATH_STEPS, createDirectReport, getDirectReports, getEntitlement, reportFirstRunRoster, type Entitlement } from "@/lib/api";
 import PersonAvatar from "@/components/team/PersonAvatar";
 import { BTN_PRIMARY, EYEBROW, INPUT, TEXTAREA } from "@/lib/tokens";
 
@@ -177,7 +177,7 @@ export default function StartPage() {
     <div className="min-h-screen">
       <header className="flex h-16 items-center justify-between border-b border-hairline px-5 sm:px-10">
         <span className="font-serif text-xl text-ink">The Same Page</span>
-        <span className="text-xs text-ink-muted">Step {step} of 3</span>
+        <span className="text-xs text-ink-muted">Step {step} of {PATH_STEPS}</span>
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-8 px-5 pb-16 pt-8 sm:px-10 sm:pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14">

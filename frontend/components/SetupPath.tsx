@@ -49,12 +49,16 @@ import SetupIntroModal from "@/components/SetupIntroModal";
 import { formatDay } from "@/components/expectations/shared";
 import {
   ExpectationQueueEntry,
+  FIRST_RUN_STEPS,
   OnboardingStepKey,
   OnboardingSteps,
+  PATH_STEPS,
   SETUP_REVEAL_EVENT,
   dismissSetupCard,
   markSetupIntroSeen,
+  pathStepsDone,
   reportSetupStepStarted,
+  skipSetupStep,
 } from "@/lib/api";
 import { BTN_GHOST, BTN_PRIMARY_SM, BTN_SECONDARY, EYEBROW } from "@/lib/tokens";
 import { useZoneData } from "@/components/ZoneMap";
@@ -75,6 +79,8 @@ type StepView = {
   // A second line under the highlighted step: what comes first, and what is next.
   detail?: string;
   done: boolean;
+  // "Skip for now": counts toward ending setup, is not done, and can be undone.
+  skipped: boolean;
   blocked: boolean;
   status: string;
 };
@@ -178,9 +184,12 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       action: "Place your people",
       href: "/app/settings?section=people",
       done: org.done,
+      skipped: org.skipped,
       blocked: false,
       status: org.done
         ? "Done"
+        : org.skipped
+          ? "Skipped for now"
         : org.people === 0
           ? "No direct reports yet"
           : org.units === 0
@@ -200,9 +209,12 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       modal: expAction.modal,
       secondary: expAction.secondary,
       done: exp.done,
+      skipped: exp.skipped,
       blocked: exp.blocked,
       status: exp.done
         ? "Done"
+        : exp.skipped
+          ? "Skipped for now"
         : exp.blocked
           ? "Needs team and roles"
           : exp.people_without_role > 0
@@ -221,9 +233,12 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       modal: goals.has_org_goal ? undefined : "goals",
       detail: !goals.has_org_goal && !goals.has_team_goal ? "A team goal is yours to write. Add it on the Goals page." : undefined,
       done: goals.done,
+      skipped: goals.skipped,
       blocked: false,
       status: goals.done
         ? "Done"
+        : goals.skipped
+          ? "Skipped for now"
         : goals.parked
           ? "Waiting on your boss"
           : !goals.has_org_goal && !goals.has_team_goal
@@ -293,7 +308,7 @@ export default function SetupPath() {
   const steps = setupSteps(onboarding.steps, nextKey);
   const level = revealed ? "full" : hiddenNow ? "hidden" : (onboarding.card?.level ?? "full");
   const introOpen = !!onboarding.intro_pending && !introClosed;
-  const startStep = steps.find((st) => st.key === nextKey) ?? steps.find((st) => !st.done && !st.blocked) ?? steps[0];
+  const startStep = steps.find((st) => st.key === nextKey) ?? steps.find((st) => !st.done && !st.skipped && !st.blocked) ?? steps[0];
 
   function opened(step: StepView) {
     void reportSetupStepStarted(step.key, step.key === nextKey);
@@ -345,7 +360,7 @@ export default function SetupPath() {
 
   if (level === "quiet") {
     const next = steps.find((st) => st.key === nextKey) ?? null;
-    const waiting = steps.find((st) => !st.done);
+    const waiting = steps.find((st) => !st.done && !st.skipped);
     return (
       <>
         <section
@@ -355,7 +370,7 @@ export default function SetupPath() {
         >
           <p className="min-w-0 flex-1 text-[13px] text-ink-secondary">
             <span className="font-medium text-ink">
-              Setup, {onboarding.done_count} of {onboarding.total} done.
+              Setup, {pathStepsDone(onboarding)} of {PATH_STEPS} steps done.
             </span>{" "}
             {next ? `Next: ${next.title}.` : waiting ? `${waiting.title}: ${waiting.status.charAt(0).toLowerCase()}${waiting.status.slice(1)}.` : ""}
           </p>
@@ -385,11 +400,11 @@ export default function SetupPath() {
           <div>
             <p className={EYEBROW}>Setup</p>
             <h2 id="setup-heading" className="mt-1 font-serif text-[1.5rem] font-normal leading-tight tracking-[-0.02em] text-ink">
-              {onboarding.done_count} of {onboarding.total} done
+              {pathStepsDone(onboarding)} of {PATH_STEPS} steps done
             </h2>
           </div>
           <p className="flex items-center gap-2 text-xs text-ink-muted">
-            <span>Setup ends when all {onboarding.total} are done.</span>
+            <span>Setup ends when steps {FIRST_RUN_STEPS + 1} to {PATH_STEPS} are each done or skipped.</span>
             <button type="button" onClick={notNow} className="rounded px-1.5 py-0.5 font-medium text-ink-secondary hover:bg-sunken hover:text-ink">
               Not now
             </button>
@@ -406,7 +421,7 @@ export default function SetupPath() {
                   step.done ? "border-brand bg-brand text-on-brand" : isNext ? "border-brand text-brand" : "border-control text-ink-muted"
                 }`}
               >
-                {step.done ? "✓" : i + 1}
+                {step.done ? "✓" : step.skipped ? "–" : FIRST_RUN_STEPS + i + 1}
               </span>
             );
 
@@ -458,6 +473,11 @@ export default function SetupPath() {
                           )}
                         </p>
                       ))}
+                      <p className="mt-2 text-[13px]">
+                        <button type="button" onClick={() => void skipSetupStep(step.key)} className="text-ink-secondary hover:text-ink">
+                          Skip for now
+                        </button>
+                      </p>
                     </div>
                   </div>
                 </li>
@@ -476,7 +496,18 @@ export default function SetupPath() {
             );
             return (
               <li key={step.key} className="py-3 first:pt-0 last:pb-0">
-                {step.blocked || step.done ? (
+                {step.skipped ? (
+                  <div className="flex items-start gap-3">
+                    {row}
+                    <button
+                      type="button"
+                      onClick={() => void skipSetupStep(step.key, false)}
+                      className="shrink-0 pl-1 text-xs font-medium text-brand hover:text-brand-hover"
+                    >
+                      Undo
+                    </button>
+                  </div>
+                ) : step.blocked || step.done ? (
                   <div className={`flex items-start gap-3 ${step.blocked ? "opacity-60" : ""}`}>{row}</div>
                 ) : step.modal ? (
                   <button
@@ -497,6 +528,13 @@ export default function SetupPath() {
                   >
                     {row}
                   </Link>
+                )}
+                {!step.done && !step.skipped && (
+                  <p className="mt-1 pl-9 text-xs">
+                    <button type="button" onClick={() => void skipSetupStep(step.key)} className="text-ink-secondary hover:text-ink">
+                      Skip for now
+                    </button>
+                  </p>
                 )}
               </li>
             );

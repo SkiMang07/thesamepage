@@ -68,6 +68,7 @@ create table users (
   setup_receipt_seen_at timestamptz,
   setup_card_dismissals integer not null default 0,
   setup_card_snoozed_until timestamptz,
+  setup_skipped_steps text[] not null default '{}',
   knowledge_skipped_at timestamptz,
   created_at timestamptz not null default now()
 );

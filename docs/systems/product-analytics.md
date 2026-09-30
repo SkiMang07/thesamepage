@@ -56,6 +56,7 @@ What we measure about how managers use the app, how it is collected, and the rul
 |`org_goal_reconfirmed`|server, `POST /api/onboarding/org-goals/{goal_id}/confirm`|the manager answers "Yes" on the "Still current?" line for an org goal|`days_since` (`under_90`, `90_180` or `over_180`: time since it was last confirmed or added)|
 |`setup_intro_resolved`|server, `POST /api/onboarding/intro-seen`|the manager closes the entry modal ("what setup is and why"). Fires once per manager, the first time only|`action` (`started`: chose the first step, `later`: closed it or chose Later)|
 |`setup_card_dismissed`|server, `POST /api/onboarding/card-dismissed`|the manager chooses "Not now" on the setup card, which snoozes it|`dismissals` (int, including this one), `level_before` (`full` or `quiet`)|
+|`setup_step_skipped`|server, `POST /api/onboarding/skip-step`|the manager chooses "Skip for now" on a setup step, or undoes it. Fires on each change, not on a repeat of the same state|`step` (enum as above), `skipped` (bool: `false` is an undo)|
 |`set_up_receipt_seen`|server, `POST /api/onboarding/receipt-seen`|the manager closes the completion modal after setup finishes. Fires once per manager, the first time only|none|
 
 `is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
@@ -110,7 +111,7 @@ The one behaviour that says the product is working for a new user: they get in, 
 How far new managers get through setup after the first prep sheet. Count only; nothing here says why anyone stopped, the day-1 and day-7 calls do.
 
 - **Steps:** `org`, `expectations`, `goals`. Knowledge documents and the first logged 1:1 are not setup steps.
-- **Read per step:** `setup_step_started` reached, `setup_step_completed` finished. Started without a later completed for the same `step` is abandoned. There is no skip in setup yet, so no skipped count.
+- **Read per step:** `setup_step_started` reached, `setup_step_completed` finished. Started without a later completed for the same `step` is abandoned. `setup_step_skipped` with `skipped` true marks a step the manager parked; one later followed by `setup_step_completed` was skipped and then done.
 - **Notes dump:** `notes_dump_parsed` (ran), then `notes_dump_applied` (saved something) or `notes_dump_skipped` (chose "Nothing to add"). Parsed without a later applied is abandoned or discarded. `proposed_*` against `kept_*` is how much of the ranked draft survived.
 - **Expectations on-ramp:** `role_draft_composed` by `source` shows how many managers attach a job description versus describe the role. `typical` against later `role_suggestion` outcomes shows how much of the "typical for this role" material survives review.
 - **Org goals:** `org_goals_parsed`, then `org_goals_applied` (saved something) or `org_goals_unknown` (chose "Don't know yet"). Parsed without a later applied or unknown is abandoned or discarded. `org_goal_reconfirmed` counts the quarterly "Still current?" answers.
