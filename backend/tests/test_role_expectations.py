@@ -25,6 +25,49 @@ def test_numbers_guard_basics():
     assert not changed
 
 
+def test_spelled_out_numbers_count_as_numbers():
+    assert rex.numbers_in("two working days") == {"2"}
+    assert rex.numbers_in("under two a quarter") == {"2"}
+    assert rex.numbers_in("about six a week") == {"6"}
+    assert rex.numbers_in("twenty-five percent, one hundred and five accounts") == {"25", "105"}
+    assert rex.numbers_in("one a week") == {"1"}
+    assert rex.numbers_in("one to two days") == {"2", "1"}
+    # a word in the notes supports the same figure as a digit in the draft, and back
+    assert rex.unsupported_numbers("Ships within 2 working days.", rex.numbers_in("two working days")) == set()
+    assert rex.unsupported_numbers("Ships within two working days.", rex.numbers_in("2 working days")) == set()
+    # and an invented figure is still caught
+    assert rex.unsupported_numbers("Ships within three working days.", rex.numbers_in("two working days")) == {"3"}
+
+
+def test_one_as_a_pronoun_is_not_a_number():
+    for text in ("No one is left behind.", "Nobody owns it, no one asks.", "One of the team leads it.",
+                 "Weekly one-on-one meetings.", "Weekly one on one meetings.", "Someone or one person.",
+                 "Each one is reviewed.", "The one who owns it.", "One another's work."):
+        assert rex.numbers_in(text) == set(), text
+    assert rex.strip_unsupported("No one is surprised.", set()) == ("No one is surprised.", False)
+
+
+def test_a_spelled_out_target_is_traced_to_the_managers_notes():
+    notes = "Andre sends the weekly status about six a week and tickets get answered within two working days."
+    items, questions, _ = rex.sanitize_composed(
+        {"items": [_composed(title="Answer tickets", meets="Answers tickets within two working days.", exceeds="",
+                             target={"text": "within two working days",
+                                     "quote": "answered within two working days"})]},
+        corpus_text="", source_available=False, context_text=notes)
+    (item,) = items
+    assert item["target"]["status"] == "set" and item["target"]["source"] == "manager"
+    assert "two working days" in item["meets"]
+    assert questions == []
+    # and a spelled-out number that is NOT in the notes is still refused
+    items, _, _ = rex.sanitize_composed(
+        {"items": [_composed(meets="Answers tickets within three working days.",
+                             target={"text": "within three working days",
+                                     "quote": "answered within three working days"})]},
+        corpus_text="", source_available=False, context_text=notes)
+    assert items[0]["target"] == {"status": "unresolved"}
+    assert "three" not in items[0]["meets"]
+
+
 def _composed(**over):
     item = {"key": "x", "section": "responsibility", "measure": "numeric", "title": "Own renewals",
             "responsibility": "Own renewals for assigned accounts.",

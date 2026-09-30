@@ -115,9 +115,88 @@ def _norm_number(raw: str) -> str:
     return str(int(f)) if f == int(f) else repr(f)
 
 
+# Spelled-out numbers count as numbers too: "two working days" and "2 working
+# days" are the same stated figure. Both normalise to digit strings, so a word in
+# the manager's notes supports a digit in the draft and the other way round.
+_UNIT_WORDS = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+    "fourteen fifteen sixteen seventeen eighteen nineteen".split())}
+_TENS_WORDS = {w: (i + 2) * 10 for i, w in enumerate(
+    "twenty thirty forty fifty sixty seventy eighty ninety".split())}
+_SCALE_WORDS = {"hundred": 100, "thousand": 1000}
+_WORD_RUN_RE = re.compile(
+    r"\b(?:" + "|".join(sorted([*_UNIT_WORDS, *_TENS_WORDS, *_SCALE_WORDS], key=len, reverse=True)) + r")\b"
+    r"(?:(?:[\s-]+(?:and[\s-]+)?)(?:" + "|".join(sorted([*_UNIT_WORDS, *_TENS_WORDS, *_SCALE_WORDS], key=len, reverse=True)) + r")\b)*",
+    re.IGNORECASE)
+# "one" is also a pronoun ("no one", "one of them", "one-on-one"). A bare "one"
+# counts as a number only when it is plainly a count: "one a week", "one per
+# quarter", "one working day", "one to two days".
+_ONE_NOT_AFTER = {"no", "any", "every", "some", "the", "this", "that", "which", "each", "another",
+                  "every", "when", "where", "what", "whichever", "whoever"}
+_ONE_COUNT_AFTER = {"a", "per", "each", "every", "time", "times", "day", "days", "week", "weeks",
+                    "month", "months", "quarter", "quarters", "year", "years", "hour", "hours",
+                    "minute", "minutes", "business", "working", "calendar", "full", "sprint",
+                    "sprints", "cycle", "cycles", "weekday", "weekdays"}
+
+
+def _words_to_values(words: list[str]) -> list[int]:
+    """Split a run of number words into the numbers it spells. A run that does
+    not read as one number ("two three") yields each part separately."""
+    values: list[int] = []
+    total = current = 0
+    have = False
+    prev_kind = None  # "unit" | "tens" | "scale"
+    for w in words:
+        if w == "and":
+            continue
+        if w in _SCALE_WORDS:
+            scale = _SCALE_WORDS[w]
+            if scale == 100:
+                current = (current or 1) * 100
+            else:
+                total += (current or 1) * 1000
+                current = 0
+            have, prev_kind = True, "scale"
+            continue
+        if w in _TENS_WORDS:
+            kind, val = "tens", _TENS_WORDS[w]
+        else:
+            kind, val = "unit", _UNIT_WORDS[w]
+        # a unit may follow tens ("twenty-five") or a scale; anything else starts a new number
+        joins = have and ((kind == "unit" and prev_kind in ("tens", "scale") and val < 10)
+                          or (kind == "tens" and prev_kind == "scale"))
+        if have and not joins:
+            values.append(total + current)
+            total = current = 0
+        current += val
+        have, prev_kind = True, kind
+    if have:
+        values.append(total + current)
+    return values
+
+
+def _spelled_numbers(text: str) -> set[str]:
+    found: set[str] = set()
+    for m in _WORD_RUN_RE.finditer(text):
+        run = re.findall(r"[A-Za-z]+", m.group(0).lower())
+        run = [w for w in run if w in _UNIT_WORDS or w in _TENS_WORDS or w in _SCALE_WORDS or w == "and"]
+        if run == ["one"]:
+            before = re.findall(r"[A-Za-z]+(?:-[A-Za-z]+)*", text[:m.start()].lower())[-1:]
+            after = re.findall(r"[A-Za-z]+", text[m.end():m.end() + 30].lower())
+            nxt = after[0] if after else ""
+            counted = nxt in _ONE_COUNT_AFTER or (
+                nxt in ("to", "or") and len(after) > 1 and after[1] in _UNIT_WORDS)
+            if (before and before[0] in _ONE_NOT_AFTER) or not counted:
+                continue
+        for v in _words_to_values(run):
+            found.add(str(v))
+    return found
+
+
 def numbers_in(text: str | None) -> set[str]:
     cleaned = _NUMBER_PHRASES.sub(" ", text or "")
-    return {_norm_number(m.group(0)) for m in _NUM_RE.finditer(cleaned)}
+    digits = {_norm_number(m.group(0)) for m in _NUM_RE.finditer(cleaned)}
+    return digits | _spelled_numbers(cleaned)
 
 
 def unsupported_numbers(text: str | None, allowed: set[str]) -> set[str]:
