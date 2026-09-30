@@ -195,3 +195,151 @@ def _cap(slice_text: str, limit: int) -> str:
     cut = slice_text[:limit]
     ends = [m.end() for m in re.finditer(r"[.!?…][\"'”’)\]]*(?=\s)", cut)]
     return cut[: ends[-1]].strip() if ends else cut.strip()
+
+
+# ---------------------------------------------------------------------------
+# Whose side a sentence is on (the 2026-09-30 Dana rerun).
+#
+# A slice is about one person, but not every sentence in it is something that
+# person owes. "I owe her quarterly priorities" is the manager's commitment;
+# "Weekly 1:1, thirty minutes" is the manager's meeting rhythm. Handed to the
+# drafter, the first became "Quarterly priorities delivered", owned by Lena,
+# and the second a measured "Weekly 1:1 attendance" target on Kwame. So those
+# sentences are held back from the drafter in code: it never sees them, their
+# numbers leave the allowed set (a target can't be built from them), and a
+# quote from them can't resolve. They stay in the stored slice, which is the
+# manager's own words, and the review row lists them as left out.
+#
+# Deliberately narrow. A sentence that also states something of the report
+# ("I'd want a weekly written status from him", "his side is ...") is never
+# held back: missing a manager-side sentence costs a line the manager deletes,
+# holding back a real expectation costs one they never see.
+# ---------------------------------------------------------------------------
+
+_I = r"\bI"
+_COMMITMENT = re.compile(
+    "|".join([
+        _I + r"\s+owe\b",
+        _I + r"\s+(?:promised|committed|offered)\b",
+        _I + r"\s+said\b[^.!?]*?\bI(?:'d|\s+would|'ll|\s+will)\b",
+        _I + r"(?:'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+should|\s+must|\s+ought\s+to|'ve\s+got\s+to|\s+still\s+have\s+to)"
+             r"\s+(?:write|send|give|get|share|set|schedule|draft|book|do|finish|put|make|ask|raise|have|talk|sort|follow|find|figure)\b",
+        _I + r"\s+(?:still\s+)?(?:haven't|have\s+not|never)\s+(?:written|sent|given|shared|set|scheduled|drafted|done|finished|asked|raised|had)\b",
+        _I + r"'d\s+(?:write|send|give|get|share|set\s+up|schedule|draft|book|put\s+together)\s+(?:him|her|them)\b",
+        r"(?<!\bof\s)\bmine\b",
+        r"\bon\s+me\b",
+        r"\bmy\s+(?:side|job|action|to-?do|homework)\b",
+    ]),
+    re.IGNORECASE,
+)
+_ONE_ON_ONE = re.compile(r"(?<![\w:])(?:1\s*[:\-–]\s*1s?|1\s*-?on-?\s*1s?|one[- ]on[- ]ones?)(?![\w:])", re.IGNORECASE)
+_RHYTHM = re.compile(
+    r"\b(?:weekly|bi-?weekly|fortnightly|monthly|daily|every\s+(?:other\s+)?\w+|(?:once|twice)\s+a\s+\w+|"
+    r"minutes?|mins?|hours?|hrs?)\b",
+    re.IGNORECASE,
+)
+# Something the report is expected to do or own. Any of these keeps a sentence.
+_THEIRS = re.compile(
+    "|".join([
+        r"\b(?:he|she|they)\s+(?:should|needs?\s+to|has\s+to|have\s+to|must|owes?|ought\s+to)\b",
+        _I + r"(?:'d|\s+would)?\s+(?:want|expect|need|like)\b[^.!?]*?\b(?:from\s+(?:him|her|them)|(?:him|her|them)\s+to)\b",
+        r"\b(?:his|her|their)\s+side\b",
+        # A sentence that names an expectation is about them even when it also
+        # carries the manager's to-do ("Expectations for her, I'd say solid
+        # delivery, and I should ask her what she wants next").
+        r"\bexpect(?:s|ed|ing|ations?)?\b",
+        r"\bwhat\s+good\s+looks\s+like\b",
+        r"\bfor\s+(?:his|her|their)\s+role\b",
+    ]),
+    re.IGNORECASE,
+)
+# What follows a commitment and only continues it ("Still a bullet point in my
+# head.", "Asked two weeks ago, waiting on her.").
+_CONTINUES = re.compile(
+    r"\b(?:still|asked|waiting|haven't|not\s+yet|in\s+my\s+head|overdue|weeks?\s+now|months?\s+now)\b",
+    re.IGNORECASE,
+)
+
+
+def _plain(s: str) -> str:
+    return s.replace("’", "'").replace("‘", "'")
+
+
+def manager_side(sentence: str) -> str | None:
+    """-> "commitment" (the manager owes it), "meeting" (the manager's 1:1
+    rhythm) or None (keep it). Pure."""
+    s = _plain(sentence)
+    if _THEIRS.search(s):
+        return None
+    if _COMMITMENT.search(s):
+        return "commitment"
+    if _ONE_ON_ONE.search(s) and _RHYTHM.search(s):
+        return "meeting"
+    return None
+
+
+def for_drafting(slice_text: str | None) -> tuple[str, list[str]]:
+    """-> (what the drafter reads, the sentences held back as the manager's).
+
+    Verbatim, like the slice: kept runs are cut straight out of it, and runs a
+    held-back sentence separates are joined by a blank line, so a quote can
+    never straddle the gap."""
+    text = slice_text or ""
+    sents = sentences(text)
+    held: list[int] = []
+    prev_commitment = False
+    prev_para = None
+    for i, (s, e, para) in enumerate(sents):
+        sentence = text[s:e]
+        side = manager_side(sentence)
+        if (side is None and prev_commitment and para == prev_para
+                and _CONTINUES.search(_plain(sentence)) and not _THEIRS.search(_plain(sentence))
+                and not _PRONOUN_LEAD.match(_plain(sentence))):
+            side = "commitment"
+        if side:
+            held.append(i)
+        prev_commitment = side == "commitment"
+        prev_para = para
+    if not held:
+        return text.strip(), []
+    runs: list[str] = []
+    start = end = None
+    prev = None
+    for i, (s, e, para) in enumerate(sents):
+        if i in held:
+            if start is not None:
+                runs.append(text[start:end].strip())
+            start = end = prev = None
+            continue
+        if start is not None and prev is not None and sents[prev][2] == para:
+            end = e
+        else:
+            if start is not None:
+                runs.append(text[start:end].strip())
+            start, end = s, e
+        prev = i
+    if start is not None:
+        runs.append(text[start:end].strip())
+    return "\n\n".join(r for r in runs if r), [text[sents[i][0]:sents[i][1]].strip() for i in held]
+
+
+_STOP = frozenset(
+    "the and for with from that this what when then than them they their his her him she he you your our "
+    "are was were has have had not but all any can will would should about into just also only more most "
+    "each very really like want wants need needs".split()
+)
+
+
+def _bigrams(text: str) -> set[tuple[str, str]]:
+    words = [w for w in re.findall(r"[a-z0-9:]+", _plain(text).lower()) if len(w) >= 3 and w not in _STOP]
+    return set(zip(words, words[1:]))
+
+
+def echoes_held_back(sentence: str, held: list[str], kept: str) -> bool:
+    """A line (the review row's statement) that repeats a pair of words found
+    only in a held-back sentence is restating the manager's side, not theirs:
+    "Provides quarterly priorities" after "I owe her quarterly priorities"."""
+    if not held:
+        return False
+    only_held = _bigrams(" ".join(held)) - _bigrams(kept)
+    return bool(_bigrams(sentence) & only_held) or manager_side(sentence) == "meeting"

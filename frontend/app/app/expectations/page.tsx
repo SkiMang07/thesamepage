@@ -66,6 +66,14 @@ function ExpectationsOverview() {
     load();
   }, [load]);
 
+  // The setup card's "Review N drafts" links to #needs-review. The section
+  // renders only once the overview has loaded, so scroll to it then, once.
+  const hasReview = !!data && data.needs_review.length > 0;
+  useEffect(() => {
+    if (!hasReview || window.location.hash !== "#needs-review") return;
+    document.getElementById("needs-review")?.scrollIntoView({ block: "start" });
+  }, [hasReview]);
+
   // Batch intake: roles whose first draft is being written. Read again until
   // each lands, so "Writing" turns into a row to review without a reload.
   const anyDrafting = !!data?.levels.some((l) => l.draft?.drafting);
@@ -155,7 +163,7 @@ function ExpectationsOverview() {
       {data && (
         <div className="mt-6 space-y-5">
           {data.needs_review.length > 0 && (
-            <section className="rounded-xl bg-amber-50 p-5" aria-labelledby="needs-review-heading">
+            <section id="needs-review" className="scroll-mt-20 rounded-xl bg-amber-50 p-5" aria-labelledby="needs-review-heading">
               <h2 id="needs-review-heading" className="text-base font-semibold text-amber-800">
                 Needs review
               </h2>

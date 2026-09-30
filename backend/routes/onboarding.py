@@ -10,7 +10,9 @@ SETUP_MODE_BRIEF.md):
                org           at least one org unit, and every active direct
                              report sits in one
                expectations  every active direct report has a role, and every
-                             role in use has expectations configured
+                             role in use has expectations configured (approved:
+                             a draft waiting for review doesn't count, but the
+                             step says it is waiting and points at it)
                goals         an org-level goal (company or department) and a
                              team goal
   onboarded  set up, plus a logged 1:1, plus a later prep sheet for the same
@@ -75,6 +77,7 @@ def evaluate(
     goal_levels: set,
     org_goals_unknown: bool = False,
     queue: list[dict] | None = None,
+    open_drafts: dict | None = None,
 ) -> dict:
     """The setup conditions as plain data. Pure, so it is tested without a database.
 
@@ -82,6 +85,8 @@ def evaluate(
     `covered_role_ids` are role levels with at least one configured expectation.
     `org_goals_unknown` is the manager's "Don't know yet" on org goals; `queue` is
     expectation_queue() (who to set expectations for next, soonest 1:1 first).
+    `open_drafts` is role level id -> "review" (an unapproved draft the manager
+    can review now) or "writing" (a batch draft still being written).
     """
     people = len(reports)
     without_team = sum(1 for r in reports if not r.get("org_unit_id"))
@@ -89,6 +94,14 @@ def evaluate(
     roles_in_use = {r["role_level_id"] for r in reports if r.get("role_level_id")}
     roles_covered = len(roles_in_use & set(covered_role_ids))
     people_ready = sum(1 for r in reports if r.get("role_level_id") in set(covered_role_ids))
+    # Drafts on roles in use that aren't approved yet. They don't complete the
+    # step (approval does), but they change what it asks for: review first.
+    waiting = {rid: state for rid, state in (open_drafts or {}).items()
+               if rid in roles_in_use and rid not in set(covered_role_ids)}
+    review_people = sorted(
+        (r for r in reports if waiting.get(r.get("role_level_id")) == "review"),
+        key=lambda r: (r.get("name") or "").lower(),
+    )
 
     org_done = people > 0 and unit_count > 0 and without_team == 0
     exp_done = people > 0 and without_role == 0 and roles_covered == len(roles_in_use)
@@ -112,8 +125,14 @@ def evaluate(
             # be drafted against. Feeds the Assessments door.
             "people_ready": people_ready,
             # Whose role to set expectations for next, soonest 1:1 first (chunk C).
+            # Roles with a draft already are left to review, not listed here.
             "next_role": (queue or [None])[0],
             "queue": queue or [],
+            # Unapproved drafts waiting in Needs review, and the people they're for.
+            "drafts_to_review": sum(1 for s in waiting.values() if s == "review"),
+            "review_people": [r.get("name") for r in review_people if r.get("name")],
+            # Batch drafts still being written (not in Needs review yet).
+            "drafts_writing": sum(1 for s in waiting.values() if s == "writing"),
         },
         "goals": {
             "done": has_org_goal and has_team_goal,
@@ -190,6 +209,9 @@ def step_target(steps: dict, key: str) -> dict:
     if key == "org":
         return {"label": "Set up team and org", "href": "/app/org"}
     if key == "expectations":
+        waiting = steps["expectations"].get("drafts_to_review") or 0
+        if waiting:
+            return {"label": f"Review {waiting} draft{'' if waiting == 1 else 's'}", "href": "/app/expectations#needs-review"}
         nxt = steps["expectations"].get("next_role")
         if not nxt:
             return {"label": "Set expectations", "href": "/app/expectations"}
@@ -212,6 +234,7 @@ def expectation_queue(
     covered_role_ids: set,
     next_dates: dict,
     limit: int = 5,
+    drafted_role_ids: set | None = None,
 ) -> list[dict]:
     """Who to set expectations for next. Pure.
 
@@ -219,9 +242,10 @@ def expectation_queue(
     that improves the next sheet comes before the rest. A person with no role is
     listed as themselves (the next action is picking a role); a role several
     people share is listed once, at its soonest person. People with no dated 1:1
-    follow, by name.
+    follow, by name. A role with an open draft (`drafted_role_ids`) is left out:
+    its next action is reviewing that draft, not starting one.
     """
-    covered = set(covered_role_ids)
+    covered = set(covered_role_ids) | set(drafted_role_ids or ())
     pending = [r for r in reports if not (r.get("role_level_id") and r["role_level_id"] in covered)]
     pending.sort(key=lambda r: (next_dates.get(r["id"]) is None, next_dates.get(r["id"]) or "", (r.get("name") or "").lower()))
     out, seen_roles = [], set()
@@ -239,6 +263,18 @@ def expectation_queue(
             "next_1on1_on": next_dates.get(r["id"]),
         })
     return out[:limit]
+
+
+def _open_drafts(supabase) -> dict:
+    """role level id -> "review" | "writing" for every open expectations draft
+    in the org (one per role). A batch draft still being written isn't in Needs
+    review yet; a stale one reads as failed, which is (Retry lives there)."""
+    import expectations_batch as batch
+    rows = (
+        supabase.table("role_expectation_drafts").select("role_level_id,analysis")
+        .eq("status", "open").execute().data
+    )
+    return {r["role_level_id"]: "writing" if batch.is_drafting(r.get("analysis")) else "review" for r in rows}
 
 
 def _next_1on1_dates(supabase, user_id: str) -> dict:
@@ -479,6 +515,7 @@ def build_status(user_id: str, supabase) -> dict:
             r["id"]: f"{r['job_role']} L{r['job_level']}" if r.get("job_level") else str(r["job_role"])
             for r in supabase.table("role_levels").select("id,job_role,job_level").execute().data
         }
+        open_drafts = _open_drafts(supabase)
         unknown = read_unknown(supabase, user_id)
         if unknown and goal_levels & ORG_LEVELS:
             clear_unknown(supabase, user_id)
@@ -489,7 +526,9 @@ def build_status(user_id: str, supabase) -> dict:
             covered_role_ids=covered_role_ids,
             goal_levels=goal_levels,
             org_goals_unknown=unknown,
-            queue=expectation_queue(reports, role_labels, covered_role_ids, _next_1on1_dates(supabase, user_id)),
+            queue=expectation_queue(reports, role_labels, covered_role_ids, _next_1on1_dates(supabase, user_id),
+                                    drafted_role_ids=set(open_drafts)),
+            open_drafts=open_drafts,
         )
         done_count = sum(1 for k in STEP_ORDER if steps[k]["done"])
         assessable = steps["expectations"]["people_ready"]

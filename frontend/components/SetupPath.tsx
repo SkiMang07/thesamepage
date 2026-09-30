@@ -31,7 +31,10 @@
 // Batch expectations intake (Build 3a; docs/EXPECTATIONS_BATCH_INTAKE_SCOPING.md):
 // when the expectations step is the highlighted one, its primary action opens
 // the notes box aimed at roles (one input, several people, a draft per role)
-// and the one-role-at-a-time route becomes the secondary link.
+// and the one-role-at-a-time route becomes the secondary link. Once drafts are
+// waiting in Needs review, reviewing them is the step's action (a count and a
+// link), and describing the rest or one role at a time are the secondary ways
+// in; a role that already has a draft is never offered for describing again.
 //
 // Voice: literal labels, no encouragement. Each step carries one line on what it
 // changes, stated as a fact.
@@ -66,8 +69,9 @@ type StepView = {
   // The action opens a modal instead of a page: the org-goals modal, or the
   // notes box aimed at role expectations.
   modal?: "goals" | "notes";
-  // A second, quieter way in, shown under the highlighted step's action.
-  secondary?: { action: string; href: string };
+  // Quieter ways in, shown under the highlighted step's action. One may open
+  // a modal instead of a page.
+  secondary?: { action: string; href: string; modal?: "notes" }[];
   // A second line under the highlighted step: what comes first, and what is next.
   detail?: string;
   done: boolean;
@@ -81,6 +85,13 @@ function plural(n: number, one: string, many: string) {
 
 function first(name: string) {
   return name.trim().split(/\s+/)[0] || name;
+}
+
+function listNames(names: string[]) {
+  const firsts = names.map(first);
+  if (firsts.length <= 1) return firsts.join("");
+  if (firsts.length <= 4) return `${firsts.slice(0, -1).join(", ")} and ${firsts[firsts.length - 1]}`;
+  return `${firsts.slice(0, 3).join(", ")} and ${firsts.length - 3} more`;
 }
 
 // Who to set expectations for next. The person whose 1:1 is soonest first; a
@@ -115,16 +126,49 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
   const queue = exp.queue ?? [];
   const nextRole = exp.next_role ?? queue[0] ?? null;
   const perRole = expectationsAction(nextRole, queue.filter((q) => q !== nextRole && q.report_id !== nextRole?.report_id));
+  const toReview = exp.drafts_to_review ?? 0;
+  const writing = exp.drafts_writing ?? 0;
+  // Roles with nothing yet: not approved, no draft. The queue already leaves
+  // drafted roles out, so it is the list of what's left to describe.
+  const undescribed = queue.length > 0;
   const uncovered = exp.people_without_role > 0 || exp.roles_covered < exp.roles_in_use;
-  // The batch box leads when this is the step to do and roles are uncovered.
-  const batch = nextKey === "expectations" && !exp.done && !exp.blocked && uncovered;
-  const expAction = batch
-    ? {
-        action: "Describe each person’s role",
-        href: perRole.href,
-        detail: `Talk or type what you expect of each person, all in one go. Up to five roles get a first draft for you to review. Nothing is approved for you.`,
-      }
-    : perRole;
+  const writingLine = writing
+    ? ` ${plural(writing, "draft is", "drafts are")} still being written; ${writing === 1 ? "it joins" : "they join"} Needs review in about a minute.`
+    : "";
+  const oneAtATime = { action: `Or one role at a time: ${perRole.action.charAt(0).toLowerCase()}${perRole.action.slice(1)}`, href: perRole.href };
+  // Drafts waiting come first: reviewing them is what finishes the step, and
+  // describing those people again would only be refused.
+  const review = !exp.done && !exp.blocked && toReview > 0;
+  // Otherwise the batch box leads when this is the step to do and roles are uncovered.
+  const batch = !review && nextKey === "expectations" && !exp.done && !exp.blocked && uncovered && undescribed;
+  let expAction: { action: string; href: string; detail?: string; modal?: "notes"; secondary?: StepView["secondary"] };
+  if (review) {
+    const who = exp.review_people ?? [];
+    expAction = {
+      action: `Review ${plural(toReview, "draft", "drafts")}`,
+      href: "/app/expectations#needs-review",
+      detail: `${who.length ? `First drafts for ${listNames(who)} are` : `${plural(toReview, "first draft is", "first drafts are")}`} waiting in Needs review. A role counts here once you approve it.${writingLine}`,
+      secondary: undescribed
+        ? [{ action: "Describe the rest in one go", href: perRole.href, modal: "notes" as const }, oneAtATime]
+        : undefined,
+    };
+  } else if (batch) {
+    expAction = {
+      action: "Describe each person’s role",
+      href: perRole.href,
+      detail: `Talk or type what you expect of each person, all in one go. Up to five roles get a first draft for you to review. Nothing is approved for you.${writingLine}`,
+      modal: "notes",
+      secondary: [oneAtATime],
+    };
+  } else if (writing && !undescribed) {
+    expAction = {
+      action: "Open Roles & expectations",
+      href: "/app/expectations",
+      detail: `${plural(writing, "first draft is", "first drafts are")} being written. ${writing === 1 ? "It joins" : "They join"} Needs review in about a minute.`,
+    };
+  } else {
+    expAction = { ...perRole, detail: `${perRole.detail ?? ""}${writingLine}`.trim() || undefined };
+  }
   return [
     {
       key: "org",
@@ -151,8 +195,8 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       action: expAction.action,
       href: expAction.href,
       detail: expAction.detail,
-      modal: batch ? "notes" : undefined,
-      secondary: batch ? { action: `Or one role at a time: ${perRole.action.charAt(0).toLowerCase()}${perRole.action.slice(1)}`, href: perRole.href } : undefined,
+      modal: expAction.modal,
+      secondary: expAction.secondary,
       done: exp.done,
       blocked: exp.blocked,
       status: exp.done
@@ -161,7 +205,9 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
           ? "Needs team and org"
           : exp.people_without_role > 0
             ? `${plural(exp.people_without_role, "person", "people")} without a role`
-            : `${exp.roles_covered} of ${plural(exp.roles_in_use, "role", "roles")} have expectations`,
+            : `${exp.roles_covered} of ${plural(exp.roles_in_use, "role", "roles")} have expectations${
+                toReview ? ` · ${plural(toReview, "draft", "drafts")} to review` : ""
+              }`,
     },
     {
       key: "goals",
@@ -390,13 +436,26 @@ export default function SetupPath() {
                           {step.action}
                         </Link>
                       )}
-                      {step.secondary && (
-                        <p className="mt-2 text-[13px]">
-                          <Link href={step.secondary.href} onClick={() => opened(step)} className="font-medium text-brand hover:text-brand-hover">
-                            {step.secondary.action}
-                          </Link>
+                      {step.secondary?.map((s) => (
+                        <p key={s.action} className="mt-2 text-[13px]">
+                          {s.modal ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                opened(step);
+                                setDumpOpen("expectations");
+                              }}
+                              className="font-medium text-brand hover:text-brand-hover"
+                            >
+                              {s.action}
+                            </button>
+                          ) : (
+                            <Link href={s.href} onClick={() => opened(step)} className="font-medium text-brand hover:text-brand-hover">
+                              {s.action}
+                            </Link>
+                          )}
                         </p>
-                      )}
+                      ))}
                     </div>
                   </div>
                 </li>

@@ -186,7 +186,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
     setNextPass(true);
     const byReport = Object.fromEntries(expRows.map((e) => [e.report_id, e]));
     const roles: string[] = [];
-    const next = result.waiting.filter((w) => {
+    const next = offerable(result).filter((w) => {
       if (roles.includes(w.role_level_id)) return true;
       if (roles.length >= maxRoles) return false;
       roles.push(w.role_level_id);
@@ -200,6 +200,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
         proposed: 0, edited: 0, seconds_to_confirm: 0,
       });
       const done = new Set(next.map((w) => w.report_id));
+      // Anyone the server skipped this pass keeps its reason and leaves "waiting".
       setResult({
         ...result,
         drafting: [...result.drafting, ...r.drafting],
@@ -215,6 +216,22 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
   }
 
   const forRoles = intent === "expectations";
+
+  // The review screen's own verdict on a row, by person. The server judges
+  // every kept row too (a role with a working draft or approved expectations
+  // is never "waiting"); this keeps the receipt consistent with the rows the
+  // manager just read even when the server couldn't judge (no text was sent).
+  const blockedBy = Object.fromEntries(expRows.filter((e) => e.blocked).map((e) => [e.report_id, e]));
+  function offerable(r: NotesDumpApplyResult) {
+    return r.waiting.filter((w) => !blockedBy[w.report_id]);
+  }
+  function skippedLines(r: NotesDumpApplyResult) {
+    const named = new Set(r.not_drafted.map((x) => x.report_id ?? x.person_name));
+    const extra = r.waiting
+      .filter((w) => blockedBy[w.report_id] && !named.has(w.report_id))
+      .map((w) => blockedText(blockedBy[w.report_id]) ?? "");
+    return [...r.not_drafted.map((x) => x.reason), ...extra].filter(Boolean);
+  }
 
   return (
     <div
@@ -426,10 +443,18 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                         )}
                       </label>
                     )}
-                    {e.slice && !e.blocked && (
+                    {(e.slice || (e.held_back ?? []).length > 0) && !e.blocked && (
                       <details className="mt-1.5 text-xs text-ink-muted">
                         <summary className="cursor-pointer">What the draft will read</summary>
-                        <p className="mt-1 whitespace-pre-wrap rounded-md bg-sunken px-2.5 py-2 text-ink-secondary">{e.slice}</p>
+                        {e.slice && (
+                          <p className="mt-1 whitespace-pre-wrap rounded-md bg-sunken px-2.5 py-2 text-ink-secondary">{e.slice}</p>
+                        )}
+                        {(e.held_back ?? []).length > 0 && (
+                          <p className="mt-1.5">
+                            Left out as yours, not {firstName(e.person_name)}’s (what you owe them, or your 1:1 rhythm):{" "}
+                            {(e.held_back ?? []).map((s) => `“${s}”`).join(" ")}
+                          </p>
+                        )}
                       </details>
                     )}
                   </Row>
@@ -528,22 +553,22 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                 </p>
               </div>
             )}
-            {result.not_drafted.length > 0 && (
+            {skippedLines(result).length > 0 && (
               <ul className="mt-2 list-disc pl-5 text-sm text-ink-secondary">
-                {result.not_drafted.map((r, i) => (
-                  <li key={i}>{r.reason}</li>
+                {skippedLines(result).map((line, i) => (
+                  <li key={i}>{line}</li>
                 ))}
               </ul>
             )}
-            {result.waiting.length > 0 && (
+            {offerable(result).length > 0 && (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline px-4 py-3 text-sm">
                 <p className="min-w-0 flex-1 text-ink-secondary">
-                  {result.waiting.map((w) => firstName(w.person_name)).join(", ")}{" "}
-                  {result.waiting.length === 1 ? "has" : "have"} a role now and no draft yet.
+                  {offerable(result).map((w) => firstName(w.person_name)).join(", ")}{" "}
+                  {offerable(result).length === 1 ? "has" : "have"} a role now and no draft yet.
                 </p>
                 {expRows.length > 0 && (
                   <button type="button" onClick={draftNext} disabled={nextPass} className={`${BTN_SECONDARY} shrink-0`}>
-                    {nextPass ? "Queuing…" : `Draft the next ${Math.min(maxRoles, new Set(result.waiting.map((w) => w.role_level_id)).size)}`}
+                    {nextPass ? "Queuing…" : `Draft the next ${Math.min(maxRoles, new Set(offerable(result).map((w) => w.role_level_id)).size)}`}
                   </button>
                 )}
               </div>

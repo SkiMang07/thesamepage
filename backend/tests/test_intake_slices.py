@@ -1,7 +1,9 @@
 """Per-person slices of a batch input (Build 3a). The slice is the only corpus a
 role's draft sees, so these tests are about who gets which sentence — and above
 all that one person's numbers never reach another person's slice."""
-from intake_slices import MAX_SLICE, sentences, slice_by_person
+import pytest
+
+from intake_slices import MAX_SLICE, echoes_held_back, for_drafting, manager_side, sentences, slice_by_person
 from routes.role_expectations import numbers_in
 
 # Fiction: business/digital-customers/personas/02-eng-manager-scaling/sessions/
@@ -148,3 +150,89 @@ def test_a_pronoun_led_sentence_naming_someone_else_goes_to_no_one():
     assert "twice" not in s["andre"] and "twice" not in s["kwame"]
     # Without a run going, a name still starts one, pronoun or not.
     assert slice_by_person("She reports to Mei now.", ROSTER) == {"mei": "She reports to Mei now."}
+
+
+# ── whose side a sentence is on (the 2026-09-30 rerun) ────────────────────
+# The drafter reads a slice without the manager's own side: what the manager
+# owes the person, and the manager's 1:1 rhythm with them.
+
+def _dana(person):
+    return slice_by_person(DANA, ROSTER)[person]
+
+
+def test_kwame_keeps_his_side_and_loses_the_1on1_rhythm_and_the_growth_plan_promise():
+    reads, held = for_drafting(_dana("kwame"))
+    assert "ask questions early, don't sit on a blocker" in reads
+    assert "Weekly 1:1" not in reads and "thirty" not in reads and "30" not in numbers_in(reads)
+    assert "growth plan" not in reads and "90" not in numbers_in(reads)
+    assert held == ["I said at his 90-day mark I'd write him a growth plan.", "Still a bullet point in my head.",
+                    "So, growth plan, mine.", "Weekly 1:1, thirty minutes."]
+
+
+def test_lenas_quarterly_priorities_are_the_managers_debt_not_hers():
+    reads, held = for_drafting(_dana("lena"))
+    assert "quarterly priorities" not in reads and "waiting on her" not in reads
+    assert "What I'd want from her, visibility. Tell me before it breaks." in reads
+    assert held == ["I owe her quarterly priorities.", "Asked two weeks ago, waiting on her."]
+
+
+def test_andres_weekly_written_status_stays_whole():
+    reads, held = for_drafting(_dana("andre"))
+    assert held == [] and reads == _dana("andre")
+    assert "I'd want a weekly written status from him." in reads
+
+
+def test_what_is_kept_is_verbatim_and_a_gap_is_a_blank_line():
+    piece = _dana("kwame")
+    reads, _ = for_drafting(piece)
+    runs = reads.split("\n\n")
+    assert len(runs) == 2 and all(run in piece for run in runs)
+
+
+@pytest.mark.parametrize("sentence,side", [
+    ("I owe her quarterly priorities.", "commitment"),
+    ("Design doc feedback, I owe her, three weeks now.", "commitment"),
+    ("I said I'd send him the rubric.", "commitment"),
+    ("I promised her a promotion case by March.", "commitment"),
+    ("I need to write his growth plan.", "commitment"),
+    ("So, growth plan, mine.", "commitment"),
+    ("That one's on me.", "commitment"),
+    ("Weekly 1:1, thirty minutes.", "meeting"),
+    ("We do a biweekly one-on-one.", "meeting"),
+    ("Our 1-on-1 is every Tuesday.", "meeting"),
+    # Theirs, never held back:
+    ("I'd want a weekly written status from him.", None),
+    ("I'd want him to bring an agenda to our weekly 1:1.", None),
+    ("She should own the on-call rotation every week.", None),
+    ("His side is, ask questions early.", None),
+    ("I owe her feedback and she owes me a weekly update.", None),
+    ("A friend of mine recommended him.", None),
+    ("Her 1:1 gets moved.", None),          # the meeting, but no rhythm to mistake for a target
+    ("What I'd want from her, visibility.", None),
+    ("Expectations for her, I'd say solid delivery, and I should ask her what she wants next.", None),
+    ("For her role, owning design docs, and I need to send her the template.", None),
+])
+def test_manager_side(sentence, side):
+    assert manager_side(sentence) == side
+    assert manager_side(sentence.replace("'", "\u2019")) == side  # dictation's curly apostrophes
+
+
+def test_a_continuation_only_follows_a_commitment():
+    reads, held = for_drafting("Lena. I owe her quarterly priorities. Asked two weeks ago. She should still ship the runbook.")
+    assert held == ["I owe her quarterly priorities.", "Asked two weeks ago."]
+    assert "She should still ship the runbook." in reads
+    # Without the commitment before it, "asked" is just a sentence.
+    assert for_drafting("Lena. Asked about the runbook twice.")[1] == []
+
+
+def test_a_statement_that_restates_the_managers_side_is_caught():
+    reads, held = for_drafting(_dana("lena"))
+    assert echoes_held_back("Provides her quarterly priorities when asked.", held, reads)
+    assert not echoes_held_back("Gives visibility before things break.", held, reads)
+    reads, held = for_drafting(_dana("kwame"))
+    assert echoes_held_back("Holds a weekly 1:1 with Dana.", held, reads)
+    assert not echoes_held_back("Asks questions early and doesn't sit on a blocker.", held, reads)
+
+
+def test_nothing_held_back_from_an_empty_slice():
+    assert for_drafting("") == ("", []) and for_drafting(None) == ("", [])

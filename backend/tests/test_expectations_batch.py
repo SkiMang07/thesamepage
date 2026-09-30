@@ -131,7 +131,7 @@ class DB:
 
 
 TEXT = ("Andre first. Backend, mid-level, two years. I'd want a weekly written status from him.\n\n"
-        "Kwame. Junior, eight months. At his 90-day mark I'd write him a growth plan. Ask questions early.\n\n"
+        "Kwame. Junior, eight months. By his 90-day mark he should own one service end to end. Ask questions early.\n\n"
         "Sofia. Solid delivery, and I should ask her what she wants next.")
 
 
@@ -333,8 +333,8 @@ def test_apply_creates_one_level_per_new_role_assigns_then_queues(client, no_bac
     again = _apply(c, text=TEXT, expectations=[
         {"report_id": "andre", "job_role": "Backend Platform Engineer", "job_level": 3, "draft": True}]).json()
     assert again["roles_created"] == 0 and len(db.rows["role_expectation_drafts"]) == 1
-    assert again["not_drafted"] == [{"person_name": "Andre Okafor",
-                                     "reason": "Andre already has a working draft — this won't change it."}]
+    assert again["not_drafted"] == [{"report_id": "andre", "person_name": "Andre Okafor",
+                                     "reason": "Andre already has a working draft — this won’t change it."}]
 
 
 def test_apply_skips_approved_and_textless_roles_visibly(client, no_background):
@@ -345,8 +345,8 @@ def test_apply_skips_approved_and_textless_roles_visibly(client, no_background):
         {"report_id": "kwame", "job_role": "Junior Engineer", "job_level": 1, "draft": True},
     ]).json()
     reasons = {x["person_name"]: x["reason"] for x in body["not_drafted"]}
-    assert reasons["Mei Tanaka"] == "Mei's role already has approved expectations — this won't change them."
-    assert reasons["Kwame Mensah"] == "Nothing you typed is about Kwame, so there's nothing to draft from."
+    assert reasons["Mei Tanaka"] == "Mei’s role already has approved expectations — this won’t change them."
+    assert reasons["Kwame Mensah"] == "Nothing you typed is about Kwame, so there’s nothing to draft from. Attached files aren’t kept."
     assert db.rows["role_expectation_drafts"] == [] and no_background == []
     # Kwame still got his role: rows are never silently dropped.
     assert next(d for d in db.rows["direct_reports"] if d["id"] == "kwame")["role_level_id"]
@@ -570,8 +570,8 @@ def test_one_persons_number_never_reaches_another_persons_draft(client, monkeypa
             {"section": "responsibility", "measure": "numeric", "title": "Plan delivery",
              "responsibility": "Delivers a plan.", "meets": "A plan within 90 days of starting.",
              "exceeds": "", "measurement_period": "quarter", "order_type": "primary", "basis": "described",
-             "source_quote": "At his 90-day mark",
-             "target": {"text": "90-day mark", "quote": "At his 90-day mark I'd write him a growth plan"}},
+             "source_quote": "By his 90-day mark",
+             "target": {"text": "90-day mark", "quote": "By his 90-day mark he should own one service end to end"}},
         ], "questions": [{"item_index": 0, "topic": "scope", "question": "Is 90 days right?", "why": "Eight months in."}]}
 
     for d in queued:
@@ -588,3 +588,208 @@ def test_one_persons_number_never_reaches_another_persons_draft(client, monkeypa
     (kitem,) = k["items"]
     assert kitem["target"]["status"] == "set" and kitem["target"]["source"] == "manager"
     assert "90" in kitem["meets"]
+
+
+# ── the 2026-09-30 Dana rerun ────────────────────────────────────────────
+# Fiction: the persona monologue, copied verbatim into test_intake_slices.DANA.
+
+from tests.test_intake_slices import DANA  # noqa: E402
+
+
+def _dana_db():
+    db = DB()
+    people = [("andre", "Andre Okafor", "rl_be"), ("kwame", "Kwame Mensah", "rl_jr"), ("lena", "Lena Fischer", "rl_sre"),
+              ("mei", "Mei Tanaka", "rl_sr"), ("sofia", "Sofia Reyes", "rl_fe"), ("tomas", "Tomás Silva", "rl_tl")]
+    db.rows["direct_reports"] = [
+        {"id": i, "name": n, "manager_id": "u1", "role_level_id": r, "role_title": None, "org_unit_id": "u", "archived_at": None}
+        for i, n, r in people]
+    db.rows["role_levels"] += [
+        {"id": "rl_jr", "job_role": "Junior Engineer", "job_level": 1, "role_family_id": None},
+        {"id": "rl_sre", "job_role": "Senior Platform Engineer", "job_level": 1, "role_family_id": None},
+        {"id": "rl_tl", "job_role": "Senior Backend Engineer", "job_level": 1, "role_family_id": None},
+    ]
+    # Sofia's role has the morning's working draft; Tomás's role is approved.
+    db.rows["role_expectation_drafts"].append({
+        "id": "sofia-draft", "org_id": "org1", "role_level_id": "rl_fe", "kind": "new", "status": "open",
+        "items": [{"key": "k1", "title": "Ship features"}], "questions": [], "suggestions": [],
+        "analysis": {"status": "composed"}, "version": 7, "updated_at": "2026-09-30T09:00:00+00:00"})
+    db.rows["metric_configs"].append({"id": "m1", "role_level_id": "rl_tl", "retired_at": None})
+    return db
+
+
+def _dana_rows(draft=True):
+    return [{"report_id": r, "role_level_id": rl, "draft": draft and r != "sofia"} for r, rl in
+            [("andre", "rl_be"), ("kwame", "rl_jr"), ("lena", "rl_sre"), ("mei", "rl_sr"), ("sofia", "rl_fe")]]
+
+
+@pytest.fixture
+def dana(monkeypatch):
+    db = _dana_db()
+    main.app.dependency_overrides[utils.get_authenticated_client] = lambda: ("u1", db)
+    monkeypatch.setattr(analytics, "capture", lambda *a, **k: None)
+    monkeypatch.setattr(nd, "ensure_org", lambda *a, **k: "org1")
+    monkeypatch.setattr(nd, "get_email_from_token", lambda a: "m@example.com")
+    queued = []
+    monkeypatch.setattr(nd, "draft_in_background", lambda supabase, ids, uid=None: queued.extend(ids))
+    yield TestClient(main.app), db, queued
+    main.app.dependency_overrides.clear()
+
+
+SOFIA_REASON = "Sofia already has a working draft — this won’t change it."
+
+
+def test_sofia_is_named_as_skipped_on_the_receipt_and_never_offered_a_draft(dana):
+    """The review row said she already has a working draft. The browser sends
+    her kept row with draft false, as it does for any blocked row; she used to
+    come back in `waiting` ("has a role now and no draft yet", "Draft the next
+    1"). Now she comes back skipped, with the review row's own words."""
+    c, db, queued = dana
+    body = _apply(c, text=DANA, expectations=_dana_rows()).json()
+    assert body["waiting"] == []
+    assert {"report_id": "sofia", "person_name": "Sofia Reyes", "reason": SOFIA_REASON} in body["not_drafted"]
+    assert sorted(p for d in body["drafting"] for p in d["people"]) == \
+        ["Andre Okafor", "Kwame Mensah", "Lena Fischer", "Mei Tanaka"]
+    sofia = next(d for d in db.rows["role_expectation_drafts"] if d["id"] == "sofia-draft")
+    assert sofia["version"] == 7 and sofia["items"] == [{"key": "k1", "title": "Ship features"}]
+
+
+def test_the_same_holds_with_no_draft_queued_and_for_an_approved_role(dana):
+    c, db, _ = dana
+    body = _apply(c, expectations=[{"report_id": "sofia", "role_level_id": "rl_fe", "draft": False},
+                                   {"report_id": "tomas", "role_level_id": "rl_tl", "draft": False},
+                                   {"report_id": "mei", "role_level_id": "rl_sr", "draft": False}]).json()
+    assert [w["report_id"] for w in body["waiting"]] == ["mei"]
+    reasons = {x["report_id"]: x["reason"] for x in body["not_drafted"]}
+    assert reasons == {"sofia": SOFIA_REASON,
+                       "tomas": "Tomás’s role already has approved expectations — this won’t change them."}
+
+
+def test_draft_the_next_for_a_role_with_a_working_draft_is_refused_server_side(dana):
+    """What "Draft the next 1" sent for Sofia before the fix: her row with
+    draft true. The server refuses it and her draft is untouched: no second
+    draft, no overwrite, no version bump."""
+    c, db, queued = dana
+    body = _apply(c, text=DANA, expectations=[{"report_id": "sofia", "role_level_id": "rl_fe", "draft": True}]).json()
+    assert body["drafting"] == [] and queued == []
+    assert body["not_drafted"] == [{"report_id": "sofia", "person_name": "Sofia Reyes", "reason": SOFIA_REASON}]
+    drafts = [d for d in db.rows["role_expectation_drafts"] if d["role_level_id"] == "rl_fe"]
+    assert len(drafts) == 1 and drafts[0]["version"] == 7 and drafts[0]["items"][0]["title"] == "Ship features"
+
+
+def test_someone_sharing_a_role_drafted_now_is_not_offered_a_second_pass(client, no_background):
+    c, db, _ = client
+    body = _apply(c, text=TEXT, expectations=[
+        {"report_id": "andre", "role_level_id": "rl_be", "draft": True},
+        {"report_id": "kwame", "role_level_id": "rl_be", "draft": False}]).json()
+    assert body["waiting"] == []
+    assert body["not_drafted"] == [{"report_id": "kwame", "person_name": "Kwame Mensah",
+                                    "reason": "Kwame shares Andre’s role, which is being drafted now."}]
+
+
+def _dana_model(prompts):
+    """A model that tries the three mistakes from the rerun whenever it can
+    see the words for them, plus Andre's correct target."""
+    def model(prompt):
+        who = next(n for n in ("Andre", "Kwame", "Lena", "Mei") if f"{n}" in prompt.split("THE MANAGER'S DESCRIPTION")[1][:60])
+        prompts[who] = prompt
+        items = [{"section": "skill", "title": "Asks early", "responsibility": "Raises blockers early.",
+                  "basis": "described", "source_quote": ""}]
+        if who == "Andre":
+            items.append({"section": "responsibility", "measure": "numeric", "title": "Weekly written status",
+                          "responsibility": "Sends a written status.", "meets": "Every week.", "measurement_period": "week",
+                          "basis": "described", "source_quote": "a weekly written status",
+                          "target": {"text": "weekly written status", "quote": "I'd want a weekly written status from him"}})
+        # Whatever the prompt says, try to put the manager's side on the report.
+        if who == "Kwame":
+            items.append({"section": "responsibility", "measure": "numeric", "title": "Weekly 1:1 attendance",
+                          "responsibility": "Attends a weekly 1:1.", "meets": "Weekly 1:1, thirty minutes.",
+                          "measurement_period": "week", "basis": "described", "source_quote": "Weekly 1:1, thirty minutes",
+                          "target": {"text": "Weekly 1:1, thirty minutes", "quote": "Weekly 1:1, thirty minutes"}})
+        if who == "Lena":
+            items.append({"section": "responsibility", "measure": "judged", "title": "Quarterly priorities delivered",
+                          "responsibility": "Provides quarterly priorities.", "basis": "described",
+                          "source_quote": "I owe her quarterly priorities"})
+        return {"items": items, "questions": [{"item_index": len(items) - 1, "topic": "scope", "question": "Current gap?"}]}
+    return model
+
+
+def test_rerunning_dana_puts_each_expectation_on_the_right_side(dana):
+    c, db, queued = dana
+    body = _apply(c, text=DANA, expectations=_dana_rows()).json()
+    assert len(queued) == 4
+    prompts = {}
+    for d in queued:
+        assert eb.run_one(db, d, call=_dana_model(prompts)) == "composed"
+    by_role = {d["role_level_id"]: d for d in db.rows["role_expectation_drafts"]}
+
+    # The drafter never saw the manager's side (checked in the description it
+    # reads, not the rules around it, which name the kinds of sentence).
+    prompts = {k: v.split("THE MANAGER'S DESCRIPTION OF THE ROLE")[1].split("THERE IS NO JOB DESCRIPTION.")[0]
+               for k, v in prompts.items()}
+    assert "Weekly 1:1" not in prompts["Kwame"] and "thirty" not in prompts["Kwame"]
+    assert "growth plan" not in prompts["Kwame"]
+    assert "quarterly priorities" not in prompts["Lena"] and "I owe her" not in prompts["Lena"]
+    assert "I'd want a weekly written status from him." in prompts["Andre"]
+    # And the stored slice is still the manager's words.
+    assert "Weekly 1:1, thirty minutes." in by_role["rl_jr"]["analysis"]["context"]
+
+    kwame = by_role["rl_jr"]
+    assert [i["title"] for i in kwame["items"]] == ["Asks early"]           # no 1:1-cadence target on Kwame
+    assert not any("30" in json.dumps(i) or "thirty" in json.dumps(i).lower() for i in kwame["items"])
+    assert any("Weekly 1:1, thirty minutes." in n for n in kwame["analysis"]["notes"])
+
+    lena = by_role["rl_sre"]
+    assert "Quarterly priorities delivered" not in [i["title"] for i in lena["items"]]
+    assert not any(q.get("question") == "Current gap?" for q in lena["questions"])  # its question went with it
+    assert any("I owe her quarterly priorities." in n for n in lena["analysis"]["notes"])
+
+    andre = by_role["rl_be"]
+    status = next(i for i in andre["items"] if i["title"] == "Weekly written status")
+    assert status["target"] == {"status": "set", "text": "weekly written status", "source": "manager",
+                                "quote": "I'd want a weekly written status from him"}
+    assert not andre["analysis"]["notes"] or not any("Left out" in n for n in andre["analysis"]["notes"])
+
+
+def test_the_review_row_reads_and_states_only_the_persons_side():
+    from intake_slices import slice_by_person
+    from tests.test_intake_slices import ROSTER
+    slices = slice_by_person(DANA, ROSTER)
+    rows = [
+        _row("kwame", "Kwame Mensah", role="rl_jr", statement=(
+            "Ask questions early and don't sit on a blocker. Expects to hold weekly 30-minute 1:1s given he needs a lot of coaching.")),
+        _row("lena", "Lena Fischer", role="rl_sre", statement=(
+            "Visibility: tell the manager before something breaks. Provides her quarterly priorities when asked.")),
+        _row("andre", "Andre Okafor", role="rl_be", statement="A weekly written status and consistent delivery."),
+    ]
+    nd.finish_expectations(rows, slices=slices, open_draft_roles=set(), covered_roles=set(), rank={})
+    by = {r["report_id"]: r for r in rows}
+    assert by["kwame"]["statement"] == "Ask questions early and don't sit on a blocker."
+    assert "Weekly 1:1" not in by["kwame"]["slice"] and "Weekly 1:1, thirty minutes." in by["kwame"]["held_back"]
+    assert by["lena"]["statement"] == "Visibility: tell the manager before something breaks."
+    assert by["lena"]["held_back"] == ["I owe her quarterly priorities.", "Asked two weeks ago, waiting on her."]
+    assert by["andre"]["statement"] == "A weekly written status and consistent delivery." and by["andre"]["held_back"] == []
+
+
+def test_what_the_manager_owes_is_proposed_as_their_private_note():
+    """Lena's quarterly priorities are Dana's debt: held back from Lena's draft,
+    and proposed as a note on Lena for Dana to keep, even when the model's
+    own notes missed it. A note that already covers it isn't doubled."""
+    from intake_slices import slice_by_person
+    from tests.test_intake_slices import ROSTER
+    slices = slice_by_person(DANA, ROSTER)
+    drafts = {
+        "expectations": [_row("lena", "Lena Fischer", role="rl_sre"), _row("kwame", "Kwame Mensah", role="rl_jr"),
+                         _row("andre", "Andre Okafor", role="rl_be")],
+        "person_notes": [{"report_id": "kwame", "person_name": "Kwame Mensah", "low": False,
+                          "text": "Promised him a growth plan at his 90-day mark; not written yet.", "excerpt": None}],
+    }
+    nd.finish_expectations(drafts["expectations"], slices=slices, open_draft_roles=set(), covered_roles=set(), rank={})
+    nd.notes_for_held_back(drafts)
+    by = {}
+    for n in drafts["person_notes"]:
+        by.setdefault(n["report_id"], []).append(n)
+    (lena,) = by["lena"]
+    assert lena["text"] == "I owe her quarterly priorities. Asked two weeks ago, waiting on her." and lena["low"] is False
+    assert lena["excerpt"] == "I owe her quarterly priorities."
+    assert len(by["kwame"]) == 1                          # the growth plan was already in his note; 1:1 rhythm isn't owed
+    assert "andre" not in by                              # nothing held back from Andre

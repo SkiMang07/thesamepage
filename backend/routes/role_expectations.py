@@ -844,6 +844,7 @@ def _context_block(context: str | None) -> str:
 _DESCRIPTION_RULES = """THERE IS NO JOB DESCRIPTION. The manager's own description of the role (above) is the only source. Mark where every item comes from with "basis":
 - "described": the description states it or plainly implies it. Set "source_quote" to the shortest exact phrase from the description it comes from.
 - "typical": usual for the role the description names, but the description does not say it. At most three such items in total, only when the description clearly names a role. A typical item is always "measure": "judged", has an empty "source_quote", and contains no number, count, percentage, time limit or target of any kind. Leave "meets" empty rather than write something the manager did not say.
+Only what the person in the role owes. What the manager owes them ("I owe her ...", "I said I'd ...", "mine") and the manager's own 1:1 rhythm with them (how often or how long they meet) are the manager's side: never an item, a target or a responsibility of the role.
 Leave any field empty rather than invent it. If the description is too thin to draft from, return few items or none: an empty list is a good answer. Never copy the description's wording into a line it does not support."""
 
 

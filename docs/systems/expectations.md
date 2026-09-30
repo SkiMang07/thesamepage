@@ -209,8 +209,15 @@ The notes box (`NotesDumpModal`, `routes/notes_dump.py`) also proposes, per pers
 the input describes, a role expectations row: their role (a cited level, their
 current one, or a new `{job_role, job_level}` with the level editable on the
 review row) and a one-line statement. It is the primary action of the setup
-card's expectations step while that step is highlighted and roles are uncovered;
-the per-role route is the secondary link.
+card's expectations step while that step is highlighted and some role in use has
+neither approved expectations nor a draft; the per-role route is the secondary
+link. Once drafts are waiting, **Review N drafts** (to `#needs-review`) is the
+step's action instead, naming whose drafts they are, with "Describe the rest in
+one go" and the per-role link as secondary only while undrafted roles remain.
+`GET /api/onboarding/status` carries `drafts_to_review`, `review_people` and
+`drafts_writing` for roles in use that aren't approved, and its queue leaves out
+roles with an open draft. The step still completes only when every role in use
+is **approved**: a draft is not yet a standard.
 
 - **Slices.** `intake_slices.slice_by_person` cuts the typed text into
   per-person verbatim slices in code: a sentence goes to the one person it
@@ -221,13 +228,39 @@ the per-role route is the secondary link.
   is the only `context_text` the drafter's `sanitize_composed(mode="description")`
   sees, so allowed numbers and quote provenance are per person. Never the whole
   input. Files never go back to apply and are never stored.
+- **The manager's side is held back.** `intake_slices.for_drafting` removes, in
+  code, the sentences in a slice that are the manager's own side:
+  a commitment ("I owe her quarterly priorities", "I said I'd write him a growth
+  plan", "mine", "on me", plus lines that only continue it, like "Asked two weeks
+  ago, waiting on her") and the 1:1 rhythm (a 1:1 plus a cadence or duration:
+  "Weekly 1:1, thirty minutes"). A sentence that also states something of the
+  report ("I'd want a weekly written status from him", "his side is", "he
+  should", anything naming an expectation) is never held back. The drafter reads
+  the rest, so held-back sentences can't become items, their numbers leave the
+  allowed set and their quotes can't resolve. As a backstop, an item whose
+  source or target quotes a held-back sentence is dropped
+  (`expectations_batch.drop_manager_side`). The stored `analysis.context` stays
+  the full slice, the manager's words; the composed draft's notes list what was
+  left out. The review row shows what the draft reads, the held-back lines, and
+  a statement cleaned the same way (`clean_statement`: no number outside what
+  the draft reads, no sentence repeating a word pair only a held-back line has,
+  no 1:1 rhythm). What the manager owes someone is proposed as that person's
+  private note, verbatim, when the model's own notes don't already cover it
+  (`notes_for_held_back`); the 1:1 rhythm is not. The parse and description
+  prompts also say this, but the code is what enforces it.
 - **Apply order.** Create the level if new (deduped on `job_role` + `job_level`,
   `role_family_id` null, so it lands Ungrouped), assign the person, then insert
   an open draft with `analysis = {status: "drafting", source: "batch", run,
   started_at, context, statement}`. At most 5 roles per apply (422 before any
   write); rows kept without a draft get role and assignment only and come back
-  in `waiting` for a second pass. A role with an open draft or approved
-  expectations, or a person with no typed text, is skipped with a stated reason.
+  in `waiting` for a second pass. Every kept row is judged, drafted or not: a
+  role with an open draft or approved expectations, or a person with no typed
+  text (judged when the text is sent), is skipped in `not_drafted` with the
+  review row's own reason, never put in `waiting`, so the receipt never offers
+  "Draft the next" for it. Someone kept without a draft whose role is drafted in
+  the same apply from someone else's part is skipped too ("shares X's role").
+  A second pass that asks anyway is refused server-side and the existing draft
+  is untouched (the one-open-draft index backs this up).
 - **Background.** One `BackgroundTask` (`expectations_batch.draft_in_background`)
   runs up to 5 rows on a 3-thread pool with the request's authenticated client.
   Each run claims its row (version bump, `started_at` reset), calls the model via
@@ -264,7 +297,10 @@ expectations through them any more.
 
 `backend/tests/test_intake_slices.py` and `test_expectations_batch.py` cover
 slicing, the expectations group, role creation and dedupe, apply order, the
-background state machine, retry and cross-contamination between people.
+background state machine, retry, cross-contamination between people, and who
+owes what (the manager's side held back, skipped roles never `waiting`), with
+the Dana persona monologue as the fixture. `test_onboarding.py` covers drafts
+waiting on the setup card.
 `backend/tests/test_role_expectations.py` covers the number guard, composed-draft
 and reanalysis sanitizing, system target questions, save rules and approval
 problems. The migration, RLS isolation, the approval transaction (including

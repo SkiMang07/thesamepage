@@ -1950,6 +1950,11 @@ export type OnboardingSteps = {
     people_ready: number;
     next_role: ExpectationQueueEntry | null;
     queue: ExpectationQueueEntry[];
+    // Unapproved drafts on roles in use: waiting in Needs review, and still
+    // being written. Approval, not a draft, completes the step.
+    drafts_to_review?: number;
+    review_people?: string[];
+    drafts_writing?: number;
   };
   // unknown: "Don't know yet" is the recorded answer. parked: it is the only
   // thing missing, so the step waits on the boss instead of being highlighted.
@@ -2081,7 +2086,11 @@ export type NotesDumpExpectation = {
   role_label: string | null;
   new_role: { job_role: string; job_level: number; level_stated: boolean } | null;
   statement: string | null;
+  // What the draft reads: this person's part, without the manager's own side.
   slice: string | null;
+  // Sentences held back from the draft as the manager's own side: what they
+  // owe the person, or their 1:1 rhythm with them.
+  held_back?: string[];
   // Why it can't be drafted now: the role has a working draft, the role is
   // already approved, or nothing typed is about them.
   blocked: "open_draft" | "approved" | "no_text" | null;
@@ -2129,7 +2138,8 @@ export type NotesDumpApplyResult = {
   refused: { kind: string; reason: string }[];
   roles_created: number;
   drafting: { draft_id: string; role_level_id: string; people: string[] }[];
-  not_drafted: { person_name: string; reason: string }[];
+  // Kept rows that were not drafted and won't be offered again, with the reason.
+  not_drafted: { report_id?: string | null; person_name: string; reason: string }[];
   // Kept rows not drafted this time: role and assignment saved, draft next pass.
   waiting: { report_id: string; person_name: string; role_level_id: string }[];
 };

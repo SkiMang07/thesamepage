@@ -22,7 +22,9 @@ into its headers with no refresh (utils.py), so a run that outlives the token
 
 The slice is the only context the drafter sees and the only context_text
 sanitize_composed gets, so the allowed numbers and the quote provenance are
-that one person's (scoping 2c). Never pass the whole input here.
+that one person's (scoping 2c). Never pass the whole input here. Within the
+slice, the manager's own side (what they owe the person, their 1:1 rhythm) is
+held back from the drafter too (intake_slices.for_drafting).
 
 Hard rules: the authenticated client throughout (1); AI only via ai_core,
 through role_expectations._call_model (2); the output is an unapproved draft
@@ -40,6 +42,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 import analytics
+from intake_slices import for_drafting
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,7 @@ WORKERS = 3
 STALE_AFTER = timedelta(minutes=5)
 BACKOFF_SECONDS = (5.0, 15.0)
 SOURCE_LABEL = "Your description"
+HELD_BACK_NOTE = "Left out as yours, not theirs (what you owe them, or your 1:1 rhythm): "
 FAILED_MESSAGE = "The draft couldn't be written just now. What you said is kept — try again."
 THIN_MESSAGE = "That wasn't enough to draft from. Add what the role owns and how you'd tell it's going well, or start without a draft."
 
@@ -143,12 +147,51 @@ def _write_if_unchanged(supabase, draft: dict, patch: dict) -> dict | None:
     return rows[0] if rows else None
 
 
+def drop_manager_side(parsed: dict, reads: str, held_back: list[str]) -> dict:
+    """The drafter never sees a held-back sentence, so this should never fire.
+    If an item still quotes one (as its source or its target), it is the
+    manager's side restated as the report's: drop it rather than trust the
+    model. Item indexes shift, so questions pointing past it lose their link."""
+    if not held_back or not isinstance(parsed.get("items"), list):
+        return parsed
+    from routes.role_expectations import _squash
+    held_sq = [_squash(s) for s in held_back]
+    reads_sq = _squash(reads)
+
+    def quotes_held(raw) -> bool:
+        if not isinstance(raw, dict):
+            return False
+        target = raw.get("target") if isinstance(raw.get("target"), dict) else {}
+        for q in (raw.get("source_quote"), target.get("quote"), target.get("text")):
+            qs = _squash(q) if isinstance(q, str) else ""
+            if qs and qs not in reads_sq and any(qs in h for h in held_sq):
+                return True
+        return False
+
+    keep = [i for i, raw in enumerate(parsed["items"]) if not quotes_held(raw)]
+    if len(keep) == len(parsed["items"]):
+        return parsed
+    remap = {old: new for new, old in enumerate(keep)}
+    questions = []
+    for q in parsed.get("questions") or []:
+        if isinstance(q, dict) and isinstance(q.get("item_index"), int):
+            if q["item_index"] not in remap:
+                continue
+            q = {**q, "item_index": remap[q["item_index"]]}
+        questions.append(q)
+    return {**parsed, "items": [parsed["items"][i] for i in keep], "questions": questions}
+
+
 def compose_for_row(supabase, draft: dict, *, call=None, sleep=time.sleep) -> dict:
     """One drafter call for one queued row. Returns the patch to write."""
     from routes import role_expectations as rex
 
     analysis = draft.get("analysis") or {}
-    context = analysis.get("context") or ""
+    # The stored slice stays the manager's words. The drafter reads it without
+    # the sentences that are the manager's own side (what they owe the person,
+    # their 1:1 rhythm), so those can't become an expectation of the report,
+    # and their numbers can't become a target (intake_slices.for_drafting).
+    context, held_back = for_drafting(analysis.get("context") or "")
     role = rex._fetch_role(supabase, draft["role_level_id"])
     title = rex._role_title(role)
     org_values = rex._org_values(supabase)
@@ -165,6 +208,7 @@ def compose_for_row(supabase, draft: dict, *, call=None, sleep=time.sleep) -> di
     parsed = call_with_backoff(call or (lambda p: rex._call_model(p)), prompt, sleep=sleep)
     if not parsed:
         raise ValueError("unreadable response")
+    parsed = drop_manager_side(parsed, context, held_back)
     # Only this person's slice is context_text: allowed numbers and quote
     # provenance are theirs alone. The role name and level ride in the corpus
     # the same way POST /import puts them there.
@@ -176,6 +220,9 @@ def compose_for_row(supabase, draft: dict, *, call=None, sleep=time.sleep) -> di
         context_text=context,
         mode="description",
     )
+    # Kept within the first five notes the analysis stores.
+    if held_back:
+        notes.insert(0, (HELD_BACK_NOTE + " ".join(f"“{s}”" for s in held_back))[:600])
     if not items:
         notes.insert(0, THIN_MESSAGE)
     typical = [i for i in items if i.get("origin") == "typical"]

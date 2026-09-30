@@ -211,6 +211,7 @@ def _tables(**over):
         "goals": [{"level": "company", "status": "active"}, {"level": "team", "status": "active"}],
         "one_on_ones": [],
         "role_levels": [{"id": "r1", "job_role": "CSM", "job_level": 2}],
+        "role_expectation_drafts": [],
     }
     t.update(over)
     return t
@@ -748,3 +749,61 @@ def test_the_receipt_is_stamped_once_and_never_before_setup_is_done(_coverage_an
         assert _coverage_and_events == [("m", "set_up_receipt_seen", {})]
     finally:
         _teardown(main, utils)
+
+
+
+# ---- drafts waiting for review (the 2026-09-30 Dana rerun) -------------------
+# After the batch box, the card still said "Describe each person's role" and
+# never mentioned the drafts sitting in Needs review. Drafts don't complete
+# the step (approval does); they change what it asks for.
+
+def _dana_status(drafts):
+    people = [("p1", "Andre Okafor", "rA"), ("p2", "Kwame Mensah", "rK"), ("p3", "Lena Fischer", "rL"),
+              ("p4", "Mei Tanaka", "rM"), ("p5", "Sofia Reyes", "rS"), ("p6", "Tomás Silva", "r1")]
+    tables = _tables(
+        direct_reports=[{"id": i, "name": n, "manager_id": "m", "role_level_id": r, "org_unit_id": "u1", "archived_at": None}
+                        for i, n, r in people],
+        role_levels=[{"id": r, "job_role": f"Role {r}", "job_level": 1} for *_, r in people],
+        role_expectation_drafts=drafts,
+    )
+    return build_status("m", _Client(tables))
+
+
+def _draft(role, state="composed", started=None):
+    analysis = {"status": state, "source": "batch"}
+    if started:
+        analysis["started_at"] = started
+    return {"role_level_id": role, "status": "open", "analysis": analysis}
+
+
+def test_drafts_waiting_are_counted_named_and_lead_the_step():
+    status = _dana_status([_draft("rK"), _draft("rL"), _draft("rM"), _draft("rS", "ready")])
+    exp = status["steps"]["expectations"]
+    assert exp["done"] is False and status["done_count"] == 2              # approval, not a draft, completes it
+    assert exp["drafts_to_review"] == 4 and exp["drafts_writing"] == 0
+    assert exp["review_people"] == ["Kwame Mensah", "Lena Fischer", "Mei Tanaka", "Sofia Reyes"]
+    # The next role to describe is the one with nothing yet, never one already drafted.
+    assert [q["role_level_id"] for q in exp["queue"]] == ["rA"]
+    assert onboarding.step_target(status["steps"], "expectations") == {
+        "label": "Review 4 drafts", "href": "/app/expectations#needs-review"}
+
+
+def test_a_draft_still_being_written_is_writing_not_review():
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    status = _dana_status([_draft("rK", "drafting", started=now), _draft("rL", "drafting", started="2020-01-01T00:00:00+00:00")])
+    exp = status["steps"]["expectations"]
+    # Kwame's is being written; Lena's went stale, reads as failed, and waits in Needs review for Retry.
+    assert exp["drafts_writing"] == 1 and exp["drafts_to_review"] == 1 and exp["review_people"] == ["Lena Fischer"]
+    assert "rK" not in [q["role_level_id"] for q in exp["queue"]]
+
+
+def test_a_revision_on_an_approved_role_or_a_role_nobody_holds_is_not_setup_work():
+    status = _dana_status([_draft("r1"), _draft("r-unused")])
+    exp = status["steps"]["expectations"]
+    assert exp["drafts_to_review"] == 0 and exp["review_people"] == []
+
+
+def test_evaluate_without_drafts_is_unchanged():
+    steps = _all_true()
+    assert steps["expectations"]["drafts_to_review"] == 0 and steps["expectations"]["drafts_writing"] == 0

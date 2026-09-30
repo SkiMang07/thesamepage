@@ -46,7 +46,7 @@ import analytics
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
-from intake_slices import MAX_SLICE, _cap, slice_by_person
+from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, manager_side, slice_by_person
 from routes.documents import _MAX_UPLOAD_BYTES
 from routes.expectations_ai import _compute_coverage
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
@@ -200,7 +200,7 @@ Rules:
 - Do not repeat what already exists below.
 - Give each item a short excerpt (under 160 characters) copied from the notes that supports it.
 - confidence is "high" only when the notes state it plainly, otherwise "low".
-- expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state.
+- expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state. Only what the person owes: leave out what the manager owes them ("I owe her ...", "I said I'd ...", "mine") and the manager's 1:1 rhythm with them (how often or how long they meet). Those are the manager's side; they belong in person_notes.
 
 Already on the manager's roster:
 {people}
@@ -421,6 +421,55 @@ def role_key(row: dict) -> str:
     return f"new:{_squash(new.get('job_role'))}|{new.get('job_level')}"
 
 
+def clean_statement(statement: str | None, reads: str, held: list[str]) -> str | None:
+    """The review row's one-line statement, held to what the drafter reads: no
+    number the person's own side doesn't state, and no sentence restating the
+    manager's side (a pair of words only a held-back sentence has, or the 1:1
+    rhythm). Pure."""
+    if not statement:
+        return None
+    cleaned, _ = strip_unsupported(" ".join(statement.split()), numbers_in(reads))
+    kept = [s for s in _sentences_of(cleaned) if not echoes_held_back(s, held, reads)]
+    return " ".join(kept) or None
+
+
+def _sentences_of(text: str) -> list[str]:
+    from intake_slices import sentences
+    return [text[s:e].strip() for s, e, _ in sentences(text or "") if text[s:e].strip()]
+
+
+def notes_for_held_back(drafts: dict) -> None:
+    """What the manager said they owe someone is held back from that person's
+    draft (intake_slices.for_drafting); it belongs in their private note. The
+    model usually proposes one, but not always, so code makes sure: for each
+    person with a held-back commitment no proposed note already covers, add a
+    note row with the manager's own sentences, verbatim. It is a review row
+    like any other: nothing is saved unless the manager keeps it. The 1:1
+    rhythm is left out: it is the meeting, not something owed. Pure."""
+    notes_by_person: dict[str, str] = {}
+    for n in drafts.get("person_notes", []):
+        notes_by_person[n["report_id"]] = notes_by_person.get(n["report_id"], "") + " " + (n.get("text") or "")
+    for row in drafts.get("expectations", []):
+        # A commitment plus the lines that only continue it ("Asked two weeks
+        # ago, waiting on her.") is one thing owed: covered or missing whole.
+        chunks: list[list[str]] = []
+        for s in row.get("held_back") or []:
+            side = manager_side(s)
+            if side == "commitment" or (side is None and not chunks):
+                chunks.append([s])
+            elif side is None:
+                chunks[-1].append(s)
+        covered = _bigrams(notes_by_person.get(row["report_id"], ""))
+        missing = [s for chunk in chunks if not (_bigrams(" ".join(chunk)) & covered) for s in chunk]
+        if not missing:
+            continue
+        text = _s(" ".join(missing), 600)
+        drafts["person_notes"].append({
+            "report_id": row["report_id"], "person_name": row["person_name"], "text": text,
+            "occurred_on": None, "excerpt": _s(missing[0], 200), "low": False,
+        })
+
+
 def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set, covered_roles: set,
                         rank: dict) -> list[dict]:
     """Attach each row's slice, say plainly why a row can't be drafted, order by
@@ -431,10 +480,13 @@ def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set
              "no_text"    (nothing typed is about them; files are not kept)."""
     for r in rows:
         piece = slices.get(r["report_id"])
-        r["slice"] = piece
+        # What the drafter will read: the slice without the manager's own side
+        # (what they owe the person, their 1:1 rhythm). The row shows both.
+        reads, held = for_drafting(piece) if piece else ("", [])
+        r["slice"] = reads or None
+        r["held_back"] = held
         if r.get("statement"):
-            cleaned, _ = strip_unsupported(r["statement"], numbers_in(piece) if piece else set())
-            r["statement"] = cleaned or None
+            r["statement"] = clean_statement(r["statement"], reads, held)
         rid = r.get("role_level_id")
         r["blocked"] = (
             "open_draft" if rid and rid in open_draft_roles
@@ -547,6 +599,7 @@ def parse_notes_dump(
     if drafts["expectations"]:
         _finish_expectations_for(supabase, user_id, ctx, drafts, typed=(text or "")[:MAX_CHARS],
                                  other_names=_other_names(parsed))
+        notes_for_held_back(drafts)
     shown, overflow = rank_and_cap(drafts, _soonest_reports(supabase, user_id))
     number_items(shown)
 
@@ -880,33 +933,37 @@ def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, save
             saved["roles"] += 1
         resolved.append((item, role_id, person))
 
-    to_draft = [(i, rid, p) for i, rid, p in resolved if i.draft]
-    out["waiting"] = [
-        {"report_id": p["id"], "person_name": p["name"], "role_level_id": rid}
-        for i, rid, p in resolved if not i.draft
-    ]
-    if not to_draft:
+    if not resolved:
         return out
 
+    # Every kept row is judged here, drafted or not. A role with a working
+    # draft or approved expectations is skipped with the reason the review row
+    # gave, whether or not the browser asked for a draft: it is never "waiting",
+    # so the receipt never offers to draft it (the 2026-09-30 Sofia bug).
     open_roles, covered = _role_status(supabase)
     slices = slice_by_person(body.text or "", list(roster.values()), others=body.other_names,
-                             want={p["id"] for _, _, p in to_draft})
+                             want={p["id"] for _, _, p in resolved}) if body.text else {}
     groups: dict[str, dict] = {}
-    for item, role_id, person in to_draft:
+    for item, role_id, person in resolved:
         first = _first(person["name"])
         if role_id in open_roles:
-            out["not_drafted"].append({"person_name": person["name"], "reason": f"{first} already has a working draft — this won't change it."})
+            out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"{first} already has a working draft — this won’t change it."})
             continue
         if role_id in covered:
-            out["not_drafted"].append({"person_name": person["name"], "reason": f"{first}'s role already has approved expectations — this won't change them."})
+            out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"{first}’s role already has approved expectations — this won’t change them."})
             continue
         piece = slices.get(person["id"])
-        if not piece:
-            out["not_drafted"].append({"person_name": person["name"], "reason": f"Nothing you typed is about {first}, so there's nothing to draft from."})
+        if body.text and not piece:
+            out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"Nothing you typed is about {first}, so there’s nothing to draft from. Attached files aren’t kept."})
             continue
-        statement = None
-        if item.statement:
-            statement, _ = strip_unsupported(" ".join(item.statement.split()), numbers_in(piece))
+        if not item.draft:
+            # Kept without a draft: the role and assignment are saved, and the
+            # receipt offers a second pass. (Without the text, which is only
+            # sent when a draft is queued, "nothing typed" is judged then.)
+            out["waiting"].append({"report_id": person["id"], "person_name": person["name"], "role_level_id": role_id})
+            continue
+        reads, held = for_drafting(piece)
+        statement = clean_statement(item.statement, reads, held)
         g = groups.setdefault(role_id, {"people": [], "slices": [], "statements": []})
         g["people"].append(person["name"])
         g["slices"].append(piece)
@@ -928,10 +985,20 @@ def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, save
                 raise
             # One open draft per role: someone opened one since we looked.
             for name in g["people"]:
-                out["not_drafted"].append({"person_name": name, "reason": f"{_first(name)} already has a working draft — this won't change it."})
+                out["not_drafted"].append({"report_id": next((p["id"] for p in roster.values() if p["name"] == name), None),
+                                           "person_name": name, "reason": f"{_first(name)} already has a working draft — this won’t change it."})
             continue
         out["draft_ids"].append(created["id"])
         out["drafting"].append({"draft_id": created["id"], "role_level_id": role_id, "people": g["people"]})
+    # Someone kept without a draft whose role was just drafted from someone
+    # else's part now shares that draft: offering them a second pass would
+    # only be refused.
+    drafted_roles = {d["role_level_id"]: d["people"] for d in out["drafting"]}
+    for w in [w for w in out["waiting"] if w["role_level_id"] in drafted_roles]:
+        out["waiting"].remove(w)
+        others = " and ".join(_first(n) for n in drafted_roles[w["role_level_id"]])
+        out["not_drafted"].append({"report_id": w["report_id"], "person_name": w["person_name"],
+                                   "reason": f"{_first(w['person_name'])} shares {others}’s role, which is being drafted now."})
     return out
 
 
