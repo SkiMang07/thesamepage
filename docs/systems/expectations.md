@@ -250,14 +250,22 @@ is **approved**: a draft is not yet a standard.
   "What you owe people" group: one row per thing the manager says they owe a
   person, as a short editable action ("Share quarterly priorities with Lena").
   When the model misses a held-back commitment, code adds it verbatim
-  (`commitments_for_held_back`; a promise said twice is one row; the 1:1 rhythm
-  is never owed). Kept rows save as open commitments the manager owns
+  (`commitments_for_held_back`; a promise said twice is one row; one the model
+  already gave anyone is not added again, since a sentence lands in the slice
+  of whoever it names; the 1:1 rhythm is never owed). Kept rows save as open commitments the manager owns
   (`committed_by = 'manager'`, `source_type = 'manual'`, no migration), not
   duplicated when an open one with the same words exists for that person; the
-  prep sheet and the person page already list open commitments. The group has
-  its own budget (`CAP_COMMITMENTS`, 20), like expectation rows, so the notes
-  cap (5) and the total cap (12) can never drop a promise. They used to be
-  proposed as notes, and the 2026-09-30 Dana rerun lost all three to that cap.
+  prep sheet and the person page already list open commitments. They used to
+  be proposed as notes, and the 2026-09-30 Dana rerun lost all three to the
+  five-note cap.
+- **Review budgets.** Everything per person has its own budget, so a bigger
+  team never loses rows to a shared cap: expectations (`CAP_EXPECTATIONS`, 15),
+  what the manager owes (`CAP_COMMITMENTS`, 20), and notes and role/team rows
+  (`CAP_PEOPLE`, 30 each; notes show the soonest 1:1 first). Only new teams or
+  departments and goals share the old cap (12 total, 5 each). Apply accepts the
+  same sizes. The one read has room for a large team (`PARSE_MAX_TOKENS`
+  12,000, `PARSE_TIMEOUT` 180 s): a 15-person monologue used ~3,300 output
+  tokens in ~21 s, and a cut-off answer would fail the whole review.
 - **Apply order.** Create the level if new (deduped on `job_role` + `job_level`,
   `role_family_id` null, so it lands Ungrouped), assign the person, then insert
   an open draft with `analysis = {status: "drafting", source: "batch", run,

@@ -76,10 +76,22 @@ CAP_EXPECTATIONS = 15
 # What the manager owes people: their own budget too, so a cap on notes or on
 # the total can never drop a promise.
 CAP_COMMITMENTS = 20
+# Per-person rows (a note about someone, their role or team) scale with the
+# team: a first brain-dump names everyone, and a fixed 5 cut the sixth person
+# off with "run it again with a shorter text". Own budget, sized for a large
+# team; the model only proposes rows for people the notes mention.
+CAP_PEOPLE = 30
+# The one read's output budget. Dana's six-person monologue used ~1,800
+# tokens; a 20-30 person team with a note, role, expectation and a promise
+# each can pass 5,000, and a cut-off answer is unparseable (the whole review
+# fails, not just the tail). Timeout sized to the budget.
+PARSE_MAX_TOKENS = 12000
+PARSE_TIMEOUT = 180.0
 MAX_OTHER_NAMES = 30
 GROUPS = ("org_units", "role_assignments", "expectations", "commitments", "goals", "person_notes")
 # Groups with their own budget, outside CAP_TOTAL / CAP_GROUP.
-OWN_BUDGET = {"expectations": CAP_EXPECTATIONS, "commitments": CAP_COMMITMENTS}
+OWN_BUDGET = {"expectations": CAP_EXPECTATIONS, "commitments": CAP_COMMITMENTS,
+              "person_notes": CAP_PEOPLE, "role_assignments": CAP_PEOPLE}
 UNIT_TYPES = ("department", "team")
 GOAL_LEVELS = ("company", "department", "team")
 _CONTEXT_GOALS = 30
@@ -474,10 +486,12 @@ def commitments_for_held_back(drafts: dict) -> None:
     manager's own sentences, verbatim, for them to edit. It is a review row
     like any other: nothing is saved unless the manager keeps it. The 1:1
     rhythm is left out: it is the meeting, not something owed. Pure."""
-    covered_by_person: dict[str, str] = {}
-    for c in drafts.get("commitments", []):
-        covered_by_person[c["report_id"]] = " ".join(
-            [covered_by_person.get(c["report_id"], ""), c.get("description") or "", c.get("excerpt") or ""])
+    # What the model already proposed, for anyone. A sentence goes to the
+    # person it names ("I said I'd pair her with Ava" sits in Carla's
+    # paragraph but lands in Ava's slice), so a promise the model rightly gave
+    # Carla must not come back as one owed to Ava.
+    proposed = _bigrams(" ".join(
+        f"{c.get('description') or ''} {c.get('excerpt') or ''}" for c in drafts.get("commitments", [])))
     for row in drafts.get("expectations", []):
         # A commitment plus the lines that only continue it ("Asked two weeks
         # ago, waiting on her.") is one thing owed: covered or missing whole.
@@ -488,7 +502,7 @@ def commitments_for_held_back(drafts: dict) -> None:
                 chunks.append([s])
             elif side is None:
                 chunks[-1].append(s)
-        covered = _bigrams(covered_by_person.get(row["report_id"], ""))
+        covered = set(proposed)
         for chunk in chunks:
             if manager_side(chunk[0]) != "commitment" or _bigrams(" ".join(chunk)) & covered:
                 continue
@@ -542,22 +556,21 @@ def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set
 
 
 def rank_and_cap(drafts: dict, soonest: list[str]) -> tuple[dict, int]:
-    """Cap what is shown. Items that close a setup step come first, then notes
-    about the person whose 1:1 is soonest, then the rest; a low-confidence item
-    sorts after a high one within its tier. -> (groups, overflow count)."""
+    """Cap what is shown. -> (groups, overflow count).
+
+    Team structure and goals share CAP_TOTAL (at most CAP_GROUP each), a
+    low-confidence item after a high one. Everything per person has its own
+    budget (OWN_BUDGET) so a bigger team never loses rows to a shared cap:
+    expectations (ordered by finish_expectations), what the manager owes,
+    roles, and notes, which show the person whose 1:1 is soonest first."""
     order = {rid: i for i, rid in enumerate(soonest)}
     candidates = []
     for group in GROUPS:
         if group in OWN_BUDGET:
             continue  # its own order and budget, never cut by CAP_TOTAL / CAP_GROUP
         for seq, item in enumerate(drafts.get(group, [])):
-            if group == "person_notes":
-                tier = 1 if item["report_id"] in order else 2
-                tie = order.get(item["report_id"], len(order))
-            else:
-                tier, tie = 0, 0
-            candidates.append((tier, item["low"], tie, GROUPS.index(group), seq, group, item))
-    candidates.sort(key=lambda c: c[:5])
+            candidates.append((item["low"], GROUPS.index(group), seq, group, item))
+    candidates.sort(key=lambda c: c[:3])
     shown: dict[str, list[dict]] = {g: [] for g in GROUPS}
     taken = 0
     for *_, group, item in candidates:
@@ -568,6 +581,8 @@ def rank_and_cap(drafts: dict, soonest: list[str]) -> tuple[dict, int]:
     overflow = len(candidates) - taken
     for group, cap in OWN_BUDGET.items():
         rows = drafts.get(group, [])
+        if group == "person_notes":
+            rows = sorted(rows, key=lambda n: (n["report_id"] not in order, order.get(n["report_id"], 0), n["low"]))
         shown[group] = rows[:cap]
         overflow += max(0, len(rows) - cap)
     return shown, overflow
@@ -628,7 +643,8 @@ def parse_notes_dump(
         raise HTTPException(status_code=422, detail="Add some notes or attach a file first")
 
     ctx = build_context(supabase, user_id)
-    raw = generate_text(build_prompt(ctx, notes), model=AI_DEFAULT_MODEL_HEAVY, max_tokens=5000, timeout=120.0)
+    raw = generate_text(build_prompt(ctx, notes), model=AI_DEFAULT_MODEL_HEAVY, max_tokens=PARSE_MAX_TOKENS,
+                        timeout=PARSE_TIMEOUT)
     parsed = _parse_json_object(raw)
     drafts = validate_parse(parsed, ctx, notes)
     unmatched = drafts.pop("unmatched_people")
@@ -765,10 +781,10 @@ class ExpectationItem(_Strict):
 
 class ApplyIn(_Strict):
     org_units: list[OrgUnitItem] = Field(default_factory=list, max_length=CAP_TOTAL)
-    role_assignments: list[RoleItem] = Field(default_factory=list, max_length=CAP_TOTAL)
+    role_assignments: list[RoleItem] = Field(default_factory=list, max_length=CAP_PEOPLE)
     expectations: list[ExpectationItem] = Field(default_factory=list, max_length=CAP_EXPECTATIONS)
     goals: list[GoalItem] = Field(default_factory=list, max_length=CAP_TOTAL)
-    person_notes: list[NoteItem] = Field(default_factory=list, max_length=CAP_TOTAL)
+    person_notes: list[NoteItem] = Field(default_factory=list, max_length=CAP_PEOPLE)
     commitments: list[CommitmentItem] = Field(default_factory=list, max_length=CAP_COMMITMENTS)
     # The typed text, sent back only when a draft is queued: each role's draft
     # is written from, and keeps, that person's slice of it. Never files.

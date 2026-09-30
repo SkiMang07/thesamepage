@@ -808,3 +808,17 @@ def test_what_the_manager_owes_is_proposed_as_a_commitment_not_a_note():
                "description": "Write Kwame's growth plan", "excerpt": "I'd write him a growth plan"}])
     assert len(by["kwame"]) == 1 and by["kwame"][0]["description"] == "Write Kwame's growth plan"
     assert len(by["lena"]) == 1
+
+
+def test_a_promise_the_model_gave_someone_else_is_not_added_again():
+    """"I said I'd pair her with Ava" is Carla's, and the model said so; the
+    slice rules put the sentence in Ava's slice. It must not come back as a
+    promise owed to Ava. A different held-back promise of Ava's still does."""
+    row = {"report_id": "ava", "person_name": "Ava Stone",
+           "held_back": ["I owe her the escalation runbook review.", "I said I'd pair her with Ava for shadowing."]}
+    drafts = {"expectations": [row], "person_notes": [], "commitments": [
+        {"report_id": "carla", "person_name": "Carla Diaz", "description": "Pair Carla with Ava for shadowing",
+         "excerpt": "I said I'd pair her with Ava for shadowing.", "due_date": None, "low": False}]}
+    nd.commitments_for_held_back(drafts)
+    added = [c for c in drafts["commitments"] if c["report_id"] == "ava"]
+    assert [c["description"] for c in added] == ["I owe her the escalation runbook review."]

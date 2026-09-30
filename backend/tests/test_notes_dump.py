@@ -201,11 +201,31 @@ def _drafts(n_notes=10, n_goals=8):
     }
 
 
-def test_cap_is_total_12_and_5_per_group_and_overflow_is_counted():
-    shown, overflow = nd.rank_and_cap(_drafts(), ["soon"])
-    assert len(shown["goals"]) == 5 and len(shown["person_notes"]) == 5
-    assert sum(len(v) for v in shown.values()) == 10
-    assert overflow == 18 - 10
+def test_shared_cap_is_5_per_group_for_structure_and_goals_and_overflow_is_counted():
+    drafts = _drafts()
+    drafts["org_units"] = [{"name": f"u{i}", "unit_type": "team", "low": False} for i in range(9)]
+    shown, overflow = nd.rank_and_cap(drafts, ["soon"])
+    assert len(shown["goals"]) == 5 and len(shown["org_units"]) == 5
+    assert overflow == (8 - 5) + (9 - 5)                        # notes are not in the shared cap
+
+
+def test_a_big_team_keeps_a_note_and_a_role_for_everyone():
+    """The 2026-09-30 Dana pass: a fixed 5 cut the sixth person off. Notes and
+    roles scale with the team, up to CAP_PEOPLE, and apply accepts them all."""
+    drafts = _drafts(n_notes=14, n_goals=0)
+    drafts["role_assignments"] = [{"report_id": f"r{i}", "low": False} for i in range(9)]
+    shown, overflow = nd.rank_and_cap(drafts, ["soon"])
+    assert len(shown["person_notes"]) == 14 and len(shown["role_assignments"]) == 9 and overflow == 0
+    drafts = _drafts(n_notes=nd.CAP_PEOPLE + 3, n_goals=0)
+    shown, overflow = nd.rank_and_cap(drafts, [])
+    assert len(shown["person_notes"]) == nd.CAP_PEOPLE and overflow == 3
+    body = nd.ApplyIn(person_notes=[{"report_id": "dr1", "text": f"n{i}"} for i in range(14)],
+                      role_assignments=[{"report_id": "dr1", "role_title": f"t{i}"} for i in range(9)])
+    assert len(body.person_notes) == 14 and len(body.role_assignments) == 9
+
+
+def test_the_read_has_room_for_a_big_team():
+    assert nd.PARSE_MAX_TOKENS >= 12000 and nd.PARSE_TIMEOUT >= 180
 
 
 def test_setup_closing_items_and_soonest_person_come_first_and_low_confidence_last():
