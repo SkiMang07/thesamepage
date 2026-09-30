@@ -770,26 +770,41 @@ def test_the_review_row_reads_and_states_only_the_persons_side():
     assert by["andre"]["statement"] == "A weekly written status and consistent delivery." and by["andre"]["held_back"] == []
 
 
-def test_what_the_manager_owes_is_proposed_as_their_private_note():
-    """Lena's quarterly priorities are Dana's debt: held back from Lena's draft,
-    and proposed as a note on Lena for Dana to keep, even when the model's
-    own notes missed it. A note that already covers it isn't doubled."""
+def test_what_the_manager_owes_is_proposed_as_a_commitment_not_a_note():
+    """Lena's quarterly priorities and Kwame's growth plan are Dana's debts:
+    held back from their drafts and proposed as commitments Dana owes, even
+    when the model proposed none. The 2026-09-30 rerun lost all three to the
+    five-note cap when they were notes. A commitment already covering one
+    isn't doubled, a promise said twice is one row, the 1:1 rhythm is not
+    owed, and notes are left alone."""
     from intake_slices import slice_by_person
     from tests.test_intake_slices import ROSTER
     slices = slice_by_person(DANA, ROSTER)
-    drafts = {
-        "expectations": [_row("lena", "Lena Fischer", role="rl_sre"), _row("kwame", "Kwame Mensah", role="rl_jr"),
-                         _row("andre", "Andre Okafor", role="rl_be")],
-        "person_notes": [{"report_id": "kwame", "person_name": "Kwame Mensah", "low": False,
-                          "text": "Promised him a growth plan at his 90-day mark; not written yet.", "excerpt": None}],
-    }
-    nd.finish_expectations(drafts["expectations"], slices=slices, open_draft_roles=set(), covered_roles=set(), rank={})
-    nd.notes_for_held_back(drafts)
-    by = {}
-    for n in drafts["person_notes"]:
-        by.setdefault(n["report_id"], []).append(n)
+    note = {"report_id": "kwame", "person_name": "Kwame Mensah", "low": False, "text": "Needs a lot of coaching.", "excerpt": None}
+
+    def run(commitments):
+        drafts = {
+            "expectations": [_row("lena", "Lena Fischer", role="rl_sre"), _row("kwame", "Kwame Mensah", role="rl_jr"),
+                             _row("andre", "Andre Okafor", role="rl_be")],
+            "person_notes": [dict(note)], "commitments": commitments,
+        }
+        nd.finish_expectations(drafts["expectations"], slices=slices, open_draft_roles=set(), covered_roles=set(), rank={})
+        nd.commitments_for_held_back(drafts)
+        by = {}
+        for c in drafts["commitments"]:
+            by.setdefault(c["report_id"], []).append(c)
+        assert drafts["person_notes"] == [note]
+        return by
+
+    by = run([])
     (lena,) = by["lena"]
-    assert lena["text"] == "I owe her quarterly priorities. Asked two weeks ago, waiting on her." and lena["low"] is False
-    assert lena["excerpt"] == "I owe her quarterly priorities."
-    assert len(by["kwame"]) == 1                          # the growth plan was already in his note; 1:1 rhythm isn't owed
+    assert lena["description"] == "I owe her quarterly priorities. Asked two weeks ago, waiting on her."
+    assert lena["excerpt"] == "I owe her quarterly priorities." and lena["low"] is False and lena["due_date"] is None
+    (kwame,) = by["kwame"]                                # "So, growth plan, mine." is the same promise
+    assert "growth plan" in kwame["description"] and "1:1" not in kwame["description"]
     assert "andre" not in by                              # nothing held back from Andre
+
+    by = run([{"report_id": "kwame", "person_name": "Kwame Mensah", "low": False, "due_date": None,
+               "description": "Write Kwame's growth plan", "excerpt": "I'd write him a growth plan"}])
+    assert len(by["kwame"]) == 1 and by["kwame"][0]["description"] == "Write Kwame's growth plan"
+    assert len(by["lena"]) == 1

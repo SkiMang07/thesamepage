@@ -20,9 +20,15 @@ unreviewed. The boundary in the voice rules is saving, not drafting. The model
 never rates a person and never fills a gap the text does not support. People are
 referred to by short refs (P1, R1) so the model cannot invent an id.
 
-Saved as: org_units, direct_reports (role / team), goals, and dr_capture_notes
+Saved as: org_units, direct_reports (role / team), goals, dr_capture_notes
 (private notes about a person; prep, nightly prep, the Scribe and assessment
-evidence already read them). No migration.
+evidence already read them), and commitments (what the manager says they owe a
+person: committed_by 'manager', source_type 'manual', open; the prep sheet and
+the person page already list open ones). No migration.
+
+What the manager owes is its own group with its own budget, never a note: a
+promise said aloud must not compete with notes for a slot (the 2026-09-30 Dana
+rerun lost all three to the note cap).
 
 Role expectations (batch intake, Build 3a; docs/EXPECTATIONS_BATCH_INTAKE_SCOPING.md):
 the same read also proposes, per person the notes describe, the role they hold
@@ -67,8 +73,13 @@ MIN_FILE_TEXT = 50
 # the manager needs to see more than MAX_ROLES of them to choose which roles to
 # draft first. They never compete with CAP_TOTAL.
 CAP_EXPECTATIONS = 15
+# What the manager owes people: their own budget too, so a cap on notes or on
+# the total can never drop a promise.
+CAP_COMMITMENTS = 20
 MAX_OTHER_NAMES = 30
-GROUPS = ("org_units", "role_assignments", "expectations", "goals", "person_notes")
+GROUPS = ("org_units", "role_assignments", "expectations", "commitments", "goals", "person_notes")
+# Groups with their own budget, outside CAP_TOTAL / CAP_GROUP.
+OWN_BUDGET = {"expectations": CAP_EXPECTATIONS, "commitments": CAP_COMMITMENTS}
 UNIT_TYPES = ("department", "team")
 GOAL_LEVELS = ("company", "department", "team")
 _CONTEXT_GOALS = 30
@@ -200,7 +211,8 @@ Rules:
 - Do not repeat what already exists below.
 - Give each item a short excerpt (under 160 characters) copied from the notes that supports it.
 - confidence is "high" only when the notes state it plainly, otherwise "low".
-- expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state. Only what the person owes: leave out what the manager owes them ("I owe her ...", "I said I'd ...", "mine") and the manager's 1:1 rhythm with them (how often or how long they meet). Those are the manager's side; they belong in person_notes.
+- expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state. Only what the person owes: leave out what the manager owes them ("I owe her ...", "I said I'd ...", "mine") and the manager's 1:1 rhythm with them (how often or how long they meet). Those are the manager's side: what the manager owes goes in commitments, the 1:1 rhythm is left out.
+- commitments: one entry per thing the manager says THEY owe a person ("I owe her quarterly priorities", "I said I'd write him a growth plan", "design doc feedback, I owe her"). description: a short plain action in the manager's terms, starting with a verb where it reads naturally ("Share quarterly priorities with Lena"), with no number or date the notes don't state. due_date only when the notes state a date. Not what the person owes, not the 1:1 rhythm, not a vague intention with nothing to deliver. A promise goes here, not in person_notes.
 
 Already on the manager's roster:
 {people}
@@ -219,6 +231,7 @@ Return one JSON object and nothing else:
   "org_units": [{{"name": "", "unit_type": "team" or "department", "parent_name": "" or null, "excerpt": "", "confidence": ""}}],
   "role_assignments": [{{"person": "P1", "role": "R1" or null, "role_title": "" or null, "org_unit_name": "" or null, "excerpt": "", "confidence": ""}}],
   "expectations": [{{"person": "P1", "role": "R1" or null, "job_role": "" or null, "job_level": 1-10 or null, "statement": "", "excerpt": "", "confidence": ""}}],
+  "commitments": [{{"person": "P1", "description": "", "due_date": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "goals": [{{"level": "company" or "department" or "team", "title": "", "success_metrics": "" or null, "org_unit_name": "" or null, "due_date": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "person_notes": [{{"person": "P1", "text": "", "occurred_on": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "unmatched_people": [{{"name": "", "excerpt": ""}}]
@@ -308,6 +321,20 @@ def validate_parse(parsed: dict, ctx: dict, notes: str) -> dict:
         })
 
     _validate_expectations(parsed, ctx, notes_sq, out, seen)
+
+    for it in parsed.get("commitments") or []:
+        if not isinstance(it, dict):
+            continue
+        person = people.get(it.get("person"))
+        description = _s(it.get("description"), 300)
+        if not person or not description or ("c", person["id"], description.lower()) in seen:
+            continue
+        seen.add(("c", person["id"], description.lower()))
+        out["commitments"].append({
+            "report_id": person["id"], "person_name": person["name"], "description": description,
+            "due_date": _iso_date(it.get("due_date")),
+            "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
+        })
 
     for it in parsed.get("goals") or []:
         if not isinstance(it, dict):
@@ -438,17 +465,19 @@ def _sentences_of(text: str) -> list[str]:
     return [text[s:e].strip() for s, e, _ in sentences(text or "") if text[s:e].strip()]
 
 
-def notes_for_held_back(drafts: dict) -> None:
+def commitments_for_held_back(drafts: dict) -> None:
     """What the manager said they owe someone is held back from that person's
-    draft (intake_slices.for_drafting); it belongs in their private note. The
-    model usually proposes one, but not always, so code makes sure: for each
-    person with a held-back commitment no proposed note already covers, add a
-    note row with the manager's own sentences, verbatim. It is a review row
+    draft (intake_slices.for_drafting). It is a commitment the manager owes,
+    so it is proposed as one. The model usually proposes it, but not always,
+    so code makes sure: for each person with a held-back commitment no
+    proposed commitment already covers, add a commitment row with the
+    manager's own sentences, verbatim, for them to edit. It is a review row
     like any other: nothing is saved unless the manager keeps it. The 1:1
     rhythm is left out: it is the meeting, not something owed. Pure."""
-    notes_by_person: dict[str, str] = {}
-    for n in drafts.get("person_notes", []):
-        notes_by_person[n["report_id"]] = notes_by_person.get(n["report_id"], "") + " " + (n.get("text") or "")
+    covered_by_person: dict[str, str] = {}
+    for c in drafts.get("commitments", []):
+        covered_by_person[c["report_id"]] = " ".join(
+            [covered_by_person.get(c["report_id"], ""), c.get("description") or "", c.get("excerpt") or ""])
     for row in drafts.get("expectations", []):
         # A commitment plus the lines that only continue it ("Asked two weeks
         # ago, waiting on her.") is one thing owed: covered or missing whole.
@@ -459,15 +488,18 @@ def notes_for_held_back(drafts: dict) -> None:
                 chunks.append([s])
             elif side is None:
                 chunks[-1].append(s)
-        covered = _bigrams(notes_by_person.get(row["report_id"], ""))
-        missing = [s for chunk in chunks if not (_bigrams(" ".join(chunk)) & covered) for s in chunk]
-        if not missing:
-            continue
-        text = _s(" ".join(missing), 600)
-        drafts["person_notes"].append({
-            "report_id": row["report_id"], "person_name": row["person_name"], "text": text,
-            "occurred_on": None, "excerpt": _s(missing[0], 200), "low": False,
-        })
+        covered = _bigrams(covered_by_person.get(row["report_id"], ""))
+        for chunk in chunks:
+            if manager_side(chunk[0]) != "commitment" or _bigrams(" ".join(chunk)) & covered:
+                continue
+            drafts["commitments"].append({
+                "report_id": row["report_id"], "person_name": row["person_name"],
+                "description": _s(" ".join(chunk), 300), "due_date": None,
+                "excerpt": _s(chunk[0], 200), "low": False,
+            })
+            # "So, growth plan, mine." after "I'd write him a growth plan" is
+            # the same promise said twice: one row.
+            covered |= _bigrams(" ".join(chunk))
 
 
 def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set, covered_roles: set,
@@ -516,8 +548,8 @@ def rank_and_cap(drafts: dict, soonest: list[str]) -> tuple[dict, int]:
     order = {rid: i for i, rid in enumerate(soonest)}
     candidates = []
     for group in GROUPS:
-        if group == "expectations":
-            continue  # its own order and budget: finish_expectations, CAP_EXPECTATIONS
+        if group in OWN_BUDGET:
+            continue  # its own order and budget, never cut by CAP_TOTAL / CAP_GROUP
         for seq, item in enumerate(drafts.get(group, [])):
             if group == "person_notes":
                 tier = 1 if item["report_id"] in order else 2
@@ -533,12 +565,16 @@ def rank_and_cap(drafts: dict, soonest: list[str]) -> tuple[dict, int]:
             continue
         shown[group].append(item)
         taken += 1
-    expectations = drafts.get("expectations", [])
-    shown["expectations"] = expectations[:CAP_EXPECTATIONS]
-    return shown, len(candidates) - taken + max(0, len(expectations) - CAP_EXPECTATIONS)
+    overflow = len(candidates) - taken
+    for group, cap in OWN_BUDGET.items():
+        rows = drafts.get(group, [])
+        shown[group] = rows[:cap]
+        overflow += max(0, len(rows) - cap)
+    return shown, overflow
 
 
-_KEY_PREFIX = {"org_units": "unit", "role_assignments": "role", "expectations": "exp", "goals": "goal", "person_notes": "note"}
+_KEY_PREFIX = {"org_units": "unit", "role_assignments": "role", "expectations": "exp",
+               "commitments": "owe", "goals": "goal", "person_notes": "note"}
 
 
 def number_items(groups: dict) -> dict:
@@ -599,7 +635,7 @@ def parse_notes_dump(
     if drafts["expectations"]:
         _finish_expectations_for(supabase, user_id, ctx, drafts, typed=(text or "")[:MAX_CHARS],
                                  other_names=_other_names(parsed))
-        notes_for_held_back(drafts)
+        commitments_for_held_back(drafts)
     shown, overflow = rank_and_cap(drafts, _soonest_reports(supabase, user_id))
     number_items(shown)
 
@@ -612,6 +648,7 @@ def parse_notes_dump(
         "proposed_goals": len(shown["goals"]),
         "proposed_notes": len(shown["person_notes"]),
         "proposed_expectations": len(shown["expectations"]),
+        "proposed_commitments": len(shown["commitments"]),
         "overflow": overflow,
         "unmatched_people": len(unmatched),
     })
@@ -706,6 +743,13 @@ class NoteItem(_Strict):
     text: str = Field(max_length=600)
 
 
+class CommitmentItem(_Strict):
+    # Something the manager owes this person. Saved open, committed_by manager.
+    report_id: str
+    description: str = Field(max_length=500)
+    due_date: str | None = None
+
+
 class ExpectationItem(_Strict):
     report_id: str
     # An existing role, or a new one by title and level (level editable on the
@@ -725,6 +769,7 @@ class ApplyIn(_Strict):
     expectations: list[ExpectationItem] = Field(default_factory=list, max_length=CAP_EXPECTATIONS)
     goals: list[GoalItem] = Field(default_factory=list, max_length=CAP_TOTAL)
     person_notes: list[NoteItem] = Field(default_factory=list, max_length=CAP_TOTAL)
+    commitments: list[CommitmentItem] = Field(default_factory=list, max_length=CAP_COMMITMENTS)
     # The typed text, sent back only when a draft is queued: each role's draft
     # is written from, and keeps, that person's slice of it. Never files.
     text: str | None = Field(default=None, max_length=MAX_CHARS)
@@ -762,7 +807,7 @@ def _first(name: str | None) -> str:
 
 def apply_items(supabase, user_id: str, org_id: str, body: ApplyIn) -> dict:
     check_draft_cap(body)
-    saved = {"org_units": 0, "roles": 0, "goals": 0, "notes": 0}
+    saved = {"org_units": 0, "roles": 0, "goals": 0, "notes": 0, "commitments": 0}
     skipped = 0
     refused: list[dict] = []
 
@@ -884,7 +929,46 @@ def apply_items(supabase, user_id: str, org_id: str, body: ApplyIn) -> dict:
         ).execute()
         saved["notes"] += 1
 
+    skipped += _apply_commitments(supabase, user_id, body, saved, refuse)
+
     return {"saved": saved, "skipped_existing": skipped, "refused": refused, **queued}
+
+
+def _apply_commitments(supabase, user_id: str, body: ApplyIn, saved: dict, refuse) -> int:
+    """What the manager owes people, as open commitments they own. The same
+    shape POST /api/commitments writes (source_type 'manual'); the prep sheet
+    and the person page read every open one. An open one with the same words
+    for the same person is not duplicated. -> how many were skipped."""
+    skipped = 0
+    if not body.commitments:
+        return skipped
+    mine = {
+        r["id"] for r in supabase.table("direct_reports").select("id").eq("manager_id", user_id).execute().data
+    }
+    open_rows = (
+        supabase.table("commitments").select("direct_report_id,description")
+        .eq("owner_id", user_id).eq("committed_by", "manager").eq("status", "open").execute().data
+    )
+    existing = {(r["direct_report_id"], " ".join((r.get("description") or "").split()).lower()) for r in open_rows}
+    for item in body.commitments:
+        description = " ".join(item.description.split())
+        if not description:
+            continue
+        if item.report_id not in mine:
+            refuse("commitment", "That person isn't on your team")
+            continue
+        key = (item.report_id, description.lower())
+        if key in existing:
+            skipped += 1
+            continue
+        due = _iso_date(item.due_date) if item.due_date else None
+        supabase.table("commitments").insert({
+            "owner_id": user_id, "direct_report_id": item.report_id, "committed_by": "manager",
+            "source_type": "manual", "description": description, "due_date": due, "status": "open",
+        }).execute()
+        existing.add(key)
+        saved["commitments"] += 1
+    return skipped
 
 
 def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, saved: dict, refuse) -> dict:
@@ -1023,12 +1107,13 @@ def apply_notes_dump(
 
     kept = sum(result["saved"].values())
     offered = (len(body.org_units) + len(body.role_assignments) + len(body.expectations)
-               + len(body.goals) + len(body.person_notes))
+               + len(body.goals) + len(body.person_notes) + len(body.commitments))
     analytics.capture(user_id, "notes_dump_applied", {
         "kept_org_units": result["saved"]["org_units"],
         "kept_roles": result["saved"]["roles"],
         "kept_goals": result["saved"]["goals"],
         "kept_notes": result["saved"]["notes"],
+        "kept_commitments": result["saved"]["commitments"],
         "kept_expectations": len(body.expectations),
         "roles_created": result["roles_created"],
         "drafts_queued": len(result["drafting"]),

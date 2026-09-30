@@ -244,10 +244,20 @@ is **approved**: a draft is not yet a standard.
   left out. The review row shows what the draft reads, the held-back lines, and
   a statement cleaned the same way (`clean_statement`: no number outside what
   the draft reads, no sentence repeating a word pair only a held-back line has,
-  no 1:1 rhythm). What the manager owes someone is proposed as that person's
-  private note, verbatim, when the model's own notes don't already cover it
-  (`notes_for_held_back`); the 1:1 rhythm is not. The parse and description
-  prompts also say this, but the code is what enforces it.
+  no 1:1 rhythm). The parse and description prompts also say this, but the
+  code is what enforces it.
+- **What the manager owes becomes a commitment.** The same read proposes a
+  "What you owe people" group: one row per thing the manager says they owe a
+  person, as a short editable action ("Share quarterly priorities with Lena").
+  When the model misses a held-back commitment, code adds it verbatim
+  (`commitments_for_held_back`; a promise said twice is one row; the 1:1 rhythm
+  is never owed). Kept rows save as open commitments the manager owns
+  (`committed_by = 'manager'`, `source_type = 'manual'`, no migration), not
+  duplicated when an open one with the same words exists for that person; the
+  prep sheet and the person page already list open commitments. The group has
+  its own budget (`CAP_COMMITMENTS`, 20), like expectation rows, so the notes
+  cap (5) and the total cap (12) can never drop a promise. They used to be
+  proposed as notes, and the 2026-09-30 Dana rerun lost all three to that cap.
 - **Apply order.** Create the level if new (deduped on `job_role` + `job_level`,
   `role_family_id` null, so it lands Ungrouped), assign the person, then insert
   an open draft with `analysis = {status: "drafting", source: "batch", run,

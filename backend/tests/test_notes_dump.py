@@ -245,7 +245,7 @@ def test_parse_saves_nothing_and_the_event_has_no_text(client, monkeypatch):
     (event, props), = [s for s in sent if s[0] == "notes_dump_parsed"]
     assert props == {
         "input_size": "under_1k", "files": 0, "truncated": False, "proposed_org_units": 0,
-        "proposed_roles": 0, "proposed_goals": 1, "proposed_notes": 1, "proposed_expectations": 0,
+        "proposed_roles": 0, "proposed_goals": 1, "proposed_notes": 1, "proposed_expectations": 0, "proposed_commitments": 0,
         "overflow": 0, "unmatched_people": 1,
     }
     assert all(isinstance(v, (int, bool)) or v in {"under_1k"} for v in props.values())
@@ -297,7 +297,7 @@ def test_apply_saves_only_what_it_is_given_in_order_and_is_idempotent(apply_clie
     }
     r = c.post("/api/onboarding/notes-dump/apply", json=payload)
     assert r.status_code == 200, r.text
-    assert r.json()["saved"] == {"org_units": 1, "roles": 1, "goals": 1, "notes": 1}
+    assert r.json()["saved"] == {"org_units": 1, "roles": 1, "goals": 1, "notes": 1, "commitments": 0}
     unit = next(u for u in db.rows["org_units"] if u["name"] == "Onboarding")
     assert unit["parent_unit_id"] == "ou1" and unit["org_id"] == "org1"
     dr1 = next(d for d in db.rows["direct_reports"] if d["id"] == "dr1")
@@ -307,7 +307,7 @@ def test_apply_saves_only_what_it_is_given_in_order_and_is_idempotent(apply_clie
     assert db.rows["dr_capture_notes"][0]["manager_id"] == "u1"
 
     again = c.post("/api/onboarding/notes-dump/apply", json=payload).json()
-    assert again["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0}
+    assert again["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0, "commitments": 0}
     assert again["skipped_existing"] >= 3
     assert len(db.rows["dr_capture_notes"]) == 1 and len([g for g in db.rows["goals"] if g["title"] == "Ship onboarding v2"]) == 1
 
@@ -327,7 +327,7 @@ def test_apply_refuses_someone_elses_person_and_a_missing_role(apply_client):
         "person_notes": [{"report_id": "other", "text": "x"}],
     })
     body = r.json()
-    assert body["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0}
+    assert body["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0, "commitments": 0}
     assert len(body["refused"]) == 4
     assert db.rows["dr_capture_notes"] == []
 
@@ -353,3 +353,64 @@ def test_skipped_event_has_no_properties(client):
     c, _, sent = client
     assert c.post("/api/telemetry/notes-dump-skipped").status_code == 200
     assert ("notes_dump_skipped", {}) in sent
+
+
+# ── what the manager owes: commitments ───────────────────────────────────
+
+def test_prompt_asks_for_what_the_manager_owes_as_commitments():
+    prompt = nd.build_prompt(_ctx(), "I owe Priya the onboarding plan.")
+    assert '"commitments": [' in prompt and "A promise goes here, not in person_notes" in prompt
+
+
+def test_validate_keeps_a_commitment_on_a_real_person_only():
+    notes = "I owe Priya the onboarding plan by Friday."
+    out = nd.validate_parse({"commitments": [
+        {"person": "P1", "description": "Share the onboarding plan with Priya", "due_date": "2026-10-09",
+         "excerpt": "I owe Priya the onboarding plan", "confidence": "high"},
+        {"person": "P1", "description": "Share the onboarding plan with Priya"},   # duplicate
+        {"person": "P9", "description": "Nobody"},                                # not on the roster
+        {"person": "P2", "description": "  "},                                    # empty
+    ]}, _ctx(), notes)
+    (c,) = out["commitments"]
+    assert c["report_id"] == "dr1" and c["due_date"] == "2026-10-09" and c["low"] is False
+    assert c["excerpt"] == "I owe Priya the onboarding plan"
+
+
+def test_commitments_have_their_own_budget_and_never_crowd_out_notes():
+    drafts = {
+        "org_units": [], "role_assignments": [], "expectations": [], "goals": [],
+        "person_notes": [{"report_id": f"n{i}", "text": "x", "low": False} for i in range(5)],
+        "commitments": [{"report_id": f"c{i}", "description": "x", "low": False} for i in range(nd.CAP_COMMITMENTS + 1)],
+    }
+    shown, overflow = nd.rank_and_cap(drafts, [])
+    assert len(shown["person_notes"]) == 5
+    assert len(shown["commitments"]) == nd.CAP_COMMITMENTS and overflow == 1
+
+
+def test_apply_saves_what_the_manager_owes_as_an_open_manager_commitment_once(apply_client):
+    c, db, sent = apply_client
+    payload = {"commitments": [
+        {"report_id": "dr1", "description": "Share  the onboarding plan with Priya", "due_date": "2026-10-09"},
+        {"report_id": "dr2", "description": "Write Sam's growth plan", "due_date": "not a date"},
+    ], "proposed": 2}
+    body = c.post("/api/onboarding/notes-dump/apply", json=payload).json()
+    assert body["saved"]["commitments"] == 2 and body["refused"] == []
+    rows = db.rows["commitments"]
+    assert {r["committed_by"] for r in rows} == {"manager"} and {r["status"] for r in rows} == {"open"}
+    assert {r["source_type"] for r in rows} == {"manual"} and {r["owner_id"] for r in rows} == {"u1"}
+    priya = next(r for r in rows if r["direct_report_id"] == "dr1")
+    assert priya["description"] == "Share the onboarding plan with Priya" and priya["due_date"] == "2026-10-09"
+    assert next(r for r in rows if r["direct_report_id"] == "dr2")["due_date"] is None
+
+    again = c.post("/api/onboarding/notes-dump/apply", json=payload).json()
+    assert again["saved"]["commitments"] == 0 and again["skipped_existing"] == 2 and len(db.rows["commitments"]) == 2
+    applied = [p for e, p in sent if e == "notes_dump_applied"]
+    assert applied[0]["kept_commitments"] == 2 and applied[1]["kept_commitments"] == 0
+
+
+def test_apply_refuses_a_commitment_to_someone_elses_person(apply_client):
+    c, db, _ = apply_client
+    body = c.post("/api/onboarding/notes-dump/apply", json={
+        "commitments": [{"report_id": "other", "description": "x"}]}).json()
+    assert body["saved"]["commitments"] == 0 and len(body["refused"]) == 1
+    assert db.rows.get("commitments", []) == []

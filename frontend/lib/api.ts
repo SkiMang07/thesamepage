@@ -2075,6 +2075,18 @@ export type NotesDumpNote = {
   excerpt: string | null;
   low: boolean;
 };
+// Something the manager said they owe a person ("I owe her quarterly
+// priorities"). Saved as an open commitment the manager owns; the prep sheet
+// lists it. Its own budget on the server, so no cap on notes can drop it.
+export type NotesDumpCommitment = {
+  key: string;
+  report_id: string;
+  person_name: string;
+  description: string;
+  due_date: string | null;
+  excerpt: string | null;
+  low: boolean;
+};
 // One person the notes describe expectations for. The role is an existing
 // level (role_level_id) or a new one (new_role, level editable). `slice` is
 // what they said about that person: the only text their role's draft sees.
@@ -2103,6 +2115,7 @@ export type NotesDumpDraft = {
   org_units: NotesDumpUnit[];
   role_assignments: NotesDumpRole[];
   expectations: NotesDumpExpectation[];
+  commitments: NotesDumpCommitment[];
   goals: NotesDumpGoal[];
   person_notes: NotesDumpNote[];
   unmatched_people: { name: string; excerpt: string | null }[];
@@ -2125,6 +2138,7 @@ export type NotesDumpApplyBody = {
   role_assignments: { report_id: string; role_level_id: string | null; role_title: string | null; org_unit_name: string | null }[];
   goals: { level: string; title: string; success_metrics: string | null; org_unit_name: string | null; due_date: string | null }[];
   person_notes: { report_id: string; text: string }[];
+  commitments?: { report_id: string; description: string; due_date: string | null }[];
   expectations?: NotesDumpExpectationBody[];
   text?: string;
   other_names?: string[];
@@ -2133,7 +2147,7 @@ export type NotesDumpApplyBody = {
   seconds_to_confirm: number;
 };
 export type NotesDumpApplyResult = {
-  saved: { org_units: number; roles: number; goals: number; notes: number };
+  saved: { org_units: number; roles: number; goals: number; notes: number; commitments: number };
   skipped_existing: number;
   refused: { kind: string; reason: string }[];
   roles_created: number;

@@ -17,6 +17,10 @@
 // a draft is queued, because each role's draft keeps that person's slice of it.
 // The privacy box says so. Attached files are never sent back or kept.
 //
+// What the manager owes people ("I owe her quarterly priorities") is its own
+// section, saved as open commitments they own, never as a note: the prep sheet
+// lists open commitments, and a promise must not compete with notes for a slot.
+//
 // Voice: literal labels, no cheer. Counts and fixed values only go to analytics
 // (sent by the server; the browser sends only how many rows were edited).
 
@@ -162,6 +166,9 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
         })),
         person_notes: draft.person_notes.filter((n) => on(n.key)).map((n) => ({
           report_id: n.report_id, text: val(n.key, n.text),
+        })),
+        commitments: (draft.commitments ?? []).filter((c) => on(c.key)).map((c) => ({
+          report_id: c.report_id, description: val(c.key, c.description), due_date: c.due_date,
         })),
         expectations: expRows.filter((e) => on(e.key)).map((e) => expectationBody(e, drafting(e))),
         // Only when a draft is queued: each role's draft keeps that person's part.
@@ -453,6 +460,8 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                           <p className="mt-1.5">
                             Left out as yours, not {firstName(e.person_name)}’s (what you owe them, or your 1:1 rhythm):{" "}
                             {(e.held_back ?? []).map((s) => `“${s}”`).join(" ")}
+                            {(draft.commitments ?? []).some((c) => c.report_id === e.report_id) &&
+                              " What you owe them is under What you owe people."}
                           </p>
                         )}
                       </details>
@@ -460,6 +469,23 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                   </Row>
                 );
               })}
+            </Section>
+
+            <Section title="What you owe people" show={(draft.commitments ?? []).length > 0}>
+              {(draft.commitments ?? []).map((c) => (
+                <Row key={c.key} rowKey={c.key} kept={kept} setKept={setKept} excerpt={c.excerpt} low={c.low}
+                  label={`You owe ${firstName(c.person_name)}${c.due_date ? ` · due ${c.due_date}` : ""}`}>
+                  <input
+                    aria-label={`What you owe ${c.person_name}`}
+                    className={INPUT}
+                    value={edits[c.key] ?? c.description}
+                    onChange={(e) => setEdits({ ...edits, [c.key]: e.target.value })}
+                  />
+                  <p className="mt-1 text-xs text-ink-muted">
+                    Saved as a commitment you owe {firstName(c.person_name)}. It’s on your prep sheet for them until you mark it done.
+                  </p>
+                </Row>
+              ))}
             </Section>
 
             <Section title="Goals" show={draft.goals.length > 0}>
@@ -598,6 +624,7 @@ function allRows(d: NotesDumpDraft): FlatRow[] {
     ...d.expectations.map((r) => ({ key: r.key, low: r.low, original: r.new_role?.job_role ?? "" })),
     ...d.goals.map((r) => ({ key: r.key, low: r.low, original: r.title })),
     ...d.person_notes.map((r) => ({ key: r.key, low: r.low, original: r.text })),
+    ...(d.commitments ?? []).map((r) => ({ key: r.key, low: r.low, original: r.description })),
   ];
 }
 
@@ -609,8 +636,12 @@ function receiptLine(r: NotesDumpApplyResult) {
     s.roles && plural(s.roles, "role or team assignment", "role or team assignments"),
     s.goals && plural(s.goals, "goal", "goals"),
     s.notes && plural(s.notes, "note about a person", "notes about people"),
+    s.commitments && plural(s.commitments, "thing you owe someone", "things you owe people"),
   ].filter(Boolean);
-  return parts.length ? parts.join(", ") : "Nothing was saved";
+  if (parts.length) return parts.join(", ");
+  // Drafts queued with nothing else new is not "nothing": the drafts are the result.
+  if (r.drafting.length) return `${plural(r.drafting.length, "first draft", "first drafts")} started`;
+  return "Nothing new was saved";
 }
 
 function readable(e: unknown) {
