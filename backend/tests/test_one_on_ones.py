@@ -116,6 +116,26 @@ def test_confirmed_follow_ups_are_explicit_prep_grounding():
     assert "No additional notes were added" in prompt
 
 
+def test_an_empty_record_is_not_reported_as_meetings_not_happening():
+    # Notes exist but no 1:1 is entered: the general prompt (not the bare
+    # first-1:1 one) must not let an empty record read as a relationship fact.
+    prompt = _build_prep_prompt(
+        report_name="Tomás Ibarra",
+        raw_notes="Promised him a stretch project in April. Weekly, thirty minutes.",
+        open_commitments=[],
+        recent_summaries=[],
+        days_since_last=None,
+        cadence_days=21,
+    )
+    body = str(prompt)
+    assert "No 1:1 with this person has been entered in this app yet" in body
+    assert "says nothing about whether the two of them have met before" in body
+    assert "have not been happening" in body and "Never say or imply" in body
+    assert "This does not mean none happened" in body
+    assert "No prior 1:1 notes on record" not in body
+    assert "This is the first logged 1:1" not in body
+
+
 def test_reviewed_workspace_signals_are_explicit_prep_grounding():
     prompt = _build_prep_prompt(
         report_name="Maya Chen",

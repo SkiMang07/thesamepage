@@ -293,11 +293,15 @@ def _build_prep_prompt(
 ) -> str:
     # --- Recency context ---
     if days_since_last is None:
+        # An empty record is the app's gap, not the relationship's. The manager
+        # may have met this person every week; nothing has been entered here.
         recency_note = (
-            "This is the first logged 1:1 with this person. "
-            "Treat it as a foundation-setting conversation: establish communication style, "
-            "understand their goals and current challenges, and set expectations for how "
-            "you'll work together."
+            "No 1:1 with this person has been entered in this app yet. That says nothing about "
+            "whether the two of them have met before, how often, or how well it has gone. "
+            "Never say or imply that 1:1s have not been happening, have been inconsistent, or "
+            "need a reset or restart unless the manager's own notes say so. Do not call this "
+            "\"the first logged 1:1\" or \"the first real conversation\" in the output. "
+            "Use only what the manager's notes and the record below state about the relationship."
         )
     elif days_since_last > cadence_days:
         recency_note = (
@@ -313,7 +317,7 @@ def _build_prep_prompt(
     if recent_summaries:
         history_block = "\n".join(f"  • {s}" for s in recent_summaries)
     else:
-        history_block = "  (No prior 1:1 notes on record.)"
+        history_block = "  (No 1:1 notes have been entered in this app. This does not mean none happened.)"
 
     # --- Open commitments (either side can owe one — committed_by) ---
     def _owner_label(c: dict) -> str:
