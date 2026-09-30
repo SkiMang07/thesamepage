@@ -746,7 +746,7 @@ function CreateRoleModal({
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-medium text-ink">Create a new role</h3>
         <p className="mt-1 text-xs text-ink-secondary">
-          Starts a new ladder at L1 — add more levels later from Roles &amp; expectations.
+          Adds the role. Levels can be added later from Roles &amp; expectations.
         </p>
         <input
           autoFocus
@@ -838,8 +838,8 @@ function CreateTeamModal({
 
 // The expectations chip — ✓ when the assigned role has configured
 // expectations, amber "no role" when nothing's assigned yet, amber
-// "Draft expectations" (deep-links into the Expectations section's AI
-// draft flow) when a role is assigned but has zero configured items.
+// "Add expectations" (deep-links into the Expectations section's AI draft
+// flow) when a role is assigned but has zero configured items.
 function ExpectationsChip({
   person,
   roleLevelId,
@@ -860,7 +860,7 @@ function ExpectationsChip({
       onClick={() => onDraft(roleLevelId)}
       className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
     >
-      Draft expectations
+      Add expectations
     </button>
   );
 }
@@ -1181,6 +1181,22 @@ function PeopleSection({
     }
   }
 
+  // One team for everyone not yet in one (setup step 1). Sequential, so a
+  // failure stops at the person it failed on and the rest stay unplaced.
+  async function placeUnplaced(orgUnitId: string) {
+    if (!orgUnitId) return;
+    for (const r of reports.filter((p) => !p.org_unit_id)) {
+      try {
+        const updated = await assignReportOrgUnit(r.id, r, orgUnitId);
+        setReports((rs) => rs.map((x) => (x.id === r.id ? { ...x, org_unit_id: updated.org_unit_id ?? orgUnitId } : x)));
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "Failed to assign team");
+        break;
+      }
+    }
+    loadSetupStatus();
+  }
+
   async function handleCreateRole(name: string) {
     const family = await createRoleFamily({ name });
     const level = await createRoleLevel({ job_role: name, job_level: 1, role_family_id: family.id });
@@ -1243,6 +1259,7 @@ function PeopleSection({
   }
 
   const visibleReports = filterUnitId ? reports.filter((r) => r.org_unit_id === filterUnitId) : reports;
+  const unplacedCount = reports.filter((r) => !r.org_unit_id).length;
   const filterUnitName = filterUnitId ? orgUnits.find((u) => u.id === filterUnitId)?.name : null;
 
   return (
@@ -1277,6 +1294,25 @@ function PeopleSection({
           2 is the role/team pickers. Previously a single flex row where the
           pickers crowded out the name, which is the row's most important
           text. */}
+      {unplacedCount > 1 && orgUnits.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-ink-secondary">
+          <label htmlFor="place-all">{unplacedCount} people aren&apos;t in a team. Put them all in</label>
+          <select
+            id="place-all"
+            value=""
+            onChange={(e) => void placeUnplaced(e.target.value)}
+            className="w-44 truncate rounded-md border border-control px-2 py-1.5 text-sm text-ink"
+          >
+            <option value="">Choose a team</option>
+            {orgUnits.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <ul className="mt-6 space-y-2">
         {visibleReports.map((r) => {
           const person = peopleById.get(r.id);
@@ -1328,6 +1364,14 @@ function PeopleSection({
         {visibleReports.length === 0 && reports.length > 0 && (
           <p className="py-2 text-sm text-ink-secondary">
             No one in {filterUnitName ?? "this unit"} yet.{" "}
+            {unplacedCount > 0 && filterUnitId && (
+              <>
+                <button onClick={() => void placeUnplaced(filterUnitId)} className="underline hover:text-ink-body">
+                  Put the {unplacedCount} {unplacedCount === 1 ? "person" : "people"} without a team here
+                </button>
+                {" or "}
+              </>
+            )}
             <button onClick={onClearFilter} className="underline hover:text-ink-body">
               Show everyone
             </button>

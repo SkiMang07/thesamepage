@@ -32,7 +32,7 @@ import NoteField from "@/components/NoteField";
 // Where each "Built without" label is fixed (setup inputs the sheet was built
 // without; the labels come from prep_built_without() on the server).
 const BUILT_WITHOUT_HREF: Record<string, string> = {
-  "team and org": "/app/org",
+  "team and org": "/app/settings?section=people",
   "role expectations": "/app/expectations",
   "org goals": "/app/goals",
   "team goals": "/app/goals",

@@ -49,13 +49,18 @@ const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? "";
 const countWord = (n: number) =>
   ["No one", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"][n] ?? String(n);
 
-// One name per line (commas too). List markers are stripped, blanks and
-// repeats dropped, and the step-1 name left out, case-insensitively.
+// One name per line. List markers are stripped, and so is a trailing
+// "(platform, remote)" note, which is not part of the name and may hold commas.
+// Blanks and repeats are dropped, and the step-1 name left out,
+// case-insensitively.
 function parseRoster(text: string, exclude: string): string[] {
   const seen = new Set([exclude.trim().toLowerCase()]);
   const out: string[] = [];
-  for (const raw of text.split(/[\n,]/)) {
-    const name = raw.replace(/^\s*([-•*]|\d+[.)])\s*/, "").trim();
+  for (const raw of text.split("\n")) {
+    const name = raw
+      .replace(/^\s*([-•*]|\d+[.)])\s*/, "")
+      .replace(/\s*[(\[][^)\]]*[)\]]\s*$/, "")
+      .trim();
     const key = name.toLowerCase();
     if (!name || seen.has(key)) continue;
     seen.add(key);

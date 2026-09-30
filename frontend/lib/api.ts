@@ -1940,7 +1940,7 @@ export type ExpectationQueueEntry = {
 };
 
 export type OnboardingSteps = {
-  org: { done: boolean; people: number; people_without_team: number; units: number };
+  org: { done: boolean; people: number; people_without_team: number; people_without_role: number; units: number };
   expectations: {
     done: boolean;
     blocked: boolean;

@@ -1,7 +1,7 @@
 "use client";
 
 // Setup card on Mission Control (docs/design-proposals/2026-09-29-onboarding-path/
-// SETUP_MODE_BRIEF.md). Setup is three things: team and org, role expectations,
+// SETUP_MODE_BRIEF.md). Setup is three things: team and roles, role expectations,
 // and goals. The server derives them from real records
 // (backend/routes/onboarding.py); this card only shows them. It renders nothing
 // once the manager is set up, or when the status could not be read.
@@ -172,11 +172,11 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
   return [
     {
       key: "org",
-      title: "Team and org",
-      changes: "Puts each person in a team, so a prep sheet knows who they work alongside.",
+      title: "Team and roles",
+      changes: "Puts each person in a team and gives them a role, so a prep sheet knows who they work alongside and what they do.",
       time: "About 3 minutes",
-      action: "Set up team and org",
-      href: "/app/org",
+      action: "Place your people",
+      href: "/app/settings?section=people",
       done: org.done,
       blocked: false,
       status: org.done
@@ -185,7 +185,9 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
           ? "No direct reports yet"
           : org.units === 0
             ? "No teams yet"
-            : `${plural(org.people_without_team, "person", "people")} not in a team`,
+            : org.people_without_team > 0
+              ? `${plural(org.people_without_team, "person", "people")} not in a team`
+              : `${plural(org.people_without_role, "person", "people")} without a role`,
     },
     {
       key: "expectations",
@@ -202,7 +204,7 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       status: exp.done
         ? "Done"
         : exp.blocked
-          ? "Needs team and org"
+          ? "Needs team and roles"
           : exp.people_without_role > 0
             ? `${plural(exp.people_without_role, "person", "people")} without a role`
             : `${exp.roles_covered} of ${plural(exp.roles_in_use, "role", "roles")} have expectations${

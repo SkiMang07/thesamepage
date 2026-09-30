@@ -39,6 +39,14 @@ def test_org_needs_people_a_unit_and_everyone_placed():
     assert steps["org"]["people_without_team"] == 1
 
 
+def test_org_also_needs_every_person_to_have_a_role():
+    people = _reports(1) + [{"id": "n", "role_level_id": None, "org_unit_id": "u1"}]
+    steps = _all_true(reports=people)
+    assert not steps["org"]["done"]
+    assert steps["org"]["people_without_role"] == 1
+    assert steps["org"]["people_without_team"] == 0
+
+
 def test_expectations_wait_on_org_and_cover_every_role_in_use():
     steps = _all_true(reports=_reports(2, unit=None))
     assert steps["expectations"]["blocked"] is True
@@ -56,6 +64,7 @@ def test_expectations_wait_on_org_and_cover_every_role_in_use():
 def test_a_person_without_a_role_blocks_expectations():
     people = _reports(1) + [{"id": "n", "role_level_id": None, "org_unit_id": "u1"}]
     steps = _all_true(reports=people)
+    assert steps["expectations"]["blocked"] is True
     assert not steps["expectations"]["done"]
     assert steps["expectations"]["people_without_role"] == 1
 
@@ -644,7 +653,7 @@ def test_the_receipt_never_uses_watching_words_or_cheer():
 def test_step_targets_mirror_what_the_card_offers():
     steps = _all_true(goal_levels={"team"}, queue=[{"report_id": "p9", "person_name": "Sam Lee", "role_level_id": None,
                                                     "role_label": None, "next_1on1_on": None}])
-    assert step_target(steps, "org") == {"label": "Set up team and org", "href": "/app/org"}
+    assert step_target(steps, "org") == {"label": "Place your people", "href": "/app/settings?section=people"}
     assert step_target(steps, "expectations") == {"label": "Pick a role for Sam", "href": "/app/expectations/new?assign=p9"}
     assert step_target(steps, "goals")["href"] == "/app/dashboard?setup=goals"
     steps = _all_true(queue=[{"report_id": "p9", "person_name": "Sam Lee", "role_level_id": "r4",

@@ -8,11 +8,12 @@ SETUP_MODE_BRIEF.md):
   activated  a prep sheet exists. Reached in the first run.
   set up     three things hold: org, expectations, goals.
                org           at least one org unit, and every active direct
-                             report sits in one
-               expectations  every active direct report has a role, and every
-                             role in use has expectations configured (approved:
-                             a draft waiting for review doesn't count, but the
-                             step says it is waiting and points at it)
+                             report sits in one and has a role (one screen:
+                             Settings > People & structure)
+               expectations  every role in use has expectations configured
+                             (approved: a draft waiting for review doesn't
+                             count, but the step says it is waiting and points
+                             at it)
                goals         an org-level goal (company or department) and a
                              team goal
   onboarded  set up, plus a logged 1:1, plus a later prep sheet for the same
@@ -103,7 +104,7 @@ def evaluate(
         key=lambda r: (r.get("name") or "").lower(),
     )
 
-    org_done = people > 0 and unit_count > 0 and without_team == 0
+    org_done = people > 0 and unit_count > 0 and without_team == 0 and without_role == 0
     exp_done = people > 0 and without_role == 0 and roles_covered == len(roles_in_use)
     has_org_goal = bool(goal_levels & ORG_LEVELS)
     has_team_goal = "team" in goal_levels
@@ -113,6 +114,7 @@ def evaluate(
             "done": org_done,
             "people": people,
             "people_without_team": without_team,
+            "people_without_role": without_role,
             "units": unit_count,
         },
         "expectations": {
@@ -197,7 +199,7 @@ def snooze_days(dismissals: int) -> int:
 
 
 STEP_LINE = {
-    "org": "Puts each person in a team, so a prep sheet knows who they work alongside.",
+    "org": "Puts each person in a team and gives them a role, so a prep sheet knows who they work alongside and what they do.",
     "expectations": "Gives the sheet a standard to hold each person\u2019s work against.",
     "goals": "Links each person\u2019s work to the goals it serves.",
 }
@@ -207,7 +209,7 @@ def step_target(steps: dict, key: str) -> dict:
     """The label and link for a step's one action, for surfaces outside the setup
     card (the Mission Control candidate). Mirrors what the card offers."""
     if key == "org":
-        return {"label": "Set up team and org", "href": "/app/org"}
+        return {"label": "Place your people", "href": "/app/settings?section=people"}
     if key == "expectations":
         waiting = steps["expectations"].get("drafts_to_review") or 0
         if waiting:
