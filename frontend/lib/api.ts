@@ -2486,6 +2486,10 @@ export type RoleCompose = {
   items: RoleItem[];
   questions: RoleQuestion[];
   notes: string[];
+  // Supporting documents read for this draft (never stored), and the figures
+  // they state — passed back to openRoleDraft so those figures stay in wording.
+  document_names: string[];
+  document_numbers: string[];
 };
 
 export const getRolesOverview = (): Promise<RolesOverview> => authedFetch("/api/role-expectations/overview");
@@ -2495,13 +2499,24 @@ export const getRoleWorkspace = (roleLevelId: string): Promise<RoleWorkspace> =>
 
 // One AI call: placement proposal + first draft + focused questions from a
 // job description. Nothing is saved. With roleLevelId the role is known and
-// no placement is proposed.
-export const composeRoleFromJd = (input: { file?: File; text?: string; context?: string; roleLevelId?: string }): Promise<RoleCompose> => {
+// no placement is proposed. Supporting documents rank below the job
+// description, inform this one draft, and are not kept; `ignore` is the
+// manager's explicit "anything to ignore?" instruction.
+export const composeRoleFromJd = (input: {
+  file?: File;
+  text?: string;
+  context?: string;
+  roleLevelId?: string;
+  documents?: File[];
+  ignore?: string;
+}): Promise<RoleCompose> => {
   const formData = new FormData();
   if (input.file) formData.append("file", input.file);
   if (input.text) formData.append("text", input.text);
   if (input.context?.trim()) formData.append("context", input.context.trim());
   if (input.roleLevelId) formData.append("role_level_id", input.roleLevelId);
+  for (const doc of input.documents ?? []) formData.append("documents", doc);
+  if (input.ignore?.trim()) formData.append("ignore", input.ignore.trim());
   return authedFormFetch("/api/role-expectations/import", formData);
 };
 
@@ -2515,6 +2530,7 @@ export const openRoleDraft = (body: {
   items?: RoleItem[];
   questions?: RoleQuestion[];
   notes?: string[];
+  document_numbers?: string[];
 }): Promise<RoleWorkspace> =>
   authedFetch("/api/role-expectations/drafts", { method: "POST", body: JSON.stringify(body) });
 

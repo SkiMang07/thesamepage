@@ -41,6 +41,11 @@ has changed since the description was written, what they expect now. They are
 kept on the draft (analysis.context — no schema change) so every reanalysis
 sees them. Where the notes and the description disagree, the notes win, and a
 target the manager states in them is a stated target (source 'manager').
+
+Supporting documents (Build 3b) rank below the job description: they inform one
+composition and are not kept, their stated figures may stay in wording, but
+they can never set a target or be a source quote, and a disagreement with the
+job description becomes a question (conflict_questions).
 """
 from __future__ import annotations
 
@@ -842,9 +847,32 @@ _DESCRIPTION_RULES = """THERE IS NO JOB DESCRIPTION. The manager's own descripti
 Leave any field empty rather than invent it. If the description is too thin to draft from, return few items or none: an empty list is a good answer. Never copy the description's wording into a line it does not support."""
 
 
+_DOCUMENT_TIER_RULES = """These documents rank BELOW the job description (and below the manager's notes). So:
+- Use them only to add detail where the job description is silent: how the work is done, what good looks like.
+- Where a document disagrees with the job description, the draft follows the job description. Report the disagreement under "conflicts" with the exact words from each side. Report only real disagreements, not a document simply adding detail. Conflicts go only under "conflicts", never under "questions"; none is a good answer.
+- A document never sets a target and is never a "source_quote": never copy a target from a document into "target", and leave "source_quote" empty ("") for anything that comes only from a document. A number a document states may appear in an item's wording."""
+
+
+def _documents_block(documents: list[tuple[str, str]] | None) -> str:
+    if not documents:
+        return ""
+    body = "\n\n".join(f"[Document: {name}]\n{text}" for name, text in documents)
+    return f"\nSUPPORTING DOCUMENTS the manager attached beside the job description:\n{body}\n\n{_DOCUMENT_TIER_RULES}\n"
+
+
+def _ignore_block(ignore: str | None) -> str:
+    """The manager's explicit "anything to ignore?" instruction. Never
+    inferred from prose; only what they typed in that field."""
+    if not ignore:
+        return ""
+    return ("\nTHE MANAGER ASKED YOU TO IGNORE THE FOLLOWING. Leave it out of the draft, the questions and the "
+            f"conflicts, wherever it appears (job description, notes or documents):\n{ignore}\n")
+
+
 def _compose_prompt(*, jd_text: str | None, role_hint: str | None, ladders_block: str | None,
                     org_values: list[dict], sibling_block: str, include_identity: bool,
-                    context: str | None = None, description_only: bool = False) -> str:
+                    context: str | None = None, description_only: bool = False,
+                    documents: list[tuple[str, str]] | None = None, ignore: str | None = None) -> str:
     values_line = ", ".join(v["name"] for v in org_values) if org_values else "(none defined yet)"
     identity = ""
     if include_identity:
@@ -868,12 +896,15 @@ Include in your JSON:
         f"\nTHE MANAGER'S DESCRIPTION OF THE ROLE (typed or spoken; the only source):\n{context}\n\n{_DESCRIPTION_RULES}\n"
         if description_only else _context_block(context)
     )
+    conflicts_shape = (',\n  "conflicts": [{"about": "a few words naming what they disagree on", "jd_quote": "the shortest exact words from the job description, under 20 words", '
+                       '"document": "the document name exactly as given", "document_quote": "the shortest exact words from that document, under 20 words"}]'
+                       if documents else "")
     source_phrase = "the manager's description of the role" if description_only else f"the job description{' and the manager' + chr(39) + 's notes' if context else ''}"
     return f"""You are helping a manager write down what good looks like for one role, so they can coach and assess against it. Produce a useful FIRST DRAFT from {source_phrase}, then at most {_MAX_AI_QUESTIONS} focused questions about real gaps or ambiguity in that draft. The manager edits everything before anything is used.
 {f"ROLE: {role_hint}" if role_hint else ""}
 {identity}
 {jd}
-{context_block}
+{context_block}{_documents_block(documents)}{_ignore_block(ignore)}
 Company values that already apply to every role: {values_line}
 {sibling_block}
 {_DOCUMENT_RULES}
@@ -884,7 +915,7 @@ Return ONLY valid JSON, no commentary:
 {{
   {'"is_job_description": true, "reason": null, "other_roles_note": null, "role": {...}, "match": {...},' if include_identity else ''}
   "items": [{{"section": "responsibility", "measure": "numeric", "title": "...", "responsibility": "...", "meets": "...", "exceeds": "", "measurement_period": "quarter", "target": null, "source_quote": "...", "order_type": "primary"{', "basis": "described"' if description_only else ''}}}],
-  "questions": [{{"item_index": 0, "topic": "scope" | "wording" | "measure" | "other", "question": "...", "why": "one short sentence on why it matters"}}]
+  "questions": [{{"item_index": 0, "topic": "scope" | "wording" | "measure" | "other", "question": "...", "why": "one short sentence on why it matters"}}]{conflicts_shape}
 }}
 
 measurement_period is one of week, month, quarter, annual, none (numeric items only). order_type is primary (the 2-4 things that matter most), secondary or tertiary. Keep the draft honest and compact: 3-8 responsibilities, 2-5 skills."""
@@ -893,10 +924,20 @@ measurement_period is one of week, month, quarter, annual, none (numeric items o
 def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
                       org_value_names: list[str] | None = None,
                       context_text: str | None = None,
-                      mode: str = "jd") -> tuple[list[dict], list[dict], list[str]]:
+                      mode: str = "jd",
+                      extra_numbers_text: str | None = None) -> tuple[list[dict], list[dict], list[str]]:
     """Validate the model's items/questions. Returns (items, questions, notes).
     context_text is the manager's notes: its numbers are stated, and a target
     quoted from it is kept with source 'manager'.
+
+    extra_numbers_text is the text of documents attached beside the job
+    description (Build 3b). They are a lower tier than the job description:
+    their numbers are real stated figures, so they may stay in an item's
+    wording, but they are NOT quote-eligible. corpus_text stays the job
+    description alone, so a target quoted from a document fails the
+    quote-in-corpus check and lands unresolved, and a source_quote from a
+    document resolves to None. target_source keeps meaning the job
+    description ('source') or the notes ('manager') — nothing else.
 
     mode "description" (setup mode chunk C): the manager's description of the
     role is the only source (passed as context_text). Each item is marked
@@ -905,8 +946,14 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
     number, judged rather than measured, and carries no number of any kind,
     so nothing invented can pass as a standard."""
     context_sq = _squash(context_text)
-    allowed = numbers_in(corpus_text) | numbers_in(context_text)
-    stated_where = "job description or your notes" if context_sq else "job description"
+    allowed = numbers_in(corpus_text) | numbers_in(context_text) | numbers_in(extra_numbers_text)
+    target_where = "job description or your notes" if context_sq else "job description"
+    stated_where = target_where
+    if extra_numbers_text:
+        stated_where = ("job description, your notes or the documents you attached" if context_sq
+                        else "job description or the documents you attached")
+        # A document can support wording, never a target (see docstring).
+        target_where += " — an attached document can add detail but can't set a target"
     company_values = {_squash(n) for n in org_value_names or []}
     source_sq = _squash(corpus_text)
     notes: list[str] = []
@@ -955,7 +1002,7 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
                     ok = True
             if not ok:
                 if isinstance(target, dict) and target.get("text"):
-                    notes.append(f"A target for “{_clean_text(raw.get('title'), 80)}” wasn't in the {stated_where}, so it was left for you to set.")
+                    notes.append(f"A target for “{_clean_text(raw.get('title'), 80)}” wasn't in the {target_where}, so it was left for you to set.")
                 raw["target"] = {"status": "unresolved"}
         else:
             raw["target"] = None
@@ -995,6 +1042,67 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
                 q["why"] = None
             questions.append(q)
     return items, reconcile_questions(items, questions), notes
+
+
+_MAX_CONFLICTS = 3
+_MAX_CONFLICT_QUOTE = 120
+_MAX_CONFLICT_ABOUT = 80
+
+
+def conflict_questions(parsed: dict, *, jd_text: str | None, documents: list[tuple[str, str]],
+                       question_allowed: set[str]) -> list[dict]:
+    """Build 3b. Where an attached document disagrees with the job
+    description, the job description wins and the disagreement becomes a
+    question for the manager. The model reports these under their own
+    "conflicts" key, so they never compete with (or get silently dropped by)
+    the _MAX_AI_QUESTIONS budget; they have their own cap.
+
+    Each quote is verified against the blob it claims: the job description
+    quote against the job description, the document quote against that
+    document's text. A conflict whose quotes cannot both be verified is
+    dropped. Both quotes go in `why` (so they are never cut by the
+    400-character `question`); `question` is a short ask that may only carry
+    numbers from question_allowed (the job description and the notes), so it
+    survives POST /drafts re-validating it without the documents."""
+    raw_list = parsed.get("conflicts") if isinstance(parsed.get("conflicts"), list) else []
+    jd_sq = _squash(jd_text)
+    docs = {_squash(name): (name, _squash(text)) for name, text in documents}
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for raw in raw_list[:10]:
+        if len(out) >= _MAX_CONFLICTS:
+            break
+        if not isinstance(raw, dict) or not jd_sq:
+            continue
+        jd_quote = _clean_text(raw.get("jd_quote"), 600)
+        doc_quote = _clean_text(raw.get("document_quote"), 600)
+        doc = docs.get(_squash(raw.get("document") if isinstance(raw.get("document"), str) else ""))
+        if not (jd_quote and doc_quote and doc):
+            continue
+        if len(jd_quote) > _MAX_CONFLICT_QUOTE or len(doc_quote) > _MAX_CONFLICT_QUOTE:
+            continue
+        if _squash(jd_quote) not in jd_sq or _squash(doc_quote) not in doc[1]:
+            continue
+        pair = (_squash(jd_quote), _squash(doc_quote))
+        if pair in seen:
+            continue
+        seen.add(pair)
+        about = _clean_text(raw.get("about"), _MAX_CONFLICT_ABOUT).rstrip(".?! ")
+        if about and unsupported_numbers(about, question_allowed):
+            about = ""
+        name = doc[0][:60]
+        question = (f"The job description and {name} disagree about {about}. Which should this role follow?"
+                    if about and not unsupported_numbers(name, question_allowed) else
+                    f"The job description and an attached document disagree{' about ' + about if about else ''}. "
+                    "Which should this role follow?")
+        why = f"Job description: “{jd_quote}” — {name}: “{doc_quote}”. The draft follows the job description until you say otherwise."
+        if len(why) > 400:
+            why = f"Job description: “{jd_quote}” — {name}: “{doc_quote}”."
+        q = normalize_question({"item_key": None, "topic": "other", "question": question, "why": why,
+                                "answer_mode": "answer", "origin": "ai"})
+        if q:
+            out.append(q)
+    return out
 
 
 def _sibling_block(supabase, role: dict | None) -> str:
@@ -1048,6 +1156,53 @@ def _read_context(context: str | None) -> str | None:
     if len(cleaned) > _MAX_CONTEXT:
         raise HTTPException(status_code=413, detail="Your notes are longer than we can read at once — trim them to the parts that matter for this role.")
     return cleaned or None
+
+
+_MAX_IGNORE = 2_000
+_MAX_DOCUMENTS_TEXT = 40_000
+
+
+def _read_ignore(ignore: str | None) -> str | None:
+    """The optional "anything to ignore?" field, passed to the prompt as an
+    explicit instruction."""
+    cleaned = (ignore or "").strip()
+    if len(cleaned) > _MAX_IGNORE:
+        raise HTTPException(status_code=413, detail="Keep what to ignore short — a few lines is plenty.")
+    return cleaned or None
+
+
+def _read_documents(documents: list[UploadFile] | None) -> tuple[list[tuple[str, str]], bool]:
+    """Supporting documents beside the job description (Build 3b). Read with
+    the notes dump's reader (PDF/docx/text, an unreadable file refused by
+    name) and never stored. -> ([(name, text)], cut) where cut says the
+    combined text was trimmed to what the model reads.
+
+    Five documents at the per-file 25MB limit, plus a 25MB job description,
+    would be 150MB in one request that is allowed ten times a minute, so the
+    documents also share one combined ceiling of _MAX_UPLOAD_BYTES, checked
+    from the upload sizes before anything is read."""
+    from routes.notes_dump import MAX_FILES, read_files  # notes_dump imports this module
+
+    real = [f for f in documents or [] if f and f.filename]
+    if not real:
+        return [], False
+    if len(real) > MAX_FILES:
+        raise HTTPException(status_code=422, detail=f"Attach up to {MAX_FILES} documents at a time")
+    total = sum((f.size or 0) for f in real)
+    if total > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Those documents are too large together — 25MB in total. Attach the parts that matter for this role.")
+    read = read_files(real)
+    out: list[tuple[str, str]] = []
+    budget, cut = _MAX_DOCUMENTS_TEXT, False
+    for name, text in read:
+        if budget <= 0:
+            cut = True
+            break
+        if len(text) > budget:
+            text, cut = text[:budget], True
+        out.append((name[:120], text))
+        budget -= len(text)
+    return out, cut
 
 
 def _draft_context(draft: dict) -> str | None:
@@ -1106,6 +1261,11 @@ class ComposeOut(BaseModel):
     items: list[dict] = []
     questions: list[dict] = []
     notes: list[str] = []
+    # Build 3b. Names of the documents read for this draft (shown, not kept),
+    # and the figures they state, which POST /drafts needs so its re-check
+    # keeps those figures in the wording. Neither is stored.
+    document_names: list[str] = []
+    document_numbers: list[str] = []
 
 
 @router.post("/import", response_model=ComposeOut)
@@ -1116,15 +1276,25 @@ def compose_from_job_description(
     text: str | None = Form(None),
     role_level_id: str | None = Form(None),
     context: str | None = Form(None),
+    documents: list[UploadFile] = File(default=[]),
+    ignore: str | None = Form(None),
     auth=Depends(get_authenticated_client),
 ):
     """Define a role: one AI call reads the job description, proposes where
     the role belongs (attach / new ladder / existing level) and a first draft
     with focused questions. Nothing is saved here — the manager confirms the
-    placement, then POST /drafts stores the draft."""
+    placement, then POST /drafts stores the draft.
+
+    Supporting documents (Build 3b) inform this one composition and are not
+    kept. They rank below the job description: they add detail where it is
+    silent, cannot set a target, and a disagreement becomes a question."""
     user_id, supabase = auth
     notes_text = _read_context(context)
+    ignore_text = _read_ignore(ignore)
     jd_text, pdf_bytes, label = _read_source(file, text, allow_none=bool(notes_text))
+    if jd_text is None and pdf_bytes is None and any(f and f.filename for f in documents or []):
+        raise HTTPException(status_code=422, detail="Add the job description too — attached documents add detail to one.")
+    docs, docs_cut = _read_documents(documents)
     # No job description, only what the manager said about the role: that
     # description is the one source, and each line is marked as coming from it
     # or as typical for the role (see sanitize_composed).
@@ -1154,9 +1324,11 @@ def compose_from_job_description(
         include_identity=target_role is None,
         context=notes_text,
         description_only=description_only,
+        documents=docs,
+        ignore=ignore_text,
     )
     try:
-        parsed = _call_model(prompt, pdf_bytes=pdf_bytes)
+        parsed = _call_model(prompt, pdf_bytes=pdf_bytes, max_tokens=5000 if docs else 4000)
     except HTTPException:
         raise
     except Exception as exc:
@@ -1186,16 +1358,29 @@ def compose_from_job_description(
     title = (role.job_role if role else _role_title(target_role)) or ""
     level = role.job_level if role else target_role["job_level"]
     corpus += f"\n{title} level {level}"
+    docs_text = "\n".join(t for _, t in docs) or None
     items, questions, notes = sanitize_composed(parsed, corpus_text=corpus, source_available=jd_text is not None,
                                                 org_value_names=[v["name"] for v in org_values],
                                                 context_text=notes_text,
-                                                mode="description" if description_only else "jd")
+                                                mode="description" if description_only else "jd",
+                                                extra_numbers_text=docs_text)
+    conflicts: list[dict] = []
+    if docs:
+        # Outside the _MAX_AI_QUESTIONS budget, with their own cap.
+        conflicts = conflict_questions(parsed, jd_text=jd_text, documents=docs,
+                                       question_allowed=numbers_in(jd_text) | numbers_in(notes_text))
+        questions += conflicts
+        if docs_cut:
+            notes.append("Your documents were longer than we read at once, so only the first part of them informed this draft.")
     if description_only and not items:
         notes.insert(0, "That wasn't enough to draft from. Add what the role owns and how you'd tell it's going well, or start without a draft.")
     analytics.capture(user_id, "role_draft_composed", {
         "source": "description" if description_only else ("both" if notes_text else "job_description"),
         "input_size": _input_bucket(len(notes_text or "") + len(jd_text or "")),
         "file": bool(file is not None and file.filename),
+        "documents": len(docs),
+        "conflicts": len(conflicts),
+        "ignore": bool(ignore_text),
         "items": len(items),
         "typical": sum(1 for i in items if i.get("origin") == "typical"),
     })
@@ -1214,6 +1399,8 @@ def compose_from_job_description(
         items=items,
         questions=questions,
         notes=notes,
+        document_names=[name for name, _ in docs],
+        document_numbers=sorted(numbers_in(docs_text))[:_MAX_DOCUMENT_NUMBERS],
     )
 
 
@@ -1232,6 +1419,20 @@ class DraftCreateIn(BaseModel):
     items: list[dict] | None = None
     questions: list[dict] | None = None
     notes: list[str] | None = None
+    # Figures stated in documents attached on POST /import (Build 3b), so the
+    # re-check below keeps them in wording. Like the manager's own edits
+    # (which save_draft keeps as written), they can put a number in prose,
+    # but never set a target: corpus_text stays the job description.
+    document_numbers: list[str] | None = None
+
+
+_MAX_DOCUMENT_NUMBERS = 200
+_NUMBER_TOKEN = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _document_numbers_text(raw: list[str] | None) -> str | None:
+    nums = [n for n in (raw or [])[:_MAX_DOCUMENT_NUMBERS] if isinstance(n, str) and _NUMBER_TOKEN.fullmatch(n)]
+    return " ".join(nums) or None
 
 
 def merge_open_decisions(items: list[dict], questions: list[dict], decisions: list[dict]) -> list[dict]:
@@ -1298,7 +1499,8 @@ def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), au
     if body.items:
         composed_items, composed_questions, _ = sanitize_composed(
             {"items": body.items, "questions": []}, corpus_text=corpus, source_available=bool(source_text),
-            org_value_names=[v["name"] for v in _org_values(supabase)], context_text=context, mode=compose_mode)
+            org_value_names=[v["name"] for v in _org_values(supabase)], context_text=context, mode=compose_mode,
+            extra_numbers_text=_document_numbers_text(body.document_numbers))
         # Questions composed earlier reference items by key; keep those that still match.
         keys = {i["key"] for i in composed_items}
         for q in body.questions or []:

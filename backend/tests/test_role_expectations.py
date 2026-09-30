@@ -724,3 +724,59 @@ def test_review_clears_a_why_with_an_invented_number():
     assert [(q["question"], q["why"]) for q in qs] == [("Expansion too?", None)]
     assert [(s["item"]["title"], s["why"]) for s in sugs] == [("Negotiation", None),
                                                                ("Forecasting", "The JD asks for 3+ years.")]
+
+
+# ---------------------------------------------------------------------------
+# Build 3b: attached documents are a lower tier than the job description
+# ---------------------------------------------------------------------------
+
+PLAYBOOK = ("Support playbook. Every renewal call is logged in the CRM. "
+            "Escalations are answered within 4 hours. We aim for 97% gross retention.")
+
+
+def test_a_document_number_reaches_prose_but_cannot_make_a_target():
+    items, questions, notes = rex.sanitize_composed(
+        {"items": [_composed(meets="Renewals stay on track. Answers escalations within 4 hours.",
+                             target={"text": "97% gross retention", "quote": "We aim for 97% gross retention"},
+                             source_quote="We aim for 97% gross retention")]},
+        corpus_text=JD, source_available=True, extra_numbers_text=PLAYBOOK)
+    (item,) = items
+    # the figure is real, so the wording keeps it
+    assert item["meets"] == "Renewals stay on track. Answers escalations within 4 hours."
+    # the quote is genuine but it is the document's, not the job description's
+    assert item["target"] == {"status": "unresolved"}
+    assert item["source_quote"] is None
+    assert [q["topic"] for q in questions] == ["target"]
+    assert any("can't set a target" in n for n in notes)
+
+
+def test_without_the_document_the_same_number_is_stripped():
+    items, _, _ = rex.sanitize_composed(
+        {"items": [_composed(meets="Renewals stay on track. Answers escalations within 4 hours.",
+                             target=None)]},
+        corpus_text=JD, source_available=True)
+    assert items[0]["meets"] == "Renewals stay on track."
+
+
+def test_a_document_does_not_vouch_for_a_number_it_does_not_state():
+    items, _, notes = rex.sanitize_composed(
+        {"items": [_composed(meets="Renewals stay on track. Hits 99% retention.", target=None)]},
+        corpus_text=JD, source_available=True, extra_numbers_text=PLAYBOOK)
+    assert items[0]["meets"] == "Renewals stay on track."
+    assert any("documents you attached" in n for n in notes)
+
+
+def test_the_job_description_and_notes_still_set_targets_beside_a_document():
+    jd = JD + " Maintain 95% gross revenue retention each quarter."
+    items, _, _ = rex.sanitize_composed(
+        {"items": [_composed(meets="Renewals stay on track.",
+                             target={"text": "95% gross revenue retention",
+                                     "quote": "Maintain 95% gross revenue retention each quarter"})]},
+        corpus_text=jd, source_available=True, extra_numbers_text=PLAYBOOK)
+    assert items[0]["target"]["status"] == "set" and items[0]["target"]["source"] == "source"
+    items, _, _ = rex.sanitize_composed(
+        {"items": [_composed(meets="Grows the book.",
+                             target={"text": "110% net revenue retention",
+                                     "quote": "we agreed 110% net revenue retention for the year"})]},
+        corpus_text=JD, source_available=True, context_text=NOTES, extra_numbers_text=PLAYBOOK)
+    assert items[0]["target"]["source"] == "manager"

@@ -663,6 +663,8 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
   const [text, setText] = useState(ws.role.job_responsibilities ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [context, setContext] = useState("");
+  const [documents, setDocuments] = useState<File[]>([]);
+  const [ignore, setIgnore] = useState("");
   const [describe, setDescribe] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -683,8 +685,8 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
         describe
           ? { context, roleLevelId: ws.role.id }
           : file
-            ? { file, context, roleLevelId: ws.role.id }
-            : { text: text.trim(), context, roleLevelId: ws.role.id }
+            ? { file, context, roleLevelId: ws.role.id, documents, ignore }
+            : { text: text.trim(), context, roleLevelId: ws.role.id, documents, ignore }
       );
       const next = await openRoleDraft({
         role_level_id: ws.role.id,
@@ -694,6 +696,7 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
         items: composed.items,
         questions: composed.questions,
         notes: composed.notes,
+        document_numbers: composed.document_numbers,
       });
       onOpened(next);
     } catch (e) {
@@ -756,6 +759,10 @@ function StartView({ ws, onOpened }: { ws: RoleWorkspace; onOpened: (w: RoleWork
             disabled={!!busy}
             describe={describe}
             onDescribe={setDescribe}
+            documents={documents}
+            onDocuments={setDocuments}
+            ignore={ignore}
+            onIgnore={setIgnore}
           />
         </div>
         <div className="mt-4 flex justify-end">

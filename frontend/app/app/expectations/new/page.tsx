@@ -51,6 +51,8 @@ function DefineRole() {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [context, setContext] = useState("");
+  const [documents, setDocuments] = useState<File[]>([]);
+  const [ignore, setIgnore] = useState("");
   const [describe, setDescribe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composed, setComposed] = useState<RoleCompose | null>(null);
@@ -83,7 +85,9 @@ function DefineRole() {
     setError(null);
     setStep("working");
     try {
-      const out = await composeRoleFromJd(describe ? { context } : file ? { file, context } : { text: text.trim(), context });
+      const out = await composeRoleFromJd(
+        describe ? { context } : file ? { file, context, documents, ignore } : { text: text.trim(), context, documents, ignore }
+      );
       if (!out.is_job_description) {
         setError(out.reason || "That doesn’t look like a job description.");
         setStep("input");
@@ -150,6 +154,7 @@ function DefineRole() {
         items: composed?.items,
         questions: composed?.questions,
         notes: composed?.notes,
+        document_numbers: composed?.document_numbers,
       });
       if (assignId) {
         try {
@@ -203,6 +208,10 @@ function DefineRole() {
             disabled={step === "working"}
             describe={describe}
             onDescribe={setDescribe}
+            documents={documents}
+            onDocuments={setDocuments}
+            ignore={ignore}
+            onIgnore={setIgnore}
           />
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={startWithoutDraft} disabled={step === "working"} className={BTN_GHOST}>
@@ -214,7 +223,7 @@ function DefineRole() {
           </div>
           {step === "working" && (
             <p className="mt-4 text-sm text-ink-secondary" role="status" aria-live="polite">
-              {describe ? "Reading your description" : "Reading the job description"}, finding where the role fits, and drafting what good looks like. This usually takes under a minute.
+              {describe ? "Reading your description" : documents.length ? "Reading the job description and your documents" : "Reading the job description"}, finding where the role fits, and drafting what good looks like. This usually takes under a minute.
             </p>
           )}
         </section>
@@ -282,6 +291,11 @@ function DefineRole() {
             {composed
               ? `${composed.items.length} expectation${composed.items.length === 1 ? "" : "s"} drafted${questionCount ? ` · ${questionCount} question${questionCount === 1 ? "" : "s"} for you` : ""}. Nothing is used until you approve it.`
               : "You’ll start with an empty draft. Add expectations in your own words, or copy them from another role."}
+            {composed?.document_names?.length ? (
+              <p className="mt-1">
+                Also informed by {composed.document_names.join(", ")} — read for this draft only, not kept.
+              </p>
+            ) : null}
             {composed?.notes?.length ? (
               <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-ink-muted">
                 {composed.notes.map((n, i) => (

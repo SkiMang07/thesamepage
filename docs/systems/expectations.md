@@ -92,6 +92,28 @@ of creating a second one. `?family=` pins a ladder; `?assign=` assigns a person
 (Settings → People's "Define it from a job description"). "Start without a draft"
 skips AI. The JD text is never lost on failure.
 
+**Supporting documents** (optional, up to five, PDF/.docx/text, 25MB combined;
+read by `notes_dump.read_files`, labelled `[Document: <name>]` in the prompt)
+can go beside the job description, plus an optional "Anything to ignore?" field
+passed to the prompt as an explicit instruction (never inferred from prose).
+Documents need a job description, inform only that one composition and are not
+stored; the form says so. They rank **below** the job description, which ranks
+below the notes: a document adds detail where the job description is silent.
+The tier is enforced in `sanitize_composed`, not only in the prompt: a
+document's numbers join the allowed set through `extra_numbers_text` (so a stated
+figure can stay in wording), but `corpus_text` stays the job description, so a
+target quoted from a document lands unresolved and a `source_quote` from one
+resolves to `None`. `target_source` still means the JD (`source`) or the notes
+(`manager`) — there is no third value. `/import` returns `document_numbers`, which
+`POST /drafts` takes back so its re-check keeps those figures in wording (like a
+manager edit, it can keep a number in prose, never set a target). Where a document
+disagrees with the job description the model reports it under its own
+`conflicts` key; `conflict_questions` verifies the JD quote against the job
+description and the document quote against that document's text, drops any it
+can't verify, and mints each as a question (`topic` `other`, no item, both quotes
+in `why`, a short ask in `question` carrying no document-only number) with its own
+cap of 3 outside the three-question budget.
+
 **Role page** (`/app/expectations/[roleLevelId]`):
 - *Open draft* → the workspace: collapsible source JD (with the manager's notes above it), the editable document by
   section, and the coaching panel. Actions: **Save & reanalyze**, **Review for
@@ -221,7 +243,7 @@ the per-role route is the secondary link.
 |---|---|
 | `GET /overview` | ladders, levels, people, status, Needs review, Coming back, company values |
 | `GET /roles/{id}` | open draft (if any), approved items, people, values, open decisions |
-| `POST /import` | JD → placement + composed draft + questions (AI, 10/min, nothing saved) |
+| `POST /import` | JD (+ optional documents, ignore instruction) → placement + composed draft + questions + conflicts (AI, 10/min, nothing saved) |
 | `POST /drafts` | open or resume the role's draft; composed items re-validated server-side |
 | `PUT /drafts/{id}` | save (items; answers and open/answered/dismissed) |
 | `POST /drafts/{id}/analyze` | save, then reanalyze (AI, 10/min) |

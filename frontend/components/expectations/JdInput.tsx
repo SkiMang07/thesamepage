@@ -12,11 +12,16 @@
 // as the same `context` field; with no job description the server treats it as
 // the only source and marks each drafted line as drawn from it or as only
 // typical for the role (backend/routes/role_expectations.py).
+//
+// Build 3b: with `onDocuments`, supporting documents can go alongside the job
+// description, plus an optional "anything to ignore?" instruction. Documents
+// rank below the job description, inform this one draft and are not kept.
 
 import { useRef, useState } from "react";
 import { LABEL, TEXTAREA } from "@/lib/tokens";
 import NoteField from "@/components/NoteField";
 
+export const MAX_DOCUMENTS = 5;
 const ACCEPT = ".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown";
 
 export default function JdInput({
@@ -29,6 +34,10 @@ export default function JdInput({
   disabled,
   describe = false,
   onDescribe,
+  documents,
+  onDocuments,
+  ignore,
+  onIgnore,
 }: {
   text: string;
   onText: (t: string) => void;
@@ -39,6 +48,10 @@ export default function JdInput({
   disabled?: boolean;
   describe?: boolean;
   onDescribe?: (v: boolean) => void;
+  documents?: File[];
+  onDocuments?: (f: File[]) => void;
+  ignore?: string;
+  onIgnore?: (t: string) => void;
 }) {
   const tabCls = (on: boolean) =>
     `rounded-md px-3 py-1.5 text-sm font-medium transition ${on ? "bg-brand text-on-brand" : "text-ink-secondary hover:text-ink"}`;
@@ -92,8 +105,99 @@ export default function JdInput({
           className="text-sm leading-relaxed"
         />
       </div>
+      {onDocuments && <DocumentsInput documents={documents ?? []} onDocuments={onDocuments} disabled={disabled} />}
+      {onIgnore && (
+        <div className="mt-5">
+          <label htmlFor="jd-ignore" className={LABEL}>
+            Anything to ignore? <span className="font-normal text-ink-muted">· optional</span>
+          </label>
+          <p className="mb-2 text-sm text-ink-muted">Anything the draft should leave out, wherever it appears. Only what you write here is ignored.</p>
+          <textarea
+            id="jd-ignore"
+            value={ignore ?? ""}
+            disabled={disabled}
+            onChange={(e) => onIgnore(e.target.value)}
+            rows={2}
+            maxLength={2000}
+            placeholder="e.g. The travel section, and the on-call duty — that moved to another team."
+            className={`${TEXTAREA} text-sm leading-relaxed`}
+          />
+        </div>
+      )}
         </>
       )}
+    </div>
+  );
+}
+
+function DocumentsInput({
+  documents,
+  onDocuments,
+  disabled,
+}: {
+  documents: File[];
+  onDocuments: (f: File[]) => void;
+  disabled?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const full = documents.length >= MAX_DOCUMENTS;
+  function add(list: FileList | null) {
+    if (!list) return;
+    onDocuments([...documents, ...Array.from(list)].slice(0, MAX_DOCUMENTS));
+  }
+  return (
+    <div className="mt-5">
+      <p className={LABEL} id="jd-documents-label">
+        Other documents <span className="font-normal text-ink-muted">· optional</span>
+      </p>
+      <p className="mb-2 text-sm text-ink-muted">
+        A team playbook, a levelling guide, last year’s goals. They add detail where the job description is silent. The job description still wins, and a
+        figure in a document can’t become a target by itself. Where one disagrees with the job description, you’ll get a question. They’re read for
+        this draft only and not kept.
+      </p>
+      {documents.length > 0 && (
+        <ul aria-labelledby="jd-documents-label" className="mb-2 space-y-1.5">
+          {documents.map((d, i) => (
+            <li key={`${d.name}-${i}`} className="flex items-center justify-between gap-3 rounded-lg border border-control bg-sunken px-4 py-2">
+              <p className="min-w-0 truncate text-sm text-ink">
+                <span className="font-medium">{d.name}</span>
+                <span className="ml-2 text-ink-muted">{Math.max(1, Math.round(d.size / 1024))} KB</span>
+              </p>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onDocuments(documents.filter((_, j) => j !== i))}
+                className="shrink-0 text-sm text-ink-secondary hover:text-ink"
+                aria-label={`Remove ${d.name}`}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+        <button
+          type="button"
+          disabled={disabled || full}
+          onClick={() => inputRef.current?.click()}
+          className="font-medium text-brand hover:text-brand-hover disabled:text-ink-muted"
+        >
+          {documents.length ? "Add another document" : "Add a document"}
+        </button>
+        <span>{full ? `Up to ${MAX_DOCUMENTS} documents.` : "PDF, Word, or text"}</span>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={ACCEPT}
+          className="hidden"
+          onChange={(e) => {
+            add(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </div>
     </div>
   );
 }
