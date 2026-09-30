@@ -36,6 +36,7 @@ import {
   parseNotesDump,
   reportNotesDumpSkipped,
 } from "@/lib/api";
+import WaitNote from "@/components/WaitNote";
 import { roleDraftCapLine } from "@/lib/roleDraftCap";
 import NoteField from "@/components/NoteField";
 import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT } from "@/lib/tokens";
@@ -356,6 +357,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                 </button>
               </div>
             </div>
+            <WaitNote active={phase === "reading"} typical="10 to 40 seconds" className="mt-2 text-right" />
           </>
         )}
 

@@ -24,6 +24,7 @@ import {
   FIRST_RUN_STEPS,
   PATH_STEPS,
 } from "@/lib/api";
+import WaitNote from "@/components/WaitNote";
 import WrapUpReview from "../wrap-up-review";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
@@ -576,6 +577,7 @@ function PrepFlow() {
           >
             {loading ? "Building agenda…" : "Build agenda →"}
           </button>
+          <WaitNote active={loading} typical="10 to 40 seconds" className="mt-2" />
           {buildBlockedByRule && !loading && (
             <p className="mt-2 text-xs text-ink-muted">Add a note or keep an item above to build an agenda.</p>
           )}

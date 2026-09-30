@@ -26,6 +26,7 @@ import {
   markOrgGoalsUnknown,
   parseOrgGoals,
 } from "@/lib/api";
+import WaitNote from "@/components/WaitNote";
 import NoteField from "@/components/NoteField";
 import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT } from "@/lib/tokens";
 
@@ -237,6 +238,7 @@ export default function OrgGoalsModal({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
             </div>
+            <WaitNote active={phase === "reading"} typical="up to a minute" className="mt-2 text-right" />
           </>
         )}
 
