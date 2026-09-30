@@ -2491,6 +2491,13 @@ export const deferRoleQuestion = (draftId: string, version: number, questionId: 
     body: JSON.stringify({ version, question_id: questionId, follow_up_on: followUpOn }),
   });
 
+// Parks every listed open question on one date in a single write.
+export const deferRoleQuestions = (draftId: string, version: number, questionIds: string[], followUpOn: string): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/drafts/${draftId}/defer-many`, {
+    method: "POST",
+    body: JSON.stringify({ version, question_ids: questionIds, follow_up_on: followUpOn }),
+  });
+
 export const copyIntoRoleDraft = (draftId: string, version: number, fromRoleLevelId: string): Promise<RoleWorkspace> =>
   authedFetch(`/api/role-expectations/drafts/${draftId}/copy`, {
     method: "POST",

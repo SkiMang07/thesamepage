@@ -423,3 +423,179 @@ def test_typical_lines_wait_as_suggestions_on_a_revision_too(monkeypatch):
     assert sorted(s["item"]["origin"] for s in draft["suggestions"]) == ["description", "typical"]
     whys = {s["item"]["origin"]: s["why"] for s in draft["suggestions"]}
     assert whys["description"].startswith("From your description") and whys["typical"] == "Typical for this role, not from you."
+
+
+# ---------------------------------------------------------------------------
+# Bulk defer: one call, one write, one version bump
+# ---------------------------------------------------------------------------
+
+class _DeferDB:
+    """A draft row plus a decisions table: enough client for the defer routes.
+    Counts draft writes so one-write-per-call is checked, not assumed."""
+
+    def __init__(self, draft):
+        from types import SimpleNamespace
+        self._ns = SimpleNamespace
+        self.draft = draft
+        self.draft_writes = 0
+        self.decisions = {}
+        self._inserted = 0
+        self._t = self._op = self._payload = None
+        self._filters = {}
+
+    def table(self, name):
+        self._t, self._op, self._payload, self._filters = name, "select", None, {}
+        return self
+
+    def select(self, *_a):
+        self._op = "select"
+        return self
+
+    def insert(self, row):
+        self._op, self._payload = "insert", row
+        return self
+
+    def update(self, patch):
+        self._op, self._payload = "update", patch
+        return self
+
+    def eq(self, col, val):
+        self._filters[col] = val
+        return self
+
+    def execute(self):
+        if self._t == "role_expectation_drafts":
+            if self._op == "select":
+                return self._ns(data=[self.draft])
+            assert self._op == "update"
+            if self._filters.get("version") != self.draft["version"]:
+                return self._ns(data=[])
+            self.draft = {**self.draft, **self._payload}
+            self.draft_writes += 1
+            return self._ns(data=[self.draft])
+        assert self._t == "role_expectation_decisions"
+        if self._op == "insert":
+            self._inserted += 1
+            row = {**self._payload, "id": f"dec{self._inserted}"}
+            self.decisions[row["id"]] = row
+            return self._ns(data=[row])
+        assert self._op == "update"
+        self.decisions[self._filters["id"]].update(self._payload)
+        return self._ns(data=[self.decisions[self._filters["id"]]])
+
+
+def _defer_setup(monkeypatch, questions, items=(), version=3):
+    draft = {"id": "dr1", "org_id": "org1", "role_level_id": "rl1", "status": "open", "version": version,
+             "items": list(items), "questions": questions, "suggestions": []}
+    db = _DeferDB(draft)
+    monkeypatch.setattr(rex, "_present_draft", lambda _s, d: {"draft": d})
+    return db
+
+
+def _q(qid, **over):
+    return {"id": qid, "question": f"{qid}?", "topic": "scope", "status": "open", **over}
+
+
+def _defer_many(db, ids, version=3, when=None):
+    from datetime import date, timedelta
+    when = when or (date.today() + timedelta(days=14)).isoformat()
+    body = rex.DeferManyIn(version=version, question_ids=ids, follow_up_on=when)
+    return rex.defer_questions("dr1", body, auth=("u1", db))["draft"]
+
+
+def test_defer_many_parks_every_question_in_one_write(monkeypatch):
+    db = _defer_setup(monkeypatch, [_q("a"), _q("b"), _q("c"), _q("d")])
+    out = _defer_many(db, ["a", "b", "c", "d"])
+    assert db.draft_writes == 1 and out["version"] == 4
+    assert [q["status"] for q in out["questions"]] == ["deferred"] * 4
+    assert len(db.decisions) == 4
+    assert {q["decision_id"] for q in out["questions"]} == set(db.decisions)
+    assert len({q["follow_up_on"] for q in out["questions"]}) == 1
+    assert rex.approval_problems({"items": [{"title": "x"}], "questions": out["questions"]}) == []
+
+
+def test_defer_many_moves_the_date_of_an_already_parked_question(monkeypatch):
+    from datetime import date, timedelta
+    db = _defer_setup(monkeypatch, [_q("a", status="deferred", decision_id="dec9", follow_up_on="2026-01-01"), _q("b")])
+    db.decisions["dec9"] = {"id": "dec9", "follow_up_on": "2026-01-01", "status": "deferred"}
+    later = (date.today() + timedelta(days=30)).isoformat()
+    out = _defer_many(db, ["a", "b"], when=later)
+    assert sorted(db.decisions) == ["dec1", "dec9"]  # b got a row; a did not get a second one
+    assert db.decisions["dec9"]["follow_up_on"] == later
+    by_id = {q["id"]: q for q in out["questions"]}
+    assert by_id["a"]["decision_id"] == "dec9" and by_id["a"]["follow_up_on"] == later
+    assert by_id["b"]["decision_id"] == "dec1" and by_id["b"]["follow_up_on"] == later
+
+
+def test_defer_many_binds_the_decision_to_the_approved_config(monkeypatch):
+    item = rex.normalize_item({"key": "n-aaaaaaaaaaaa", "section": "responsibility", "measure": "judged",
+                               "title": "Forecast", "config_id": "cfg1", "config_kind": "skills"})
+    db = _defer_setup(monkeypatch, [_q("a", item_key="n-aaaaaaaaaaaa")], items=[item])
+    _defer_many(db, ["a"])
+    (row,) = db.decisions.values()
+    assert row["config_id"] == "cfg1" and row["config_kind"] == "skills" and row["item_key"] == "cfg1"
+    assert row["status"] == "deferred" and row["created_by"] == "u1" and row["draft_id"] == "dr1"
+
+
+def test_defer_many_skips_unknown_ids_and_leaves_answered_and_dismissed_alone(monkeypatch):
+    db = _defer_setup(monkeypatch, [_q("a"), _q("b", status="answered", answer="Yes"), _q("c", status="dismissed")])
+    out = _defer_many(db, ["a", "b", "c", "gone"])
+    assert [q["status"] for q in out["questions"]] == ["deferred", "answered", "dismissed"]
+    assert len(db.decisions) == 1 and db.draft_writes == 1
+
+
+def test_defer_many_with_only_unknown_ids_is_a_404(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+    db = _defer_setup(monkeypatch, [_q("a")])
+    with pytest.raises(HTTPException) as err:
+        _defer_many(db, ["gone", "also-gone"])
+    assert err.value.status_code == 404
+    assert db.draft_writes == 0 and not db.decisions
+
+
+def test_defer_many_with_nothing_left_to_park_writes_nothing(monkeypatch):
+    db = _defer_setup(monkeypatch, [_q("a", status="answered", answer="Yes")])
+    out = _defer_many(db, ["a"])
+    assert out["version"] == 3 and db.draft_writes == 0 and not db.decisions
+
+
+def test_defer_many_validates_date_version_and_size(monkeypatch):
+    import pytest
+    from datetime import date, timedelta
+    from fastapi import HTTPException
+    db = _defer_setup(monkeypatch, [_q("a")])
+    for bad in ("soon", (date.today() - timedelta(days=5)).isoformat(), (date.today() + timedelta(days=400)).isoformat()):
+        with pytest.raises(HTTPException) as err:
+            _defer_many(db, ["a"], when=bad)
+        assert err.value.status_code == 422
+    with pytest.raises(HTTPException) as err:
+        _defer_many(db, ["a"], version=2)
+    assert err.value.status_code == 409
+    with pytest.raises(HTTPException) as err:
+        _defer_many(db, [f"q{n}" for n in range(rex._MAX_ITEMS + 1)])
+    assert err.value.status_code == 422
+    assert db.draft_writes == 0 and not db.decisions
+
+
+def test_a_parked_target_question_still_closes_and_reopens_with_the_target(monkeypatch):
+    item = rex.normalize_item({"key": "n-bbbbbbbbbbbb", "section": "responsibility", "measure": "numeric",
+                               "title": "Adoption", "target": {"status": "unresolved"}})
+    (tq,) = rex.reconcile_questions([item], [])
+    db = _defer_setup(monkeypatch, [tq], items=[item])
+    parked = _defer_many(db, [tq["id"]])["questions"]
+    assert parked[0]["status"] == "deferred" and parked[0]["decision_id"]
+    with_target = {**item, "target": {"status": "set", "text": "Weekly active", "source": "manager"}}
+    answered = rex.reconcile_questions([with_target], parked)
+    assert answered[0]["status"] == "answered" and answered[0]["answer"] == "Weekly active"
+    reopened = rex.reconcile_questions([item], answered)
+    assert reopened[0]["status"] == "deferred" and reopened[0]["answer"] is None
+
+
+def test_single_defer_still_works_through_the_shared_helpers(monkeypatch):
+    from datetime import date, timedelta
+    db = _defer_setup(monkeypatch, [_q("a"), _q("b")])
+    when = (date.today() + timedelta(days=7)).isoformat()
+    out = rex.defer_question("dr1", rex.DeferIn(version=3, question_id="a", follow_up_on=when), auth=("u1", db))["draft"]
+    assert [q["status"] for q in out["questions"]] == ["deferred", "open"]
+    assert db.draft_writes == 1 and len(db.decisions) == 1

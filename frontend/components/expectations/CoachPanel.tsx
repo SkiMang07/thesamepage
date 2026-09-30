@@ -21,6 +21,7 @@ type Props = {
   onAnswer: (q: RoleQuestion) => void;
   onDismiss: (q: RoleQuestion) => void;
   onDefer: (q: RoleQuestion, isoDate: string) => void;
+  onDeferAll: (questionIds: string[], isoDate: string) => void;
   onGoToField: (itemKey: string, field: string) => void;
   onSuggestion: (s: RoleSuggestion, action: "accept" | "dismiss") => void;
   onRetry: () => void;
@@ -67,6 +68,21 @@ export default function CoachPanel(p: Props) {
       ) : open.length === 0 && suggestions.length === 0 ? (
         <p className="mt-1.5 text-sm text-ink-secondary">When you’re ready, review the whole role and approve it — or save and reanalyze after you edit.</p>
       ) : null}
+
+      {open.length > 1 && (
+        <div className="mt-4 rounded-lg bg-surface p-3.5">
+          <FollowUpPicker
+            busy={p.busy}
+            label="Come back to all of these on"
+            onChoose={(d) =>
+              p.onDeferAll(
+                open.map((q) => q.id),
+                d
+              )
+            }
+          />
+        </div>
+      )}
 
       {open.length > 0 && (
         <ul className="mt-4 space-y-3">

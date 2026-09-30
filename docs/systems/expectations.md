@@ -99,7 +99,8 @@ skips AI. The JD text is never lost on failure.
 - *Nothing yet* → start from the JD (saved one prefilled) plus notes, another role, or blank.
 
 **Review** (`…/review`). The complete content that will become active, Edit links
-back to each field, every open detail with "Bring this back" dates, what's parked,
+back to each field, every open detail with "Bring this back" dates (and, with two or
+more open, one "Come back to all of these on" date for the lot), what's parked,
 and one explicit confirmation + **Approve** for the whole role.
 
 ## Rules the code enforces
@@ -125,7 +126,9 @@ and one explicit confirmation + **Approve** for the whole role.
   Approval requires each one to have a deferred decision with a date (checked in
   Python and again inside the SQL function).
 - **Questions need an outcome before approval:** answered, parked with a date, or
-  "Not needed". Deferral always goes through `POST /drafts/{id}/defer`, so there is
+  "Not needed". Deferral always goes through `POST /drafts/{id}/defer` (one question) or
+  `/defer-many` (every listed open question on one date, one draft write and version
+  bump; unknown ids are skipped, 404 only if none match, at most 40), so there is
   always a persisted return path. Follow-up is date-based only — the one trigger the
   app can honor.
 - **Reanalysis preserves the manager's wording.** It saves first, then adds
@@ -179,6 +182,7 @@ into the description as a last "Example: ..." line. Every composed draft emits
 | `PUT /drafts/{id}` | save (items; answers and open/answered/dismissed) |
 | `POST /drafts/{id}/analyze` | save, then reanalyze (AI, 10/min) |
 | `POST /drafts/{id}/defer` | park a question until a date |
+| `POST /drafts/{id}/defer-many` | park several open questions on one date, one write |
 | `POST /drafts/{id}/suggestions/{sid}` | accept or dismiss one suggestion |
 | `POST /drafts/{id}/copy` | copy another role's approved items in |
 | `POST /drafts/{id}/discard` | discard; approved expectations untouched |

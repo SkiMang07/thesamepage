@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ApiError, RoleQuestion, RoleWorkspace, approveRoleDraft, deferRoleQuestion, getRoleWorkspace, saveRoleDraft } from "@/lib/api";
+import { ApiError, RoleQuestion, RoleWorkspace, approveRoleDraft, deferRoleQuestion, deferRoleQuestions, getRoleWorkspace, saveRoleDraft } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SkeletonSection } from "@/components/Skeleton";
 import RoleDocument from "@/components/expectations/RoleDocument";
@@ -123,6 +123,15 @@ export default function ReviewPage() {
               <h2 id="open-heading" className="text-base font-semibold text-amber-800">
                 {open.length === 1 ? "One detail needs a decision" : `${open.length} details need a decision`}
               </h2>
+              {open.length > 1 && (
+                <div className="mt-3 border-t border-amber-500/25 pt-3">
+                  <FollowUpPicker
+                    busy={busy}
+                    label="Come back to all of these on"
+                    onChoose={(d) => run(() => deferRoleQuestions(draft.id, draft.version, open.map((q) => q.id), d))}
+                  />
+                </div>
+              )}
               <ul className="mt-2 space-y-4">
                 {open.map((q) => (
                   <li key={q.id} className="border-t border-amber-500/25 pt-3 first:border-t-0 first:pt-0">

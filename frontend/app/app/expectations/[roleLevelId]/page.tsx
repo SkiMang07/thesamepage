@@ -22,6 +22,7 @@ import {
   composeRoleFromJd,
   copyIntoRoleDraft,
   deferRoleQuestion,
+  deferRoleQuestions,
   discardRoleDraft,
   getRoleWorkspace,
   getRolesOverview,
@@ -325,6 +326,21 @@ function Workspace({
     }
   }
 
+  async function deferAll(questionIds: string[], date: string) {
+    const next = await act(
+      "defer",
+      async () => {
+        const version = await saveIfDirty();
+        return deferRoleQuestions(draft.id, version ?? savedVersion.current, questionIds, date);
+      },
+      "That couldn’t be scheduled. Try again."
+    );
+    if (next) {
+      adopt(next);
+      setMessage({ tone: "brand", text: `Saved for ${formatDay(date, true)}. They stay in Needs review until they’re resolved.` });
+    }
+  }
+
   async function suggestion(s: RoleSuggestion, action: "accept" | "dismiss") {
     const next = await act(
       "suggestion",
@@ -482,6 +498,7 @@ function Workspace({
           onAnswer={answer}
           onDismiss={dismiss}
           onDefer={defer}
+          onDeferAll={deferAll}
           onGoToField={goToField}
           onSuggestion={suggestion}
           onRetry={reanalyze}

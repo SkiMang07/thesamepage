@@ -1623,6 +1623,44 @@ class DeferIn(BaseModel):
     follow_up_on: str
 
 
+def _follow_up_date(raw: str) -> date:
+    """The date a parked question comes back on: today (with a day of slack)
+    up to a year out."""
+    try:
+        when = date.fromisoformat(raw[:10])
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Choose a date to come back to this")
+    # One day of slack: the manager's "today" can be the server's yesterday.
+    if when < date.today() - timedelta(days=1) or when > date.today() + timedelta(days=366):
+        raise HTTPException(status_code=422, detail="Choose a date within the next year")
+    return when
+
+
+def _park_question(supabase, draft: dict, user_id: str, q: dict, when: date) -> str:
+    """Persist the decision behind a parked question and return its id. A
+    question that already carries a decision only has its date moved."""
+    if q.get("decision_id"):
+        supabase.table("role_expectation_decisions").update({"follow_up_on": when.isoformat()}) \
+            .eq("id", q["decision_id"]).eq("status", "deferred").execute()
+        return q["decision_id"]
+    item = next((i for i in draft["items"] if i["key"] == q["item_key"]), None) if q["item_key"] else None
+    row = supabase.table("role_expectation_decisions").insert({
+        "org_id": draft["org_id"],
+        "role_level_id": draft["role_level_id"],
+        "draft_id": draft["id"],
+        "item_key": item["config_id"] if item and item.get("config_id") and item.get("config_kind") == item_kind(item) else q["item_key"],
+        "config_kind": item_kind(item) if item and item.get("config_id") else None,
+        "config_id": item["config_id"] if item and item.get("config_id") and item.get("config_kind") == item_kind(item) else None,
+        "topic": q["topic"],
+        "question": q["question"],
+        "context": q.get("why"),
+        "status": "deferred",
+        "follow_up_on": when.isoformat(),
+        "created_by": user_id,
+    }).execute().data[0]
+    return row["id"]
+
+
 @router.post("/drafts/{draft_id}/defer")
 def defer_question(draft_id: str, body: DeferIn, auth=Depends(get_authenticated_client)):
     """Come back to this later: persists a decision with its role/level, the
@@ -1632,40 +1670,52 @@ def defer_question(draft_id: str, body: DeferIn, auth=Depends(get_authenticated_
     draft = _load_draft(supabase, draft_id)
     _require_open(draft)
     _check_version(draft, body.version)
-    try:
-        when = date.fromisoformat(body.follow_up_on[:10])
-    except ValueError:
-        raise HTTPException(status_code=422, detail="Choose a date to come back to this")
-    # One day of slack: the manager's "today" can be the server's yesterday.
-    if when < date.today() - timedelta(days=1) or when > date.today() + timedelta(days=366):
-        raise HTTPException(status_code=422, detail="Choose a date within the next year")
+    when = _follow_up_date(body.follow_up_on)
     questions = [q for q in (normalize_question(q) for q in draft.get("questions") or []) if q]
     q = next((x for x in questions if x["id"] == body.question_id), None)
     if not q:
         raise HTTPException(status_code=404, detail="That question is no longer part of this draft")
-    if q.get("decision_id"):
-        supabase.table("role_expectation_decisions").update({"follow_up_on": when.isoformat()}) \
-            .eq("id", q["decision_id"]).eq("status", "deferred").execute()
-        decision_id = q["decision_id"]
-    else:
-        item = next((i for i in draft["items"] if i["key"] == q["item_key"]), None) if q["item_key"] else None
-        row = supabase.table("role_expectation_decisions").insert({
-            "org_id": draft["org_id"],
-            "role_level_id": draft["role_level_id"],
-            "draft_id": draft["id"],
-            "item_key": item["config_id"] if item and item.get("config_id") and item.get("config_kind") == item_kind(item) else q["item_key"],
-            "config_kind": item_kind(item) if item and item.get("config_id") else None,
-            "config_id": item["config_id"] if item and item.get("config_id") and item.get("config_kind") == item_kind(item) else None,
-            "topic": q["topic"],
-            "question": q["question"],
-            "context": q.get("why"),
-            "status": "deferred",
-            "follow_up_on": when.isoformat(),
-            "created_by": user_id,
-        }).execute().data[0]
-        decision_id = row["id"]
+    decision_id = _park_question(supabase, draft, user_id, q, when)
     questions = [{**x, "status": "deferred", "decision_id": decision_id, "follow_up_on": when.isoformat()}
                  if x["id"] == q["id"] else x for x in questions]
+    updated = _write_draft(supabase, draft, {"questions": reconcile_questions(draft["items"], questions)})
+    return _present_draft(supabase, updated)
+
+
+class DeferManyIn(BaseModel):
+    version: int
+    question_ids: list[str]
+    follow_up_on: str
+
+
+@router.post("/drafts/{draft_id}/defer-many")
+def defer_questions(draft_id: str, body: DeferManyIn, auth=Depends(get_authenticated_client)):
+    """Park several open questions on one date in a single write: one draft
+    write and one version bump however many are parked. An id that is no
+    longer in the draft is skipped (the client can be a reconcile behind);
+    only when none are is it a 404. Answered and dismissed questions are left
+    alone; one that is already parked just moves to the new date."""
+    user_id, supabase = auth
+    draft = _load_draft(supabase, draft_id)
+    _require_open(draft)
+    _check_version(draft, body.version)
+    ids = list(dict.fromkeys(body.question_ids))
+    if len(ids) > _MAX_ITEMS:
+        raise HTTPException(status_code=422, detail=f"Park at most {_MAX_ITEMS} questions at a time")
+    when = _follow_up_date(body.follow_up_on)
+    questions = [q for q in (normalize_question(q) for q in draft.get("questions") or []) if q]
+    known = {q["id"] for q in questions}
+    if not any(i in known for i in ids):
+        raise HTTPException(status_code=404, detail="Those questions are no longer part of this draft")
+    wanted = set(ids)
+    parked: dict[str, str] = {}
+    for q in questions:
+        if q["id"] in wanted and q["status"] in ("open", "deferred"):
+            parked[q["id"]] = _park_question(supabase, draft, user_id, q, when)
+    if not parked:
+        return _present_draft(supabase, draft)
+    questions = [{**x, "status": "deferred", "decision_id": parked[x["id"]], "follow_up_on": when.isoformat()}
+                 if x["id"] in parked else x for x in questions]
     updated = _write_draft(supabase, draft, {"questions": reconcile_questions(draft["items"], questions)})
     return _present_draft(supabase, updated)
 
