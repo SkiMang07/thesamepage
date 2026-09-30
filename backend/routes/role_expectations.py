@@ -175,22 +175,60 @@ def _words_to_values(words: list[str]) -> list[int]:
     return values
 
 
+def _run_values(text: str, m: re.Match) -> list[int]:
+    """The numbers a spelled run spells, or [] when the run is a pronoun "one"."""
+    run = re.findall(r"[A-Za-z]+", m.group(0).lower())
+    run = [w for w in run if w in _UNIT_WORDS or w in _TENS_WORDS or w in _SCALE_WORDS or w == "and"]
+    if run == ["one"]:
+        before = re.findall(r"[A-Za-z]+(?:-[A-Za-z]+)*", text[:m.start()].lower())[-1:]
+        after = re.findall(r"[A-Za-z]+", text[m.end():m.end() + 30].lower())
+        nxt = after[0] if after else ""
+        counted = nxt in _ONE_COUNT_AFTER or (
+            nxt in ("to", "or") and len(after) > 1 and after[1] in _UNIT_WORDS)
+        if (before and before[0] in _ONE_NOT_AFTER) or not counted:
+            return []
+    return _words_to_values(run)
+
+
 def _spelled_numbers(text: str) -> set[str]:
     found: set[str] = set()
     for m in _WORD_RUN_RE.finditer(text):
-        run = re.findall(r"[A-Za-z]+", m.group(0).lower())
-        run = [w for w in run if w in _UNIT_WORDS or w in _TENS_WORDS or w in _SCALE_WORDS or w == "and"]
-        if run == ["one"]:
-            before = re.findall(r"[A-Za-z]+(?:-[A-Za-z]+)*", text[:m.start()].lower())[-1:]
-            after = re.findall(r"[A-Za-z]+", text[m.end():m.end() + 30].lower())
-            nxt = after[0] if after else ""
-            counted = nxt in _ONE_COUNT_AFTER or (
-                nxt in ("to", "or") and len(after) > 1 and after[1] in _UNIT_WORDS)
-            if (before and before[0] in _ONE_NOT_AFTER) or not counted:
-                continue
-        for v in _words_to_values(run):
+        for v in _run_values(text, m):
             found.add(str(v))
     return found
+
+
+def _canon_numbers(text: str | None) -> str:
+    """Text in a form where the same stated figure reads the same however it was
+    written: lowercased, whitespace collapsed, curly quotes straightened, and
+    every number token (digits or a spelled run) rewritten as its canonical
+    value. "Within two working days" and "within 2 working days" canonicalise
+    identically; a pronoun "one" is left as a word."""
+    s = re.sub(r"\s+", " ", (text or "")).strip().lower()
+    s = s.replace("\u2019", "'").replace("\u2018", "'").replace("\u201c", '"').replace("\u201d", '"')
+
+    def spelled(m: re.Match) -> str:
+        values = _run_values(s, m)
+        return " ".join(str(v) for v in values) if values else m.group(0)
+
+    s = _WORD_RUN_RE.sub(spelled, s)
+    return _NUM_RE.sub(lambda m: _norm_number(m.group(0)), s)
+
+
+_SPAN_TRIM = " .,;:!?'\"()"
+
+
+def is_span_of(text: str | None, quote: str | None) -> bool:
+    """True when `text` is a literal span of `quote` once both are canonicalised.
+    Whole tokens only, so "2 working days" is not a span of "12 working days"
+    and "3 days" is not a span of "3.5 days". A target that is a span of its
+    quote cannot carry a number, or a claim, the quote does not make."""
+    t = _canon_numbers(text).strip(_SPAN_TRIM)
+    q = _canon_numbers(quote)
+    if not t or not q:
+        return False
+    pattern = r"(?<![0-9a-z])(?<![0-9][.,])" + re.escape(t) + r"(?![0-9a-z])(?![.,][0-9])"
+    return re.search(pattern, q) is not None
 
 
 def numbers_in(text: str | None) -> set[str]:
@@ -762,7 +800,7 @@ For every item write:
 - "exceeds": OPTIONAL. Only when there is a meaningful, observable step beyond meeting. Empty string is a good answer.
 - "source_quote": the shortest exact phrase from the job description this item comes from, or "" if it comes from the manager's notes or is your proposal.
 
-THE NUMBER RULE (non-negotiable): never write a number, percentage, count, time limit or target that is not written in the job description or the manager's notes. No benchmarks, no "typical" figures, no placeholders, no zero. If a numeric responsibility has no target in either, set "target" to null — the manager will be asked. If one of them states a target, copy it into "target": {"text": "...", "quote": "exact words from the job description or the manager's notes"}."""
+THE NUMBER RULE (non-negotiable): never write a number, percentage, count, time limit or target that is not written in the job description or the manager's notes. No benchmarks, no "typical" figures, no placeholders, no zero. If a numeric responsibility has no target in either, set "target" to null — the manager will be asked. If one of them states a target, copy it into "target": {"text": "...", "quote": "exact words from the job description or the manager's notes"}. The target "text" must itself be words copied from inside that quote — a stretch of it, not a paraphrase, summary or abbreviation (quote "answered within two working days" → text "within two working days"; never "2-day SLA"). A cadence counts as a target the same way ("weekly written status")."""
 
 
 _CONTEXT_RULES = """THE MANAGER'S NOTES are the current truth about this role; the job description is the starting point. The description may be out of date (written before a promotion or a change of scope) or generic. So:
@@ -886,7 +924,9 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
             if isinstance(target, dict) and target.get("text"):
                 quote = _clean_text(target.get("quote"), 600)
                 text = _clean_text(target.get("text"), 300)
-                traced = numbers_in(text) and numbers_in(text) <= numbers_in(quote)
+                # The target must be a span of the quote it cites: a paraphrase,
+                # or a quote that merely contains some number, proves nothing.
+                traced = is_span_of(text, quote)
                 if traced and quote and context_sq and _squash(quote) in context_sq:
                     raw["target"] = {"status": "set", "text": text, "source": "manager", "quote": quote}
                     ok = True
@@ -931,6 +971,8 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
             "why": raw.get("why"), "answer_mode": "answer", "origin": "ai",
         })
         if q and not unsupported_numbers(q["question"], allowed):
+            if unsupported_numbers(q["why"], allowed):
+                q["why"] = None
             questions.append(q)
     return items, reconcile_questions(items, questions), notes
 
@@ -1468,6 +1510,8 @@ def sanitize_review(parsed: dict, draft: dict) -> tuple[list[dict], list[dict], 
                                 "why": raw.get("why"), "answer_mode": "answer", "origin": "ai"})
         if not q or _squash(q["question"]) in asked or unsupported_numbers(q["question"], allowed):
             continue
+        if unsupported_numbers(q["why"], allowed):
+            q["why"] = None
         questions.append(q)
 
     suggestions = []
@@ -1477,6 +1521,8 @@ def sanitize_review(parsed: dict, draft: dict) -> tuple[list[dict], list[dict], 
         if not isinstance(raw, dict):
             continue
         why = _clean_text(raw.get("why"), 300) or None
+        if unsupported_numbers(why, allowed):
+            why = None
         sid = f"s-{uuid.uuid4().hex[:12]}"
         stype = raw.get("type")
         if stype == "rewrite":

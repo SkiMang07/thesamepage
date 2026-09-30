@@ -26,6 +26,7 @@ import LadderManager from "@/components/expectations/LadderManager";
 import CompanyValues from "@/components/expectations/CompanyValues";
 import { Notice, formatDay } from "@/components/expectations/shared";
 import { BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW } from "@/lib/tokens";
+import { approvedNotice } from "@/lib/expectations-notice";
 
 export default function ExpectationsPage() {
   return (
@@ -50,6 +51,7 @@ function ExpectationsOverview() {
   const [roleFamilies, setRoleFamilies] = useState<RoleFamily[]>([]);
   const [manageError, setManageError] = useState<string | null>(null);
   const notice = params.get("notice");
+  const noticeRole = params.get("role");
 
   const load = useCallback(() => {
     getRolesOverview()
@@ -90,12 +92,16 @@ function ExpectationsOverview() {
     return out;
   }, [data]);
 
+  // After an approval, say who it reaches: the role's holders and how many
+  // expectations their next prep sheet uses. Wait for the overview when the
+  // role is known, so the notice doesn't swap wording once it loads.
+  const approvedLevel = data?.levels.find((l) => l.role_level_id === noticeRole);
   const noticeText =
-    notice === "approved"
-      ? "Expectations approved. They’re now used in 1:1 preparation, development and assessments."
-      : notice === "approved-open"
-        ? "Expectations approved. The open detail stays listed here until it’s resolved."
-        : notice === "saved"
+    notice === "approved" || notice === "approved-open"
+      ? noticeRole && !data && !error
+        ? null
+        : approvedNotice(notice, approvedLevel)
+      : notice === "saved"
           ? "Draft saved. Pick it up from Needs review whenever you’re ready."
           : notice === "discarded"
             ? "Draft discarded. Approved expectations were not changed."

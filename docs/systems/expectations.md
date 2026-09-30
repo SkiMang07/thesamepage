@@ -72,7 +72,10 @@ revision); healthy roles aren't styled as warnings. *Manage ladders* swaps in
 `LadderManager` (create/rename/delete ladders, add levels above or below, edit a
 level title, move a level to another ladder — the merge — and delete). Company values
 are listed once with add/edit/remove and an AI suggestion that saves nothing until
-kept. First use shows a single "Start with one role" prompt.
+kept. First use shows a single "Start with one role" prompt. After an approval
+(`?notice=approved&role=`), the notice names who holds the role and how many
+expectations their next prep sheet measures against (from `counts`;
+`lib/expectations-notice.ts`); a role nobody holds gets the plain wording.
 
 **Define a role** (`/app/expectations/new`). Paste or upload (PDF, .docx, .txt,
 .md) a job description, and optionally add notes in "What the job description
@@ -115,11 +118,18 @@ and one explicit confirmation + **Approve** for the whole role.
 - **Never invent a number.** Every number in AI-proposed text must already appear
   in the job description, the manager's notes, the current draft or the manager's
   answers (`numbers_in` / `strip_unsupported`); sentences with any other number are
-  removed and noted. A composed target survives only if its exact quote is in the
-  source (`target_source` `source`) or the notes (`manager`) and its numbers are in
-  the quote; otherwise the item is numeric with an unresolved target. A scanned PDF
-  with no text layer yields no numbers of its own — only the notes' numbers count.
-  Suggested targets must trace to the source, the notes or the manager's answers.
+  removed and noted, and a question's `why` (or a suggestion's) that carries one is
+  cleared. A composed target survives only if its exact quote is in the source
+  (`target_source` `source`) or the notes (`manager`) **and the target text is a
+  span of that quote** (`is_span_of`: both sides through `_canon_numbers`, which
+  lowercases, collapses whitespace and rewrites digits and spelled numbers alike to
+  one value, so "2 working days" is a span of "within two working days"; whole
+  tokens only, so it is not a span of "12 working days"). A span can't carry a
+  number the quote doesn't make, and a cadence with no digit ("weekly written
+  status") can be a target. Otherwise the item is numeric with an unresolved
+  target. A scanned PDF with no text layer yields no numbers of its own — only the
+  notes' numbers count. Suggested targets must trace to the source, the notes or the
+  manager's answers.
 - **Every missing target is explicit.** A numeric responsibility without a target
   always carries a system question (independent of the AI). It closes only by
   writing the target or making the item unmeasured — never by dismissing it.

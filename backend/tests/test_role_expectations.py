@@ -153,7 +153,7 @@ def test_notes_do_not_launder_an_invented_number():
 def test_notes_work_when_the_pdf_has_no_text_layer():
     # Scanned PDF: corpus is empty and source unavailable, but the notes still count.
     items, _, _ = rex.sanitize_composed(
-        {"items": [_composed(meets="Keeps NRR on plan.", target={"text": "110% NRR", "quote": "110% net revenue retention"})]},
+        {"items": [_composed(meets="Keeps NRR on plan.", target={"text": "110% net revenue retention", "quote": "110% net revenue retention"})]},
         corpus_text="", source_available=False, context_text=NOTES)
     assert items[0]["target"]["source"] == "manager"
 
@@ -599,3 +599,128 @@ def test_single_defer_still_works_through_the_shared_helpers(monkeypatch):
     out = rex.defer_question("dr1", rex.DeferIn(version=3, question_id="a", follow_up_on=when), auth=("u1", db))["draft"]
     assert [q["status"] for q in out["questions"]] == ["deferred", "open"]
     assert db.draft_writes == 1 and len(db.decisions) == 1
+
+
+# ── Build 2: the target must be a span of the quote it cites ─────────────
+
+# Fictional (business/digital-customers/.../2026-09-30-dana-spoken-monologue.md).
+DANA = (
+    "Okay. The five without expectations. Andre first, because he's the one I keep replaying. Backend, "
+    "mid-level, two years. What good looks like for him, I never wrote down. Two conversations, nothing on "
+    "paper. I'd want a weekly written status from him. He sent two, then stopped. Last month. And consistent "
+    "delivery, I guess. That's the actual thing.\n\n"
+    "Kwame. Junior, eight months. Remote onboarding. I said at his 90-day mark I'd write him a growth plan. "
+    "Still a bullet point in my head. So, growth plan, mine. His side is, ask questions early, don't sit on a "
+    "blocker. He needs a lot of coaching. Weekly 1:1, thirty minutes.\n\n"
+    "Lena. Senior platform, SRE. Six hours ahead. Only remote one. Biweekly, mostly async. Honestly I don't "
+    "know what she's working on until something breaks. I owe her quarterly priorities. Asked two weeks ago, "
+    "waiting on her. What I'd want from her, visibility. Tell me before it breaks.\n\n"
+    "Mei. Senior full-stack. Three years. Was my peer. Applied for the job. Design doc feedback, I owe her, "
+    "three weeks now. And the meets versus exceeds talk after calibration. Not raised."
+)
+
+
+def test_canon_numbers_rewrites_digits_and_spelled_runs_the_same_way():
+    assert rex._canon_numbers("Within  Two working\ndays") == "within 2 working days"
+    assert rex._canon_numbers("within 2 working days") == "within 2 working days"
+    assert rex._canon_numbers("Twenty-five percent of 1,200 accounts") == "25 percent of 1200 accounts"
+    assert rex._canon_numbers("one hundred and five accounts, 3.50 days") == "105 accounts, 3.5 days"
+    assert rex._canon_numbers("one a week") == "1 a week"
+    assert rex._canon_numbers("I\u2019d want it") == "i'd want it"
+
+
+def test_canon_numbers_leaves_a_pronoun_one_as_a_word():
+    for text in ("No one is left behind.", "One of the team leads it.", "Weekly one-on-one meetings.",
+                 "Each one is reviewed."):
+        assert rex._canon_numbers(text) == " ".join(text.split()).lower(), text
+
+
+def test_span_check_is_whole_token_and_canonical():
+    assert rex.is_span_of("2 working days", "answered within two working days")
+    assert rex.is_span_of("within two working days", "answered within 2 working days")
+    assert rex.is_span_of("within two working days.", "answered within two working days")
+    assert not rex.is_span_of("2 working days", "answered within 12 working days")
+    assert not rex.is_span_of("3 days", "resolved in 3.5 days")
+    assert not rex.is_span_of("5 days", "resolved in 1.5 days")
+    assert not rex.is_span_of("week", "a weekly status")
+    assert not rex.is_span_of("", "anything") and not rex.is_span_of(" . ", "anything")
+
+
+def _target_status(text, quote, *, corpus="", source_available=False, context=None):
+    items, _, _ = rex.sanitize_composed(
+        {"items": [_composed(meets="Delivers.", target={"text": text, "quote": quote})]},
+        corpus_text=corpus, source_available=source_available, context_text=context)
+    t = items[0]["target"]
+    return (t["status"], t.get("source"))
+
+
+def test_spans_of_a_real_quote_are_set_with_provenance():
+    jd = JD + " Maintain 95% gross revenue retention each quarter. Respond to reviews within two working days."
+    notes = DANA + " Tickets get answered within two working days."
+    assert _target_status("95% gross revenue retention", "Maintain 95% gross revenue retention each quarter",
+                          corpus=jd, source_available=True) == ("set", "source")
+    assert _target_status("within two working days", "answered within two working days",
+                          context=notes) == ("set", "manager")
+    # digit <-> spelled, both directions
+    assert _target_status("2 working days", "answered within two working days", context=notes) == ("set", "manager")
+    assert _target_status("Two working days", "respond to reviews within 2 working days",
+                          corpus=jd.replace("two working", "2 working"), source_available=True) == ("set", "source")
+    assert _target_status("Two working days", "respond to reviews within two working days",
+                          corpus=jd, source_available=True) == ("set", "source")
+
+
+def test_cadence_targets_from_danas_own_words_are_set():
+    assert _target_status("weekly written status", "I'd want a weekly written status from him",
+                          context=DANA) == ("set", "manager")
+    assert _target_status("Weekly", "a weekly written status from him", context=DANA) == ("set", "manager")
+    assert _target_status("quarterly priorities", "I owe her quarterly priorities", context=DANA) == ("set", "manager")
+    assert _target_status("Quarterly", "I owe her quarterly priorities", context=DANA) == ("set", "manager")
+
+
+def test_a_genuine_quote_cannot_carry_a_fabricated_target():
+    fabricated = [
+        ("2 working days", "Backend, mid-level, two years"),
+        ("90% of design docs reviewed", "at his 90-day mark"),
+        ("90% of design docs", "at his 90-day mark"),
+        ("3 status updates a week", "Design doc feedback, I owe her, three weeks now"),
+        ("6 incidents per quarter", "Six hours ahead"),
+        ("30 PRs a month", "Weekly 1:1, thirty minutes"),
+        ("Every sprint", "consistent delivery"),
+    ]
+    for text, quote in fabricated:
+        assert rex._squash(quote) in rex._squash(DANA), quote  # the quote itself is genuine
+        assert _target_status(text, quote, context=DANA) == ("unresolved", None), text
+
+
+def test_the_allowed_set_of_one_roles_slice_strips_anothers_number():
+    # 2c is a caller constraint (Build 3): given only Andre's slice, Mei's "three weeks" can't vouch for a 3.
+    andre = DANA.split("\n\n")[0]
+    text, changed = rex.strip_unsupported("Responds to design doc feedback within 3 days.", rex.numbers_in(andre))
+    assert changed and text == ""
+
+
+def test_a_why_with_an_invented_number_is_cleared_and_the_question_kept():
+    raw = {"items": [_composed()],
+           "questions": [{"item_index": 0, "topic": "scope", "question": "Does this include expansion?",
+                          "why": "Most teams expand 40% of their book."},
+                         {"item_index": 0, "topic": "wording", "question": "Is on track observable?",
+                          "why": "It shapes the 1:1 conversation."}]}
+    _, questions, _ = rex.sanitize_composed(raw, corpus_text=JD, source_available=True)
+    by_topic = {q["topic"]: q for q in questions}
+    assert by_topic["scope"]["why"] is None and by_topic["scope"]["question"] == "Does this include expansion?"
+    assert by_topic["wording"]["why"] == "It shapes the 1:1 conversation."
+
+
+def test_review_clears_a_why_with_an_invented_number():
+    item = rex.normalize_item(_composed(key="n-cccccccccccc", meets="Renewals stay on track.",
+                                        target={"status": "unresolved"}))
+    parsed = {"questions": [{"item_key": item["key"], "topic": "scope", "question": "Expansion too?",
+                             "why": "Peers hit 85% on this."}],
+              "suggestions": [{"type": "add", "section": "skill", "title": "Negotiation",
+                               "meets": "Handles pricing pushback calmly.", "why": "Top reps win 70% of these."},
+                              {"type": "add", "section": "skill", "title": "Forecasting",
+                               "meets": "Keeps the forecast current.", "why": "The JD asks for 3+ years."}]}
+    qs, sugs, _ = rex.sanitize_review(parsed, _draft([item]))
+    assert [(q["question"], q["why"]) for q in qs] == [("Expansion too?", None)]
+    assert [(s["item"]["title"], s["why"]) for s in sugs] == [("Negotiation", None),
+                                                               ("Forecasting", "The JD asks for 3+ years.")]

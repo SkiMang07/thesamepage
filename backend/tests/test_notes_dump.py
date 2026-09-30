@@ -158,7 +158,7 @@ def test_validate_keeps_real_drafts_and_drops_invented_ones():
         ],
         "unmatched_people": [{"name": "Dana Wu", "excerpt": "Dana covers EMEA"}, "junk"],
     }
-    out = nd.validate_parse(parsed, _ctx())
+    out = nd.validate_parse(parsed, _ctx(), "Dana covers EMEA now.")
     assert [u["name"] for u in out["org_units"]] == ["Onboarding"]
     assert len(out["role_assignments"]) == 1
     ra = out["role_assignments"][0]
@@ -168,6 +168,24 @@ def test_validate_keeps_real_drafts_and_drops_invented_ones():
     assert out["person_notes"][0]["report_id"] == "dr1"
     assert out["unmatched_people"] == [{"name": "Dana Wu", "excerpt": "Dana covers EMEA"}]
     assert out["org_units"][0]["low"] is False and out["goals"][0]["low"] is True
+
+
+def test_an_excerpt_not_in_the_notes_is_dropped_and_its_row_kept():
+    notes = "Onboarding team\n   sits under   Support.\nMaya joined in March from the sales team."
+    parsed = {
+        "org_units": [{"name": "Onboarding", "unit_type": "team", "excerpt": "Onboarding team sits under Support.",
+                       "confidence": "high"}],
+        "person_notes": [{"person": "P1", "text": "Joined in March from the sales team.",
+                          "excerpt": "Maya was the top closer in sales."}],
+        "unmatched_people": [{"name": "Dana Wu", "excerpt": "Dana covers EMEA"}],
+    }
+    out = nd.validate_parse(parsed, _ctx(), notes)
+    # a genuine excerpt survives even though the notes had newlines and double spaces
+    assert out["org_units"][0]["excerpt"] == "Onboarding team sits under Support."
+    # an invented one is dropped, the row stays
+    assert out["person_notes"][0]["text"] == "Joined in March from the sales team."
+    assert out["person_notes"][0]["excerpt"] is None
+    assert out["unmatched_people"] == [{"name": "Dana Wu", "excerpt": None}]
 
 
 # ── rank and cap ─────────────────────────────────────────────────────────

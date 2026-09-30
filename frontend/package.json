@@ -11,7 +11,8 @@
     "test:assessments": "node --experimental-strip-types --test lib/assessment-periods.test.mjs",
     "test:ai-drafts": "node --experimental-strip-types --test lib/aiDraftTelemetry.test.mjs",
     "test:growth-preview": "node --experimental-strip-types --test lib/development-preview.test.mjs",
-    "test:scribe-citations": "node --experimental-strip-types --test lib/scribeCitations.test.mjs"
+    "test:scribe-citations": "node --experimental-strip-types --test lib/scribeCitations.test.mjs",
+    "test:expectations-notice": "node --experimental-strip-types --test lib/expectations-notice.test.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.3",

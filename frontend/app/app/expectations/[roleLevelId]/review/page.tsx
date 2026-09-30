@@ -89,7 +89,7 @@ export default function ReviewPage() {
     setProblems([]);
     try {
       const out = await approveRoleDraft(draft.id, draft.version);
-      router.push(`/app/expectations?notice=${out.open_decisions.length ? "approved-open" : "approved"}`);
+      router.push(`/app/expectations?notice=${out.open_decisions.length ? "approved-open" : "approved"}&role=${encodeURIComponent(draft.role_level_id)}`);
     } catch (e) {
       if (e instanceof ApiError) {
         setError(e.status === 409 ? e.detail : e.status < 500 ? e.detail : "Approval didn’t go through, and nothing was changed. Try again.");

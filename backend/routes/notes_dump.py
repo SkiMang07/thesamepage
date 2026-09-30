@@ -36,7 +36,7 @@ from config import AI_DEFAULT_MODEL_HEAVY
 from routes.documents import _MAX_UPLOAD_BYTES
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
 from routes.org_units import _validate_parent_assignment
-from routes.role_expectations import _extract_pdf_text
+from routes.role_expectations import _extract_pdf_text, _squash
 from routes.roles_import import _extract_docx_text, _infer_import_type, _parse_json_object
 from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
 
@@ -228,8 +228,18 @@ def _low(item: dict) -> bool:
     return str(item.get("confidence", "")).lower() != "high"
 
 
-def validate_parse(parsed: dict, ctx: dict) -> dict:
-    """Keep only well-formed drafts that point at real things. Drop the rest quietly."""
+def _excerpt(value, notes_sq: str) -> str | None:
+    """An excerpt is shown as the manager's own words, so it must be in what they
+    gave us. Both sides are squashed: _s has already collapsed whitespace, and a
+    raw comparison would fail on genuine excerpts."""
+    excerpt = _s(value, 200)
+    return excerpt if excerpt and _squash(excerpt) in notes_sq else None
+
+
+def validate_parse(parsed: dict, ctx: dict, notes: str) -> dict:
+    """Keep only well-formed drafts that point at real things. Drop the rest quietly.
+    An excerpt that isn't in the notes is dropped; its row stays."""
+    notes_sq = _squash(notes)
     people, roles = ctx["people"], ctx["roles"]
     unit_names = {u["name"].lower() for u in ctx["units"]}
     existing_goals = {(g["level"], g["title"].strip().lower()) for g in ctx["goals"]}
@@ -245,7 +255,7 @@ def validate_parse(parsed: dict, ctx: dict) -> dict:
         seen.add(("u", name.lower()))
         out["org_units"].append({
             "name": name, "unit_type": utype, "parent_name": _s(it.get("parent_name"), 80),
-            "excerpt": _s(it.get("excerpt"), 200), "low": _low(it),
+            "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
         })
 
     for it in parsed.get("role_assignments") or []:
@@ -269,7 +279,7 @@ def validate_parse(parsed: dict, ctx: dict) -> dict:
             "role_label": role["label"] if changes_role else None,
             "role_title": role_title if changes_title else None,
             "org_unit_name": unit_name if changes_unit else None,
-            "excerpt": _s(it.get("excerpt"), 200), "low": _low(it),
+            "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
         })
 
     for it in parsed.get("goals") or []:
@@ -283,7 +293,7 @@ def validate_parse(parsed: dict, ctx: dict) -> dict:
             "level": level, "title": title, "success_metrics": _s(it.get("success_metrics"), 500),
             "org_unit_name": _s(it.get("org_unit_name"), 80) if level != "company" else None,
             "due_date": _iso_date(it.get("due_date")),
-            "excerpt": _s(it.get("excerpt"), 200), "low": _low(it),
+            "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
         })
 
     for it in parsed.get("person_notes") or []:
@@ -297,13 +307,13 @@ def validate_parse(parsed: dict, ctx: dict) -> dict:
         out["person_notes"].append({
             "report_id": person["id"], "person_name": person["name"], "text": text,
             "occurred_on": _iso_date(it.get("occurred_on")),
-            "excerpt": _s(it.get("excerpt"), 200), "low": _low(it),
+            "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
         })
 
     unmatched = []
     for it in parsed.get("unmatched_people") or []:
         if isinstance(it, dict) and _s(it.get("name"), 80) and len(unmatched) < CAP_GROUP:
-            unmatched.append({"name": _s(it.get("name"), 80), "excerpt": _s(it.get("excerpt"), 200)})
+            unmatched.append({"name": _s(it.get("name"), 80), "excerpt": _excerpt(it.get("excerpt"), notes_sq)})
     out["unmatched_people"] = unmatched
     return out
 
@@ -388,7 +398,7 @@ def parse_notes_dump(
 
     ctx = build_context(supabase, user_id)
     raw = generate_text(build_prompt(ctx, notes), model=AI_DEFAULT_MODEL_HEAVY, max_tokens=4000, timeout=120.0)
-    drafts = validate_parse(_parse_json_object(raw), ctx)
+    drafts = validate_parse(_parse_json_object(raw), ctx, notes)
     unmatched = drafts.pop("unmatched_people")
     shown, overflow = rank_and_cap(drafts, _soonest_reports(supabase, user_id))
     number_items(shown)
