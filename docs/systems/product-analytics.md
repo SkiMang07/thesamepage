@@ -53,6 +53,9 @@ What we measure about how managers use the app, how it is collected, and the rul
 |`org_goals_applied`|server, `POST /api/onboarding/org-goals/apply`|the manager saves what they kept from the org-goals review|`kept` (int, saved), `skipped_existing` (int), `refused` (int), `dropped` (int, proposed and not kept), `edited` (int, kept rows the manager changed)|
 |`org_goals_unknown`|server, `POST /api/onboarding/org-goals/unknown`|the manager answers "Don't know yet" on org goals|`had_boss_meeting` (bool): the item was added to an existing meeting with their boss now, rather than held for the first one|
 |`org_goal_reconfirmed`|server, `POST /api/onboarding/org-goals/{goal_id}/confirm`|the manager answers "Yes" on the "Still current?" line for an org goal|`days_since` (`under_90`, `90_180` or `over_180`: time since it was last confirmed or added)|
+|`setup_intro_resolved`|server, `POST /api/onboarding/intro-seen`|the manager closes the entry modal ("what setup is and why"). Fires once per manager, the first time only|`action` (`started`: chose the first step, `later`: closed it or chose Later)|
+|`setup_card_dismissed`|server, `POST /api/onboarding/card-dismissed`|the manager chooses "Not now" on the setup card, which snoozes it|`dismissals` (int, including this one), `level_before` (`full` or `quiet`)|
+|`set_up_receipt_seen`|server, `POST /api/onboarding/receipt-seen`|the manager closes the completion modal after setup finishes. Fires once per manager, the first time only|none|
 
 `is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
 
@@ -110,6 +113,8 @@ How far new managers get through setup after the first prep sheet. Count only; n
 - **Notes dump:** `notes_dump_parsed` (ran), then `notes_dump_applied` (saved something) or `notes_dump_skipped` (chose "Nothing to add"). Parsed without a later applied is abandoned or discarded. `proposed_*` against `kept_*` is how much of the ranked draft survived.
 - **Expectations on-ramp:** `role_draft_composed` by `source` shows how many managers attach a job description versus describe the role. `typical` against later `role_suggestion` outcomes shows how much of the "typical for this role" material survives review.
 - **Org goals:** `org_goals_parsed`, then `org_goals_applied` (saved something) or `org_goals_unknown` (chose "Don't know yet"). Parsed without a later applied or unknown is abandoned or discarded. `org_goal_reconfirmed` counts the quarterly "Still current?" answers.
+- **Entry and fading:** `setup_intro_resolved` by `action` shows how many start straight from the modal versus leave it for the card. `setup_card_dismissed` with a rising `dismissals` count marks managers the card is losing; compare their `setup_step_completed` against managers who never dismiss. The Mission Control candidate that returns a manager to the next step reports through the existing `cta_clicked` and `setup_dismissed_today` events, with `candidate_type` `resume_setup_step`.
+- **Completion:** `set_up` is the fact, `set_up_receipt_seen` is the manager seeing the receipt. The gap between them is how long a finished manager takes to return to Mission Control.
 - **`is_next`:** compare completion of the highlighted step against the others to see whether the highlight helps.
 - **Activation ladder:** `prep_sheet_saved` (`is_first`) is activated, `set_up` is set up, `onboarded` is onboarded. Build the PostHog funnel from those three.
 - **Known gap:** a step the manager finishes on its own page without ever clicking the card still fires `setup_step_completed`, with no matching `setup_step_started`.

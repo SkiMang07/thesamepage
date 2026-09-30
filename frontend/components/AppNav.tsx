@@ -38,6 +38,7 @@ import { useQuickAdd } from "@/lib/quick-add-context";
 import { useSidebar } from "@/lib/sidebar-context";
 import Logo from "@/components/Logo";
 import { createClient } from "@/lib/supabase";
+import { SETUP_REVEAL_EVENT } from "@/lib/api";
 import { Icon, NAV_STRIP_HEIGHT, getNavContext, useZoneData } from "@/components/ZoneMap";
 import QuickAddModal from "@/components/QuickAddModal";
 import { BTN_TOPBAR_NEUTRAL, BTN_TOPBAR_SCRIBE, BTN_TOPBAR_SCRIBE_OPEN, ELEVATED } from "@/lib/tokens";
@@ -126,6 +127,7 @@ export default function AppNav() {
             {zone.onboarding && !zone.onboarding.set_up && (
               <Link
                 href="/app/dashboard#setup"
+                onClick={() => window.dispatchEvent(new Event(SETUP_REVEAL_EVENT))}
                 className={`${BTN_TOPBAR_NEUTRAL} gap-2`}
                 aria-label={`Setup, ${zone.onboarding.done_count} of ${zone.onboarding.total} done`}
               >

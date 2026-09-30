@@ -256,7 +256,7 @@ export function CandidateControls({
           )}
           {aiExplanation && <p className="mt-3 rounded-md bg-surface px-3 py-2 text-xs text-ink-body">{aiExplanation}</p>}
           {aiState === "failed" && <p className="mt-3 text-xs text-ink-muted">An extra AI explanation is unavailable. The ranking and evidence above are unchanged.</p>}
-          {!aiExplanation && aiState !== "failed" && (
+          {!aiExplanation && aiState !== "failed" && candidate.candidate_type !== "resume_setup_step" && (
             <button type="button" onClick={requestExplanation} disabled={aiState === "loading"} className="mt-3 text-xs text-blue-700 hover:text-blue-600">
               {aiState === "loading" ? "Explaining…" : "Explain in plain language with AI"}
             </button>

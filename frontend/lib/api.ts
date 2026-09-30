@@ -65,6 +65,8 @@ function announceReadOnly(status: number) {
 }
 
 export const RECORDS_CHANGED_EVENT = "tsp:records-changed";
+// The header Setup chip asks Mission Control to show the setup card even when it is snoozed.
+export const SETUP_REVEAL_EVENT = "tsp:setup-reveal";
 export const RECORDS_CHANGED_STORAGE_KEY = "tsp:records-changed-at";
 
 function announceRecordChange(path: string, method: string) {
@@ -210,6 +212,10 @@ export type PrepGuide = {
   // routes/one_on_ones.py), Knowledge documents by title. Absent on sheets
   // saved before 2026-09-26 by the manual path.
   drew_on?: string[];
+  // Setup inputs that were missing for this person when the sheet was built
+  // ("role expectations", "team goals", ...). Absent when nothing was missing
+  // and on sheets saved before 2026-10-01.
+  built_without?: string[];
 };
 
 export type OneOnOne = {
@@ -284,6 +290,7 @@ export type PrepResponse = {
   prepared_by?: "manager" | "overnight";
   prepared_at?: string | null;
   drew_on?: string[];
+  built_without?: string[];
 };
 
 // AI-drafted wrap-up of a 1:1 — reviewed and edited by the manager before
@@ -1960,9 +1967,47 @@ export type OnboardingStatus = {
   // People whose role has expectations. Null once set up.
   assessable_people: number | null;
   steps: OnboardingSteps | null;
+  // Setup mode prompts (chunk D). The entry modal has not been closed yet; the
+  // completion modal has not been closed yet; how loud the setup card is. All
+  // three are absent or false until the chunk D migration has run.
+  intro_pending?: boolean;
+  receipt_pending?: boolean;
+  card?: SetupCardState | null;
 };
 
+export type SetupCardLevel = "full" | "quiet" | "hidden";
+
+export type SetupCardState = { level: SetupCardLevel; dismissals: number; snoozed_until: string | null };
+
 export const getOnboardingStatus = (): Promise<OnboardingStatus> => authedFetch("/api/onboarding/status");
+
+// The entry modal ("what setup is and why") was closed. `started` when the
+// manager chose the first step, `later` for anything else.
+export const markSetupIntroSeen = (action: "started" | "later"): Promise<void> =>
+  authedFetch("/api/onboarding/intro-seen", { method: "POST", body: JSON.stringify({ action }) }).then(
+    () => undefined,
+    () => undefined,
+  );
+
+// "Not now" on the setup card. Snoozes it for longer each time.
+export const dismissSetupCard = (): Promise<void> =>
+  authedFetch("/api/onboarding/card-dismissed", { method: "POST" }).then(
+    () => undefined,
+    () => undefined,
+  );
+
+// The completion receipt (counted from records, no AI) and the optional
+// "next, when there is time" list. Null once it has been seen.
+export type SetupReceiptNext = { key: string; label: string; detail: string; href: string };
+export type SetupReceipt = { lines: string[]; next: SetupReceiptNext[] };
+
+export const getSetupReceipt = (): Promise<SetupReceipt | null> => authedFetch("/api/onboarding/receipt");
+
+export const markSetupReceiptSeen = (): Promise<void> =>
+  authedFetch("/api/onboarding/receipt-seen", { method: "POST" }).then(
+    () => undefined,
+    () => undefined,
+  );
 
 // A setup step opened from the setup card. Step name and whether it was the
 // highlighted one, nothing else. Fire-and-forget.

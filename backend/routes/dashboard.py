@@ -46,6 +46,7 @@ from mission_control_week import build_week, week_bounds
 from routes.capacity import _time_off_hours
 from routes.expectations_ai import _compute_coverage
 from routes.one_on_ones import get_one_on_ones_overview
+from routes.onboarding import setup_prompt
 from utils import (
     get_authenticated_client,
     get_org,
@@ -549,6 +550,9 @@ def _load_action_snapshot(user_id: str, supabase, local_date: date) -> tuple[dic
         "check_ins": check_ins,
         "capacity": capacity,
         "coverage": coverage,
+        # Setup mode: a way back to the next step. Read softly, and left out of
+        # `coverage` so a failure here never reads as an unavailable source.
+        "setup": setup_prompt(user_id, supabase),
     }
     return snapshot, events
 

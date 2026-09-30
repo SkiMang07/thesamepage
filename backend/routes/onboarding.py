@@ -26,22 +26,45 @@ endpoint answers from the user row alone, because every page load asks. Each
 step's first completion is stamped too (users.setup_<step>_at), which is what
 lets its analytics event fire exactly once.
 
+Chunk D adds the prompt layer (docs/design-proposals/2026-09-29-onboarding-path/
+CHUNK_D_PLAN.md): the entry modal (intro_pending), how loud the setup card is
+(card.level: full, quiet or hidden, from card_level()), and the completion
+receipt (receipt_pending, GET /receipt). Their state is four columns on users,
+read softly so a deploy before the migration only loses the prompt layer.
+
 No AI is involved anywhere in this route.
 """
-from datetime import date, datetime, timezone
+import logging
+from datetime import date, datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ConfigDict
 
 import analytics
 from routes.expectations_ai import _compute_coverage
 from routes.org_goals import clear_unknown, read_unknown
 from utils import get_authenticated_client, meeting_day_of
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 STEP_ORDER = ("org", "expectations", "goals")
 STEP_COLUMN = {step: f"setup_{step}_at" for step in STEP_ORDER}
 ORG_LEVELS = {"company", "department"}
+
+# The setup card's volume (chunk D). "Not now" snoozes it: 1 day, then 3, 7 and
+# 14 (capped). After the first dismissal, or QUIET_AFTER_DAYS without progress,
+# it is one quiet line instead of the full card. Completing a step resets both.
+SNOOZE_DAYS = (1, 3, 7, 14)
+QUIET_AFTER_DAYS = 7
+PROMPT_COLUMNS = (
+    "setup_intro_seen_at",
+    "setup_receipt_seen_at",
+    "setup_card_dismissals",
+    "setup_card_snoozed_until",
+)
 
 
 def evaluate(
@@ -116,6 +139,71 @@ def next_step(steps: dict) -> str | None:
         if not step["done"] and not step.get("blocked") and not step.get("parked"):
             return key
     return None
+
+
+def _parse_ts(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def card_level(*, dismissals: int, snoozed_until, since, now: datetime) -> str:
+    """How loud the setup card is: "full", "quiet" or "hidden". Pure.
+
+    hidden  snoozed by a "Not now" that has not run out
+    quiet   dismissed before, or QUIET_AFTER_DAYS since the last progress
+            (the entry modal closing, or a step completing)
+    full    otherwise
+    The chip in the header is not governed by this: the requirement stays, only
+    the volume changes.
+    """
+    until = _parse_ts(snoozed_until)
+    if until and until > now:
+        return "hidden"
+    if (dismissals or 0) >= 1:
+        return "quiet"
+    last = _parse_ts(since)
+    if last and now - last >= timedelta(days=QUIET_AFTER_DAYS):
+        return "quiet"
+    return "full"
+
+
+def snooze_days(dismissals: int) -> int:
+    """How long the nth dismissal hides the card (1-based, capped)."""
+    return SNOOZE_DAYS[max(0, min(dismissals - 1, len(SNOOZE_DAYS) - 1))]
+
+
+STEP_LINE = {
+    "org": "Puts each person in a team, so a prep sheet knows who they work alongside.",
+    "expectations": "Gives the sheet a standard to hold each person\u2019s work against.",
+    "goals": "Links each person\u2019s work to the goals it serves.",
+}
+
+
+def step_target(steps: dict, key: str) -> dict:
+    """The label and link for a step's one action, for surfaces outside the setup
+    card (the Mission Control candidate). Mirrors what the card offers."""
+    if key == "org":
+        return {"label": "Set up team and org", "href": "/app/org"}
+    if key == "expectations":
+        nxt = steps["expectations"].get("next_role")
+        if not nxt:
+            return {"label": "Set expectations", "href": "/app/expectations"}
+        first = (nxt.get("person_name") or "").strip().split(" ")[0] or "them"
+        if not nxt.get("role_level_id"):
+            return {"label": f"Pick a role for {first}", "href": f"/app/expectations/new?assign={nxt['report_id']}"}
+        return {
+            "label": f"Set expectations for {nxt.get('role_label') or 'this role'}",
+            "href": f"/app/expectations/{nxt['role_level_id']}",
+        }
+    if not steps["goals"]["has_org_goal"]:
+        # The goals modal lives on Mission Control; the param opens it there.
+        return {"label": "Add company or department goals", "href": "/app/dashboard?setup=goals"}
+    return {"label": "Write a team goal", "href": "/app/goals"}
 
 
 def expectation_queue(
@@ -207,11 +295,23 @@ def _now_iso() -> str:
 
 
 _USER_COLUMNS = ",".join(["set_up_at", "onboarded_at", *STEP_COLUMN.values()])
+_ALL_USER_COLUMNS = ",".join([_USER_COLUMNS, *PROMPT_COLUMNS])
 
 
 def _user_row(supabase, user_id: str) -> dict:
-    rows = supabase.table("users").select(_USER_COLUMNS).eq("id", user_id).execute().data
-    return rows[0] if rows else {}
+    """The user's setup stamps and prompt state. The prompt columns are read
+    softly: before the chunk D migration the read falls back to the stamps
+    alone, and `_prompt` says the prompt layer is not available."""
+    try:
+        rows = supabase.table("users").select(_ALL_USER_COLUMNS).eq("id", user_id).execute().data
+        available = True
+    except Exception:
+        logger.warning("onboarding: prompt columns unavailable", exc_info=True)
+        rows = supabase.table("users").select(_USER_COLUMNS).eq("id", user_id).execute().data
+        available = False
+    row = dict(rows[0]) if rows else {}
+    row["_prompt"] = available
+    return row
 
 
 def _stamp(supabase, user_id: str, column: str) -> bool:
@@ -266,7 +366,18 @@ def _is_onboarded(supabase, user_id: str) -> bool:
     return carried_forward(logged, prepped)
 
 
-def _status(*, activated, set_up_at, onboarded_at, steps, done_count, assessable_people) -> dict:
+def _status(
+    *,
+    activated,
+    set_up_at,
+    onboarded_at,
+    steps,
+    done_count,
+    assessable_people,
+    intro_pending=False,
+    receipt_pending=False,
+    card=None,
+) -> dict:
     return {
         "activated": activated,
         "set_up": set_up_at is not None,
@@ -280,7 +391,47 @@ def _status(*, activated, set_up_at, onboarded_at, steps, done_count, assessable
         # question no longer matters to the door.
         "assessable_people": assessable_people,
         "steps": steps,
+        # Chunk D. The entry modal has not been closed yet; the completion modal
+        # has not been closed yet; how loud the setup card is (None once set up).
+        "intro_pending": intro_pending,
+        "receipt_pending": receipt_pending,
+        "card": card,
     }
+
+
+def _last_progress(user: dict):
+    """The latest of the entry modal closing and any step first holding."""
+    stamps = [_parse_ts(user.get(c)) for c in ("setup_intro_seen_at", *STEP_COLUMN.values())]
+    stamps = [t for t in stamps if t]
+    return max(stamps) if stamps else None
+
+
+def _card(user: dict, intro_pending: bool, now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
+    dismissals = int(user.get("setup_card_dismissals") or 0)
+    # While the entry modal is still to be shown, the card is at full volume.
+    level = "full" if intro_pending else card_level(
+        dismissals=dismissals,
+        snoozed_until=user.get("setup_card_snoozed_until"),
+        since=_last_progress(user),
+        now=now,
+    )
+    return {"level": level, "dismissals": dismissals, "snoozed_until": user.get("setup_card_snoozed_until")}
+
+
+def _reset_card(supabase, user_id: str, user: dict) -> None:
+    """A step completed: momentum earns the full card back for the next one."""
+    if not user.get("_prompt"):
+        return
+    if not user.get("setup_card_dismissals") and not user.get("setup_card_snoozed_until"):
+        return
+    supabase.table("users").update({"setup_card_dismissals": 0, "setup_card_snoozed_until": None}).eq("id", user_id).execute()
+    user["setup_card_dismissals"] = 0
+    user["setup_card_snoozed_until"] = None
+
+
+def _receipt_pending(user: dict, set_up_at=None) -> bool:
+    return bool(user.get("_prompt") and (set_up_at or user.get("set_up_at")) and not user.get("setup_receipt_seen_at"))
 
 
 def build_status(user_id: str, supabase) -> dict:
@@ -295,6 +446,7 @@ def build_status(user_id: str, supabase) -> dict:
             steps=None,
             done_count=total,
             assessable_people=None,
+            receipt_pending=_receipt_pending(user),
         )
 
     activated = _has_prep_sheet(supabase, user_id)
@@ -345,6 +497,8 @@ def build_status(user_id: str, supabase) -> dict:
         for key in STEP_ORDER:
             if steps[key]["done"] and not user.get(STEP_COLUMN[key]):
                 if _stamp(supabase, user_id, STEP_COLUMN[key]):
+                    user[STEP_COLUMN[key]] = _now_iso()
+                    _reset_card(supabase, user_id, user)
                     analytics.capture(user_id, "setup_step_completed", {"step": key, "done_count": done_count})
 
         if done_count == total:
@@ -360,6 +514,11 @@ def build_status(user_id: str, supabase) -> dict:
         if _stamp(supabase, user_id, "onboarded_at"):
             analytics.capture(user_id, "onboarded", {})
 
+    intro_pending = False
+    card = None
+    if steps is not None and user.get("_prompt"):
+        intro_pending = activated and not user.get("setup_intro_seen_at")
+        card = _card(user, intro_pending)
     return _status(
         activated=activated,
         set_up_at=set_up_at,
@@ -367,6 +526,9 @@ def build_status(user_id: str, supabase) -> dict:
         steps=steps,
         done_count=done_count,
         assessable_people=assessable,
+        intro_pending=intro_pending,
+        receipt_pending=_receipt_pending(user, set_up_at),
+        card=card,
     )
 
 
@@ -374,3 +536,182 @@ def build_status(user_id: str, supabase) -> dict:
 def get_onboarding_status(auth=Depends(get_authenticated_client)):
     user_id, supabase = auth
     return build_status(user_id, supabase)
+
+
+def setup_prompt(user_id: str, supabase) -> dict | None:
+    """What Mission Control's ranker needs to offer a way back to the next step,
+    or None when there is nothing to offer (not activated, already set up, no
+    step to point at, or the prompt layer is not available yet). Never raises:
+    a failure here only means no candidate."""
+    try:
+        status = build_status(user_id, supabase)
+    except Exception:
+        logger.warning("onboarding: setup prompt unavailable", exc_info=True)
+        return None
+    steps, key, card = status.get("steps"), status.get("next_step"), status.get("card")
+    if not status["activated"] or status["set_up"] or not steps or not key or not card:
+        return None
+    target = step_target(steps, key)
+    return {
+        "user_id": user_id,
+        "next_step": key,
+        "done_count": status["done_count"],
+        "total": status["total"],
+        "card_level": card["level"],
+        "changes": STEP_LINE[key],
+        **target,
+    }
+
+
+# ---- the entry modal, "Not now", and the completion receipt (chunk D) -------
+
+
+class IntroSeenIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["started", "later"]
+
+
+@router.post("/intro-seen")
+def intro_seen(body: IntroSeenIn, auth=Depends(get_authenticated_client)):
+    """The manager closed the entry modal. Stamped once; the event fires once."""
+    user_id, supabase = auth
+    if _stamp(supabase, user_id, "setup_intro_seen_at"):
+        analytics.capture(user_id, "setup_intro_resolved", {"action": body.action})
+    return {"ok": True}
+
+
+@router.post("/card-dismissed")
+def card_dismissed(auth=Depends(get_authenticated_client)):
+    """"Not now" on the setup card: hide it for longer each time."""
+    user_id, supabase = auth
+    user = _user_row(supabase, user_id)
+    if user.get("set_up_at") or not user.get("_prompt"):
+        return {"ok": True, "snoozed_until": None}
+    now = datetime.now(timezone.utc)
+    before = _card(user, intro_pending=False, now=now)["level"]
+    dismissals = int(user.get("setup_card_dismissals") or 0) + 1
+    until = (now + timedelta(days=snooze_days(dismissals))).isoformat()
+    supabase.table("users").update(
+        {"setup_card_dismissals": dismissals, "setup_card_snoozed_until": until}
+    ).eq("id", user_id).execute()
+    analytics.capture(
+        user_id,
+        "setup_card_dismissed",
+        {"dismissals": dismissals, "level_before": before if before in ("full", "quiet") else "quiet"},
+    )
+    return {"ok": True, "snoozed_until": until}
+
+
+def _plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
+def compose_receipt(
+    *,
+    people: list[dict],
+    unit_count: int,
+    covered_role_ids: set,
+    org_goals: int,
+    team_goals: int,
+    prepped_report_ids: set,
+    project_count: int,
+    check_in_count: int,
+) -> dict:
+    """The completion receipt as plain data. Pure: counts in, fixed sentences out.
+
+    `lines` say what is now on record. `next` is the optional "when there is
+    time" list: at most three, each only when it has something to act on, in a
+    fixed order (people with no sheet, a first check-in, a first project).
+    """
+    covered = set(covered_role_ids)
+    ready = [p for p in people if p.get("role_level_id") in covered]
+    roles_covered = {p["role_level_id"] for p in ready}
+    lines = [
+        f"{_plural(len(people), 'person', 'people')} placed across {_plural(unit_count, 'team', 'teams')}.",
+        f"{_plural(len(roles_covered), 'role', 'roles')} with expectations, covering {_plural(len(ready), 'person', 'people')}.",
+        f"{_plural(org_goals, 'org goal', 'org goals')} and {_plural(team_goals, 'team goal', 'team goals')} on record.",
+        "Assessments are open for each person whose role has expectations.",
+    ]
+    unprepped = [p for p in people if p["id"] not in prepped_report_ids]
+    nxt = []
+    if unprepped:
+        nxt.append({
+            "key": "prep_others",
+            "label": f"Prepare sheets for {_plural(len(unprepped), 'more person', 'more people')}.",
+            "detail": "Each sheet now draws on the expectations and goals you set.",
+            "href": "/app/1-1s",
+        })
+    if (org_goals + team_goals) > 0 and check_in_count == 0:
+        nxt.append({
+            "key": "first_check_in",
+            "label": "Record a first check-in on a goal.",
+            "detail": "Check-ins show whether each goal is moving.",
+            "href": "/app/goals",
+        })
+    if project_count == 0:
+        nxt.append({
+            "key": "first_project",
+            "label": "Add a project.",
+            "detail": "Projects hold the work behind a goal.",
+            "href": "/app/projects",
+        })
+    return {"lines": lines, "next": nxt[:3]}
+
+
+def _receipt_data(supabase, user_id: str) -> dict:
+    people = (
+        supabase.table("direct_reports")
+        .select("id,role_level_id,org_unit_id")
+        .eq("manager_id", user_id)
+        .is_("archived_at", "null")
+        .execute()
+        .data
+    )
+    coverage = _compute_coverage(supabase)
+    covered = {
+        r["role_level_id"]
+        for r in coverage["roles"]
+        if r["metrics_count"] + r["skills_count"] + r["values_count"] > 0
+    }
+    goal_levels = [g["level"] for g in supabase.table("goals").select("level").neq("status", "cancelled").execute().data]
+    prepped = {
+        r["direct_report_id"]
+        for r in supabase.table("one_on_ones")
+        .select("direct_report_id")
+        .eq("manager_id", user_id)
+        .not_.is_("prep_guide", "null")
+        .execute()
+        .data
+    }
+    return dict(
+        people=people,
+        unit_count=len(supabase.table("org_units").select("id").execute().data),
+        covered_role_ids=covered,
+        org_goals=sum(1 for level in goal_levels if level in ORG_LEVELS),
+        team_goals=sum(1 for level in goal_levels if level == "team"),
+        prepped_report_ids=prepped,
+        project_count=len(supabase.table("projects").select("id").eq("owner_id", user_id).limit(1).execute().data),
+        check_in_count=len(supabase.table("check_ins").select("id").eq("owner_id", user_id).limit(1).execute().data),
+    )
+
+
+@router.get("/receipt")
+def get_receipt(auth=Depends(get_authenticated_client)):
+    """The completion receipt, while it is still to be shown; otherwise null."""
+    user_id, supabase = auth
+    user = _user_row(supabase, user_id)
+    if not _receipt_pending(user):
+        return None
+    return compose_receipt(**_receipt_data(supabase, user_id))
+
+
+@router.post("/receipt-seen")
+def receipt_seen(auth=Depends(get_authenticated_client)):
+    """The manager closed the completion modal. Stamped once; the event fires once."""
+    user_id, supabase = auth
+    if not _user_row(supabase, user_id).get("set_up_at"):
+        return {"ok": True}
+    if _stamp(supabase, user_id, "setup_receipt_seen_at"):
+        analytics.capture(user_id, "set_up_receipt_seen", {})
+    return {"ok": True}

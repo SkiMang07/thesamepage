@@ -150,3 +150,92 @@ def test_linked_goal_and_project_review_use_one_slot():
     work = [candidate for candidate in [brief["primary"], *brief["secondary"]] if candidate and candidate["entity_type"] in {"goal", "project"}]
     assert len(work) == 1
     assert any(item["code"] == "linked_work_review" for item in work[0]["evidence"])
+
+
+# ---- setup: a way back to the next step (setup mode chunk D) -----------------
+
+
+def _setup(**over):
+    base = {
+        "user_id": "11111111-1111-1111-1111-111111111111",
+        "next_step": "goals",
+        "done_count": 2,
+        "total": 3,
+        "card_level": "quiet",
+        "changes": "Links each person’s work to the goals it serves.",
+        "label": "Add company or department goals",
+        "href": "/app/dashboard?setup=goals",
+    }
+    base.update(over)
+    return base
+
+
+def _all(brief):
+    return [c for c in [brief["primary"], *brief["secondary"]] if c]
+
+
+def test_setup_candidate_is_offered_only_when_the_card_is_not_full():
+    for level in ("quiet", "hidden"):
+        snapshot = scenario("all_clear")
+        snapshot["setup"] = _setup(card_level=level)
+        brief = build_brief(snapshot, TODAY, now=NOW)
+        assert brief["primary"]["candidate_type"] == "resume_setup_step"
+    snapshot = scenario("all_clear")
+    snapshot["setup"] = _setup(card_level="full")
+    assert build_brief(snapshot, TODAY, now=NOW)["primary"] is None
+    snapshot = scenario("all_clear")
+    snapshot["setup"] = None
+    assert build_brief(snapshot, TODAY, now=NOW)["primary"] is None
+
+
+def test_setup_candidate_carries_the_step_and_a_real_workflow_link():
+    snapshot = scenario("all_clear")
+    snapshot["setup"] = _setup()
+    candidate = build_brief(snapshot, TODAY, now=NOW)["primary"]
+    assert candidate["entity_type"] == "setup" and candidate["entity_id"] == "11111111-1111-1111-1111-111111111111"
+    assert candidate["action"] == {"label": "Add company or department goals", "href": "/app/dashboard?setup=goals"}
+    assert candidate["score"] == 10 and [c["code"] for c in candidate["rank_basis"]] == ["setup"]
+    assert "2 of 3 setup steps are done" in candidate["explanation"]
+
+
+def test_setup_ranks_below_anything_with_a_date_and_never_changes_the_mode():
+    busy = scenario("busy")
+    busy["setup"] = _setup()
+    brief = build_brief(busy, TODAY, now=NOW)
+    assert brief["mode"] == "busy"
+    assert "resume_setup_step" not in [c["candidate_type"] for c in _all(brief)]
+    normal = build_brief(scenario("normal") | {"setup": _setup()}, TODAY, now=NOW)
+    without = build_brief(scenario("normal"), TODAY, now=NOW)
+    assert _all(normal)[-1]["candidate_type"] == "resume_setup_step"
+    above = [c["candidate_key"] for c in _all(normal)][:-1]
+    assert above == [c["candidate_key"] for c in _all(without)][:len(above)]         # nothing above it moved
+    displaced = _all(without)[len(above)]                                            # what it edged out has no date
+    assert displaced["score"] <= 10 and "urgency" not in [b["code"] for b in displaced["rank_basis"]]
+    assert normal["mode"] == without["mode"] == "normal"
+    early = build_brief(scenario("early") | {"setup": _setup()}, TODAY, now=NOW)
+    types = [c["candidate_type"] for c in _all(early)]
+    assert types[0] == "start_due_one_on_one_prep" and types[-1] == "resume_setup_step"
+    assert early["mode"] == "early_use"
+    clear = scenario("all_clear")
+    clear["setup"] = _setup()
+    brief = build_brief(clear, TODAY, now=NOW)
+    assert brief["mode"] == "all_clear" and brief["eligible_count"] == 0     # setup is not due work
+
+
+def test_setup_candidate_can_be_dismissed_for_the_day_and_returns_when_a_step_completes():
+    snapshot = scenario("all_clear")
+    snapshot["setup"] = _setup()
+    candidate = build_brief(snapshot, TODAY, now=NOW)["primary"]
+    dismissed = [{
+        "candidate_key": candidate["candidate_key"],
+        "evidence_fingerprint": candidate["evidence_fingerprint"],
+        "event_type": "setup_dismissed_today",
+        "snoozed_until": (NOW + timedelta(hours=8)).isoformat(),
+        "created_at": NOW.isoformat(),
+    }]
+    assert build_brief(deepcopy(snapshot), TODAY, events=dismissed, now=NOW)["primary"] is None
+    later = NOW + timedelta(hours=9)
+    assert build_brief(deepcopy(snapshot), TODAY, events=dismissed, now=later)["primary"] is not None
+    moved_on = deepcopy(snapshot)
+    moved_on["setup"] = _setup(next_step="org", done_count=1)      # a different step, a different fingerprint
+    assert build_brief(moved_on, TODAY, events=dismissed, now=NOW)["primary"] is not None

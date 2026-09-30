@@ -65,3 +65,33 @@ def test_kept_thoughts_take_the_place_of_notes_and_many_documents_are_counted():
 def test_the_guide_stores_the_list():
     guide = build_prep_guide("s", [], [], source_notes="", prepared_by="manager", drew_on=["your notes"])
     assert guide["drew_on"] == ["your notes"]
+
+
+# ---- "Built without": what setup left out of THIS sheet ---------------------
+
+from routes.one_on_ones import prep_built_without  # noqa: E402
+
+
+def test_built_without_names_only_what_was_missing_for_this_person():
+    everything = {"company", "team"}
+    assert prep_built_without(has_team=True, has_role_expectations=True, goal_levels=everything) == []
+    assert prep_built_without(has_team=True, has_role_expectations=False, goal_levels=everything) == ["role expectations"]
+    assert prep_built_without(has_team=False, has_role_expectations=False, goal_levels=set()) == [
+        "team and org",
+        "role expectations",
+        "org goals",
+        "team goals",
+    ]
+
+
+def test_a_department_goal_counts_as_an_org_goal_and_a_team_goal_is_separate():
+    assert prep_built_without(has_team=True, has_role_expectations=True, goal_levels={"department"}) == ["team goals"]
+    assert prep_built_without(has_team=True, has_role_expectations=True, goal_levels={"team"}) == ["org goals"]
+
+
+def test_the_saved_sheet_stores_the_line_only_when_there_is_something_to_say():
+    said = build_prep_guide("s", [], [], source_notes="", prepared_by="manager", built_without=["role expectations"])
+    assert said["built_without"] == ["role expectations"]
+    silent = build_prep_guide("s", [], [], source_notes="", prepared_by="manager", built_without=[])
+    assert "built_without" not in silent
+    assert "built_without" not in build_prep_guide("s", [], [], source_notes="", prepared_by="manager")

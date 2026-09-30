@@ -28,6 +28,15 @@ import { SECTION_GAP } from "@/components/ZoneMap";
 import { deriveOneOnOneSuggestions, OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
 
 import NoteField from "@/components/NoteField";
+
+// Where each "Built without" label is fixed (setup inputs the sheet was built
+// without; the labels come from prep_built_without() on the server).
+const BUILT_WITHOUT_HREF: Record<string, string> = {
+  "team and org": "/app/org",
+  "role expectations": "/app/expectations",
+  "org goals": "/app/goals",
+  "team goals": "/app/goals",
+};
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -228,6 +237,7 @@ function PrepFlow() {
             prepared_by: session.prep_guide.prepared_by,
             prepared_at: session.prep_guide.prepared_at ?? null,
             drew_on: session.prep_guide.drew_on,
+            built_without: session.prep_guide.built_without,
           });
           setStep(editSources ? 1 : 2);
         }
@@ -612,6 +622,19 @@ function PrepFlow() {
                 <p className="mt-1 max-w-md text-xs text-ink-secondary">
                   {prep.prepared_by === "overnight" ? "Drafted overnight by AI" : "Drafted by AI"}
                   {prep.drew_on && prep.drew_on.length > 0 && ` · Drew on ${prep.drew_on.join(", ")}`}
+                  {prep.built_without && prep.built_without.length > 0 && (
+                    <>
+                      {" · Built without "}
+                      {prep.built_without.map((label, i) => (
+                        <span key={label}>
+                          {i > 0 && ", "}
+                          <Link href={BUILT_WITHOUT_HREF[label] ?? "/app/dashboard"} className="underline decoration-hairline underline-offset-2 hover:text-ink">
+                            {label}
+                          </Link>
+                        </span>
+                      ))}
+                    </>
+                  )}
                   {prep.prepared_by === "overnight" && (
                     <>
                       {" · "}

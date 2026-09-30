@@ -85,6 +85,10 @@ class _Query:
         self.filters.append(lambda r, f=f, e=exp: r.get(f) is e)
         return self
 
+    def neq(self, f, v):
+        self.filters.append(lambda r, f=f, v=v: r.get(f) != v)
+        return self
+
     def in_(self, f, vs):
         vs = set(vs)
         self.filters.append(lambda r, f=f, vs=vs: r.get(f) in vs)
@@ -212,9 +216,9 @@ def _world():
         ],
         "goals": [
             {"id": "g1", "owner_id": "m1", "direct_report_id": "r1", "title": "Renewal rate", "status": "at_risk",
-             "created_at": "2026-09-01"},
+             "level": "team", "created_at": "2026-09-01"},
             {"id": "g-foreign", "owner_id": "m2", "direct_report_id": "r1", "title": "FOREIGN GOAL",
-             "status": "at_risk", "created_at": "2026-09-01"},
+             "status": "at_risk", "level": "company", "created_at": "2026-09-01"},
         ],
         "development_plans": [
             {"id": "p1", "manager_id": "m1", "direct_report_id": "r1", "plan_text": "Grow toward team lead",
@@ -312,6 +316,11 @@ def test_submit_builds_the_prompt_from_this_managers_records_only(batch):
     assert [c["id"] for c in snap["open_commitments"]] == ["c1"]
     assert "1 carried topic" in snap["drew_on"] and "1 open commitment" in snap["drew_on"]
     assert "the opening line you kept at the last wrap-up" in snap["drew_on"]
+    # What setup left out of THIS sheet: Jordan has no team, and m1 has a team
+    # goal but no org goal. The other tenant's company goal does not count.
+    assert "team and org" in snap["built_without"]
+    assert "org goals" in snap["built_without"]
+    assert "team goals" not in snap["built_without"]
 
 
 def test_submit_failure_marks_jobs_failed_and_frees_the_occurrence(monkeypatch):
@@ -365,7 +374,8 @@ def test_collect_saves_the_sheet_marked_overnight_and_consumes_only_what_it_read
     assert [c["id"] for c in guide["open_commitments_to_check"]] == ["c1"]
     assert "1 kept thought" in guide["drew_on"]
     assert [c["id"] for c in world["dr_capture_notes"]] == ["cap2"]
-    assert job["status"] == "applied" and set(job["input"]) == {"drew_on"}   # record text dropped
+    assert job["status"] == "applied" and set(job["input"]) == {"drew_on", "built_without"}   # record text dropped; only fixed labels stay
+    assert "team and org" in guide["built_without"]
 
 
 def test_a_sheet_the_manager_made_meanwhile_is_never_overwritten(batch):

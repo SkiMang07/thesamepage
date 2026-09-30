@@ -104,6 +104,7 @@ class PrepResponse(BaseModel):
     prepared_by: str = "manager"
     prepared_at: str | None = None
     drew_on: list[str] | None = None
+    built_without: list[str] | None = None
 
 
 class NewCommitmentIn(BaseModel):
@@ -993,6 +994,11 @@ def assemble_prep_inputs(
     )
     return {
         "prompt": prompt,
+        "built_without": prep_built_without(
+            has_team=bool(report.get("org_unit_id")),
+            has_role_expectations=bool(role_expectations),
+            goal_levels=_goal_levels(supabase, user_id),
+        ),
         "report_name": report["name"],
         "open_commitments": open_commitments,
         "document_ids": [doc["id"] for doc in retrieved_docs],
@@ -1001,6 +1007,37 @@ def assemble_prep_inputs(
         "has_role_expectations": bool(role_expectations),
         "secondhand_count": len(secondhand_notes),
     }
+
+
+def _goal_levels(supabase, user_id: str) -> set[str]:
+    """The levels of the manager's goals that are not cancelled. Names the owner
+    explicitly: the overnight worker runs with the service-role client."""
+    rows = (
+        supabase.table("goals")
+        .select("level")
+        .eq("owner_id", user_id)
+        .neq("status", "cancelled")
+        .execute()
+        .data
+    )
+    return {row["level"] for row in rows}
+
+
+def prep_built_without(*, has_team: bool, has_role_expectations: bool, goal_levels: set[str]) -> list[str]:
+    """The plain "Built without: ..." list shown beside "Drew on": the setup
+    inputs that were missing for THIS person when the sheet was built. Empty
+    when nothing was missing, and then no line is shown. Shared by the manual
+    POST /prep and the overnight worker, like prep_drew_on()."""
+    missing: list[str] = []
+    if not has_team:
+        missing.append("team and org")
+    if not has_role_expectations:
+        missing.append("role expectations")
+    if not goal_levels & {"company", "department"}:
+        missing.append("org goals")
+    if "team" not in goal_levels:
+        missing.append("team goals")
+    return missing
 
 
 def _plural(n: int, one: str, many: str | None = None) -> str:
@@ -1093,11 +1130,14 @@ def build_prep_guide(
     source_notes: str,
     prepared_by: str,
     drew_on: list[str] | None = None,
+    built_without: list[str] | None = None,
 ) -> dict:
     """The stored prep_guide. prepared_by is 'manager' (they pressed
     Prepare) or 'overnight' (the worker prepared it ahead of the meeting);
     drew_on is prep_drew_on()'s plain list of what the sheet was built from,
-    shown under the sheet so the manager can see its sources."""
+    shown under the sheet so the manager can see its sources. built_without
+    is prep_built_without()'s list of setup inputs that were missing for this
+    person; stored only when there is something to say."""
     guide = {
         "situation_summary": situation_summary,
         "agenda_items": agenda_items,
@@ -1110,6 +1150,8 @@ def build_prep_guide(
     }
     if drew_on is not None:
         guide["drew_on"] = drew_on
+    if built_without:
+        guide["built_without"] = built_without
     return guide
 
 
@@ -1223,6 +1265,7 @@ def prep_one_on_one(
             has_notes=bool(body.raw_notes.strip()),
             suggested_topics=len(suggested_topics),
         ),
+        built_without=inputs.get("built_without"),
     )
     # Analytics (backend/analytics.py): was there a sheet before this one?
     # Checked before the write so the answer isn't this sheet itself.
@@ -1284,6 +1327,7 @@ def prep_one_on_one(
         prepared_by=prep_guide["prepared_by"],
         prepared_at=prep_guide["prepared_at"],
         drew_on=prep_guide["drew_on"],
+        built_without=prep_guide.get("built_without") or [],
     )
 
 

@@ -255,6 +255,7 @@ def build_request(admin, occurrence: dict) -> dict | None:
             "open_commitments": inputs["open_commitments"],
             "document_ids": inputs["document_ids"],
             "drew_on": drew_on,
+            "built_without": inputs.get("built_without") or [],
         },
     }
 
@@ -341,7 +342,7 @@ def _finish(admin, job_ids: list[str], status: str, outcome: str | None, keep: d
 def apply_result(admin, job: dict, text: str | None, error: str | None) -> str:
     """Save one sheet, or record why not. Returns the job's final status."""
     snapshot = job.get("input") or {}
-    keep = {"drew_on": snapshot.get("drew_on") or []}
+    keep = {"drew_on": snapshot.get("drew_on") or [], "built_without": snapshot.get("built_without") or []}
     if error or not text:
         _finish(admin, [job["id"]], "failed", error or "no_text", keep)
         return "failed"
@@ -379,6 +380,7 @@ def apply_result(admin, job: dict, text: str | None, error: str | None) -> str:
         source_notes=snapshot.get("raw_notes") or "",
         prepared_by="overnight",
         drew_on=snapshot.get("drew_on") or [],
+        built_without=snapshot.get("built_without") or [],
     )
     saved = (
         admin.table("one_on_ones")

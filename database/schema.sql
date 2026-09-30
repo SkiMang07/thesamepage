@@ -61,6 +61,13 @@ create table users (
   -- Chunk C: the manager answered "Don't know yet" on org goals. Parks the
   -- goals step, does not complete it. Cleared when an org goal is added.
   org_goals_unknown_at timestamptz,
+  -- Chunk D: the entry and completion modals (stamped once when closed), and
+  -- the setup card's "Not now" state. Dismissals and snooze reset when a step
+  -- completes.
+  setup_intro_seen_at timestamptz,
+  setup_receipt_seen_at timestamptz,
+  setup_card_dismissals integer not null default 0,
+  setup_card_snoozed_until timestamptz,
   knowledge_skipped_at timestamptz,
   created_at timestamptz not null default now()
 );

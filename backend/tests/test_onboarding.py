@@ -473,3 +473,278 @@ def test_status_clears_the_flag_once_an_org_goal_exists():
                      goals=[{"level": "company", "status": "active"}])
     build_status("m", _Client(tables))
     assert tables["users"][0]["org_goals_unknown_at"] is None
+
+
+# ---- chunk D: the fading card, the entry modal, the completion receipt -------
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+from routes.onboarding import (  # noqa: E402
+    QUIET_AFTER_DAYS,
+    card_level,
+    compose_receipt,
+    setup_prompt,
+    snooze_days,
+    step_target,
+)
+
+NOW = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
+
+
+def _ago(days):
+    return (NOW - timedelta(days=days)).isoformat()
+
+
+def _later(days):
+    return (NOW + timedelta(days=days)).isoformat()
+
+
+def test_card_is_full_until_dismissed_or_left_alone_for_a_week():
+    assert card_level(dismissals=0, snoozed_until=None, since=_ago(1), now=NOW) == "full"
+    assert card_level(dismissals=0, snoozed_until=None, since=None, now=NOW) == "full"
+    assert card_level(dismissals=0, snoozed_until=None, since=_ago(QUIET_AFTER_DAYS), now=NOW) == "quiet"
+    assert card_level(dismissals=1, snoozed_until=None, since=_ago(0), now=NOW) == "quiet"
+
+
+def test_a_running_snooze_hides_the_card_and_an_expired_one_does_not():
+    assert card_level(dismissals=2, snoozed_until=_later(1), since=_ago(20), now=NOW) == "hidden"
+    assert card_level(dismissals=2, snoozed_until=_ago(1), since=_ago(20), now=NOW) == "quiet"
+    assert card_level(dismissals=0, snoozed_until="not a date", since=None, now=NOW) == "full"
+
+
+def test_each_dismissal_hides_the_card_longer_up_to_a_cap():
+    assert [snooze_days(n) for n in (1, 2, 3, 4, 5, 40)] == [1, 3, 7, 14, 14, 14]
+
+
+def _prompt_user(**over):
+    """A manager mid-setup whose org and expectations steps were stamped days ago."""
+    base = dict(
+        setup_intro_seen_at=_ago(1),
+        setup_receipt_seen_at=None,
+        setup_card_dismissals=0,
+        setup_card_snoozed_until=None,
+        setup_org_at=_ago(1),
+        setup_expectations_at=_ago(1),
+    )
+    base.update(over)
+    return _user(**base)
+
+
+def _incomplete(**over):
+    # Team goal missing, so the manager is mid-setup with the goals step next.
+    return _tables(goals=[{"level": "company", "status": "active"}], one_on_ones=[_sheet()], **over)
+
+
+def test_the_entry_modal_is_pending_once_activated_and_until_it_is_closed():
+    tables = _incomplete(users=[_user(setup_intro_seen_at=None, setup_card_dismissals=0)])
+    status = build_status("m", _Client(tables))
+    assert status["intro_pending"] is True and status["card"]["level"] == "full"
+    tables = _incomplete(users=[_prompt_user()])
+    status = build_status("m", _Client(tables))
+    assert status["intro_pending"] is False and status["card"]["level"] == "full"
+
+
+def test_the_entry_modal_waits_for_the_first_prep_sheet():
+    tables = _tables(goals=[], one_on_ones=[], users=[_user(setup_intro_seen_at=None, setup_card_dismissals=0)])
+    assert build_status("m", _Client(tables))["intro_pending"] is False
+
+
+def test_the_card_goes_quiet_then_hidden_from_the_stored_state():
+    quiet = build_status("m", _Client(_incomplete(users=[_prompt_user(setup_card_dismissals=1)])))
+    assert quiet["card"]["level"] == "quiet"
+    stale = _prompt_user(setup_intro_seen_at=_ago(9), setup_org_at=_ago(9), setup_expectations_at=_ago(9))
+    assert build_status("m", _Client(_incomplete(users=[stale])))["card"]["level"] == "quiet"
+    hidden = build_status(
+        "m", _Client(_incomplete(users=[_prompt_user(setup_card_dismissals=2, setup_card_snoozed_until=_later(2))]))
+    )
+    assert hidden["card"]["level"] == "hidden"
+    assert hidden["next_step"] == "goals"           # the requirement does not fade, only the volume
+
+
+def test_finishing_a_step_earns_the_full_card_back():
+    unstamped = _prompt_user(setup_card_dismissals=3, setup_card_snoozed_until=_later(5),
+                             setup_org_at=None, setup_expectations_at=None)
+    tables = _incomplete(users=[unstamped])
+    status = build_status("m", _Client(tables))     # org and expectations hold for the first time
+    assert status["card"] == {"level": "full", "dismissals": 0, "snoozed_until": None}
+    user = tables["users"][0]
+    assert user["setup_card_dismissals"] == 0 and user["setup_card_snoozed_until"] is None
+
+
+def test_without_the_migration_the_prompt_layer_is_simply_absent(monkeypatch):
+    real = _Q.select
+
+    def select(self, *cols):
+        if cols and "setup_intro_seen_at" in cols[0]:
+            raise RuntimeError("column users.setup_intro_seen_at does not exist")
+        return real(self, *cols)
+
+    monkeypatch.setattr(_Q, "select", select)
+    status = build_status("m", _Client(_incomplete()))
+    assert status["steps"] is not None and status["next_step"] == "goals"
+    assert status["intro_pending"] is False and status["receipt_pending"] is False and status["card"] is None
+
+
+def test_the_receipt_is_pending_from_the_moment_setup_completes_until_it_is_closed():
+    tables = _tables(users=[_prompt_user()], one_on_ones=[_sheet()])
+    status = build_status("m", _Client(tables))
+    assert status["set_up"] and status["receipt_pending"] is True and status["card"] is None
+    tables = _tables(users=[_prompt_user(set_up_at=_ago(1), setup_receipt_seen_at=_ago(1))], one_on_ones=[_sheet()])
+    assert build_status("m", _Client(tables))["receipt_pending"] is False
+
+
+def test_a_finished_account_with_the_receipt_unseen_still_answers_from_the_user_row(_coverage_and_events):
+    user = _prompt_user(set_up_at=_ago(2), onboarded_at=_ago(1))
+    client = _Client({"users": [user]})
+    status = build_status("m", client)
+    assert status["receipt_pending"] is True and client.touched == ["users"]
+
+
+def _receipt(**over):
+    base = dict(
+        people=[{"id": "a", "role_level_id": "r1"}, {"id": "b", "role_level_id": "r1"}, {"id": "c", "role_level_id": "r2"}],
+        unit_count=2,
+        covered_role_ids={"r1", "r2"},
+        org_goals=1,
+        team_goals=2,
+        prepped_report_ids={"a", "b", "c"},
+        project_count=1,
+        check_in_count=1,
+    )
+    base.update(over)
+    return compose_receipt(**base)
+
+
+def test_the_receipt_states_what_is_on_record_in_plain_counts():
+    receipt = _receipt()
+    assert receipt["lines"][0] == "3 people placed across 2 teams."
+    assert receipt["lines"][1] == "2 roles with expectations, covering 3 people."
+    assert receipt["lines"][2] == "1 org goal and 2 team goals on record."
+    assert receipt["next"] == []                    # nothing left that is worth listing
+
+
+def test_next_when_there_is_time_lists_only_what_has_something_to_act_on_in_a_fixed_order():
+    receipt = _receipt(prepped_report_ids={"a"}, project_count=0, check_in_count=0)
+    assert [n["key"] for n in receipt["next"]] == ["prep_others", "first_check_in", "first_project"]
+    assert receipt["next"][0]["label"] == "Prepare sheets for 2 more people."
+    only_project = _receipt(project_count=0)
+    assert [n["key"] for n in only_project["next"]] == ["first_project"]
+    no_goals = _receipt(org_goals=0, team_goals=0, check_in_count=0)
+    assert "first_check_in" not in [n["key"] for n in no_goals["next"]]
+
+
+def test_the_receipt_never_uses_watching_words_or_cheer():
+    receipt = _receipt(prepped_report_ids=set(), project_count=0, check_in_count=0)
+    text = " ".join(receipt["lines"] + [f"{n['label']} {n['detail']}" for n in receipt["next"]]).lower()
+    for banned in ("watch", "track", "monitor", "congrat", "great", "!", "the same page"):
+        assert banned not in text
+
+
+def test_step_targets_mirror_what_the_card_offers():
+    steps = _all_true(goal_levels={"team"}, queue=[{"report_id": "p9", "person_name": "Sam Lee", "role_level_id": None,
+                                                    "role_label": None, "next_1on1_on": None}])
+    assert step_target(steps, "org") == {"label": "Set up team and org", "href": "/app/org"}
+    assert step_target(steps, "expectations") == {"label": "Pick a role for Sam", "href": "/app/expectations/new?assign=p9"}
+    assert step_target(steps, "goals")["href"] == "/app/dashboard?setup=goals"
+    steps = _all_true(queue=[{"report_id": "p9", "person_name": "Sam Lee", "role_level_id": "r4",
+                              "role_label": "AE L1", "next_1on1_on": None}])
+    assert step_target(steps, "expectations") == {"label": "Set expectations for AE L1", "href": "/app/expectations/r4"}
+    assert step_target(steps, "goals") == {"label": "Write a team goal", "href": "/app/goals"}
+
+
+def test_setup_prompt_offers_a_way_back_only_mid_setup():
+    mid = setup_prompt("m", _Client(_incomplete(users=[_prompt_user(setup_card_dismissals=1)])))
+    assert mid["next_step"] == "goals" and mid["card_level"] == "quiet" and mid["user_id"] == "m"
+    assert mid["done_count"] == 2 and mid["total"] == 3 and mid["href"] == "/app/goals"
+    assert setup_prompt("m", _Client(_tables(users=[_prompt_user()], one_on_ones=[_sheet()]))) is None   # set up
+    not_activated = _tables(goals=[], one_on_ones=[], users=[_prompt_user()])
+    assert setup_prompt("m", _Client(not_activated)) is None
+
+
+def test_setup_prompt_never_raises():
+    class Broken:
+        def table(self, _name):
+            raise RuntimeError("down")
+
+    assert setup_prompt("m", Broken()) is None
+
+
+# ---- chunk D routes ----------------------------------------------------------
+
+
+def _route_client(users):
+    import main
+    import utils
+    from fastapi.testclient import TestClient
+
+    utils.limiter.reset()
+    fake = _Client({"users": users})
+    main.app.dependency_overrides[utils.get_authenticated_client] = lambda: ("m", fake)
+    return TestClient(main.app), main, utils
+
+
+def _teardown(main, utils):
+    main.app.dependency_overrides.clear()
+    utils.limiter.reset()
+
+
+def test_the_entry_modal_is_stamped_and_reported_once(_coverage_and_events):
+    users = [_user(setup_intro_seen_at=None, setup_card_dismissals=0)]
+    client, main, utils = _route_client(users)
+    try:
+        assert client.post("/api/onboarding/intro-seen", json={"action": "later"}).status_code == 200
+        assert client.post("/api/onboarding/intro-seen", json={"action": "started"}).status_code == 200
+        assert users[0]["setup_intro_seen_at"] is not None
+        assert _coverage_and_events == [("m", "setup_intro_resolved", {"action": "later"})]
+        assert client.post("/api/onboarding/intro-seen", json={"action": "later", "note": "x"}).status_code == 422
+        assert client.post("/api/onboarding/intro-seen", json={"action": "dismissed"}).status_code == 422
+    finally:
+        _teardown(main, utils)
+
+
+def test_not_now_snoozes_longer_each_time_and_reports_counts_only(_coverage_and_events):
+    users = [_prompt_user()]
+    client, main, utils = _route_client(users)
+    try:
+        for expected_days in (1, 3, 7, 14, 14):
+            before = datetime.now(timezone.utc)
+            assert client.post("/api/onboarding/card-dismissed").status_code == 200
+            until = datetime.fromisoformat(users[0]["setup_card_snoozed_until"])
+            days = (until - before).total_seconds() / 86400
+            assert expected_days - 0.01 <= days <= expected_days + 0.01
+        assert users[0]["setup_card_dismissals"] == 5
+        assert _coverage_and_events[0] == ("m", "setup_card_dismissed", {"dismissals": 1, "level_before": "full"})
+        assert all(e[2]["level_before"] in ("full", "quiet") and set(e[2]) == {"dismissals", "level_before"}
+                   for e in _coverage_and_events)
+    finally:
+        _teardown(main, utils)
+
+
+def test_not_now_does_nothing_once_set_up(_coverage_and_events):
+    users = [_prompt_user(set_up_at=_ago(1))]
+    client, main, utils = _route_client(users)
+    try:
+        assert client.post("/api/onboarding/card-dismissed").json()["snoozed_until"] is None
+        assert users[0]["setup_card_dismissals"] == 0 and _coverage_and_events == []
+    finally:
+        _teardown(main, utils)
+
+
+def test_the_receipt_is_stamped_once_and_never_before_setup_is_done(_coverage_and_events):
+    early = [_prompt_user()]
+    client, main, utils = _route_client(early)
+    try:
+        client.post("/api/onboarding/receipt-seen")
+        assert early[0]["setup_receipt_seen_at"] is None and _coverage_and_events == []
+        assert client.get("/api/onboarding/receipt").json() is None
+    finally:
+        _teardown(main, utils)
+    done = [_prompt_user(set_up_at=_ago(1))]
+    client, main, utils = _route_client(done)
+    try:
+        client.post("/api/onboarding/receipt-seen")
+        client.post("/api/onboarding/receipt-seen")
+        assert done[0]["setup_receipt_seen_at"] is not None
+        assert _coverage_and_events == [("m", "set_up_receipt_seen", {})]
+    finally:
+        _teardown(main, utils)

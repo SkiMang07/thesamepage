@@ -494,7 +494,42 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
         item = _work_candidate(row, project_checks.get(row["id"]), "project", today)
         if item:
             candidates.append(item)
+    setup_candidate = _setup_candidate(snapshot.get("setup") or {}, today)
+    if setup_candidate:
+        candidates.append(setup_candidate)
     return candidates
+
+
+SETUP_CANDIDATE = "resume_setup_step"
+
+
+def _setup_candidate(setup: dict[str, Any], today: date) -> dict[str, Any] | None:
+    """A way back to the next setup step (docs/design-proposals/2026-09-29-onboarding-path/
+    CHUNK_D_PLAN.md). Offered only when the setup card is quiet or hidden, so
+    the card and this never show together. Fixed at 10 points with no urgency
+    component: every dated candidate scores at least 10 and wins the tie on its
+    urgency points, so this ranks below anything with a date. Dismissal reuses
+    setup_dismissed_today; the fingerprint carries the step and the done count,
+    so finishing a step re-arms it.
+    """
+    if not setup or setup.get("card_level") == "full" or not setup.get("next_step") or not setup.get("user_id"):
+        return None
+    done, total = int(setup.get("done_count") or 0), int(setup.get("total") or 3)
+    return _candidate(
+        candidate_type=SETUP_CANDIDATE,
+        entity_type="setup",
+        entity_id=str(setup["user_id"]),
+        subject_key="setup",
+        title="Finish setting up.",
+        explanation=f"{done} of {total} setup steps are done. {setup.get('changes') or ''}".strip(),
+        action_label=str(setup.get("label") or "Continue setup"),
+        action_href=str(setup.get("href") or "/app/dashboard"),
+        components=[{"code": "setup", "label": "Setup step waiting", "points": 10}],
+        evidence=[_evidence("setup_state", f"{done} of {total} setup steps are done", "Setup state", today, today)],
+        facts={"step": setup["next_step"], "done_count": done},
+        attention_since=None,
+        exact_workflow=True,
+    )
 
 
 def _deduplicate(candidates: list[dict[str, Any]], snapshot: dict[str, Any]) -> list[dict[str, Any]]:
@@ -645,6 +680,8 @@ def build_brief(
     deduped = _deduplicate(raw, snapshot)
     available = [candidate for candidate in deduped if not _disposition_suppresses(candidate, events, now)]
     ranked = sorted(available, key=_sort_key)
+    # Setup is not due work: it fills a slot but never decides the mode.
+    work_ranked = [candidate for candidate in ranked if candidate["candidate_type"] != SETUP_CANDIDATE]
     for index, candidate in enumerate(ranked[:3], start=1):
         candidate["rank"] = index
 
@@ -658,9 +695,9 @@ def build_brief(
         mode = "partial"
     elif early:
         mode = "early_use"
-    elif not ranked:
+    elif not work_ranked:
         mode = "all_clear"
-    elif len(ranked) > 3:
+    elif len(work_ranked) > 3:
         mode = "busy"
     else:
         mode = "normal"
@@ -690,5 +727,5 @@ def build_brief(
         "supporting": _supporting(snapshot, local_date),
         "coverage": coverage,
         "optional_context": optional_context,
-        "eligible_count": len(ranked),
+        "eligible_count": len(work_ranked),
     }
