@@ -79,3 +79,12 @@ def test_org_unit_name_is_trimmed_and_cannot_be_blank():
     assert _clean_name("  Customer Success  ") == "Customer Success"
     with pytest.raises(HTTPException, match="name cannot be empty"):
         _clean_name("   ")
+
+
+def test_members_mark_only_the_caller():
+    from routes.org_units import _mark_caller
+
+    rows = [{"id": "me", "full_name": "", "email": "a@x.co"}, {"id": "them", "full_name": "Sam", "email": "s@x.co"}]
+    marked = _mark_caller(rows, "me")
+    assert [r["is_you"] for r in marked] == [True, False]
+    assert rows[0].get("is_you") is None  # input rows are not mutated

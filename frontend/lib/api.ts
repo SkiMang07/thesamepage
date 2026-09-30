@@ -780,6 +780,7 @@ export type OrgMember = {
   id: string;
   full_name: string;
   email: string;
+  is_you?: boolean;
 };
 
 export const getOrgMembers = (): Promise<OrgMember[]> => authedFetch("/api/org-units/members");

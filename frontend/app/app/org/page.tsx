@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PageShell from "@/components/PageShell";
 import PartialLoadNotice from "@/components/PartialLoadNotice";
 import { createSectionLoader } from "@/lib/sectionLoader";
+import { ledByLabel, memberLabel } from "@/lib/memberLabel";
 import {
   GoalsRollupItem,
   OrgMember,
@@ -108,7 +109,7 @@ function collectDescendantIds(node: OrgNode, into = new Set<string>()) {
 function memberName(id: string | null, members: OrgMember[]): string | null {
   if (!id) return null;
   const member = members.find((candidate) => candidate.id === id);
-  return member ? member.full_name || member.email : null;
+  return member ? ledByLabel(member) : null;
 }
 
 function subtreeRollup(
@@ -945,7 +946,7 @@ function UnitForm({
         <select id={`unit-leader-${initial?.id ?? "new"}`} value={leaderId} onChange={(event) => setLeaderId(event.target.value)} className={INPUT}>
           <option value="">No leader assigned</option>
           {members.map((member) => (
-            <option key={member.id} value={member.id}>{member.full_name || member.email}</option>
+            <option key={member.id} value={member.id}>{memberLabel(member)}</option>
           ))}
         </select>
       </div>

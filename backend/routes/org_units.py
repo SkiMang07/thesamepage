@@ -132,6 +132,13 @@ def list_led_org_units(auth=Depends(get_authenticated_client)):
     )
 
 
+def _mark_caller(rows: list[dict], user_id: str) -> list[dict]:
+    """Tag the caller's own row so the picker can say "You" instead of an
+    email address when they never gave a name (the fresh-setup walkthrough
+    showed "Led by andrewgodlew+dana")."""
+    return [{**row, "is_you": row.get("id") == user_id} for row in rows]
+
+
 @router.get("/members")
 def list_org_members(auth=Depends(get_authenticated_client)):
     """Org members for the leader picker. Relies on the existing
@@ -139,13 +146,14 @@ def list_org_members(auth=Depends(get_authenticated_client)):
     no manual org_id filter needed, same pattern noted throughout
     ENGINEERING.md's RLS conventions."""
     user_id, supabase = auth
-    return (
+    rows = (
         supabase.table("users")
         .select("id,full_name,email")
         .order("full_name")
         .execute()
         .data
     )
+    return _mark_caller(rows, user_id)
 
 
 @router.post("")
