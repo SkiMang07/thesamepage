@@ -36,6 +36,7 @@ import {
   parseNotesDump,
   reportNotesDumpSkipped,
 } from "@/lib/api";
+import { roleDraftCapLine } from "@/lib/roleDraftCap";
 import NoteField from "@/components/NoteField";
 import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT } from "@/lib/tokens";
 
@@ -396,9 +397,11 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
 
             <Section title="Role expectations" show={expRows.length > 0}>
               <li className="px-3 py-2.5 text-[13px] text-ink-secondary">
-                Up to {maxRoles} roles get a first draft now, soonest 1:1 first ({chosenRoles.size} of {maxRoles} chosen). Every
-                draft is unapproved until you review it. Roles you keep without a draft are saved and assigned now; you can draft
-                them next.
+                {roleDraftCapLine(
+                  maxRoles,
+                  chosenRoles.size,
+                  expRows.filter((e) => !e.blocked && !!kept[e.key] && !drafting(e) && !chosenRoles.has(roleKey(e, titleOf(e), levelOf(e)))).map((e) => firstName(e.person_name)),
+                )}
               </li>
               {expRows.map((e) => {
                 const blocked = blockedText(e);
@@ -504,13 +507,13 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                 <Row key={n.key} rowKey={n.key} kept={kept} setKept={setKept} excerpt={n.excerpt} low={n.low} edited={changed(n.key, n.text)}
                   label={`${n.person_name}${n.occurred_on ? ` · ${n.occurred_on}` : ""}`}>
                   <textarea
-                    aria-label={`Note about ${n.person_name}`}
+                    aria-label={`Kept thought about ${n.person_name}`}
                     rows={3}
                     className={`${INPUT} leading-relaxed`}
                     value={edits[n.key] ?? n.text}
                     onChange={(e) => setEdits({ ...edits, [n.key]: e.target.value })}
                   />
-                  <p className="mt-1 text-xs text-ink-muted">Saved as a private note. Your next prep sheet for them reads it.</p>
+                  <p className="mt-1 text-xs text-ink-muted">Kept as a thought for your next prep sheet with them. Only you see it.</p>
                 </Row>
               ))}
             </Section>
@@ -636,7 +639,7 @@ function receiptLine(r: NotesDumpApplyResult) {
     r.roles_created && plural(r.roles_created, "new role", "new roles"),
     s.roles && plural(s.roles, "role or team assignment", "role or team assignments"),
     s.goals && plural(s.goals, "goal", "goals"),
-    s.notes && plural(s.notes, "note about a person", "notes about people"),
+    s.notes && plural(s.notes, "kept thought about a person", "kept thoughts about people"),
     s.commitments && plural(s.commitments, "thing you owe someone", "things you owe people"),
   ].filter(Boolean);
   if (parts.length) return parts.join(", ");

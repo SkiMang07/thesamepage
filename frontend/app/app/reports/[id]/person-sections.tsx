@@ -841,7 +841,7 @@ export function DevelopmentSection({
         {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
 
         {bundle.manager_notes.length === 0 ? (
-          <p className="mt-4 text-sm text-ink-muted">No private notes yet.</p>
+          <p className="mt-4 text-sm text-ink-muted">No private notes yet. Thoughts you keep for the next 1:1 are on the Relationship tab.</p>
         ) : (
           <ul className="mt-3 space-y-2 max-h-56 overflow-y-auto pr-1">
             {bundle.manager_notes.map((n) => (

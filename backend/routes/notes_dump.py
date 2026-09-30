@@ -21,7 +21,7 @@ never rates a person and never fills a gap the text does not support. People are
 referred to by short refs (P1, R1) so the model cannot invent an id.
 
 Saved as: org_units, direct_reports (role / team), goals, dr_capture_notes
-(private notes about a person; prep, nightly prep, the Scribe and assessment
+(kept thoughts about a person, the same ones the person page lists; prep, nightly prep, the Scribe and assessment
 evidence already read them), and commitments (what the manager says they owe a
 person: committed_by 'manager', source_type 'manual', open; the prep sheet and
 the person page already list open ones). No migration.
