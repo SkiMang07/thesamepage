@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuickAdd } from "@/lib/quick-add-context";
+import { followThroughCopy } from "@/lib/followThrough";
 import {
   GoalLevel,
   GoalStatus,
@@ -945,7 +946,6 @@ function FollowThrough({
     { owner: "mine", label: "Mine", noun: "my" },
     { owner: "team", label: "My team", noun: "team" },
   ];
-  const undated = week.undated_open_commitments.mine + week.undated_open_commitments.team;
   const phrase = weekPhrase(week.week);
   const current = isCurrentWeek(week.week);
 
@@ -974,15 +974,16 @@ function FollowThrough({
               STATES.map((s) => [s, week.commitments.filter((c) => c.owner === g.owner && c.state === s).length])
             ) as Record<WeekCommitmentState, number>;
             const total = counts.completed + counts.due + counts.overdue;
+            const copy = followThroughCopy(total, week.undated_open_commitments[g.owner], phrase);
             return (
               <div key={g.owner} className="mt-4">
                 <div className="mb-2 flex justify-between text-xs">
                   <span className="text-ink">{g.label}</span>
-                  <span className="text-2xs text-ink-muted">{plural(total, "commitment")}</span>
+                  <span className="text-2xs text-ink-muted">{copy.countLabel}</span>
                 </div>
                 {total === 0 ? (
                   <p className="rounded-[3px] bg-surface px-3 py-1.5 text-2xs text-ink-muted">
-                    Nothing completed, due, or overdue {phrase}.
+                    {copy.emptyText}
                   </p>
                 ) : (
                   <div
@@ -1008,12 +1009,12 @@ function FollowThrough({
                     })}
                   </div>
                 )}
+                {copy.undatedNote && <p className="mt-1.5 text-2xs text-ink-muted">{copy.undatedNote}</p>}
               </div>
             );
           })}
           <p className="mt-4 text-2xs text-ink-muted">
             Each bar shows the split within its group. Select a segment to see its commitments.
-            {undated > 0 && ` ${plural(undated, "open commitment")} with no due date ${undated === 1 ? "isn’t" : "aren’t"} counted here.`}
           </p>
         </>
       )}
@@ -1147,7 +1148,7 @@ function NextMove({
               <p className="text-ink">{brief.optional_context.title}</p>
               <p className="mt-1 text-2xs text-ink-muted">{brief.optional_context.detail}</p>
               <div className="mt-2 flex gap-4">
-                <Link href={brief.optional_context.href} className="text-xs font-medium text-brand hover:text-brand-hover">Add role →</Link>
+                <Link href={brief.optional_context.href} className="text-xs font-medium text-brand hover:text-brand-hover">{brief.optional_context.action_label ?? "Add role"} →</Link>
                 <button type="button" onClick={dismissOptionalContext} className="text-xs text-ink-muted hover:text-ink-secondary">Dismiss for today</button>
               </div>
             </div>

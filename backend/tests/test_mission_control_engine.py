@@ -239,3 +239,70 @@ def test_setup_candidate_can_be_dismissed_for_the_day_and_returns_when_a_step_co
     moved_on = deepcopy(snapshot)
     moved_on["setup"] = _setup(next_step="org", done_count=1)      # a different step, a different fingerprint
     assert build_brief(moved_on, TODAY, events=dismissed, now=NOW)["primary"] is not None
+
+
+# --- Fresh-setup walkthrough, 2026-09-30 (bugs 7 and 8) ---------------------
+
+
+def test_assigned_role_without_expectations_does_not_ask_to_add_the_role():
+    # Bug 7: the manager had assigned the role; the card still said "Add role".
+    snapshot = scenario("early")
+    assert snapshot["reports"][0]["role_level_id"]
+    context = build_brief(snapshot, TODAY, now=NOW)["optional_context"]
+    assert "Add" not in context["title"] and "role to prep" not in context["title"]
+    assert "expectations" in context["title"]
+    assert context["href"] == "/app/expectations"
+    assert context["action_label"] == "Review expectations"
+
+
+def test_missing_role_still_asks_to_add_the_role():
+    snapshot = scenario("early")
+    snapshot["reports"][0]["role_level_id"] = None
+    context = build_brief(snapshot, TODAY, now=NOW)["optional_context"]
+    assert context["title"].startswith("Add ") and "role" in context["title"]
+    assert context["href"] == "/app/settings"
+    assert context["action_label"] == "Add role"
+
+
+def _saved_prep_overdue_by_cadence(report_id="leah"):
+    snapshot = scenario("normal")
+    # Last conversation long enough ago that cadence is overdue.
+    snapshot["sessions"] = [
+        {"id": "held", "direct_report_id": report_id, "scheduled_at": (TODAY - timedelta(days=60)).isoformat() + "T12:00:00Z",
+         "summary": "Held", "prep_guide": None, "created_at": (TODAY - timedelta(days=60)).isoformat() + "T12:00:00Z"},
+    ]
+    return snapshot
+
+
+def test_dated_tomorrow_one_on_one_is_not_called_due_now_with_saved_prep():
+    # Bug 8: "Their 1:1 cadence is due now" shown for a 1:1 dated tomorrow.
+    snapshot = _saved_prep_overdue_by_cadence()
+    tomorrow = (TODAY + timedelta(days=1)).isoformat() + "T12:00:00Z"
+    snapshot["sessions"].append(
+        {"id": "next", "direct_report_id": "leah", "scheduled_at": tomorrow, "summary": None, "prep_guide": {"agenda": []},
+         "created_at": TODAY.isoformat() + "T09:00:00Z"}
+    )
+    brief = build_brief(snapshot, TODAY, now=NOW)
+    leah = next(c for c in [brief["primary"], *brief["secondary"]] if c and c["entity_id"] == "leah")
+    assert "due now" not in leah["explanation"]
+    assert "tomorrow" in leah["explanation"]
+
+
+def test_dated_tomorrow_one_on_one_is_not_called_due_now_without_prep():
+    snapshot = _saved_prep_overdue_by_cadence()
+    tomorrow = (TODAY + timedelta(days=1)).isoformat() + "T12:00:00Z"
+    snapshot["sessions"].append(
+        {"id": "shell", "direct_report_id": "leah", "scheduled_at": tomorrow, "summary": None, "prep_guide": None,
+         "created_at": TODAY.isoformat() + "T09:00:00Z"}
+    )
+    brief = build_brief(snapshot, TODAY, now=NOW)
+    leah = next(c for c in [brief["primary"], *brief["secondary"]] if c and c["candidate_type"] == "start_due_one_on_one_prep" and c["entity_id"] == "leah")
+    assert "due now" not in leah["explanation"]
+    assert "tomorrow" in leah["explanation"] and "no prep is saved" in leah["explanation"]
+
+
+def test_undated_cadence_still_says_due_now():
+    snapshot = _saved_prep_overdue_by_cadence()
+    brief = build_brief(snapshot, TODAY, now=NOW)
+    leah = next(c for c in [brief["primary"], *brief["secondary"]] if c and c["entity_id"] == "leah")
+    assert "cadence is due now" in leah["explanation"]

@@ -1066,6 +1066,7 @@ export type MissionControlBrief = {
     title: string;
     detail: string;
     href: string;
+    action_label?: string;
   } | null;
   eligible_count: number;
   // B3 — one sentence over the top three moves. "ready" comes from the

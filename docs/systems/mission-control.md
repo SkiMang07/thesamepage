@@ -36,6 +36,10 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
    Segments are toned at rest and solid when selected (`METER_SEGMENT`, see
    `brand.md` → Meters). Selecting a segment lists exactly those records;
    overdue lists run oldest first and show each item's age.
+   Open commitments with no due date are not in a bar. Each group says so under
+   its bar ("4 open commitments with no due date, not shown in the bar."), and a
+   group with no dated commitments reads "4 open, no due date", never
+   "0 commitments" (`lib/followThrough.ts`).
 5. **Right-hand column.** By default it shows "Your next move" (the brief's
    primary candidate) and up to two "Keep in view" items (the secondaries),
    each with the quiet variant of the unchanged CTA / Why this? / Addressed /
@@ -126,6 +130,15 @@ The pure engine establishes eligibility before ranking:
 
 Missing dates never become urgent. Capacity never creates a candidate: actual
 logged time off can only corroborate an already-eligible dated commitment.
+A saved prep or due-by-cadence card whose 1:1 already has a date says
+"Your 1:1 is tomorrow" rather than "cadence is due now"; the cadence evidence
+and score are unchanged.
+
+The early-use role card (`optional_context`) asks for the role only when the
+person has none ("Add role", People). When a role is assigned but has no
+approved expectations it asks for the expectations instead ("Review
+expectations", `/app/expectations`).
+
 Assessment scores, capture-note content, private 1:1 notes, and inferred employee
 risk do not enter the brief.
 

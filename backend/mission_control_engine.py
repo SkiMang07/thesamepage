@@ -74,6 +74,35 @@ def _due_label(due: date, today: date) -> str:
     return f"Due in {delta} day{'s' if delta != 1 else ''}"
 
 
+def _upcoming_one_on_one_dates(sessions: list[dict[str, Any]], today: date) -> dict[str, date]:
+    """The next dated, not-yet-held 1:1 per person (today or later).
+
+    A 1:1 that already has a date is not "due by cadence" in the sense the
+    manager reads it: they have scheduled it. The cadence facts stay in the
+    evidence; this only lets the sentence say what is true about the date.
+    """
+    upcoming: dict[str, date] = {}
+    for row in sessions:
+        report_id = row.get("direct_report_id")
+        when = _date(row.get("scheduled_at"))
+        if not report_id or row.get("summary") or not when or when < today:
+            continue
+        if report_id not in upcoming or when < upcoming[report_id]:
+            upcoming[report_id] = when
+    return upcoming
+
+
+def _scheduled_phrase(when: date, today: date) -> str:
+    delta = (when - today).days
+    if delta == 0:
+        return "today"
+    if delta == 1:
+        return "tomorrow"
+    if delta < 7:
+        return f"on {when.strftime('%A')}"
+    return f"on {when.strftime('%b')} {when.day}"
+
+
 def _urgency_points(delta: int | None, *, never_recorded: bool = False) -> tuple[int, str | None]:
     if never_recorded:
         return 24, "First 1:1 not recorded"
@@ -321,6 +350,7 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
     )
     report_by_id = {row["id"]: row for row in reports}
     planned, completed = _latest_by_report(sessions)
+    upcoming_dates = _upcoming_one_on_one_dates(sessions, today)
     due_commitments: dict[str, list[dict]] = {}
     for row in commitments:
         due = _date(row.get("due_date"))
@@ -366,7 +396,14 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
                     entity_id=report_id,
                     subject_key=f"person:{report_id}",
                     title=f"Review {name}’s saved 1:1 prep.",
-                    explanation=f"Preparation is already saved for {name}." + (" Their 1:1 cadence is due now." if is_due else ""),
+                    explanation=f"Preparation is already saved for {name}."
+                    + (
+                        f" Your 1:1 is {_scheduled_phrase(upcoming_dates[report_id], today)}."
+                        if report_id in upcoming_dates
+                        else " Their 1:1 cadence is due now."
+                        if is_due
+                        else ""
+                    ),
                     action_label=f"Resume {name.split()[0]}’s prep",
                     action_href=f"/app/reports/{report_id}/prep?resume={saved['id']}",
                     components=components,
@@ -414,6 +451,8 @@ def _build_candidates(snapshot: dict[str, Any], today: date) -> list[dict[str, A
                     explanation=(
                         "No completed 1:1 is recorded yet. Start with one useful conversation."
                         if days_since is None
+                        else f"{name}’s 1:1 is {_scheduled_phrase(upcoming_dates[report_id], today)}, and no prep is saved."
+                        if report_id in upcoming_dates
                         else f"{name}’s {cadence}-day 1:1 cadence is due now, and no prep is saved."
                     ),
                     action_label=f"Start {name.split()[0]}’s prep",
@@ -711,12 +750,22 @@ def build_brief(
     if mode == "early_use" and primary and primary.get("entity_type") == "direct_report":
         report = next((row for row in reports if row["id"] == primary["entity_id"]), None)
         if coverage.get("expectations", "ok") == "ok" and report and not report.get("role_has_expectations"):
+            # Two different gaps, two different asks. A role that is missing
+            # is fixed on People; a role that is assigned but has no approved
+            # expectations is fixed on Expectations. Saying "add the role" to
+            # someone who just assigned it reads as the app not noticing.
+            has_role = bool(report.get("role_level_id"))
             context_candidate = {
                 "candidate_key": f"early_role_grounding:{report['id']}",
                 "evidence_fingerprint": _fingerprint({"report_id": report["id"], "role_level_id": report.get("role_level_id"), "role_has_expectations": False}),
-                "title": f"Add {report['name']}’s role to prep against the expectations you set.",
+                "title": (
+                    f"Set the expectations for {report['name']}’s role so prep can use them."
+                    if has_role
+                    else f"Add {report['name']}’s role to prep against the expectations you set."
+                ),
                 "detail": "Optional. Prep works without it.",
-                "href": "/app/settings",
+                "href": "/app/expectations" if has_role else "/app/settings",
+                "action_label": "Review expectations" if has_role else "Add role",
             }
             if not _disposition_suppresses(context_candidate, events, now):
                 optional_context = context_candidate
