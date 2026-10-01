@@ -152,6 +152,28 @@ def test_a_pronoun_led_sentence_naming_someone_else_goes_to_no_one():
     assert slice_by_person("She reports to Mei now.", ROSTER) == {"mei": "She reports to Mei now."}
 
 
+def test_a_pronoun_then_a_name_mid_sentence_stays_with_the_current_person_and_ends_the_run():
+    # "I need her to help Noor": the sentence is about the person whose run this
+    # is. It never goes to Noor, and what follows is no longer known to be hers.
+    r = [{"id": "ines", "name": "Ines Duarte"}, {"id": "noor", "name": "Noor Haddad"}, {"id": "lena", "name": "Lena Fischer"}]
+    text = "Ines owns the onboarding docs. I need her to help Noor with the renewal playbook. She keeps the weekly report."
+    s = slice_by_person(text, r)
+    assert s["ines"] == "Ines owns the onboarding docs. I need her to help Noor with the renewal playbook."
+    assert "noor" not in s
+    # The run has ended, so the unnamed sentence after it is left out, not guessed.
+    assert "weekly report" not in s["ines"]
+    assert slice_by_person("Noor is new. I want him to mentor Lena on renewals.", r) == {
+        "noor": "Noor is new. I want him to mentor Lena on renewals."}
+
+
+def test_a_name_first_then_a_pronoun_is_still_left_out():
+    r = [{"id": "ines", "name": "Ines Duarte"}, {"id": "noor", "name": "Noor Haddad"}]
+    # The name comes first and the pronoun after it, so we cannot tell whose
+    # "her" it is: the sentence goes to no one.
+    s = slice_by_person("Ines owns the docs. Yesterday, after standup, Noor said I should ask her about the playbook.", r)
+    assert s == {"ines": "Ines owns the docs."}
+
+
 # ── whose side a sentence is on (the 2026-09-30 rerun) ────────────────────
 # The drafter reads a slice without the manager's own side: what the manager
 # owes the person, and the manager's 1:1 rhythm with them.
@@ -257,10 +279,12 @@ RENATA_ROSTER = [{"id": n.lower(), "name": f"{n} X"} for n in
 
 def test_a_sentence_that_turns_to_a_second_person_after_a_pronoun_ends_the_run():
     s = slice_by_person(RENATA, RENATA_ROSTER)
-    first = "Odalys is a senior CSM on enterprise and she owns our largest account."
-    # Odalys keeps only her own opening line. Nothing said of the other six
-    # reaches her, and Noor is only the object of one sentence.
-    assert s["odalys"] == first
+    # Odalys keeps both of her own sentences, including the one that names Noor
+    # as the object. Nothing said of the other six reaches her.
+    assert s["odalys"] == (
+        "Odalys is a senior CSM on enterprise and she owns our largest account. "
+        "I need her to run the big renewals herself, tell me early when one is going sideways, and help Noor "
+        "get ready for exec QBRs.")
     # The other six are described as a group, so each is given those lines.
     for who in ("gideon", "noor", "cormac", "yuki", "bram", "tessa"):
         assert s[who].startswith("The other six are CSMs.")
@@ -289,11 +313,11 @@ def test_a_pronoun_sentence_after_an_ambiguous_one_is_left_out_not_guessed():
     ("Marcus is solid on backend. I want him to mentor Lena on code review.", "marcus", "lena"),
     ("Zed is new. I need him to speak up in design reviews, and Hana can help with that.", "zed", "hana"),
 ])
-def test_an_i_sentence_naming_a_second_person_is_given_to_neither(text, owner, other):
+def test_an_i_sentence_naming_a_second_person_is_given_to_the_first_only(text, owner, other):
     roster = [{"id": i, "name": f"{i.title()} Q"} for i in ("marcus", "lena", "zed", "hana")]
     s = slice_by_person(text, roster)
     assert other not in s
-    assert "mentor" not in s.get(owner, "") and "speak up" not in s.get(owner, "")
+    assert s[owner] == text
 
 
 # ── sentences said of a group ────────────────────────────────────────────

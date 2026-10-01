@@ -138,6 +138,14 @@ def _name_patterns(people: list[dict], others: list[str]) -> list[tuple[str, re.
     return pats
 
 
+def _pronoun_before_name(plain: str, folded_sentence: str, pats: list[tuple[str, re.Pattern]]) -> bool:
+    """A he-she-they word comes before the first name, and that name is not in
+    the sentence's first few words."""
+    m = _PRONOUN_ANY.search(plain)
+    starts = [x.start() for _, pat in pats if (x := pat.search(folded_sentence))]
+    return bool(m and starts and m.start() < min(starts) and not _opens_on_name(folded_sentence, pats))
+
+
 def _named(sentence: str, pats: list[tuple[str, re.Pattern]]) -> set[str]:
     return {owner for owner, pat in pats if pat.search(sentence)}
 
@@ -177,11 +185,21 @@ def _assign(text: str, people: list[dict], others: list[str] | None):
             # Two people and a pronoun in one sentence: we cannot tell which
             # the pronoun is. Leave it out, and leave out an unnamed pronoun
             # sentence straight after it for the same reason.
+            if named and not _PRONOUN_LEAD.match(plain) and _pronoun_before_name(plain, folded[s:e], pats):
+                # "I need her to help Noor", "I want him to mentor Lena": the
+                # pronoun comes first and the name is the object, so the
+                # sentence is the current person's. It is never the named
+                # person's. The manager has moved on, so the run ends here.
+                skipped_pronoun = None
+                owned.setdefault(current, []).append(i)
+                current = None
+                prev_para = para
+                continue
             skipped_pronoun = _pronoun_kind(plain) or "x"
             if named and not _PRONOUN_LEAD.match(plain):
-                # "I need her to help Noor": the manager has moved on to talking
-                # about someone else, so what follows is no longer known to be
-                # about the person whose run this was.
+                # A name first, then a pronoun ("Noor said I should ask her"):
+                # leave the sentence out, and end the run, since what follows is
+                # no longer known to be about the person whose run this was.
                 current = None
             prev_para = para
             continue

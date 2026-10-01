@@ -222,9 +222,11 @@ is **approved**: a draft is not yet a standard.
 - **Slices.** `intake_slices.slice_by_person` cuts the typed text into
   per-person verbatim slices in code: a sentence goes to the one person it
   names and the ones after it follow; several names go to each and end the run; a
-  sentence that has a pronoun and names someone else (leading with the pronoun, or
-  naming them only after it: "I need her to help Noor") goes to no one, and in the
-  second case ends the run; a paragraph break ends the run unless the paragraph was
+  sentence that leads with a pronoun and names someone else goes to no one; one
+  where the pronoun comes first and the name is further in ("I need her to help
+  Noor") goes to the current person only, never the named one, and ends the run; one
+  that names someone first and has a pronoun after goes to no one and ends the run;
+  a paragraph break ends the run unless the paragraph was
   a bare name; anyone else named (roster or `unmatched_people`) ends it too.
   Sentences said of a group ("Everyone…", "The other six…", "The rest…", "Both of
   them…", "They each…") go to every person in that group and follow until someone is
