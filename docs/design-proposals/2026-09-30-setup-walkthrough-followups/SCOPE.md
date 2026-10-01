@@ -10,11 +10,11 @@ is the day it was typed in, not the day it was promised, so it can stand in for 
 on commitments made in the app from now on, and not for backfilled history. Revisit
 if real users ask how long ago they promised something.
 
-**Open, small, no migration:** "in April" cannot become a date because the notes-box
-prompt carries no current date. Put today's date in the per-call body (not the cached
-prefix) and let a month-only or relative due date resolve, marked low-confidence so the
-review row starts unchecked. Risk: a wrong month becomes a false "overdue" on Mission
-Control, so keep those dates editable.
+**Built, no migration:** today's date rides in the notes-box prompt's per-call body, so
+a month-only or relative due date resolves. A date the model worked out is marked
+low-confidence, so the review row starts unchecked and stays editable (a wrong month
+would read as a false "overdue" on Mission Control). "Promised in April" is when it was
+promised, not a due date, and stays null. Covered by prompt-text tests, not a live eval.
 
 ## 2. What people owe her: built
 
