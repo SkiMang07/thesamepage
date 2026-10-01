@@ -502,3 +502,21 @@ def test_prompt_writes_a_commitment_from_the_side_of_whoever_owes_it():
     # the worked example: the report's own action, not the manager's retelling of it
     assert 'give "Send next quarter\'s priorities", not "Share her priorities for next quarter"' in prompt
     assert 'never says "her" or "his" for the person who owes it' in prompt
+
+
+def test_prompt_carries_todays_date_in_the_per_call_body_so_a_month_can_resolve():
+    from datetime import date
+    prompt = nd.build_prompt(_ctx(), "Send Lena the plan by April.", today=date(2026, 9, 30))
+    assert "Today's date is 2026-09-30 (Wednesday)." in prompt
+    # beside the notes, after the fixed rules, never inside the stable prefix
+    assert prompt.index("Today's date is") > prompt.index("Return one JSON object")
+    assert prompt.index("Today's date is") < prompt.index("<notes>")
+    assert nd.build_prompt(_ctx(), "x").count("Today's date is") == 1      # defaults to the real today
+
+
+def test_prompt_resolves_relative_dues_low_and_never_dates_a_promise_made_in_the_past():
+    prompt = nd.build_prompt(_ctx(), "Priya owes me the plan by April.")
+    assert 'a month or relative time you can resolve against today\'s date' in prompt
+    assert 'Set confidence to "low" on any commitment whose due_date you worked out' in prompt
+    assert 'its row starts unchecked' in prompt
+    assert '"promised in April"' in prompt and "due_date is null" in prompt

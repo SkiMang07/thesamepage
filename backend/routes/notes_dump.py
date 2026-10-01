@@ -201,7 +201,7 @@ def _role_label(role: dict) -> str:
     return f"{role.get('job_role')} L{level}" if level else str(role.get("job_role"))
 
 
-def build_prompt(ctx: dict, notes: str) -> str:
+def build_prompt(ctx: dict, notes: str, today: date | None = None) -> str:
     people = "\n".join(
         f"{ref}: {p['name']} | role: {p['role_label'] or 'none set'} | team: {p['unit_name'] or 'none set'}"
         for ref, p in ctx["people"].items()
@@ -215,6 +215,7 @@ def build_prompt(ctx: dict, notes: str) -> str:
         for u in ctx["units"]
     ) or "(none yet)"
     goals = "\n".join(f"{g['level']}: {g['title']}" for g in ctx["goals"][:_CONTEXT_GOALS]) or "(none yet)"
+    today = today or date.today()
     return f"""You are helping a manager set up their workspace from notes they already have. Read the notes and propose drafts. The manager will review every draft before anything is saved.
 
 Rules:
@@ -226,7 +227,7 @@ Rules:
 - Give each item a short excerpt (under 160 characters) copied from the notes that supports it.
 - confidence is "high" only when the notes state it plainly, otherwise "low".
 - expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state. Only what the person owes: leave out what the manager owes them ("I owe her ...", "I said I'd ...", "mine") and the manager's 1:1 rhythm with them (how often or how long they meet). Those are the manager's side: what the manager owes goes in commitments, the 1:1 rhythm is left out.
-- commitments: one entry per specific thing one person owes the other, in either direction. committed_by "manager" when the manager says THEY owe it ("I owe her quarterly priorities", "I said I'd write him a growth plan", "design doc feedback, I owe her"). committed_by "direct_report" when the notes say the PERSON owes the manager something specific ("her priorities for next quarter, waiting on her", "Andre said he'd send me the plan Friday"). Use "direct_report" only when the notes say so plainly; when the direction is unclear, leave it out. description: a short plain action, starting with a verb where it reads naturally, with no number or date the notes don't state, written from the side of whoever owes it. For "manager" it is what the manager does ("Share quarterly priorities with Lena", "Give Mei feedback on her design doc"). For "direct_report" it is what the person does, so it names the thing delivered and never says "her" or "his" for the person who owes it: notes "her priorities for next quarter, waiting on her" give "Send next quarter's priorities", not "Share her priorities for next quarter". due_date only when the notes state a date. A commitment is one thing to deliver. A standing expectation of the role that recurs ("a weekly status", "a short weekly note", "reliable delivery") is not a commitment: it belongs in expectations. Not the 1:1 rhythm, not a vague intention with nothing to deliver. A promise goes here, not in person_notes.
+- commitments: one entry per specific thing one person owes the other, in either direction. committed_by "manager" when the manager says THEY owe it ("I owe her quarterly priorities", "I said I'd write him a growth plan", "design doc feedback, I owe her"). committed_by "direct_report" when the notes say the PERSON owes the manager something specific ("her priorities for next quarter, waiting on her", "Andre said he'd send me the plan Friday"). Use "direct_report" only when the notes say so plainly; when the direction is unclear, leave it out. description: a short plain action, starting with a verb where it reads naturally, with no number or date the notes don't state, written from the side of whoever owes it. For "manager" it is what the manager does ("Share quarterly priorities with Lena", "Give Mei feedback on her design doc"). For "direct_report" it is what the person does, so it names the thing delivered and never says "her" or "his" for the person who owes it: notes "her priorities for next quarter, waiting on her" give "Send next quarter's priorities", not "Share her priorities for next quarter". due_date: the date the thing is due, when the notes state one, or a month or relative time you can resolve against today's date below ("by April", "next Friday", "in two weeks"). A month alone means the last day of the next such month that has not passed. When the notes say when something was promised ("promised in April", "four months ago") and not when it is due, due_date is null. Set confidence to "low" on any commitment whose due_date you worked out rather than read straight off the notes, so its row starts unchecked and the manager confirms the date before it is saved. A commitment is one thing to deliver. A standing expectation of the role that recurs ("a weekly status", "a short weekly note", "reliable delivery") is not a commitment: it belongs in expectations. Not the 1:1 rhythm, not a vague intention with nothing to deliver. A promise goes here, not in person_notes.
 
 Already on the manager's roster:
 {people}
@@ -250,6 +251,8 @@ Return one JSON object and nothing else:
   "person_notes": [{{"person": "P1", "text": "", "occurred_on": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "unmatched_people": [{{"name": "", "excerpt": ""}}]
 }}
+
+Today's date is {today.isoformat()} ({today.strftime("%A")}).
 
 <notes>
 {notes}
