@@ -2095,6 +2095,9 @@ export type NotesDumpNote = {
   text: string;
   occurred_on: string | null;
   excerpt: string | null;
+  // Whole sentences of what was typed that the row's quote covers. Moving the
+  // row to "About the role" tags these, not the model's rewording.
+  sentences?: string[];
   low: boolean;
 };
 // One specific thing owed between the manager and a person, in either
@@ -2109,6 +2112,8 @@ export type NotesDumpCommitment = {
   description: string;
   due_date: string | null;
   excerpt: string | null;
+  // As on a note: the typed sentences the quote covers.
+  sentences?: string[];
   low: boolean;
 };
 // One person the notes describe expectations for. The role is an existing
@@ -2122,7 +2127,14 @@ export type NotesDumpExpectation = {
   role_label: string | null;
   new_role: { job_role: string; job_level: number; level_stated: boolean } | null;
   statement: string | null;
-  // What the draft reads: this person's part, without the manager's own side.
+  // The sentences tagged "About the role" for this person: the only text their
+  // role's draft reads. The model names them as evidence; code drops any that
+  // is a promise, a lapse or the manager's own account. The manager retags on
+  // the review, and what they leave is sent back as role_sentences.
+  role_sentences?: string[];
+  // The person's whole part of what was typed, and the lines held back from it
+  // (the pre-tagging way of choosing what a draft reads). Kept for the receipt
+  // and older callers; the review no longer shows them.
   slice: string | null;
   // Sentences held back from the draft as the manager's own side: what they
   // owe the person, or their 1:1 rhythm with them.
@@ -2141,6 +2153,9 @@ export type NotesDumpExpectation = {
   excerpt: string | null;
   low: boolean;
 };
+// A person a row can be moved to, and a pasted sentence no row cites.
+export type NotesDumpPerson = { id: string; name: string };
+export type NotesDumpUnplaced = { key: string; text: string; report_id: string | null };
 export type NotesDumpDraft = {
   org_units: NotesDumpUnit[];
   role_assignments: NotesDumpRole[];
@@ -2148,6 +2163,12 @@ export type NotesDumpDraft = {
   commitments: NotesDumpCommitment[];
   goals: NotesDumpGoal[];
   person_notes: NotesDumpNote[];
+  // The roster, for the person chip on every row.
+  people: NotesDumpPerson[];
+  // Every sentence of what was typed that no row cites, so nothing said is
+  // silently dropped. unplaced_more: how many more there were than shown.
+  unplaced: NotesDumpUnplaced[];
+  unplaced_more: number;
   unmatched_people: { name: string; excerpt: string | null }[];
   other_names: string[];
   max_roles: number;
@@ -2161,8 +2182,12 @@ export type NotesDumpExpectationBody = {
   job_role: string | null;
   job_level: number | null;
   statement: string | null;
-  // The row's `promises`, echoed so the draft is written without them.
+  // The row's `promises`, echoed so the draft is written without them (only
+  // used when role_sentences is not sent).
   promises?: string[];
+  // The sentences tagged About the role, as the manager left them. The draft
+  // is written from exactly these, cut from the typed text on the server.
+  role_sentences?: string[];
   draft: boolean;
 };
 export type NotesDumpApplyBody = {

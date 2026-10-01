@@ -21,6 +21,15 @@
 // section, saved as open commitments they own, never as a note: the prep sheet
 // lists open commitments, and a promise must not compete with notes for a slot.
 //
+// Placement (lib/notesDumpPlacement.ts): every promise, kept thought, role line
+// and not-yet-placed sentence is one item with a lane (You owe, They owe you,
+// About the role, Private thought) and a person (or "Not on my team", which
+// saves nothing). The model's pick is the default and the two chips on a row
+// change it with a tap; nothing is required. A role draft reads only the
+// sentences whose lane is About the role, sent back as role_sentences. A pasted
+// sentence no suggestion cites is listed under "Not placed" with the same chips,
+// so nothing the manager said is silently dropped.
+//
 // Voice: literal labels, no cheer. Counts and fixed values only go to analytics
 // (sent by the server; the browser sends only how many rows were edited).
 
@@ -32,12 +41,17 @@ import {
   NotesDumpDraft,
   NotesDumpExpectation,
   NotesDumpExpectationBody,
+  NotesDumpPerson,
   applyNotesDump,
   parseNotesDump,
   reportNotesDumpSkipped,
 } from "@/lib/api";
 import WaitNote from "@/components/WaitNote";
 import { roleDraftCapLine } from "@/lib/roleDraftCap";
+import {
+  LANES, NOT_ON_TEAM, buildItems, effective, initialKept, placement, problem, resolve,
+  type Item, type Lane, type Move, type Moves, type RoleRowState,
+} from "@/lib/notesDumpPlacement";
 import NoteField from "@/components/NoteField";
 import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT } from "@/lib/tokens";
 
@@ -61,6 +75,13 @@ function roleKey(row: NotesDumpExpectation, title: string, level: number) {
 
 function firstName(name: string) {
   return name.trim().split(/\s+/)[0] || name;
+}
+
+// A role that already has a working draft or approved expectations can't take a
+// new draft. "no_text" (nothing typed is about them) is not a hard block: a
+// sentence the manager tags About the role gives the draft something to read.
+function hardBlocked(row: NotesDumpExpectation) {
+  return row.blocked === "open_draft" || row.blocked === "approved";
 }
 
 function blockedText(row: NotesDumpExpectation) {
@@ -89,6 +110,8 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
   const [draft, setDraft] = useState<NotesDumpDraft | null>(null);
   const [kept, setKept] = useState<Record<string, boolean>>({});
   const [edits, setEdits] = useState<Edits>({});
+  // Where the manager moved a row, by item id (a row key, or a role line's id).
+  const [moves, setMoves] = useState<Moves>({});
   const [result, setResult] = useState<NotesDumpApplyResult | null>(null);
   // Role expectation rows: whether to draft now, and the new role's level.
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
@@ -117,8 +140,9 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
     try {
       const d = await parseNotesDump({ text, files });
       setDraft(d);
-      setKept(Object.fromEntries(allRows(d).map((r) => [r.key, !r.low])));
+      setKept({ ...Object.fromEntries(allRows(d).map((r) => [r.key, !r.low])), ...initialKept(d) });
       setEdits({});
+      setMoves({});
       setDrafts(Object.fromEntries(d.expectations.map((e) => [e.key, e.draft])));
       setLevels(Object.fromEntries(d.expectations.filter((e) => e.new_role).map((e) => [e.key, e.new_role!.job_level])));
       shownAt.current = Date.now();
@@ -135,20 +159,41 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
   }
 
   const rows = useMemo(() => (draft ? allRows(draft) : []), [draft]);
-  const keptCount = rows.filter((r) => kept[r.key]).length;
   const changed = (key: string, original: string) => edits[key] !== undefined && edits[key] !== original;
   const editedCount = rows.filter((r) => kept[r.key] && edits[r.key] !== undefined && edits[r.key] !== r.original).length;
 
   const expRows = draft?.expectations ?? [];
-  const owedByYou = (draft?.commitments ?? []).filter((c) => (c.committed_by ?? "manager") === "manager");
-  const owedToYou = (draft?.commitments ?? []).filter((c) => c.committed_by === "direct_report");
   const maxRoles = draft?.max_roles ?? 5;
+  const people: NotesDumpPerson[] = draft?.people ?? [];
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name;
+  const items = useMemo(() => (draft ? buildItems(draft) : []), [draft]);
+  // Which people can take a role line: they have a role row from this read, and it is kept and not blocked.
+  const roleRows: RoleRowState = Object.fromEntries(
+    expRows.map((e) => [e.report_id, hardBlocked(e) ? "blocked" : kept[e.key] ? "ok" : "unchecked"]),
+  );
+  const resolved = resolve(items, moves, kept, edits, roleRows, nameOf);
+  const inLane = (p: "you_owe" | "they_owe" | "private" | "unplaced") => items.filter((it) => placement(it, moves, roleRows) === p);
+  const keptCount =
+    [...(draft?.org_units ?? []), ...(draft?.role_assignments ?? []), ...expRows, ...(draft?.goals ?? [])].filter((r) => kept[r.key]).length +
+    resolved.commitments.length +
+    resolved.person_notes.length;
   const titleOf = (e: NotesDumpExpectation) => (edits[e.key] ?? e.new_role?.job_role ?? "").trim();
   const levelOf = (e: NotesDumpExpectation) => levels[e.key] ?? e.new_role?.job_level ?? 1;
-  const drafting = (e: NotesDumpExpectation) => !!kept[e.key] && !!drafts[e.key] && !e.blocked;
+  const nothingHere = rows.length === 0 && items.length === 0;
+  const roleLines = (e: NotesDumpExpectation) => resolved.roleSentences[e.report_id] ?? [];
+  // A draft needs something tagged About the role to read.
+  const drafting = (e: NotesDumpExpectation) => !!kept[e.key] && !!drafts[e.key] && !hardBlocked(e) && roleLines(e).length > 0;
   const chosenRoles = new Set(expRows.filter(drafting).map((e) => roleKey(e, titleOf(e), levelOf(e))));
   const canDraft = (e: NotesDumpExpectation) =>
-    !e.blocked && !!kept[e.key] && (drafting(e) || chosenRoles.size < maxRoles || chosenRoles.has(roleKey(e, titleOf(e), levelOf(e))));
+    !hardBlocked(e) && !!kept[e.key] && roleLines(e).length > 0 &&
+    (drafting(e) || chosenRoles.size < maxRoles || chosenRoles.has(roleKey(e, titleOf(e), levelOf(e))));
+
+  // Move an item. Placing a sentence that was not placed checks it: choosing
+  // where it goes is the manager saying they want it saved.
+  function move(it: Item, patch: Move) {
+    setMoves((m) => ({ ...m, [it.id]: { ...m[it.id], ...patch } }));
+    if (it.kind === "unplaced") setKept((k) => ({ ...k, [it.id]: true }));
+  }
 
   function expectationBody(e: NotesDumpExpectation, draftNow: boolean, roleLevelId?: string): NotesDumpExpectationBody {
     return {
@@ -157,7 +202,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
       job_role: roleLevelId || e.role_level_id ? null : titleOf(e) || e.new_role?.job_role || null,
       job_level: roleLevelId || e.role_level_id ? null : levelOf(e),
       statement: e.statement,
-      promises: e.promises ?? [],
+      role_sentences: roleLines(e),
       draft: draftNow,
     };
   }
@@ -180,13 +225,9 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
           level: g.level, title: val(g.key, g.title), success_metrics: g.success_metrics,
           org_unit_name: g.org_unit_name, due_date: g.due_date,
         })),
-        person_notes: draft.person_notes.filter((n) => on(n.key)).map((n) => ({
-          report_id: n.report_id, text: val(n.key, n.text),
-        })),
-        commitments: (draft.commitments ?? []).filter((c) => on(c.key)).map((c) => ({
-          report_id: c.report_id, description: val(c.key, c.description), due_date: c.due_date,
-          committed_by: c.committed_by ?? "manager",
-        })),
+        // Where each item sits now, which the manager may have changed.
+        person_notes: resolved.person_notes,
+        commitments: resolved.commitments,
         expectations: expRows.filter((e) => on(e.key)).map((e) => expectationBody(e, drafting(e))),
         // Only when a draft is queued: each role's draft keeps that person's part.
         ...(expRows.some(drafting) ? { text, other_names: draft.other_names } : {}),
@@ -255,6 +296,58 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
       .filter((w) => blockedBy[w.report_id] && !named.has(w.report_id))
       .map((w) => blockedText(blockedBy[w.report_id]) ?? "");
     return [...r.not_drafted.map((x) => x.reason), ...extra].filter(Boolean);
+  }
+
+  const laneNote = (lane: Lane | null, who: string) =>
+    lane === "you_owe"
+      ? `Saved as a commitment you owe ${who}. It’s on your prep sheet for them until you mark it done.`
+      : lane === "they_owe"
+        ? `Saved as a commitment ${who} owes you. It’s on your prep sheet for them until you mark it done.`
+        : lane === "private"
+          ? "Kept as a thought for your next prep sheet with them. Only you see it."
+          : lane === "role"
+            ? `Read by ${who}’s first role draft.`
+            : null;
+
+  // One item, wherever it sits now: the row, then the two chips that move it.
+  function itemRow(it: Item) {
+    const { lane, person } = effective(it, moves);
+    const named = person && person !== NOT_ON_TEAM ? nameOf(person) : undefined;
+    const who = named ? firstName(named) : "them";
+    const due = it.dueDate && (lane === "you_owe" || lane === "they_owe") && it.kind === "commitment" ? ` · due ${it.dueDate}` : "";
+    const label =
+      lane === "you_owe" ? `You owe ${named ? who : "…"}${due}`
+      : lane === "they_owe" ? `${named ? who : "Someone"} owes you${due}`
+      : lane === "private" ? `${named ?? "A person"}${it.occurredOn ? ` · ${it.occurredOn}` : ""}`
+      : lane === "role" ? `About the role${named ? ` · ${named}` : ""}`
+      : "Not placed";
+    const why = problem(it, moves, roleRows, nameOf);
+    const editable = lane === "you_owe" || lane === "they_owe" || lane === "private";
+    return (
+      <Row key={it.id} rowKey={it.id} kept={kept} setKept={setKept} excerpt={it.kind === "role" || it.kind === "unplaced" ? null : it.excerpt}
+        low={it.kind === "commitment" || it.kind === "note" ? it.low : false} edited={changed(it.id, it.text)} label={label}>
+        {!editable ? (
+          <p className="text-sm text-ink">{it.text}</p>
+        ) : lane === "private" ? (
+          <textarea
+            aria-label={`Kept thought${named ? ` about ${named}` : ""}`}
+            rows={3}
+            className={`${INPUT} leading-relaxed`}
+            value={edits[it.id] ?? it.text}
+            onChange={(e) => setEdits({ ...edits, [it.id]: e.target.value })}
+          />
+        ) : (
+          <input
+            aria-label={lane === "you_owe" ? `What you owe ${named ?? "them"}` : `What ${named ?? "they"} ${named ? "owes" : "owe"} you`}
+            className={INPUT}
+            value={edits[it.id] ?? it.text}
+            onChange={(e) => setEdits({ ...edits, [it.id]: e.target.value })}
+          />
+        )}
+        <PlaceChips item={it} lane={lane} person={person} people={people} onMove={(patch) => move(it, patch)} />
+        <p className="mt-1 text-xs text-ink-muted">{why ?? laneNote(lane, who)}</p>
+      </Row>
+    );
   }
 
   return (
@@ -379,12 +472,12 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
           <>
             <p className={EYEBROW}>Review</p>
             <h2 id="notes-dump-title" className="mt-1 font-serif text-[1.5rem] font-normal leading-tight tracking-[-0.02em] text-ink">
-              {rows.length === 0 ? "Nothing to save from that" : `${plural(rows.length, "suggestion", "suggestions")} from your notes`}
+              {nothingHere ? "Nothing to save from that" : rows.length === 0 ? "Nothing suggested from that" : `${plural(rows.length, "suggestion", "suggestions")} from your notes`}
             </h2>
             <p className="mt-2 text-sm text-ink-secondary">
-              {rows.length === 0
+              {nothingHere
                 ? "Nothing in it matched your team, roles or goals. Nothing was saved."
-                : "Nothing is saved until you choose Save selected. Rows the notes did not state plainly start unchecked."}
+                : "Nothing is saved until you choose Save selected. Rows the notes did not state plainly start unchecked. The two tags on a row say where it goes and who it is about; change them if the guess is wrong."}
             </p>
 
             <Section title="Teams and departments" show={draft.org_units.length > 0}>
@@ -416,11 +509,12 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                 {roleDraftCapLine(
                   maxRoles,
                   chosenRoles.size,
-                  expRows.filter((e) => !e.blocked && !!kept[e.key] && !drafting(e) && !chosenRoles.has(roleKey(e, titleOf(e), levelOf(e)))).map((e) => firstName(e.person_name)),
+                  expRows.filter((e) => !hardBlocked(e) && !!kept[e.key] && roleLines(e).length > 0 && !drafting(e) && !chosenRoles.has(roleKey(e, titleOf(e), levelOf(e)))).map((e) => firstName(e.person_name)),
                 )}
               </li>
               {expRows.map((e) => {
-                const blocked = blockedText(e);
+                const hard = hardBlocked(e);
+                const blocked = hard || (e.blocked === "no_text" && roleLines(e).length === 0) ? blockedText(e) : null;
                 const title = titleOf(e);
                 return (
                   <Row key={e.key} rowKey={e.key} kept={kept} setKept={setKept} excerpt={e.excerpt} low={e.low} edited={changed(e.key, e.new_role?.job_role ?? "")} label={e.person_name}>
@@ -472,74 +566,44 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                         )}
                       </label>
                     )}
-                    {(e.slice || (e.held_back ?? []).length > 0 || (e.promises ?? []).length > 0) && !e.blocked && (
-                      <details className="mt-1.5 text-xs text-ink-muted">
-                        <summary className="cursor-pointer">
-                          What the draft will read
-                          {(e.shared ?? []).length > 0 && ` · ${(e.shared ?? []).length} said about a group`}
-                        </summary>
-                        {e.slice && (
-                          <p className="mt-1 whitespace-pre-wrap rounded-md bg-sunken px-2.5 py-2 text-ink-secondary">{e.slice}</p>
-                        )}
-                        {(e.shared ?? []).length > 0 && (
+                    {!hard && !blocked &&
+                      (items.some((it) => {
+                        const p = placement(it, moves, roleRows);
+                        return typeof p === "object" && p.role === e.report_id;
+                      }) ? (
+                        <details className="mt-1.5 text-xs text-ink-muted">
+                          <summary className="cursor-pointer">
+                            What the draft will read · {plural(roleLines(e).length, "sentence", "sentences")}
+                          </summary>
+                          <ul className="mt-2 divide-y divide-hairline rounded-lg border border-hairline">
+                            {items
+                              .filter((it) => {
+                                const p = placement(it, moves, roleRows);
+                                return typeof p === "object" && p.role === e.report_id;
+                              })
+                              .map(itemRow)}
+                          </ul>
                           <p className="mt-1.5">
-                            Said about a group, so everyone in it reads these too:{" "}
-                            {(e.shared ?? []).map((s) => `“${s}”`).join(" ")}
+                            The draft reads only these. Everything else you said about {firstName(e.person_name)} is under What you owe people,
+                            What people owe you, About each person or Not placed.
                           </p>
-                        )}
-                        {(e.promises ?? []).length > 0 && (
-                          <p className="mt-1.5">
-                            Left out of the role, because it is a promise rather than an expectation:{" "}
-                            {(e.promises ?? []).map((s) => `“${s}”`).join(" ")} It is under What you owe people or What people owe you.
-                          </p>
-                        )}
-                        {(e.held_back ?? []).length > 0 && (
-                          <p className="mt-1.5">
-                            Left out as yours, not {firstName(e.person_name)}’s (what you owe them, or your 1:1 rhythm):{" "}
-                            {(e.held_back ?? []).map((s) => `“${s}”`).join(" ")}
-                            {(draft.commitments ?? []).some((c) => c.report_id === e.report_id && (c.committed_by ?? "manager") === "manager") &&
-                              " What you owe them is under What you owe people."}
-                          </p>
-                        )}
-                      </details>
-                    )}
+                        </details>
+                      ) : (
+                        <p className="mt-1.5 text-xs text-ink-muted">
+                          Nothing is tagged as about {firstName(e.person_name)}’s role, so there is nothing to draft from. Place a sentence under Not placed to change that.
+                        </p>
+                      ))}
                   </Row>
                 );
               })}
             </Section>
 
-            <Section title="What you owe people" show={owedByYou.length > 0}>
-              {owedByYou.map((c) => (
-                <Row key={c.key} rowKey={c.key} kept={kept} setKept={setKept} excerpt={c.excerpt} low={c.low} edited={changed(c.key, c.description)}
-                  label={`You owe ${firstName(c.person_name)}${c.due_date ? ` · due ${c.due_date}` : ""}`}>
-                  <input
-                    aria-label={`What you owe ${c.person_name}`}
-                    className={INPUT}
-                    value={edits[c.key] ?? c.description}
-                    onChange={(e) => setEdits({ ...edits, [c.key]: e.target.value })}
-                  />
-                  <p className="mt-1 text-xs text-ink-muted">
-                    Saved as a commitment you owe {firstName(c.person_name)}. It’s on your prep sheet for them until you mark it done.
-                  </p>
-                </Row>
-              ))}
+            <Section title="What you owe people" show={inLane("you_owe").length > 0}>
+              {inLane("you_owe").map(itemRow)}
             </Section>
 
-            <Section title="What people owe you" show={owedToYou.length > 0}>
-              {owedToYou.map((c) => (
-                <Row key={c.key} rowKey={c.key} kept={kept} setKept={setKept} excerpt={c.excerpt} low={c.low} edited={changed(c.key, c.description)}
-                  label={`${firstName(c.person_name)} owes you${c.due_date ? ` · due ${c.due_date}` : ""}`}>
-                  <input
-                    aria-label={`What ${c.person_name} owes you`}
-                    className={INPUT}
-                    value={edits[c.key] ?? c.description}
-                    onChange={(e) => setEdits({ ...edits, [c.key]: e.target.value })}
-                  />
-                  <p className="mt-1 text-xs text-ink-muted">
-                    Saved as a commitment {firstName(c.person_name)} owes you. It’s on your prep sheet for them until you mark it done.
-                  </p>
-                </Row>
-              ))}
+            <Section title="What people owe you" show={inLane("they_owe").length > 0}>
+              {inLane("they_owe").map(itemRow)}
             </Section>
 
             <Section title="Goals" show={draft.goals.length > 0}>
@@ -552,21 +616,21 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
               ))}
             </Section>
 
-            <Section title="About each person" show={draft.person_notes.length > 0}>
-              {draft.person_notes.map((n) => (
-                <Row key={n.key} rowKey={n.key} kept={kept} setKept={setKept} excerpt={n.excerpt} low={n.low} edited={changed(n.key, n.text)}
-                  label={`${n.person_name}${n.occurred_on ? ` · ${n.occurred_on}` : ""}`}>
-                  <textarea
-                    aria-label={`Kept thought about ${n.person_name}`}
-                    rows={3}
-                    className={`${INPUT} leading-relaxed`}
-                    value={edits[n.key] ?? n.text}
-                    onChange={(e) => setEdits({ ...edits, [n.key]: e.target.value })}
-                  />
-                  <p className="mt-1 text-xs text-ink-muted">Kept as a thought for your next prep sheet with them. Only you see it.</p>
-                </Row>
-              ))}
+            <Section title="About each person" show={inLane("private").length > 0}>
+              {inLane("private").map(itemRow)}
             </Section>
+
+            <Section title={`Not placed · ${inLane("unplaced").length}`} show={inLane("unplaced").length > 0}>
+              <li className="px-3 py-2.5 text-[13px] text-ink-secondary">
+                Sentences from your notes that none of the suggestions above are built from. Nothing is saved from one unless you place it.
+              </li>
+              {inLane("unplaced").map(itemRow)}
+            </Section>
+            {draft.unplaced_more > 0 && (
+              <p className="mt-2 text-[13px] text-ink-secondary">
+                {plural(draft.unplaced_more, "more sentence was", "more sentences were")} not shown here and will not be saved.
+              </p>
+            )}
 
             {draft.unmatched_people.length > 0 && (
               <p className="mt-4 text-[13px] text-ink-secondary">
@@ -719,6 +783,50 @@ function Section({ title, show, children }: { title: string; show: boolean; chil
       <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</h3>
       <ul className="mt-2 divide-y divide-hairline rounded-lg border border-hairline">{children}</ul>
     </section>
+  );
+}
+
+const CHIP =
+  "max-w-full rounded-full border border-control bg-sunken px-2.5 py-1 text-xs text-ink-secondary hover:text-ink " +
+  "focus:border-brand focus:outline-none focus:ring-2 focus:ring-blue-600/40";
+
+// The two tags on a row: where it goes and who it is about. Native selects, so
+// they are closed chips until tapped and need no layout of their own.
+function PlaceChips({
+  item, lane, person, people, onMove,
+}: {
+  item: Item;
+  lane: Lane | null;
+  person: string | null;
+  people: NotesDumpPerson[];
+  onMove: (patch: Move) => void;
+}) {
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <select
+        aria-label="Where this goes"
+        className={CHIP}
+        value={lane ?? ""}
+        onChange={(e) => onMove({ lane: e.target.value as Lane })}
+      >
+        {lane === null && <option value="" disabled>Place it…</option>}
+        {LANES.map((l) => (
+          <option key={l.value} value={l.value}>{l.label}</option>
+        ))}
+      </select>
+      <select
+        aria-label="Who it is about"
+        className={CHIP}
+        value={person ?? ""}
+        onChange={(e) => onMove({ person: e.target.value })}
+      >
+        {person === null && <option value="" disabled>Who?</option>}
+        {people.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+        <option value={NOT_ON_TEAM}>Not on my team</option>
+      </select>
+    </div>
   );
 }
 

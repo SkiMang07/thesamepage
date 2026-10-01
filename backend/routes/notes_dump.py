@@ -41,6 +41,16 @@ written in the background (expectations_batch.py). The typed text comes back on
 apply only for that: each role's draft is written from, and stores, that
 person's slice of it (intake_slices.py), never the whole text. Attached files
 are never sent back and never stored.
+
+Placement (2026-10-01, round 3; intake_placement.py). A role draft is written
+from the sentences tagged "About the role", not from a slice filtered by
+wording. Each role row carries `role_sentences` (the model's `evidence`,
+checked in code); apply takes the tagged sentences back as `role_sentences` and
+cuts them from the typed text itself. Every commitment and kept-thought row
+carries a lane and person the manager can change, and the parse lists any
+pasted sentence no row cites as `unplaced`, so nothing said is silently
+dropped. The old slice path remains only for callers that send no
+`role_sentences`.
 """
 import logging
 import re
@@ -55,6 +65,7 @@ import analytics
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
+from intake_placement import cited_sentences, cites_of_rows, name_guesser, quotes_of, role_sentences, unplaced_sentences, verbatim_sentences
 from intake_slices import (MAX_SLICE, _bigrams, _cap, _words, echoes_commitment, echoes_held_back, follow_through_action, for_drafting,
                            from_own_slice, is_promise, manager_side, sentences, _clauses, shared_by_person, slice_by_person, sourced_by, split_lapses)
 from routes.documents import _MAX_UPLOAD_BYTES
@@ -228,7 +239,7 @@ Rules:
 - Do not repeat what already exists below.
 - Give each item a short excerpt (under 160 characters) copied from the notes that supports it.
 - confidence is "high" when the notes state it plainly, otherwise "low". A fact the notes state outright is "high" however sensitive it is, and a person note is "low" only when the notes themselves hedge it.
-- expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state. Only what the person owes: leave out what the manager owes them ("I owe her ...", "I said I'd ...", "mine") and the manager's 1:1 rhythm with them (how often or how long they meet). Those are the manager's side: what the manager owes goes in commitments, the 1:1 rhythm is left out.
+- expectations: one entry per person when the notes say what good looks like in their role or what the manager expects from them (what they own, standards, how often, targets). Leave out anyone the notes only mention in passing. Cite their role by ref when it exists; otherwise give job_role (the title without seniority words) and job_level, a number 1-10 read from the seniority the notes state (junior 1-2, mid-level 3, senior 4-5, staff or principal 6-7), or null when the notes state no seniority. The manager checks the level before anything is saved. statement: at most two plain sentences restating what the manager expects of them, in the manager's terms, with no number the notes don't state. Only what the person owes: leave out what the manager owes them ("I owe her ...", "I said I'd ...", "mine") and the manager's 1:1 rhythm with them (how often or how long they meet). Those are the manager's side: what the manager owes goes in commitments, the 1:1 rhythm is left out. evidence: up to six sentences copied word for word from the notes that say what is expected of this person in the role (what they own, standards, how often, targets). Only a sentence that says what is expected of them: never what the manager owes, what happened ("did it twice and then stopped"), a result already reached, or the manager's own thoughts and admissions. Fewer is better than a doubtful one, and an empty list is fine.
 - goals: only when the notes call something a goal, objective, target or priority for the company, a department or the team. What "going well" or "good" looks like for a role or for the team's day to day ("Going well means no late flags") is an expectation of people, not a goal: leave it out of goals. Never write a goal title the manager did not say.
 - commitments: one entry per specific thing one person owes the other, in either direction. committed_by "manager" when the manager says THEY owe it ("I owe her quarterly priorities", "I said I'd write him a growth plan", "design doc feedback, I owe her"). committed_by "direct_report" when the notes say the PERSON owes the manager something specific ("her priorities for next quarter, waiting on her", "Andre said he'd send me the plan Friday"). Use "direct_report" only when the notes say so plainly; when the direction is unclear, leave it out. description: a short plain action, starting with a verb where it reads naturally, with no number or date the notes don't state, written from the side of whoever owes it. For "manager" it is what the manager does ("Share quarterly priorities with Lena", "Give Mei feedback on her design doc"). For "direct_report" it is what the person does, so it names the thing delivered and never says "her" or "his" for the person who owes it: notes "her priorities for next quarter, waiting on her" give "Send next quarter's priorities", not "Share her priorities for next quarter". due_date: the date the thing is due, when the notes state one, or a month or relative time you can resolve against today's date below ("by April", "next Friday", "in two weeks"). A month alone means the last day of the next such month that has not passed. When the notes say when something was promised ("promised in April", "four months ago") and not when it is due, due_date is null. Set confidence to "low" on any commitment whose due_date you worked out rather than read straight off the notes, so its row starts unchecked and the manager confirms the date before it is saved. A commitment is one thing to deliver. A standing expectation of the role that recurs ("a weekly status", "a short weekly note", "reliable delivery") is not a commitment: it belongs in expectations. Not the 1:1 rhythm, not a vague intention with nothing to deliver. A promise goes here, not in person_notes.
 
@@ -248,7 +259,7 @@ Return one JSON object and nothing else:
 {{
   "org_units": [{{"name": "", "unit_type": "team" or "department", "parent_name": "" or null, "excerpt": "", "confidence": ""}}],
   "role_assignments": [{{"person": "P1", "role": "R1" or null, "role_title": "" or null, "org_unit_name": "" or null, "excerpt": "", "confidence": ""}}],
-  "expectations": [{{"person": "P1", "role": "R1" or null, "job_role": "" or null, "job_level": 1-10 or null, "statement": "", "excerpt": "", "confidence": ""}}],
+  "expectations": [{{"person": "P1", "role": "R1" or null, "job_role": "" or null, "job_level": 1-10 or null, "statement": "", "evidence": ["", ""], "excerpt": "", "confidence": ""}}],
   "commitments": [{{"person": "P1", "committed_by": "manager" or "direct_report", "description": "", "due_date": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "goals": [{{"level": "company" or "department" or "team", "title": "", "success_metrics": "" or null, "org_unit_name": "" or null, "due_date": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
   "person_notes": [{{"person": "P1", "text": "", "occurred_on": "YYYY-MM-DD" or null, "excerpt": "", "confidence": ""}}],
@@ -446,6 +457,9 @@ def _validate_expectations(parsed: dict, ctx: dict, notes_sq: str, out: dict, se
             "role_level_id": role_id, "role_label": label_by_id.get(role_id) if role_id else None,
             "new_role": new_role, "statement": _s(it.get("statement"), 400),
             "excerpt": _excerpt(it.get("excerpt"), notes_sq), "low": _low(it),
+            # Sentences the model says are about the role. Only ones really in
+            # the notes; assign_role_sentences turns them into the row's tags.
+            "evidence": [e for e in (_excerpt(x, notes_sq) for x in (it.get("evidence") if isinstance(it.get("evidence"), list) else [])[:8]) if e],
         })
     covered = {e["report_id"] for e in out["expectations"]}
     kept = []
@@ -564,6 +578,45 @@ def commitments_for_lapses(drafts: dict) -> None:
                 "description": _s(item["description"], 300), "due_date": None, "committed_by": "direct_report",
                 "excerpt": item.get("excerpt"), "low": True,
             })
+
+
+def assign_role_sentences(drafts: dict) -> None:
+    """Tag each role row's "About the role" sentences (intake_placement). The
+    row's evidence is the model's say on which sentences state an expectation;
+    code keeps only those that are really in the person's slice and that no
+    other row cites (a promise or a kept thought is not a role line), that are
+    not history ("stopped") and not the manager's own side. A row whose
+    evidence is empty falls back to its one excerpt. A row left with no tagged
+    sentence has nothing to draft from, so it is not preselected; the manager
+    can tag a sentence on the review screen. Pure."""
+    other = (cites_of_rows(drafts.get("commitments", []), "excerpt")
+             + cites_of_rows(drafts.get("person_notes", []), "excerpt"))
+    for row in drafts.get("expectations", []):
+        evidence = row.pop("evidence", None) or ([row["excerpt"]] if row.get("excerpt") else [])
+        row["role_sentences"] = [] if row.get("blocked") else role_sentences(row.get("slice"), evidence, other)
+        if not row["role_sentences"]:
+            row["draft"] = False
+
+
+def attach_cited_sentences(typed: str, shown: dict) -> None:
+    """Each promise and kept-thought row carries the sentences it cites, so the
+    review can move it to "About the role" as the manager's own words. Pure."""
+    for group in ("commitments", "person_notes"):
+        for row in shown[group]:
+            row["sentences"] = cited_sentences(typed, row.get("excerpt"))
+
+
+def unplaced_for(typed: str, shown: dict, ctx: dict, other_names: list[str]) -> tuple[list[dict], int]:
+    """Every sentence of the typed text that no shown row cites, with the person
+    it names when it names exactly one. Judged on what is SHOWN, so a row cut by a cap gives its
+    sentences back here instead of losing them. Pure."""
+    cites: list[str] = []
+    for group in GROUPS:
+        cites += cites_of_rows(shown[group], "excerpt")
+    cites += cites_of_rows(shown["commitments"], "description") + cites_of_rows(shown["person_notes"], "text")
+    cites += quotes_of([s for e in shown["expectations"] for s in (e.get("role_sentences") or [])])
+    people = [{"id": p["id"], "name": p["name"]} for p in ctx["people"].values()]
+    return unplaced_sentences(typed, cites, name_guesser(people, other_names))
 
 
 def _merge_slices(pieces: list[str]) -> str:
@@ -783,13 +836,17 @@ def parse_notes_dump(
     parsed = _parse_json_object(raw)
     drafts = validate_parse(parsed, ctx, notes)
     unmatched = drafts.pop("unmatched_people")
+    typed = (text or "")[:MAX_CHARS]
     if drafts["expectations"]:
-        _finish_expectations_for(supabase, user_id, ctx, drafts, typed=(text or "")[:MAX_CHARS],
+        _finish_expectations_for(supabase, user_id, ctx, drafts, typed=typed,
                                  other_names=_other_names(parsed))
         commitments_for_held_back(drafts)
         commitments_for_lapses(drafts)
+        assign_role_sentences(drafts)
     shown, overflow = rank_and_cap(drafts, _soonest_reports(supabase, user_id))
     number_items(shown)
+    attach_cited_sentences(typed, shown)
+    unplaced, unplaced_more = unplaced_for(typed, shown, ctx, _other_names(parsed))
 
     analytics.capture(user_id, "notes_dump_parsed", {
         "input_size": size_bucket(len(notes)),
@@ -803,9 +860,15 @@ def parse_notes_dump(
         "proposed_commitments": len(shown["commitments"]),
         "overflow": overflow,
         "unmatched_people": len(unmatched),
+        "unplaced": len(unplaced) + unplaced_more,
     })
     return {
         **shown,
+        # Who a row can be moved to, and every sentence no row cites (the review
+        # lists them so nothing said is silently dropped).
+        "people": [{"id": p["id"], "name": p["name"]} for p in ctx["people"].values()],
+        "unplaced": unplaced,
+        "unplaced_more": unplaced_more,
         "unmatched_people": unmatched,
         "overflow": overflow,
         "truncated": truncated,
@@ -919,6 +982,11 @@ class ExpectationItem(_Strict):
     # `promises`), echoed back so the draft is written without them. Only a
     # real sentence of the slice has any effect (intake_slices.for_drafting).
     promises: list[Annotated[str, Field(max_length=600)]] = Field(default_factory=list, max_length=20)
+    # The sentences tagged "About the role" for this person (the review row's
+    # `role_sentences`, as the manager left them). The draft is written from
+    # exactly these, cut from the typed text itself. None = a caller that does
+    # not tag: the slice path (promises above) is used instead.
+    role_sentences: list[Annotated[str, Field(max_length=600)]] | None = Field(default=None, max_length=30)
     # Queue a draft now. Rows kept without it get the role and assignment only;
     # the receipt offers them as a second pass.
     draft: bool = False
@@ -1201,22 +1269,39 @@ def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, save
         if role_id in covered:
             out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"{first}’s role already has approved expectations — this won’t change them."})
             continue
-        piece = slices.get(person["id"])
-        if body.text and not piece:
-            out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"Nothing you typed is clearly about {first}, so there’s nothing to draft from. Attached files aren’t kept."})
-            continue
+        tagged = item.role_sentences is not None
+        if tagged:
+            # The manager's tags decide what the draft reads. Each is cut from
+            # the typed text, so the stored context is their own words.
+            if not item.role_sentences:
+                out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"Nothing is tagged as about {first}’s role, so there’s nothing to draft from."})
+                continue
+            verified = verbatim_sentences(body.text, item.role_sentences) if body.text else []
+            piece = "\n\n".join(verified) or None
+            if body.text and not piece:
+                out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"Nothing tagged as about {first}’s role is in what you typed, so there’s nothing to draft from. Attached files aren’t kept."})
+                continue
+        else:
+            piece = slices.get(person["id"])
+            if body.text and not piece:
+                out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"Nothing you typed is clearly about {first}, so there’s nothing to draft from. Attached files aren’t kept."})
+                continue
         if not item.draft:
             # Kept without a draft: the role and assignment are saved, and the
             # receipt offers a second pass. (Without the text, which is only
             # sent when a draft is queued, "nothing typed" is judged then.)
             out["waiting"].append({"report_id": person["id"], "person_name": person["name"], "role_level_id": role_id})
             continue
-        reads, held = for_drafting(piece, extra=item.promises)
+        if tagged and not piece:
+            # A draft needs the typed text to cut the tags from; none came with it.
+            out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"There’s no text to draft {first}’s role from."})
+            continue
+        reads, held = (piece, []) if tagged else for_drafting(piece, extra=item.promises)
         statement = clean_statement(item.statement, reads, held)
         g = groups.setdefault(role_id, {"people": [], "slices": [], "statements": [], "promises": []})
         g["people"].append(person["name"])
         g["slices"].append(piece)
-        g["promises"].extend(p for p in item.promises if p not in g["promises"])
+        g["promises"].extend(p for p in ([] if tagged else item.promises) if p not in g["promises"])
         if statement:
             g["statements"].append(statement)
 

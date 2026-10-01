@@ -234,10 +234,14 @@ is **approved**: a draft is not yet a standard.
   them…", "They each…") go to every person in that group and follow until someone is
   named; a stated head count must match or the sentence is left out. People on one
   role share those lines once in the draft context, and `shared_by_person` lets the
-  review show which lines are said about a group. The slice is stored as `analysis.context` and
-  is the only `context_text` the drafter's `sanitize_composed(mode="description")`
-  sees, so allowed numbers and quote provenance are per person. Never the whole
-  input. Files never go back to apply and are never stored.
+  review show which lines are said about a group. The slice picks the defaults
+  (which sentences a role row may tag, who a sentence is about); what a draft stores as
+  `analysis.context`, and the only `context_text` the drafter's
+  `sanitize_composed(mode="description")` sees, is the sentences tagged About the
+  role (see Placement), so allowed numbers and quote provenance are per person.
+  Never the whole input. Files never go back to apply and are never stored. A
+  caller that sends no tags gets the slice itself (the pre-placement path; the
+  browser always tags).
 - **The manager's side is held back.** `intake_slices.for_drafting` removes, in
   code, the sentences in a slice that are the manager's own side:
   a commitment ("I owe her quarterly priorities", "I said I'd write him a growth
@@ -297,6 +301,42 @@ is **approved**: a draft is not yet a standard.
   prep sheet and the person page already list open commitments. They used to
   be proposed as notes, and the 2026-09-30 Dana rerun lost all three to the
   five-note cap.
+- **Placement: a draft reads only what is tagged About the role**
+  (`intake_placement.py`, `lib/notesDumpPlacement.ts`). Filtering a slice by how the
+  manager worded things let lapses ("he did twice and then he just stopped"), the
+  manager's own account ("I joined two. That's rescuing, not coaching.") and orphan
+  fragments through. So the decision is a tag, not a filter. Every promise, kept
+  thought, role line and pasted sentence is one item with a lane (You owe, They
+  owe you, About the role, Private thought) and a person (or "Not on my team",
+  which saves nothing); the review shows both as chips on every row, the model's
+  pick is the default, nothing is required, and moving a row regroups it live.
+  - *Role lines.* The parse prompt has the model name `evidence` per role row: up
+    to six sentences copied from the notes that say what is expected. Code keeps
+    those that are in the person's slice and drops any that another row cites (a
+    promise or a kept thought), any lapse, any manager-side line or private
+    admission, and any sentence the manager leads with "I" or "my" unless it also
+    states what they expect of the person
+    (`intake_placement.role_sentences`, `notes_dump.assign_role_sentences`). They
+    come back as the row's `role_sentences`; a row with none is not preselected
+    to draft. With no `evidence` the row's one excerpt stands in.
+  - *Apply.* `role_sentences` on an expectation row is what the manager left
+    tagged. The server cuts each from the typed text itself
+    (`verbatim_sentences`; an altered or invented one is dropped), joins them with
+    blank lines as `analysis.context`, and drafts from exactly that. An empty list
+    is skipped in `not_drafted` ("Nothing is tagged as about X's role"). Moving a
+    promise or thought to the role tags `sentences`, the typed sentences its
+    excerpt covers, never the model's rewording. "About the role" needs a kept,
+    unblocked role row for that person from the same read; otherwise the row says why
+    and saves nothing.
+  - *Unplaced.* Every sentence of the typed text that no shown row cites is
+    listed as `unplaced` (up to 60; headings and one-word fragments are not
+    offered), judged after the caps so a row cut by a cap gives its sentences
+    back. Each carries the one roster person it names, if any; a bare "he" is
+    left for the manager. They start unchecked and save nothing until placed.
+  - The wrong default is still possible: the model proposes the lane, and a
+    wrong one the manager does not notice still saves. This makes the leak one
+    tap to fix, not impossible. Required fields on every row were rejected: they
+    turn an 8 to 9 minute skim into 14 or more decisions.
 - **Review budgets.** Everything per person has its own budget, so a bigger
   team never loses rows to a shared cap: expectations (`CAP_EXPECTATIONS`, 15),
   what the manager owes (`CAP_COMMITMENTS`, 20), and notes and role/team rows
@@ -352,6 +392,9 @@ expectations through them any more.
 
 ## Verification
 
+`backend/tests/test_intake_placement.py` covers role tags, verbatim cutting, the
+unplaced list, and the apply and parse routes with tags (run `npm run
+test:notes-dump-placement` in `frontend/` for the lane and person logic).
 `backend/tests/test_intake_slices.py` and `test_expectations_batch.py` cover
 slicing, the expectations group, role creation and dedupe, apply order, the
 background state machine, retry, cross-contamination between people, and who

@@ -266,7 +266,7 @@ def test_parse_saves_nothing_and_the_event_has_no_text(client, monkeypatch):
     assert props == {
         "input_size": "under_1k", "files": 0, "truncated": False, "proposed_org_units": 0,
         "proposed_roles": 0, "proposed_goals": 1, "proposed_notes": 1, "proposed_expectations": 0, "proposed_commitments": 0,
-        "overflow": 0, "unmatched_people": 1,
+        "overflow": 0, "unmatched_people": 1, "unplaced": 0,
     }
     assert all(isinstance(v, (int, bool)) or v in {"under_1k"} for v in props.values())
     assert "Falcon" not in json.dumps(sent) and "Priya" not in json.dumps(sent)
