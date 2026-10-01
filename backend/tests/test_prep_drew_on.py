@@ -69,7 +69,7 @@ def test_the_guide_stores_the_list():
 
 # ---- "Built without": what setup left out of THIS sheet ---------------------
 
-from routes.one_on_ones import prep_built_without  # noqa: E402
+from routes.one_on_ones import has_configured_expectations, prep_built_without  # noqa: E402
 
 
 def test_built_without_names_only_what_was_missing_for_this_person():
@@ -95,3 +95,15 @@ def test_the_saved_sheet_stores_the_line_only_when_there_is_something_to_say():
     silent = build_prep_guide("s", [], [], source_notes="", prepared_by="manager", built_without=[])
     assert "built_without" not in silent
     assert "built_without" not in build_prep_guide("s", [], [], source_notes="", prepared_by="manager")
+
+
+def test_a_bare_role_is_not_role_expectations():
+    # Renata run 2026-10-01: both role drafts were unapproved, yet the sheet
+    # said it "drew on role expectations". A role with nothing configured is
+    # only role context.
+    role = {"role_level": {"job_role": "CSM", "job_level": 1}, "metrics": [], "skills": [], "values": []}
+    assert has_configured_expectations(None) is False
+    assert has_configured_expectations(role) is False
+    assert has_configured_expectations({**role, "skills": [{"skill_name": "Early risk flagging"}]}) is True
+    assert has_configured_expectations({**role, "values": [{"value_name": "Candour"}]}) is True
+

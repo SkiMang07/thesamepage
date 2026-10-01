@@ -655,3 +655,9 @@ def test_the_prep_prompt_forbids_reading_the_person_and_keeps_the_managers_hedge
     assert "NEVER READ THE PERSON" in body
     assert "showing signs of disengagement or overload" in body
     assert "Hedge only what the notes themselves hedge" in body
+    # Same run: "may have talked" came back as "told her", "haven't tried yet"
+    # read as a charge, and the sheet called the reader "the manager".
+    assert 'If the notes say someone "may have"' in body
+    assert "no \"What haven't you tried?\"" in body
+    assert 'never call them "the manager"' in body
+    assert "What approaches haven't you tried yet?" not in body

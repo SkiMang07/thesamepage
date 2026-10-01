@@ -411,7 +411,7 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
    - OBSTACLES / BLOCKERS → use GROW coaching questions:
        Goal: "What outcome were you going for?"
        Reality: "What's actually happening now?"
-       Options: "What approaches haven't you tried yet?"
+       Options: "What options do you see?" or "What could you try next?"
        Way forward: "What will you commit to by next time?"
    - PERFORMANCE CONCERNS → prepare SBI framing the manager can use:
        Situation: when and where the behavior was observed
@@ -439,6 +439,9 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
 
 7. NEVER READ THE PERSON
    Restate what the manager wrote; do not characterize the person. Never name a state of mind, motive or cause the notes do not state: no "disengaged", "overloaded", "burned out", "checked out", "struggling", "lacks confidence", "showing signs of". Report the facts and leave the reading to the manager ("missed two QBRs and two health scores are yellow", not "showing signs of disengagement or overload"). What the notes state plainly, state plainly; do not add "may", "seems" or "appears" to it. Hedge only what the notes themselves hedge, and keep their hedge in their words ("not sure if it's capacity"). A possible cause belongs in a question the report can answer ("What's getting in the way of the QBRs?"), never in the summary or a rationale as a finding.
+   Keep the hedge and add no outcome. If the notes say someone "may have" said or done something, the output says "may have", not "told her" or "decided". Never add a result the notes do not state ("hasn't followed up", "never resulted in anything", "wasn't resolved").
+   Questions never imply fault or effort: no "What haven't you tried?", "Why haven't you...?", "Didn't you...?". Ask what happened and what is in the way. This matters most when the person used to be the manager's peer.
+   The sheet is read by the manager. Write to them as "you" ("you noted she seemed flat", "you haven't asked yet"), and never call them "the manager".
 
 ---
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
@@ -1006,7 +1009,7 @@ def assemble_prep_inputs(
         "prompt": prompt,
         "built_without": prep_built_without(
             has_team=bool(report.get("org_unit_id")),
-            has_role_expectations=bool(role_expectations),
+            has_role_expectations=has_configured_expectations(role_expectations),
             goal_levels=_goal_levels(supabase, user_id),
         ),
         "report_name": report["name"],
@@ -1014,7 +1017,7 @@ def assemble_prep_inputs(
         "document_ids": [doc["id"] for doc in retrieved_docs],
         "document_titles": [str(doc.get("title") or "Untitled document") for doc in retrieved_docs],
         "history_count": len(recent_summaries),
-        "has_role_expectations": bool(role_expectations),
+        "has_role_expectations": has_configured_expectations(role_expectations),
         "secondhand_count": len(secondhand_notes),
     }
 
@@ -1031,6 +1034,15 @@ def _goal_levels(supabase, user_id: str) -> set[str]:
         .data
     )
     return {row["level"] for row in rows}
+
+
+def has_configured_expectations(role_expectations: dict | None) -> bool:
+    """True only when the person's role has expectations to draw on. A role with
+    no approved metrics, skills or values comes back from fetch_role_expectations()
+    as a bare role row, which is context, not expectations."""
+    if not role_expectations:
+        return False
+    return any(role_expectations.get(kind) for kind in ("metrics", "skills", "values"))
 
 
 def prep_built_without(*, has_team: bool, has_role_expectations: bool, goal_levels: set[str]) -> list[str]:
