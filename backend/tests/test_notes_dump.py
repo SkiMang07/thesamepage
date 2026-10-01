@@ -317,7 +317,7 @@ def test_apply_saves_only_what_it_is_given_in_order_and_is_idempotent(apply_clie
     }
     r = c.post("/api/onboarding/notes-dump/apply", json=payload)
     assert r.status_code == 200, r.text
-    assert r.json()["saved"] == {"org_units": 1, "roles": 1, "goals": 1, "notes": 1, "commitments": 0}
+    assert r.json()["saved"] == {"org_units": 1, "roles": 1, "goals": 1, "notes": 1, "commitments": 0, "owed_to_you": 0}
     unit = next(u for u in db.rows["org_units"] if u["name"] == "Onboarding")
     assert unit["parent_unit_id"] == "ou1" and unit["org_id"] == "org1"
     dr1 = next(d for d in db.rows["direct_reports"] if d["id"] == "dr1")
@@ -327,7 +327,7 @@ def test_apply_saves_only_what_it_is_given_in_order_and_is_idempotent(apply_clie
     assert db.rows["dr_capture_notes"][0]["manager_id"] == "u1"
 
     again = c.post("/api/onboarding/notes-dump/apply", json=payload).json()
-    assert again["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0, "commitments": 0}
+    assert again["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0, "commitments": 0, "owed_to_you": 0}
     assert again["skipped_existing"] >= 3
     assert len(db.rows["dr_capture_notes"]) == 1 and len([g for g in db.rows["goals"] if g["title"] == "Ship onboarding v2"]) == 1
 
@@ -347,7 +347,7 @@ def test_apply_refuses_someone_elses_person_and_a_missing_role(apply_client):
         "person_notes": [{"report_id": "other", "text": "x"}],
     })
     body = r.json()
-    assert body["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0, "commitments": 0}
+    assert body["saved"] == {"org_units": 0, "roles": 0, "goals": 0, "notes": 0, "commitments": 0, "owed_to_you": 0}
     assert len(body["refused"]) == 4
     assert db.rows["dr_capture_notes"] == []
 
@@ -433,4 +433,64 @@ def test_apply_refuses_a_commitment_to_someone_elses_person(apply_client):
     body = c.post("/api/onboarding/notes-dump/apply", json={
         "commitments": [{"report_id": "other", "description": "x"}]}).json()
     assert body["saved"]["commitments"] == 0 and len(body["refused"]) == 1
+    assert db.rows.get("commitments", []) == []
+
+
+# ── what people owe the manager: the other direction ─────────────────────
+
+def test_prompt_asks_for_both_directions_and_keeps_standing_expectations_out():
+    prompt = nd.build_prompt(_ctx(), "Lena's priorities for next quarter, waiting on her.")
+    assert '"committed_by": "manager" or "direct_report"' in prompt
+    assert "waiting on her" in prompt                      # the worked example for the other side
+    assert "is not a commitment: it belongs in expectations" in prompt
+    assert "when the direction is unclear, leave it out" in prompt
+
+
+def test_validate_keeps_the_direction_and_defaults_to_the_managers_own():
+    notes = "I owe Priya the plan. Priya owes me her priorities."
+    out = nd.validate_parse({"commitments": [
+        {"person": "P1", "committed_by": "manager", "description": "Share the plan with Priya", "confidence": "high"},
+        {"person": "P1", "committed_by": "direct_report", "description": "Send next quarter's priorities", "confidence": "high"},
+        {"person": "P1", "description": "No direction given"},                      # missing: the manager's own
+        {"person": "P1", "committed_by": "counterpart", "description": "Odd value"},  # not a direction we take: the manager's own
+        {"person": "P1", "committed_by": "direct_report", "description": "Send next quarter's priorities"},  # duplicate
+    ]}, _ctx(), notes)
+    got = {(c["committed_by"], c["description"]) for c in out["commitments"]}
+    assert got == {("manager", "Share the plan with Priya"), ("direct_report", "Send next quarter's priorities"),
+                   ("manager", "No direction given"), ("manager", "Odd value")}
+
+
+def test_the_same_words_in_both_directions_are_two_rows():
+    out = nd.validate_parse({"commitments": [
+        {"person": "P1", "committed_by": "manager", "description": "Agree the plan"},
+        {"person": "P1", "committed_by": "direct_report", "description": "Agree the plan"},
+    ]}, _ctx(), "x")
+    assert len(out["commitments"]) == 2
+
+
+def test_apply_saves_what_a_person_owes_the_manager_as_a_direct_report_commitment_once(apply_client):
+    c, db, sent = apply_client
+    payload = {"commitments": [
+        {"report_id": "dr1", "description": "Send next quarter's priorities", "due_date": "2026-10-09", "committed_by": "direct_report"},
+        {"report_id": "dr1", "description": "Send next quarter's priorities", "committed_by": "manager"},  # same words, the other side
+    ], "proposed": 2}
+    body = c.post("/api/onboarding/notes-dump/apply", json=payload).json()
+    assert body["saved"]["commitments"] == 1 and body["saved"]["owed_to_you"] == 1 and body["refused"] == []
+    rows = db.rows["commitments"]
+    assert {(r["committed_by"], r["status"], r["source_type"], r["owner_id"]) for r in rows} == {
+        ("direct_report", "open", "manual", "u1"), ("manager", "open", "manual", "u1")}
+    assert next(r for r in rows if r["committed_by"] == "direct_report")["due_date"] == "2026-10-09"
+
+    again = c.post("/api/onboarding/notes-dump/apply", json=payload).json()
+    assert again["saved"]["commitments"] == 0 and again["saved"]["owed_to_you"] == 0 and again["skipped_existing"] == 2
+    assert len(db.rows["commitments"]) == 2
+    applied = [p for e, p in sent if e == "notes_dump_applied"]
+    assert applied[0]["kept_owed_to_you"] == 1 and applied[1]["kept_owed_to_you"] == 0
+
+
+def test_apply_rejects_a_direction_it_does_not_know(apply_client):
+    c, db, _ = apply_client
+    r = c.post("/api/onboarding/notes-dump/apply", json={
+        "commitments": [{"report_id": "dr1", "description": "x", "committed_by": "counterpart"}]})
+    assert r.status_code == 422
     assert db.rows.get("commitments", []) == []

@@ -2097,11 +2097,13 @@ export type NotesDumpNote = {
   excerpt: string | null;
   low: boolean;
 };
-// Something the manager said they owe a person ("I owe her quarterly
-// priorities"). Saved as an open commitment the manager owns; the prep sheet
-// lists it. Its own budget on the server, so no cap on notes can drop it.
+// One specific thing owed between the manager and a person, in either
+// direction ("I owe her quarterly priorities"; "her priorities, waiting on
+// her"). Saved as an open commitment; the prep sheet lists it. Its own budget
+// on the server, so no cap on notes can drop it.
 export type NotesDumpCommitment = {
   key: string;
+  committed_by: "manager" | "direct_report";
   report_id: string;
   person_name: string;
   description: string;
@@ -2160,7 +2162,7 @@ export type NotesDumpApplyBody = {
   role_assignments: { report_id: string; role_level_id: string | null; role_title: string | null; org_unit_name: string | null }[];
   goals: { level: string; title: string; success_metrics: string | null; org_unit_name: string | null; due_date: string | null }[];
   person_notes: { report_id: string; text: string }[];
-  commitments?: { report_id: string; description: string; due_date: string | null }[];
+  commitments?: { report_id: string; description: string; due_date: string | null; committed_by: "manager" | "direct_report" }[];
   expectations?: NotesDumpExpectationBody[];
   text?: string;
   other_names?: string[];
@@ -2169,7 +2171,7 @@ export type NotesDumpApplyBody = {
   seconds_to_confirm: number;
 };
 export type NotesDumpApplyResult = {
-  saved: { org_units: number; roles: number; goals: number; notes: number; commitments: number };
+  saved: { org_units: number; roles: number; goals: number; notes: number; commitments: number; owed_to_you: number };
   skipped_existing: number;
   refused: { kind: string; reason: string }[];
   roles_created: number;

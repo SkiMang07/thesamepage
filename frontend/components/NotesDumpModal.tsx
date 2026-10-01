@@ -130,6 +130,8 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
   const editedCount = rows.filter((r) => kept[r.key] && edits[r.key] !== undefined && edits[r.key] !== r.original).length;
 
   const expRows = draft?.expectations ?? [];
+  const owedByYou = (draft?.commitments ?? []).filter((c) => (c.committed_by ?? "manager") === "manager");
+  const owedToYou = (draft?.commitments ?? []).filter((c) => c.committed_by === "direct_report");
   const maxRoles = draft?.max_roles ?? 5;
   const titleOf = (e: NotesDumpExpectation) => (edits[e.key] ?? e.new_role?.job_role ?? "").trim();
   const levelOf = (e: NotesDumpExpectation) => levels[e.key] ?? e.new_role?.job_level ?? 1;
@@ -172,6 +174,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
         })),
         commitments: (draft.commitments ?? []).filter((c) => on(c.key)).map((c) => ({
           report_id: c.report_id, description: val(c.key, c.description), due_date: c.due_date,
+          committed_by: c.committed_by ?? "manager",
         })),
         expectations: expRows.filter((e) => on(e.key)).map((e) => expectationBody(e, drafting(e))),
         // Only when a draft is queued: each role's draft keeps that person's part.
@@ -466,7 +469,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                           <p className="mt-1.5">
                             Left out as yours, not {firstName(e.person_name)}’s (what you owe them, or your 1:1 rhythm):{" "}
                             {(e.held_back ?? []).map((s) => `“${s}”`).join(" ")}
-                            {(draft.commitments ?? []).some((c) => c.report_id === e.report_id) &&
+                            {(draft.commitments ?? []).some((c) => c.report_id === e.report_id && (c.committed_by ?? "manager") === "manager") &&
                               " What you owe them is under What you owe people."}
                           </p>
                         )}
@@ -477,8 +480,8 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
               })}
             </Section>
 
-            <Section title="What you owe people" show={(draft.commitments ?? []).length > 0}>
-              {(draft.commitments ?? []).map((c) => (
+            <Section title="What you owe people" show={owedByYou.length > 0}>
+              {owedByYou.map((c) => (
                 <Row key={c.key} rowKey={c.key} kept={kept} setKept={setKept} excerpt={c.excerpt} low={c.low} edited={changed(c.key, c.description)}
                   label={`You owe ${firstName(c.person_name)}${c.due_date ? ` · due ${c.due_date}` : ""}`}>
                   <input
@@ -489,6 +492,23 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                   />
                   <p className="mt-1 text-xs text-ink-muted">
                     Saved as a commitment you owe {firstName(c.person_name)}. It’s on your prep sheet for them until you mark it done.
+                  </p>
+                </Row>
+              ))}
+            </Section>
+
+            <Section title="What people owe you" show={owedToYou.length > 0}>
+              {owedToYou.map((c) => (
+                <Row key={c.key} rowKey={c.key} kept={kept} setKept={setKept} excerpt={c.excerpt} low={c.low} edited={changed(c.key, c.description)}
+                  label={`${firstName(c.person_name)} owes you${c.due_date ? ` · due ${c.due_date}` : ""}`}>
+                  <input
+                    aria-label={`What ${c.person_name} owes you`}
+                    className={INPUT}
+                    value={edits[c.key] ?? c.description}
+                    onChange={(e) => setEdits({ ...edits, [c.key]: e.target.value })}
+                  />
+                  <p className="mt-1 text-xs text-ink-muted">
+                    Saved as a commitment {firstName(c.person_name)} owes you. It’s on your prep sheet for them until you mark it done.
                   </p>
                 </Row>
               ))}
@@ -643,6 +663,7 @@ function receiptLine(r: NotesDumpApplyResult) {
     s.goals && plural(s.goals, "goal", "goals"),
     s.notes && plural(s.notes, "kept thought about a person", "kept thoughts about people"),
     s.commitments && plural(s.commitments, "thing you owe someone", "things you owe people"),
+    s.owed_to_you && plural(s.owed_to_you, "thing someone owes you", "things people owe you"),
   ].filter(Boolean);
   if (parts.length) return parts.join(", ");
   // Drafts queued with nothing else new is not "nothing": the drafts are the result.
