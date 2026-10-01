@@ -494,3 +494,11 @@ def test_apply_rejects_a_direction_it_does_not_know(apply_client):
         "commitments": [{"report_id": "dr1", "description": "x", "committed_by": "counterpart"}]})
     assert r.status_code == 422
     assert db.rows.get("commitments", []) == []
+
+
+def test_prompt_writes_a_commitment_from_the_side_of_whoever_owes_it():
+    prompt = nd.build_prompt(_ctx(), "Lena's priorities for next quarter, waiting on her.")
+    assert "written from the side of whoever owes it" in prompt
+    # the worked example: the report's own action, not the manager's retelling of it
+    assert 'give "Send next quarter\'s priorities", not "Share her priorities for next quarter"' in prompt
+    assert 'never says "her" or "his" for the person who owes it' in prompt
