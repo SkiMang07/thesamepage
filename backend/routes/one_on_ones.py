@@ -45,6 +45,7 @@ import analytics
 import context_engine
 from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
+from private_lane import report_facing
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
@@ -1142,7 +1143,9 @@ def parse_prep_output(raw: str) -> tuple[str, list[dict]]:
         agenda.append({
             "title": str(item.get("title") or ""),
             "rationale": str(item.get("rationale") or ""),
-            "suggested_questions": [str(q) for q in questions if isinstance(q, (str, int, float))],
+            # A line the manager may say aloud never carries their own private
+            # state (private_lane.py): the notes are only theirs to read.
+            "suggested_questions": report_facing([str(q) for q in questions if isinstance(q, (str, int, float))]),
         })
     return str(parsed.get("situation_summary") or ""), agenda
 

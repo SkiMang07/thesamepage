@@ -42,7 +42,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 import analytics
-from intake_slices import for_drafting
+from intake_slices import for_drafting, norm
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ STALE_AFTER = timedelta(minutes=5)
 BACKOFF_SECONDS = (5.0, 15.0)
 SOURCE_LABEL = "Your description"
 HELD_BACK_NOTE = "Left out as yours, not theirs (what you owe them, or your 1:1 rhythm): "
+PROMISES_NOTE = "Left out because they are promises, tracked as commitments: "
 FAILED_MESSAGE = "The draft couldn't be written just now. What you said is kept — try again."
 THIN_MESSAGE = "That wasn't enough to draft from. Add what the role owns and how you'd tell it's going well, or start without a draft."
 
@@ -68,8 +69,10 @@ def _parse(ts) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-def drafting_analysis(context: str, statement: str | None, now: datetime | None = None) -> dict:
-    """The analysis a queued (or re-queued) draft starts with."""
+def drafting_analysis(context: str, statement: str | None, now: datetime | None = None,
+                      promises: list[str] | None = None) -> dict:
+    """The analysis a queued (or re-queued) draft starts with. `promises` are
+    sentences of the slice a commitment cites: the drafter never reads them."""
     return {
         "status": "drafting",
         "source": "batch",
@@ -77,6 +80,7 @@ def drafting_analysis(context: str, statement: str | None, now: datetime | None 
         "started_at": (now or _now()).isoformat(),
         "context": context,
         **({"statement": statement} if statement else {}),
+        **({"promises": promises[:20]} if promises else {}),
     }
 
 
@@ -191,7 +195,11 @@ def compose_for_row(supabase, draft: dict, *, call=None, sleep=time.sleep) -> di
     # the sentences that are the manager's own side (what they owe the person,
     # their 1:1 rhythm), so those can't become an expectation of the report,
     # and their numbers can't become a target (intake_slices.for_drafting).
-    context, held_back = for_drafting(analysis.get("context") or "")
+    promises = [p for p in (analysis.get("promises") or []) if isinstance(p, str)]
+    context, held_all = for_drafting(analysis.get("context") or "", extra=promises)
+    promised_sq = {norm(p) for p in promises}
+    held_back = [s for s in held_all if norm(s) not in promised_sq]
+    promised = [s for s in held_all if norm(s) in promised_sq]
     role = rex._fetch_role(supabase, draft["role_level_id"])
     title = rex._role_title(role)
     org_values = rex._org_values(supabase)
@@ -208,7 +216,7 @@ def compose_for_row(supabase, draft: dict, *, call=None, sleep=time.sleep) -> di
     parsed = call_with_backoff(call or (lambda p: rex._call_model(p)), prompt, sleep=sleep)
     if not parsed:
         raise ValueError("unreadable response")
-    parsed = drop_manager_side(parsed, context, held_back)
+    parsed = drop_manager_side(parsed, context, held_all)
     # Only this person's slice is context_text: allowed numbers and quote
     # provenance are theirs alone. The role name and level ride in the corpus
     # the same way POST /import puts them there.
@@ -221,6 +229,8 @@ def compose_for_row(supabase, draft: dict, *, call=None, sleep=time.sleep) -> di
         mode="description",
     )
     # Kept within the first five notes the analysis stores.
+    if promised:
+        notes.insert(0, (PROMISES_NOTE + " ".join(f"“{s}”" for s in promised))[:600])
     if held_back:
         notes.insert(0, (HELD_BACK_NOTE + " ".join(f"“{s}”" for s in held_back))[:600])
     if not items:

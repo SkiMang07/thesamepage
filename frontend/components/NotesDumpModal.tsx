@@ -157,6 +157,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
       job_role: roleLevelId || e.role_level_id ? null : titleOf(e) || e.new_role?.job_role || null,
       job_level: roleLevelId || e.role_level_id ? null : levelOf(e),
       statement: e.statement,
+      promises: e.promises ?? [],
       draft: draftNow,
     };
   }
@@ -471,7 +472,7 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                         )}
                       </label>
                     )}
-                    {(e.slice || (e.held_back ?? []).length > 0) && !e.blocked && (
+                    {(e.slice || (e.held_back ?? []).length > 0 || (e.promises ?? []).length > 0) && !e.blocked && (
                       <details className="mt-1.5 text-xs text-ink-muted">
                         <summary className="cursor-pointer">
                           What the draft will read
@@ -484,6 +485,12 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                           <p className="mt-1.5">
                             Said about a group, so everyone in it reads these too:{" "}
                             {(e.shared ?? []).map((s) => `“${s}”`).join(" ")}
+                          </p>
+                        )}
+                        {(e.promises ?? []).length > 0 && (
+                          <p className="mt-1.5">
+                            Left out of the role, because it is a promise rather than an expectation:{" "}
+                            {(e.promises ?? []).map((s) => `“${s}”`).join(" ")} It is under What you owe people or What people owe you.
                           </p>
                         )}
                         {(e.held_back ?? []).length > 0 && (

@@ -256,6 +256,23 @@ is **approved**: a draft is not yet a standard.
   the draft reads, no sentence repeating a word pair only a held-back line has,
   no 1:1 rhythm). The parse and description prompts also say this, but the
   code is what enforces it.
+- **A promise is never also an expectation.** The wording patterns above only
+  find a promise phrased the way they expect ("I owe", "mine"); a paste in
+  fragments ("Meets versus exceeds talk after calibration. Not raised.") passes
+  them. So the lane is also decided by provenance, in code
+  (`intake_slices.sourced_by`, `echoes_commitment`, `split_lapses`;
+  `notes_dump.separate_statement`). A sentence of a person's slice that one of
+  their proposed commitments cites is held back from the draft and shown on the
+  review row as a promise (`promises`; the browser echoes them on apply, they are
+  stored as `analysis.promises`, and the draft's notes list them). The row's
+  statement drops any clause that shares three content words with one of that
+  person's commitments, in either direction. A clause that says what happened to a
+  standing ask ("stopped after two") is history, not an expectation: it leaves the
+  statement with the ask it followed, and the pair is proposed as one unchecked
+  commitment the person owes (`commitments_for_lapses`). A sentence that states
+  something of the report ("he should", "expect") is never treated as a promise.
+  Known edge: with neither the wording nor a commitment row to cite, nothing marks
+  a manager-side sentence.
 - **A row says only what is about that person.** Who a sentence is about is the
   slicer's call, never the model's. In `finish_expectations`, a row's statement
   keeps a sentence only if `intake_slices.from_own_slice` passes it: it names no

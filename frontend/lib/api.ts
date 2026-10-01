@@ -2127,6 +2127,9 @@ export type NotesDumpExpectation = {
   // Sentences held back from the draft as the manager's own side: what they
   // owe the person, or their 1:1 rhythm with them.
   held_back?: string[];
+  // Sentences a promise cites (a "What you owe people" or "What people owe you"
+  // row): never an expectation, so the draft doesn't read them either.
+  promises?: string[];
   // Lines in `slice` the manager said of a group ("Everyone ...", "The other
   // six ..."), so each person in the group reads them too.
   shared?: string[];
@@ -2158,6 +2161,8 @@ export type NotesDumpExpectationBody = {
   job_role: string | null;
   job_level: number | null;
   statement: string | null;
+  // The row's `promises`, echoed so the draft is written without them.
+  promises?: string[];
   draft: boolean;
 };
 export type NotesDumpApplyBody = {

@@ -1691,7 +1691,7 @@ def redraft(request: Request, draft_id: str, body: RedraftIn, background_tasks: 
         raise HTTPException(status_code=409, detail="This draft isn't waiting on a retry. Reload to see where it is.")
     analysis = draft.get("analysis") or {}
     queued = _write_draft(supabase, draft, {
-        "analysis": batch.drafting_analysis(analysis["context"], analysis.get("statement")),
+        "analysis": batch.drafting_analysis(analysis["context"], analysis.get("statement"), promises=analysis.get("promises")),
     })
     background_tasks.add_task(batch.draft_in_background, supabase, [draft_id], user_id)
     return _present_draft(supabase, queued)

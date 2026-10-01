@@ -468,20 +468,27 @@ def is_promise(sentence: str) -> bool:
     return manager_side(sentence) == "commitment" and bool(_PROMISE.search(_plain(sentence)))
 
 
-def for_drafting(slice_text: str | None) -> tuple[str, list[str]]:
+def for_drafting(slice_text: str | None, extra: list[str] | None = None) -> tuple[str, list[str]]:
     """-> (what the drafter reads, the sentences held back as the manager's).
 
     Verbatim, like the slice: kept runs are cut straight out of it, and runs a
     held-back sentence separates are joined by a blank line, so a quote can
-    never straddle the gap."""
+    never straddle the gap.
+
+    `extra` is sentences of this slice that are also held back because a
+    promise cites them (sourced_by): same treatment as a commitment line.
+    Anything in it that is not a sentence of the slice is ignored."""
     text = slice_text or ""
     sents = sentences(text)
+    extra_sq = {norm(x) for x in (extra or []) if norm(x)}
     held: list[int] = []
     prev_commitment = False
     prev_para = None
     for i, (s, e, para) in enumerate(sents):
         sentence = text[s:e]
         side = manager_side(sentence)
+        if side is None and extra_sq and norm(sentence) in extra_sq:
+            side = "commitment"
         if (side is None and prev_commitment and para == prev_para
                 and _CONTINUES.search(_plain(sentence)) and not _THEIRS.search(_plain(sentence))
                 and not _PRONOUN_LEAD.match(_plain(sentence))):
@@ -563,3 +570,109 @@ def from_own_slice(sentence: str, piece: str, others: list[str], *, floor: float
             if w in words and w not in own:
                 return False
     return len(words & own) / len(words) >= floor
+
+
+# ---------------------------------------------------------------------------
+# Which lane a sentence is in (the 2026-10-01 Dana2 run).
+#
+# manager_side() finds the manager's own promises by how they are WORDED
+# ("I owe her ...", "I said I'd ..."). Dana's second paste was fragments with
+# no "I", so the same promises read as role expectations: Mei's "meets versus
+# exceeds" talk, Lena's quarterly priorities, Andre's lapsed weekly status.
+# The model's own commitment rows are the better evidence of what is a
+# promise, so these helpers decide by PROVENANCE, not wording: a sentence a
+# proposed commitment cites is a promise, and a promise is never also a role
+# expectation. Everything here is pure and verbatim, like the rest of the file.
+# ---------------------------------------------------------------------------
+
+_MIN_CITE = 12  # an excerpt shorter than this (squashed) is too thin to cite from
+
+
+def norm(text: str) -> str:
+    """Lower-case words only, so quotes and whitespace never decide a match."""
+    return " ".join(re.findall(r"[a-z0-9]+", _plain(text or "").lower()))
+
+
+def sourced_by(piece: str, excerpts: list[str]) -> list[str]:
+    """The sentences of a slice that a commitment's excerpt covers: the excerpt
+    sits inside the sentence, or the sentence sits inside the excerpt (a quote
+    that runs over several fragments). Never a sentence that states something
+    of the report (_THEIRS) and never a one-word fragment ("Mei."). Verbatim."""
+    text = piece or ""
+    cites = [c for c in (norm(x) for x in excerpts) if len(c) >= _MIN_CITE]
+    if not cites:
+        return []
+    out: list[str] = []
+    for s, e, _ in sentences(text):
+        sentence = text[s:e].strip()
+        n = norm(sentence)
+        if len(n.split()) < 2 or _THEIRS.search(_plain(sentence)):
+            continue
+        if any(n in c or c in n for c in cites):
+            out.append(sentence)
+    return out
+
+
+def echoes_commitment(sentence: str, commitments: list[dict], *, floor: int = 3) -> bool:
+    """A line that shares `floor` content words (lightly stemmed) with what a
+    proposed commitment says is restating that promise, not describing the
+    role: "Owns setting priorities for next quarter" after "Send next
+    quarter's priorities". Three, so "Owns design docs" survives a commitment
+    to give feedback on one. Pure."""
+    words = _words(sentence)
+    return any(len(words & _words(c.get("description") or "")) >= floor for c in commitments)
+
+
+# What happened, as opposed to what is expected: the report did something and
+# stopped. A lapse is history the manager follows up on, not a standing ask.
+_LAPSE = re.compile(
+    r"\b(?:stopped|quit|gave\s+up|lapsed|dropped\s+off|fell\s+off|"
+    r"sent\s+(?:only\s+)?(?:one|two|three|four|five|\d+))\b",
+    re.IGNORECASE,
+)
+_STANDING_LEAD = re.compile(
+    r"^\s*(?:is\s+|are\s+)?(?:expected|expects?|supposed|needs?|has|have|should|must)\s+(?:to\s+)?",
+    re.IGNORECASE,
+)
+
+
+def _clauses(statement: str) -> list[str]:
+    out: list[str] = []
+    for s, e, _ in sentences(statement or ""):
+        for part in re.split(r"\s*;\s*", statement[s:e].strip()):
+            part = part.strip()
+            if part:
+                out.append(part)
+    return out
+
+
+def split_lapses(statement: str | None) -> tuple[str | None, list[tuple[str | None, str]]]:
+    """-> (the statement without history, [(the clause it followed, the
+    history clause)]). "Expected to send a weekly status; stopped after two."
+    is a standing ask plus what happened to it: the second is not an
+    expectation, and the two together are an open follow-through, not a role
+    row. Both clauses leave the statement. Pure."""
+    if not statement:
+        return statement, []
+    kept: list[str] = []
+    lapses: list[tuple[str | None, str]] = []
+    for clause in _clauses(statement):
+        if _LAPSE.search(clause):
+            before = kept.pop() if kept else None
+            lapses.append((before, clause))
+        else:
+            kept.append(clause)
+    if not lapses:
+        return statement, []
+    joined = " ".join(c if re.search(r"[.!?]$", c) else c + "." for c in kept)
+    return joined or None, lapses
+
+
+def follow_through_action(before: str | None) -> str | None:
+    """The standing ask as a short action for a commitment row: "Expected to
+    send a weekly status" -> "Send a weekly status". None when there is no
+    ask to restate. Pure."""
+    if not before:
+        return None
+    action = _STANDING_LEAD.sub("", before).strip().rstrip(".;, ")
+    return (action[:1].upper() + action[1:]) if len(action.split()) >= 2 else None

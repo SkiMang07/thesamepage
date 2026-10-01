@@ -296,6 +296,13 @@ outcome is added, no question implies fault, and the sheet speaks to the manager
 "you". "Drew on: role expectations" and "Built without: role expectations" go by
 whether the role has configured (approved) metrics, skills or values, not by whether a
 role is assigned.
+The notes are private to the manager, and the sheet's suggested questions are lines
+they may say aloud, so the model's output is checked in code: `parse_prep_output`
+runs every suggested question through `private_lane.report_facing`, which removes
+one in which the manager talks about their own avoidance, dread or discomfort ("I
+hold back on hard feedback with you"). It applies to manual and overnight prep
+alike. The rationale and summary are addressed to the manager and may still say it.
+The prompt asks for the same thing (rule 6), but the code is what enforces it.
 
 **Expectations are grounding context, not an agenda.** `_format_expectations_block()`
 explicitly instructs the model *not* to audit every expectation in one 1:1. This

@@ -55,7 +55,8 @@ import analytics
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
-from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, from_own_slice, is_promise, manager_side, shared_by_person, slice_by_person
+from intake_slices import (MAX_SLICE, _bigrams, _cap, _words, echoes_commitment, echoes_held_back, follow_through_action, for_drafting,
+                           from_own_slice, is_promise, manager_side, sentences, shared_by_person, slice_by_person, sourced_by, split_lapses)
 from routes.documents import _MAX_UPLOAD_BYTES
 from routes.expectations_ai import _compute_coverage
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
@@ -546,6 +547,25 @@ def commitments_for_held_back(drafts: dict) -> None:
             covered |= _bigrams(" ".join(chunk))
 
 
+def commitments_for_lapses(drafts: dict) -> None:
+    """A standing ask the report let lapse ("a weekly status ... stopped after
+    two") is something they owe the manager, so it is proposed as one, not
+    filed as a role expectation. Added only when no commitment the report owes
+    already covers it, and unchecked: the notes said it lapsed, never that it
+    is owed. Pure."""
+    for row in drafts.get("expectations", []):
+        for item in row.pop("follow_through", None) or []:
+            owed = [c for c in drafts.get("commitments", [])
+                    if c["report_id"] == row["report_id"] and c.get("committed_by") == "direct_report"]
+            if echoes_commitment(item["description"], owed, floor=2):
+                continue
+            drafts["commitments"].append({
+                "report_id": row["report_id"], "person_name": row["person_name"],
+                "description": _s(item["description"], 300), "due_date": None, "committed_by": "direct_report",
+                "excerpt": item.get("excerpt"), "low": True,
+            })
+
+
 def _merge_slices(pieces: list[str]) -> str:
     """People on one role share lines said of a group; each line goes in once.
     Runs are whole and verbatim, so dropping a repeat never splits a quote."""
@@ -560,10 +580,49 @@ def _merge_slices(pieces: list[str]) -> str:
     return "\n\n".join(runs)
 
 
+def separate_statement(statement: str | None, own_commitments: list[dict], piece: str | None,
+                       fallback_excerpt: str | None) -> tuple[str | None, list[dict]]:
+    """A role row's one-line statement, held to the lane rule: a promise is
+    never also an expectation. -> (statement, follow-through rows to propose).
+
+    - A clause that restates one of this person's proposed commitments (either
+      direction) is dropped.
+    - A clause that says what happened to a standing ask ("stopped after two")
+      is history, not an expectation: it leaves the statement together with
+      the ask it followed, and the pair becomes one open follow-through the
+      person owes (unchecked: the notes never said "owes"). Its source quote is
+      the notes' own sentence about the lapse when there is one.
+    Pure; the model's wording decides nothing here."""
+    if not statement:
+        return statement, []
+    statement, lapses = split_lapses(statement)
+    follow: list[dict] = []
+    for before, lapse in lapses:
+        action = follow_through_action(before)
+        if not action:
+            continue
+        cite = None
+        for start, end, _ in sentences(piece or ""):
+            sentence = piece[start:end].strip()
+            if split_lapses(sentence)[1] and _words(sentence) & _words(action):
+                cite = _s(sentence, 200)
+                break
+        follow.append({"description": action, "excerpt": cite or fallback_excerpt})
+    if statement:
+        kept = [s for s in _sentences_of(statement) if not echoes_commitment(s, own_commitments)]
+        statement = " ".join(kept) or None
+    return statement, follow
+
+
 def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set, covered_roles: set,
-                        rank: dict, shared: dict | None = None, roster: list[dict] | None = None) -> list[dict]:
+                        rank: dict, shared: dict | None = None, roster: list[dict] | None = None,
+                        commitments: list[dict] | None = None) -> list[dict]:
     """Attach each row's slice, say plainly why a row can't be drafted, order by
     soonest 1:1 and preselect the first MAX_ROLES roles to draft. Pure.
+
+    `commitments` is what the same read proposed to save as a commitment, either
+    direction. A sentence one of them cites is a promise: held back from the
+    draft (row["promises"]) and never restated in the row's statement.
 
     blocked: "open_draft" (the role has a working draft; left alone),
              "approved"   (the role already has approved expectations),
@@ -572,9 +631,14 @@ def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set
         piece = slices.get(r["report_id"])
         # What the drafter will read: the slice without the manager's own side
         # (what they owe the person, their 1:1 rhythm). The row shows both.
-        reads, held = for_drafting(piece) if piece else ("", [])
+        own = [c for c in (commitments or []) if c.get("report_id") == r["report_id"]]
+        _, manager_held = for_drafting(piece) if piece else ("", [])
+        promised = sourced_by(piece, [c.get("excerpt") for c in own if c.get("excerpt")]) if piece else []
+        reads, held = for_drafting(piece, extra=promised) if piece else ("", [])
         r["slice"] = reads or None
-        r["held_back"] = held
+        r["held_back"] = [s for s in held if s in manager_held]
+        # Sentences a commitment cites that the manager-side patterns missed.
+        r["promises"] = [s for s in held if s not in manager_held]
         # The lines in it said of a group ("Everyone ...", "The other six ..."),
         # so the review can show which are about them alone.
         r["shared"] = [s for s in (shared or {}).get(r["report_id"], []) if s in reads]
@@ -590,6 +654,7 @@ def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set
                 r["excerpt"] = None
         elif r.get("statement"):
             r["statement"] = clean_statement(r["statement"], reads, held)
+        r["statement"], r["follow_through"] = separate_statement(r.get("statement"), own, piece, r.get("excerpt"))
         rid = r.get("role_level_id")
         r["blocked"] = (
             "open_draft" if rid and rid in open_draft_roles
@@ -709,6 +774,7 @@ def parse_notes_dump(
         _finish_expectations_for(supabase, user_id, ctx, drafts, typed=(text or "")[:MAX_CHARS],
                                  other_names=_other_names(parsed))
         commitments_for_held_back(drafts)
+        commitments_for_lapses(drafts)
     shown, overflow = rank_and_cap(drafts, _soonest_reports(supabase, user_id))
     number_items(shown)
 
@@ -782,7 +848,7 @@ def _finish_expectations_for(supabase, user_id: str, ctx: dict, drafts: dict, *,
                         covered_roles=covered, rank=queue_rank(roster, queue),
                         shared=shared_by_person(typed, roster, others=other_names,
                                                 want={e["report_id"] for e in drafts["expectations"]}),
-                        roster=roster)
+                        roster=roster, commitments=drafts.get("commitments"))
 
 
 # ---------------------------------------------------------------------------
@@ -836,6 +902,10 @@ class ExpectationItem(_Strict):
     job_role: str | None = Field(default=None, max_length=80)
     job_level: int | None = None
     statement: str | None = Field(default=None, max_length=400)
+    # Sentences of this person's slice that a promise cites (the review row's
+    # `promises`), echoed back so the draft is written without them. Only a
+    # real sentence of the slice has any effect (intake_slices.for_drafting).
+    promises: list[Annotated[str, Field(max_length=600)]] = Field(default_factory=list, max_length=20)
     # Queue a draft now. Rows kept without it get the role and assignment only;
     # the receipt offers them as a second pass.
     draft: bool = False
@@ -1128,11 +1198,12 @@ def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, save
             # sent when a draft is queued, "nothing typed" is judged then.)
             out["waiting"].append({"report_id": person["id"], "person_name": person["name"], "role_level_id": role_id})
             continue
-        reads, held = for_drafting(piece)
+        reads, held = for_drafting(piece, extra=item.promises)
         statement = clean_statement(item.statement, reads, held)
-        g = groups.setdefault(role_id, {"people": [], "slices": [], "statements": []})
+        g = groups.setdefault(role_id, {"people": [], "slices": [], "statements": [], "promises": []})
         g["people"].append(person["name"])
         g["slices"].append(piece)
+        g["promises"].extend(p for p in item.promises if p not in g["promises"])
         if statement:
             g["statements"].append(statement)
 
@@ -1142,7 +1213,7 @@ def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, save
             "org_id": org_id, "role_level_id": role_id, "created_by": user_id,
             "kind": "new", "status": "open", "source_text": None, "source_label": SOURCE_LABEL,
             "items": [], "questions": [], "suggestions": [],
-            "analysis": drafting_analysis(context, " ".join(g["statements"])[:600] or None),
+            "analysis": drafting_analysis(context, " ".join(g["statements"])[:600] or None, promises=g["promises"]),
         }
         try:
             created = supabase.table("role_expectation_drafts").insert(row).execute().data[0]
