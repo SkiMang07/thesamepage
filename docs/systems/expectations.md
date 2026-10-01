@@ -222,9 +222,15 @@ is **approved**: a draft is not yet a standard.
 - **Slices.** `intake_slices.slice_by_person` cuts the typed text into
   per-person verbatim slices in code: a sentence goes to the one person it
   names and the ones after it follow; several names go to each and end the run; a
-  pronoun-led sentence naming someone else goes to no one; a paragraph break ends
-  the run unless the paragraph was a bare name; anyone else named (roster or
-  `unmatched_people`) ends it too. The slice is stored as `analysis.context` and
+  sentence that has a pronoun and names someone else (leading with the pronoun, or
+  naming them only after it: "I need her to help Noor") goes to no one, and in the
+  second case ends the run; a paragraph break ends the run unless the paragraph was
+  a bare name; anyone else named (roster or `unmatched_people`) ends it too.
+  Sentences said of a group ("Everyone…", "The other six…", "The rest…", "Both of
+  them…", "They each…") go to every person in that group and follow until someone is
+  named; a stated head count must match or the sentence is left out. People on one
+  role share those lines once in the draft context, and `shared_by_person` lets the
+  review show which lines are said about a group. The slice is stored as `analysis.context` and
   is the only `context_text` the drafter's `sanitize_composed(mode="description")`
   sees, so allowed numbers and quote provenance are per person. Never the whole
   input. Files never go back to apply and are never stored.

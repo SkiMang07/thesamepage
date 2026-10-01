@@ -2127,6 +2127,9 @@ export type NotesDumpExpectation = {
   // Sentences held back from the draft as the manager's own side: what they
   // owe the person, or their 1:1 rhythm with them.
   held_back?: string[];
+  // Lines in `slice` the manager said of a group ("Everyone ...", "The other
+  // six ..."), so each person in the group reads them too.
+  shared?: string[];
   // Why it can't be drafted now: the role has a working draft, the role is
   // already approved, or nothing typed is about them.
   blocked: "open_draft" | "approved" | "no_text" | null;

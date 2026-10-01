@@ -18,8 +18,14 @@ Rules, all in code (no model call decides who a sentence is about):
     after it follows (we cannot tell whose it is).
   - A sentence that opens on a pronoun while someone's run is going, and names
     someone else, is about the current person with the other one as an object
-    ("He should pair with Andre twice a week"). It goes to no one — giving it
-    to either would hand one person's detail to the other — and the run goes on.
+    ("He should pair with Andre twice a week"). So is one that names someone
+    else only after a pronoun or an "I" ("I need her to help Noor"). It goes to
+    no one — giving it to either would hand one person's detail to the other —
+    and the run goes on, except that a sentence right after it led by a different
+    pronoun ("He should loop Ines in" then "She then owns ...") is left out too:
+    it could be about either of them. When the pronoun came mid-sentence
+    ("I need her to help Noor") the run ends instead: the manager has turned to
+    someone else.
   - A paragraph break stops the carry-forward, except after a short heading
     paragraph that only names one person ("Andre" or "Andre:" then his notes).
   - Anyone named who is not being drafted (the rest of the roster, people the
@@ -49,6 +55,26 @@ _PRONOUN_LEAD = re.compile(
     r"(?:he|she|they|him|her|his|hers|them|their|he's|she's|they're|he'll|she'll|they'll|he'd|she'd|they'd)\b",
     re.IGNORECASE,
 )
+_PRONOUN_ANY = re.compile(r"\b(?:he|she|they|him|her|his|hers|them|their)\b", re.IGNORECASE)
+_KINDS = {"he": "m", "him": "m", "his": "m", "she": "f", "her": "f", "hers": "f", "they": "t", "them": "t", "their": "t"}
+_LEAD_WORDS = 3  # a name this close to the start makes the sentence about that person
+
+
+def _pronoun_kind(sentence: str) -> str | None:
+    """m / f / t for the first he-she-they word in the sentence."""
+    m = _PRONOUN_ANY.search(sentence)
+    return _KINDS[m.group(0).lower()] if m else None
+
+
+def _opens_on_name(folded_sentence: str, pats: list[tuple[str, re.Pattern]]) -> bool:
+    """The sentence's first name falls within its first few words ("Ines owns
+    the doc, and her notes ...", "And Ines can help")."""
+    starts = [m.start() for _, pat in pats if (m := pat.search(folded_sentence))]
+    if not starts:
+        return False
+    return len(folded_sentence[: min(starts)].split()) < _LEAD_WORDS
+
+
 # A sentence runs to terminal punctuation (plus any closing quote or bracket)
 # followed by whitespace or the end of the line. "2.5" and "1:1" do not end one.
 _SENT_RE = re.compile(r"\S.*?(?:[.!?…]+[\"'”’)\]]*(?=\s|$)|$)")
@@ -116,32 +142,83 @@ def _named(sentence: str, pats: list[tuple[str, re.Pattern]]) -> set[str]:
     return {owner for owner, pat in pats if pat.search(sentence)}
 
 
-def slice_by_person(text: str, people: list[dict], *, others: list[str] | None = None,
-                    want: set[str] | None = None, limit: int = MAX_SLICE) -> dict[str, str]:
-    """-> {person id: that person's verbatim slice of `text`}.
-
-    people: every person in view ({"id", "name"}) — the whole roster, so anyone
-            named ends the previous person's run, not only the ones drafted.
-    others: names the notes mention that are not on the roster.
-    want:   the ids to return (default: all). People with nothing get no key.
-    """
+def _assign(text: str, people: list[dict], others: list[str] | None):
+    """-> (sentences, {owner: [sentence index]}, {owner: {indexes said of a group}})."""
     text = text or ""
     folded = _fold(text)
     pats = _name_patterns(people, others or [])
     sents = sentences(text)
+    roster_ids = [p["id"] for p in people if p.get("name")]
     owned: dict[str, list[int]] = {}
+    shared: dict[str, set[int]] = {}
+    ever_named: set[str] = set()
+    group: list[str] | None = None
+    last_multi: list[str] | None = None
     current: str | None = None
     carry_heading = False
+    skipped_pronoun: str | None = None
     prev_para = None
     for i, (s, e, para) in enumerate(sents):
         if prev_para is not None and para != prev_para and not carry_heading:
             current = None
+            group = None
+            last_multi = None
         carry_heading = False
         named = _named(folded[s:e], pats)
-        if named and current and current not in named and _PRONOUN_LEAD.match(text[s:e].replace("\u2019", "'")):
+        plain = text[s:e].replace("\u2019", "'")
+        if current and (
+            (named and current not in named and (
+                _PRONOUN_LEAD.match(plain)
+                or (_PRONOUN_ANY.search(plain) and not _opens_on_name(folded[s:e], pats)))
+             )
+            or (not named and skipped_pronoun and _PRONOUN_LEAD.match(plain)
+                and _pronoun_kind(plain) != skipped_pronoun)
+        ):
+            # Two people and a pronoun in one sentence: we cannot tell which
+            # the pronoun is. Leave it out, and leave out an unnamed pronoun
+            # sentence straight after it for the same reason.
+            skipped_pronoun = _pronoun_kind(plain) or "x"
+            if named and not _PRONOUN_LEAD.match(plain):
+                # "I need her to help Noor": the manager has moved on to talking
+                # about someone else, so what follows is no longer known to be
+                # about the person whose run this was.
+                current = None
             prev_para = para
             continue
+        skipped_pronoun = None
+        if not named:
+            members = _group_scope(plain, roster_ids, ever_named, group, last_multi)
+            if members is not None:
+                # Said of several people at once ("Each of them...", "The other
+                # six...", "Everyone..."): each of them is given the sentence, and
+                # the lines after it follow until someone is named.
+                if members:
+                    group, current = members, None
+                    for owner in members:
+                        owned.setdefault(owner, []).append(i)
+                        shared.setdefault(owner, set()).add(i)
+                else:
+                    group = current = None
+                last_multi = None
+                prev_para = para
+                continue
+            if group:
+                if _PRONOUN_LEAD.match(plain) and not _PLURAL_LEAD.match(plain):
+                    # "She ..." in the middle of a group run: whose?
+                    prev_para = para
+                    continue
+                for owner in group:
+                    owned.setdefault(owner, []).append(i)
+                    shared.setdefault(owner, set()).add(i)
+                last_multi = None
+                prev_para = para
+                continue
+        group = None
+        last_multi = None
         if named:
+            ever_named |= {o for o in named if o != _OTHER}
+            if len(named - {_OTHER}) > 1 and _OTHER not in named:
+                last_multi = sorted(named)
             for owner in named:
                 if owner != _OTHER:
                     owned.setdefault(owner, []).append(i)
@@ -154,7 +231,20 @@ def slice_by_person(text: str, people: list[dict], *, others: list[str] | None =
         elif current:
             owned[current].append(i)
         prev_para = para
+    return sents, owned, shared
 
+
+def slice_by_person(text: str, people: list[dict], *, others: list[str] | None = None,
+                    want: set[str] | None = None, limit: int = MAX_SLICE) -> dict[str, str]:
+    """-> {person id: that person's verbatim slice of `text`}.
+
+    people: every person in view ({"id", "name"}) — the whole roster, so anyone
+            named ends the previous person's run, not only the ones drafted.
+    others: names the notes mention that are not on the roster.
+    want:   the ids to return (default: all). People with nothing get no key.
+    """
+    text = text or ""
+    sents, owned, _ = _assign(text, people, others)
     out: dict[str, str] = {}
     for owner, idxs in owned.items():
         if want is not None and owner not in want:
@@ -177,6 +267,69 @@ def slice_by_person(text: str, people: list[dict], *, others: list[str] | None =
         if joined:
             out[owner] = joined
     return out
+
+
+def shared_by_person(text: str, people: list[dict], *, others: list[str] | None = None,
+                     want: set[str] | None = None) -> dict[str, list[str]]:
+    """-> {person id: the sentences in their slice that were said of a group},
+    so the review can show which lines are theirs alone and which are shared."""
+    text = text or ""
+    sents, _, shared = _assign(text, people, others)
+    return {
+        owner: [text[sents[i][0]:sents[i][1]].strip() for i in sorted(idxs)]
+        for owner, idxs in shared.items() if want is None or owner in want
+    }
+
+
+# Sentences said of several people at once. Three kinds, all matched on how the
+# sentence opens, and only when it names no one:
+#   everyone  - "Everyone should ...", "The whole team ..."        -> the whole roster
+#   the rest  - "The other six are CSMs", "The rest of the team"   -> the roster minus
+#               anyone named earlier; if a number is given it must match
+#   them      - "Both of them ...", "They each ...", "Each of them" -> the group already
+#               going, else the people the sentence just before named together
+# Anything else that sounds like a group stays out ("Mid-levels should ...").
+_LEAD = r"^[\"'\u201c\u2018(]*(?:(?:and|but|so|also|then|plus)[, ]+)?"
+_GROUP_ALL = re.compile(
+    _LEAD + r"(?:everyone|everybody|all\s+of\s+(?:you|us)|the\s+(?:whole|entire)\s+team|each\s+(?:person|one)\b|every\s+(?:one|person)\b)\b",
+    re.IGNORECASE)
+_GROUP_REST = re.compile(
+    _LEAD + r"(?:the\s+(?:other|remaining)\s+(?P<n>\w+)|the\s+rest(?:\s+of\s+(?:the\s+team|them|us|you)|(?!\s+(?:of|is|was)\b))|the\s+others|"
+    r"everyone\s+else|everybody\s+else)\b",
+    re.IGNORECASE)
+_GROUP_THEY = re.compile(
+    _LEAD + r"(?:both\s+of\s+them|they\s+(?:both|all|each)|all\s+of\s+them|each\s+of\s+them|"
+    r"the\s+(?:two|three|four|five|six|seven|eight)\s+of\s+them)\b",
+    re.IGNORECASE)
+_PLURAL_LEAD = re.compile(_LEAD + r"(?:they|them|their)\b", re.IGNORECASE)
+_NUMBERS = {w: n for n, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve".split())}
+
+
+def _group_scope(sentence: str, roster_ids: list[str], ever_named: set[str],
+                 group: list[str] | None, last_multi: list[str] | None) -> list[str] | None:
+    """None: not a group sentence. []: one, but we cannot say whose (left out).
+    Otherwise the people it is said of."""
+    if _GROUP_ALL.match(sentence):
+        return list(roster_ids)
+    m = _GROUP_REST.match(sentence)
+    if m:
+        scope = [r for r in roster_ids if r not in ever_named]
+        n = m.group("n")
+        if n:
+            count = _NUMBERS.get(n.lower(), int(n) if n.isdigit() else None)
+            if count is None:
+                return None  # "The other thing I'd say": not a head count
+            if count != len(scope):
+                return []
+        return scope
+    if _GROUP_THEY.match(sentence):
+        if group:
+            return group
+        if last_multi:
+            return [o for o in last_multi if o != _OTHER] if _OTHER not in last_multi else []
+        return []
+    return None
 
 
 def _is_heading(sents: list[tuple[int, int, int]], i: int, text: str) -> bool:

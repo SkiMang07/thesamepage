@@ -54,7 +54,7 @@ import analytics
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
-from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, is_promise, manager_side, slice_by_person
+from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, is_promise, manager_side, shared_by_person, slice_by_person
 from routes.documents import _MAX_UPLOAD_BYTES
 from routes.expectations_ai import _compute_coverage
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
@@ -530,8 +530,22 @@ def commitments_for_held_back(drafts: dict) -> None:
             covered |= _bigrams(" ".join(chunk))
 
 
+def _merge_slices(pieces: list[str]) -> str:
+    """People on one role share lines said of a group; each line goes in once.
+    Runs are whole and verbatim, so dropping a repeat never splits a quote."""
+    seen: set[str] = set()
+    runs: list[str] = []
+    for piece in pieces:
+        for run in piece.split("\n\n"):
+            key = " ".join(run.split())
+            if key and key not in seen:
+                seen.add(key)
+                runs.append(run)
+    return "\n\n".join(runs)
+
+
 def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set, covered_roles: set,
-                        rank: dict) -> list[dict]:
+                        rank: dict, shared: dict | None = None) -> list[dict]:
     """Attach each row's slice, say plainly why a row can't be drafted, order by
     soonest 1:1 and preselect the first MAX_ROLES roles to draft. Pure.
 
@@ -545,6 +559,9 @@ def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set
         reads, held = for_drafting(piece) if piece else ("", [])
         r["slice"] = reads or None
         r["held_back"] = held
+        # The lines in it said of a group ("Everyone ...", "The other six ..."),
+        # so the review can show which are about them alone.
+        r["shared"] = [s for s in (shared or {}).get(r["report_id"], []) if s in reads]
         if r.get("statement"):
             r["statement"] = clean_statement(r["statement"], reads, held)
         rid = r.get("role_level_id")
@@ -736,7 +753,9 @@ def _finish_expectations_for(supabase, user_id: str, ctx: dict, drafts: dict, *,
     labels = {r["id"]: r["label"] for r in ctx["roles"].values()}
     queue = expectation_queue(roster, labels, covered, _next_1on1_dates(supabase, user_id), limit=len(roster))
     finish_expectations(drafts["expectations"], slices=slices, open_draft_roles=open_roles,
-                        covered_roles=covered, rank=queue_rank(roster, queue))
+                        covered_roles=covered, rank=queue_rank(roster, queue),
+                        shared=shared_by_person(typed, roster, others=other_names,
+                                                want={e["report_id"] for e in drafts["expectations"]}))
 
 
 # ---------------------------------------------------------------------------
@@ -1074,7 +1093,7 @@ def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, save
             continue
         piece = slices.get(person["id"])
         if body.text and not piece:
-            out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"Nothing you typed is about {first}, so there’s nothing to draft from. Attached files aren’t kept."})
+            out["not_drafted"].append({"report_id": person["id"], "person_name": person["name"], "reason": f"Nothing you typed is clearly about {first}, so there’s nothing to draft from. Attached files aren’t kept."})
             continue
         if not item.draft:
             # Kept without a draft: the role and assignment are saved, and the
@@ -1091,7 +1110,7 @@ def _apply_expectations(supabase, user_id: str, org_id: str, body: ApplyIn, save
             g["statements"].append(statement)
 
     for role_id, g in groups.items():
-        context = _cap("\n\n".join(g["slices"]), MAX_SLICE)
+        context = _cap(_merge_slices(g["slices"]), MAX_SLICE)
         row = {
             "org_id": org_id, "role_level_id": role_id, "created_by": user_id,
             "kind": "new", "status": "open", "source_text": None, "source_label": SOURCE_LABEL,

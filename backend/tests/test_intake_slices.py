@@ -3,7 +3,7 @@ role's draft sees, so these tests are about who gets which sentence — and abov
 all that one person's numbers never reach another person's slice."""
 import pytest
 
-from intake_slices import MAX_SLICE, echoes_held_back, for_drafting, manager_side, sentences, slice_by_person
+from intake_slices import MAX_SLICE, echoes_held_back, for_drafting, manager_side, sentences, shared_by_person, slice_by_person
 from routes.role_expectations import numbers_in
 
 # Fiction: business/digital-customers/personas/02-eng-manager-scaling/sessions/
@@ -136,7 +136,7 @@ def test_long_slices_are_cut_at_a_sentence_end():
 
 def test_empty_input_and_no_names():
     assert slice_by_person("", ROSTER) == {}
-    assert slice_by_person("Everyone should write docs.", ROSTER) == {}
+    assert slice_by_person("Marcus is here.", ROSTER) == {}
 
 
 def test_a_pronoun_led_sentence_naming_someone_else_goes_to_no_one():
@@ -236,3 +236,113 @@ def test_a_statement_that_restates_the_managers_side_is_caught():
 
 def test_nothing_held_back_from_an_empty_slice():
     assert for_drafting("") == ("", []) and for_drafting(None) == ("", [])
+
+
+# ── a pronoun and a second name in one sentence (the 2026-10-01 Renata run) ──
+# Fiction: business/digital-customers/personas/03-cs-inherited-team/sessions/
+# 2026-10-01-signup-onboarding-walkthrough.md. "I need her to ... help Noor"
+# opens on "I", so it was filed under Noor, and carry-forward then gave Noor
+# every later sentence, including the ones about the whole team.
+RENATA = (
+    "Odalys is a senior CSM on enterprise and she owns our largest account. "
+    "I need her to run the big renewals herself, tell me early when one is going sideways, and help Noor "
+    "get ready for exec QBRs. The other six are CSMs. Each of them carries a book of mid-market or "
+    "enterprise accounts. I expect them to own their renewals and QBRs, keep health scores honest, and tell "
+    "me about risk before the account exec does. Nobody should be surprised. Going well means no late "
+    "flags, QBRs covered, and renewals closing without me dropping in."
+)
+RENATA_ROSTER = [{"id": n.lower(), "name": f"{n} X"} for n in
+                 ("Odalys", "Gideon", "Noor", "Cormac", "Yuki", "Bram", "Tessa")]
+
+
+def test_a_sentence_that_turns_to_a_second_person_after_a_pronoun_ends_the_run():
+    s = slice_by_person(RENATA, RENATA_ROSTER)
+    first = "Odalys is a senior CSM on enterprise and she owns our largest account."
+    # Odalys keeps only her own opening line. Nothing said of the other six
+    # reaches her, and Noor is only the object of one sentence.
+    assert s["odalys"] == first
+    # The other six are described as a group, so each is given those lines.
+    for who in ("gideon", "noor", "cormac", "yuki", "bram", "tessa"):
+        assert s[who].startswith("The other six are CSMs.")
+        assert "own their renewals and QBRs" in s[who]
+        assert "run the big renewals herself" not in s[who]
+        assert "senior CSM" not in s[who]
+    assert shared_by_person(RENATA, RENATA_ROSTER)["noor"][0] == "The other six are CSMs."
+
+
+def test_a_name_early_in_the_sentence_still_owns_it():
+    text = "Tom is ramping. Ines owns the handoff doc, and her notes cover custom config."
+    roster = [{"id": "tom", "name": "Tom Yu"}, {"id": "ines", "name": "Ines Roy"}]
+    s = slice_by_person(text, roster)
+    assert s["ines"] == "Ines owns the handoff doc, and her notes cover custom config."
+    assert s["tom"] == "Tom is ramping."
+
+
+def test_a_pronoun_sentence_after_an_ambiguous_one_is_left_out_not_guessed():
+    text = "Tom is ramping. He should loop Ines in before any custom config. She then owns the handoff doc."
+    roster = [{"id": "tom", "name": "Tom Yu"}, {"id": "ines", "name": "Ines Roy"}]
+    s = slice_by_person(text, roster)
+    assert s == {"tom": "Tom is ramping."}
+
+
+@pytest.mark.parametrize("text,owner,other", [
+    ("Marcus is solid on backend. I want him to mentor Lena on code review.", "marcus", "lena"),
+    ("Zed is new. I need him to speak up in design reviews, and Hana can help with that.", "zed", "hana"),
+])
+def test_an_i_sentence_naming_a_second_person_is_given_to_neither(text, owner, other):
+    roster = [{"id": i, "name": f"{i.title()} Q"} for i in ("marcus", "lena", "zed", "hana")]
+    s = slice_by_person(text, roster)
+    assert other not in s
+    assert "mentor" not in s.get(owner, "") and "speak up" not in s.get(owner, "")
+
+
+# ── sentences said of a group ────────────────────────────────────────────
+GROUP_ROSTER = [{"id": i, "name": f"{i.title()} Z"} for i in ("ana", "ben", "cy", "di")]
+
+
+def test_everyone_is_said_of_the_whole_roster():
+    s = slice_by_person("Everyone should write docs.", GROUP_ROSTER)
+    assert set(s) == {"ana", "ben", "cy", "di"}
+    assert all(v == "Everyone should write docs." for v in s.values())
+
+
+def test_the_rest_excludes_whoever_was_named_earlier_and_follows_until_someone_is_named():
+    text = "Ana is the senior. The rest are mid-level. They should run their own 1:1 agendas. Di is new."
+    s = slice_by_person(text, GROUP_ROSTER)
+    assert s["ben"] == "The rest are mid-level. They should run their own 1:1 agendas."
+    assert s["cy"] == s["ben"]
+    # Di is named after the group's run, so she is not part of it ... but she is
+    # one of "the rest", said before she was named.
+    assert s["di"].startswith("The rest are mid-level.")
+    assert "mid-level" not in s["ana"]
+
+
+def test_a_stated_count_must_match_or_the_sentence_is_left_out():
+    text = "Ana is the senior. The other two are mid-level. They each own a book."
+    assert slice_by_person(text, GROUP_ROSTER) == {"ana": "Ana is the senior."}
+    ok = slice_by_person("Ana is the senior. The other three are mid-level.", GROUP_ROSTER)
+    assert ok["cy"] == "The other three are mid-level."
+
+
+def test_both_of_them_means_the_two_just_named_and_nobody_when_no_one_was():
+    text = "Ana and Ben run support. Both of them should close tickets in a day. Cy owns billing."
+    s = slice_by_person(text, GROUP_ROSTER)
+    assert s["ana"] == s["ben"] == "Ana and Ben run support. Both of them should close tickets in a day."
+    assert s["cy"] == "Cy owns billing."
+    assert slice_by_person("Both of them should close tickets in a day.", GROUP_ROSTER) == {}
+
+
+def test_a_singular_pronoun_in_a_group_run_is_left_out():
+    text = "Everyone should write docs. She should also review PRs."
+    s = slice_by_person(text, GROUP_ROSTER)
+    assert s["ana"] == "Everyone should write docs."
+
+
+def test_a_paragraph_break_ends_a_group_run():
+    text = "Everyone should write docs.\n\nUnrelated line about the office move."
+    assert slice_by_person(text, GROUP_ROSTER)["ana"] == "Everyone should write docs."
+
+
+def test_look_alike_openers_are_not_groups():
+    text = "Ana owns support. The other thing I'd say is she should write more. The rest of the week I'm out."
+    assert slice_by_person(text, GROUP_ROSTER) == {"ana": text}

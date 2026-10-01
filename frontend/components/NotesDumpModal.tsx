@@ -461,9 +461,18 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                     )}
                     {(e.slice || (e.held_back ?? []).length > 0) && !e.blocked && (
                       <details className="mt-1.5 text-xs text-ink-muted">
-                        <summary className="cursor-pointer">What the draft will read</summary>
+                        <summary className="cursor-pointer">
+                          What the draft will read
+                          {(e.shared ?? []).length > 0 && ` · ${(e.shared ?? []).length} said about a group`}
+                        </summary>
                         {e.slice && (
                           <p className="mt-1 whitespace-pre-wrap rounded-md bg-sunken px-2.5 py-2 text-ink-secondary">{e.slice}</p>
+                        )}
+                        {(e.shared ?? []).length > 0 && (
+                          <p className="mt-1.5">
+                            Said about a group, so everyone in it reads these too:{" "}
+                            {(e.shared ?? []).map((s) => `“${s}”`).join(" ")}
+                          </p>
                         )}
                         {(e.held_back ?? []).length > 0 && (
                           <p className="mt-1.5">

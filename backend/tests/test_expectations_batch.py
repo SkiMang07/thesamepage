@@ -346,7 +346,7 @@ def test_apply_skips_approved_and_textless_roles_visibly(client, no_background):
     ]).json()
     reasons = {x["person_name"]: x["reason"] for x in body["not_drafted"]}
     assert reasons["Mei Tanaka"] == "Mei’s role already has approved expectations — this won’t change them."
-    assert reasons["Kwame Mensah"] == "Nothing you typed is about Kwame, so there’s nothing to draft from. Attached files aren’t kept."
+    assert reasons["Kwame Mensah"] == "Nothing you typed is clearly about Kwame, so there’s nothing to draft from. Attached files aren’t kept."
     assert db.rows["role_expectation_drafts"] == [] and no_background == []
     # Kwame still got his role: rows are never silently dropped.
     assert next(d for d in db.rows["direct_reports"] if d["id"] == "kwame")["role_level_id"]
@@ -840,3 +840,11 @@ def test_loose_manager_side_lines_are_held_back_but_never_proposed_as_commitment
     drafts = {"expectations": [row], "person_notes": [], "commitments": []}
     nd.commitments_for_held_back(drafts)
     assert drafts["commitments"] == []
+
+
+def test_people_on_one_role_share_group_lines_once_in_the_draft_context():
+    from routes.notes_dump import _merge_slices
+    group = "The other six are CSMs. Each of them carries a book."
+    merged = _merge_slices([group, "Gideon is new.\n\n" + group, group])
+    assert merged.count("The other six are CSMs.") == 1
+    assert merged == group + "\n\nGideon is new."
