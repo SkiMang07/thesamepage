@@ -56,6 +56,10 @@ export default function ReviewPage() {
   const base = `/app/expectations/${roleLevelId}`;
   const open = draft.questions.filter((q) => q.status === "open");
   const parked = draft.questions.filter((q) => q.status === "deferred");
+  const answered = draft.questions.filter((q) => q.status === "answered" && q.topic !== "target" && q.answer);
+  // A missing target needs a decision; any other open question is optional and approval parks it (30 days, as the server does).
+  const needDecision = open.filter((q) => q.topic === "target").length;
+  const optionalBackOn = formatDay(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
   const pending = draft.suggestions.filter((s) => s.status === "pending").length;
   const revision = draft.kind === "revision" && ws.approved_items.length > 0;
   const titleOf = (key: string | null) => (key ? draft.items.find((i) => i.key === key)?.title : undefined);
@@ -121,8 +125,16 @@ export default function ReviewPage() {
           {open.length > 0 && (
             <section className="rounded-xl bg-amber-50 p-5" aria-labelledby="open-heading">
               <h2 id="open-heading" className="text-base font-semibold text-amber-800">
-                {open.length === 1 ? "One detail needs a decision" : `${open.length} details need a decision`}
+                {needDecision > 0
+                  ? needDecision === 1 ? "One detail needs a decision" : `${needDecision} details need a decision`
+                  : open.length === 1 ? "One open question" : `${open.length} open questions`}
               </h2>
+              {needDecision < open.length && (
+                <p className="mt-1 text-sm text-ink-body">
+                  {needDecision > 0 ? "The other questions are optional. " : "These are optional. "}
+                  If you approve without answering, {open.length - needDecision === 1 ? "it comes" : "they come"} back on {optionalBackOn}.
+                </p>
+              )}
               {open.length > 1 && (
                 <div className="mt-3 border-t border-amber-500/25 pt-3">
                   <FollowUpPicker
@@ -155,6 +167,22 @@ export default function ReviewPage() {
                         </button>
                       )}
                     </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {answered.length > 0 && (
+            <section className={`${CARD} p-5`} aria-labelledby="answers-heading">
+              <h2 id="answers-heading" className="text-sm font-semibold text-ink">
+                Your answers
+              </h2>
+              <p className="mt-1 text-xs text-ink-secondary">Saved with this role. They don’t change the wording on the left unless you accepted a suggestion built from them.</p>
+              <ul className="mt-2 space-y-2.5">
+                {answered.map((q) => (
+                  <li key={q.id} className="text-sm">
+                    <p className="text-ink-secondary">{q.question}</p>
+                    <p className="mt-0.5 text-ink">{q.answer}</p>
                   </li>
                 ))}
               </ul>

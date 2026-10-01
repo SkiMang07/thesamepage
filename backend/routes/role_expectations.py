@@ -1593,10 +1593,16 @@ def get_role(role_level_id: str, auth=Depends(get_authenticated_client)):
     if drafts:
         return _present_draft(supabase, drafts[0])
     last = (
-        supabase.table("role_expectation_drafts").select("approved_at")
+        supabase.table("role_expectation_drafts").select("approved_at,questions")
         .eq("role_level_id", role_level_id).eq("status", "approved")
         .order("approved_at", desc=True).limit(1).execute().data
     )
+    # What the manager answered while shaping the standard, so it stays visible.
+    answers = [
+        {"id": q["id"], "question": q["question"], "answer": q["answer"]}
+        for q in (normalize_question(q) for q in (last[0].get("questions") or [] if last else []))
+        if q and q["status"] == "answered" and q["answer"] and q["topic"] != "target"
+    ]
     return {
         "draft": None,
         "role": {
@@ -1610,6 +1616,7 @@ def get_role(role_level_id: str, auth=Depends(get_authenticated_client)):
         "org_values": _org_values(supabase),
         "approved_items": items_from_configs(_approved_configs(supabase, role_level_id)),
         "approved_at": last[0]["approved_at"] if last else None,
+        "answers": answers,
         "open_decisions": _open_decisions(supabase, role_level_id),
     }
 
@@ -2089,14 +2096,32 @@ def approval_problems(draft: dict) -> list[str]:
             problems.append("Every expectation needs a name.")
             break
     for q in draft["questions"]:
-        if q["status"] == "open":
+        # Only a missing target needs the manager's explicit decision. Any other
+        # open question is optional: approval parks it (_park_open_optional).
+        if q["status"] == "open" and q["topic"] == "target":
             item = next((i for i in draft["items"] if i["key"] == q.get("item_key")), None)
             where = f" (“{item['title']}”)" if item else ""
-            if q["topic"] == "target":
-                problems.append(f"Set the target{where} or choose when to come back to it.")
-            else:
-                problems.append(f"Answer, park or dismiss: {q['question']}")
+            problems.append(f"Set the target{where} or choose when to come back to it.")
     return problems
+
+
+# Where an optional question the manager left open goes when they approve.
+_OPTIONAL_PARK_DAYS = 30
+
+
+def _park_open_optional(supabase, draft: dict, user_id: str) -> dict:
+    """Approving with an optional question still open parks it a month out
+    (the same persisted decision as 'Bring this back'), so it keeps a return
+    path instead of blocking the approval or vanishing with the draft."""
+    questions = draft["questions"]
+    open_optional = [q for q in questions if q["status"] == "open" and q["topic"] != "target"]
+    if not open_optional:
+        return draft
+    when = date.today() + timedelta(days=_OPTIONAL_PARK_DAYS)
+    parked = {q["id"]: _park_question(supabase, draft, user_id, q, when) for q in open_optional}
+    questions = [{**x, "status": "deferred", "decision_id": parked[x["id"]], "follow_up_on": when.isoformat()}
+                 if x["id"] in parked else x for x in questions]
+    return _write_draft(supabase, draft, {"questions": reconcile_questions(draft["items"], questions)})
 
 
 @router.post("/drafts/{draft_id}/approve")
@@ -2104,17 +2129,20 @@ def approve_draft(draft_id: str, body: ApproveIn, auth=Depends(get_authenticated
     """Approve the reviewed role definition as a whole. Pending AI
     suggestions are not part of it. One transaction; a retry after success
     returns the approved result."""
-    _, supabase = auth
+    user_id, supabase = auth
     draft = _load_draft(supabase, draft_id)
+    version = body.version
     if draft["status"] == "open":
         _check_version(draft, body.version)
         draft = {**draft, "questions": [q for q in (normalize_question(q) for q in draft.get("questions") or []) if q]}
         problems = approval_problems(draft)
         if problems:
             raise HTTPException(status_code=422, detail={"message": "A few things need a decision first.", "problems": problems})
+        parked = _park_open_optional(supabase, draft, user_id)
+        version = parked["version"]
     try:
         rows = supabase.rpc("approve_role_expectation_draft", {
-            "p_draft_id": draft_id, "p_expected_version": body.version,
+            "p_draft_id": draft_id, "p_expected_version": version,
         }).execute().data
     except APIError as err:
         status = _RPC_ERRORS.get(getattr(err, "code", None) or "")

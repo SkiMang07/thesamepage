@@ -225,8 +225,9 @@ export default function CoachPanel(p: Props) {
       )}
 
       {answered.length > 0 && (
-        <details className="mt-5">
+        <details className="mt-5" open>
           <summary className="cursor-pointer text-sm font-semibold text-ink">Your answers ({answered.length})</summary>
+          <p className="mt-1 text-xs text-ink-secondary">Saved with this role. They don’t rewrite your draft; Save &amp; reanalyze uses them to suggest wording you can accept.</p>
           <ul className="mt-2 space-y-2">
             {answered.map((q) => (
               <li key={q.id} className="rounded-md bg-surface px-3 py-2 text-sm">

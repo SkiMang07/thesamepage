@@ -3,6 +3,7 @@ need a database: the no-invented-numbers guard, composed-draft and
 reanalysis sanitizing, system target questions, what a save may change, and
 what blocks approval. The approval transaction, RLS and consumer reads are
 verified against local Postgres (see docs/systems/expectations.md)."""
+from types import SimpleNamespace
 import os
 
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
@@ -264,7 +265,8 @@ def test_approval_problems_name_every_open_decision():
     qs = rex.reconcile_questions([item], [rex.normalize_question({"id": "s", "question": "Scope?", "status": "open"})])
     problems = rex.approval_problems({"items": [item], "questions": qs})
     assert any("Set the target (“Retention”)" in p for p in problems)
-    assert any("Scope?" in p for p in problems)
+    # An optional question left open doesn't block approval; approving parks it.
+    assert not any("Scope?" in p for p in problems)
     assert rex.approval_problems({"items": [], "questions": []}) == ["Add at least one expectation before approving."]
 
 
@@ -494,6 +496,42 @@ def _defer_setup(monkeypatch, questions, items=(), version=3):
 
 def _q(qid, **over):
     return {"id": qid, "question": f"{qid}?", "topic": "scope", "status": "open", **over}
+
+
+def test_approving_with_an_open_optional_question_parks_it_a_month_out(monkeypatch):
+    from datetime import date, timedelta
+    db = _defer_setup(monkeypatch, [_q("a"), _q("b", topic="other", status="answered", answer="Yes.")],
+                      items=[rex.normalize_item({"key": "n-aaaaaaaaaaaa", "section": "responsibility", "title": "Own renewals"})])
+    calls = {}
+
+    class _Rpc:
+        def execute(self_inner):
+            return SimpleNamespace(data=[{"id": "dr1", "role_level_id": "rl1", "approved_at": "now"}])
+
+    def rpc(name, args):
+        calls.update(args)
+        return _Rpc()
+
+    db.rpc = rpc
+    monkeypatch.setattr(rex, "get_role", lambda *_a, **_k: {})
+    out = rex.approve_draft("dr1", rex.ApproveIn(version=3), auth=("u1", db))
+    assert out["approved_draft"]["id"] == "dr1"
+    assert calls["p_expected_version"] == 4 and db.draft_writes == 1
+    (decision,) = db.decisions.values()
+    assert decision["status"] == "deferred"
+    assert decision["follow_up_on"] == (date.today() + timedelta(days=30)).isoformat()
+    parked = {q["id"]: q for q in db.draft["questions"]}
+    assert parked["a"]["status"] == "deferred" and parked["a"]["decision_id"] == "dec1"
+    assert parked["b"]["status"] == "answered"
+
+
+def test_approving_with_nothing_open_does_not_rewrite_the_draft(monkeypatch):
+    db = _defer_setup(monkeypatch, [], items=[rex.normalize_item({"key": "n-aaaaaaaaaaaa", "section": "responsibility", "title": "Own renewals"})])
+    seen = {}
+    db.rpc = lambda name, args: (seen.update(args) or SimpleNamespace(execute=lambda: SimpleNamespace(data=[{"id": "dr1", "role_level_id": "rl1"}])))
+    monkeypatch.setattr(rex, "get_role", lambda *_a, **_k: {})
+    rex.approve_draft("dr1", rex.ApproveIn(version=3), auth=("u1", db))
+    assert seen["p_expected_version"] == 3 and db.draft_writes == 0
 
 
 def _defer_many(db, ids, version=3, when=None):

@@ -645,6 +645,22 @@ function ApprovedView({ ws, focus, onOpened }: { ws: RoleWorkspace; focus: strin
         <RoleDocument items={ws.approved_items} orgValues={ws.org_values} openTargets={new Set(ws.open_decisions.filter((d) => d.topic === "target").map((d) => d.item_key || ""))} />
         <aside className="space-y-5">
           <SourcePane text={ws.role.job_responsibilities} label="Saved job description" />
+          {(ws.answers?.length ?? 0) > 0 && (
+            <section className={`${CARD} p-5`} aria-labelledby="role-answers-heading">
+              <h2 id="role-answers-heading" className="text-sm font-semibold text-ink">
+                Your answers
+              </h2>
+              <p className="mt-1 text-xs text-ink-secondary">What you told the thought partner while shaping this role. They’re saved here; they don’t rewrite the approved wording.</p>
+              <ul className="mt-2 space-y-2.5">
+                {ws.answers!.map((a) => (
+                  <li key={a.id} className="text-sm">
+                    <p className="text-ink-secondary">{a.question}</p>
+                    <p className="mt-0.5 text-ink">{a.answer}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <section className={`${CARD} p-5`}>
             <h2 className="text-sm font-semibold text-ink">Where these are used</h2>
             <p className="mt-1 text-sm text-ink-secondary">1:1 preparation, development and assessments for everyone in this role. Changes go through a revision and your approval before they replace these.</p>

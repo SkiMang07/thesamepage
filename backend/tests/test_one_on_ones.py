@@ -661,3 +661,11 @@ def test_the_prep_prompt_forbids_reading_the_person_and_keeps_the_managers_hedge
     assert "no \"What haven't you tried?\"" in body
     assert 'never call them "the manager"' in body
     assert "What approaches haven't you tried yet?" not in body
+    # Re-run 2026-10-01: with the CSM role approved, "not sure if it's capacity"
+    # became "What's actually going on with capacity right now?" and "a
+    # scheduling or bandwidth question"; "I never asked what was said" became
+    # "that you haven't followed up on"; rationales cited "per the role expectations".
+    assert "Open causes stay open" in body
+    assert "bandwidth" in body and "Echo the uncertainty in their words or leave it out" in body
+    assert '"I never asked what was said" is "you never asked what was said"' in body
+    assert 'no "per the role expectations"' in body

@@ -157,8 +157,10 @@ and one explicit confirmation + **Approve** for the whole role.
   writing the target or making the item unmeasured — never by dismissing it.
   Approval requires each one to have a deferred decision with a date (checked in
   Python and again inside the SQL function).
-- **Questions need an outcome before approval:** answered, parked with a date, or
-  "Not needed". Deferral always goes through `POST /drafts/{id}/defer` (one question) or
+- **Only a missing target blocks approval.** Any other open question is optional:
+  approving parks it 30 days out (the same persisted decision as "Bring this back"),
+  and the review page says so. Otherwise a question ends answered, parked with a date,
+  or "Not needed". Deferral always goes through `POST /drafts/{id}/defer` (one question) or
   `/defer-many` (every listed open question on one date, one draft write and version
   bump; unknown ids are skipped, 404 only if none match, at most 40), so there is
   always a persisted return path. Follow-up is date-based only — the one trigger the

@@ -2472,6 +2472,7 @@ export type RoleWorkspace = {
   org_values: { id: string; name: string; description: string | null }[];
   approved_items: RoleItem[];
   approved_at?: string | null;
+  answers?: { id: string; question: string; answer: string }[];
   open_decisions: RoleDecision[];
   resumed?: boolean;
   analysis_failed?: boolean;

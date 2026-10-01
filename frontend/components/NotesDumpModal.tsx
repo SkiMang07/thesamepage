@@ -71,6 +71,16 @@ function blockedText(row: NotesDumpExpectation) {
   return null;
 }
 
+// The seniority word behind a level number, in the bands the intake prompt reads from
+// ("senior" is 4-5). Only for saying what was read; ladders keep the number.
+function seniorityWord(level: number): string {
+  if (level <= 2) return "junior, ";
+  if (level === 3) return "mid-level, ";
+  if (level <= 5) return "senior, ";
+  if (level <= 7) return "staff or principal, ";
+  return "";
+}
+
 export default function NotesDumpModal({ onClose, intent }: { onClose: () => void; intent?: "expectations" }) {
   const [phase, setPhase] = useState<Phase>("input");
   const [text, setText] = useState("");
@@ -435,7 +445,9 @@ export default function NotesDumpModal({ onClose, intent }: { onClose: () => voi
                           />
                         </label>
                         <span className="text-xs text-ink-muted">
-                          {e.new_role.level_stated ? "Level read from how you described them. Check it." : "No seniority stated, so it starts at 1. Check it."}
+                          {e.new_role.level_stated
+                            ? `Read as ${seniorityWord(e.new_role.job_level)}level ${e.new_role.job_level} from how you described them. The title leaves seniority out. Check the level.`
+                            : "No seniority stated, so it starts at 1. Check it."}
                         </span>
                       </div>
                     ) : (
