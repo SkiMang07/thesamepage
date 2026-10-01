@@ -43,6 +43,8 @@ Pure: no database, no model. Tested in tests/test_intake_slices.py.
 from __future__ import annotations
 
 import re
+
+from private_lane import discloses_self_state
 import unicodedata
 
 MAX_SLICE = 20_000  # role_expectations._MAX_CONTEXT
@@ -449,13 +451,27 @@ def _plain(s: str) -> str:
     return s.replace("’", "'").replace("‘", "'")
 
 
+# The manager's own side in fragment voice, with the "I" dropped: "Need to talk
+# through meets versus exceeds.", "Haven't raised it.", "Owed her feedback."
+_FRAGMENT = re.compile(
+    r"^\W*(?:still\s+)?(?:"
+    r"need\s+to\s+(?:write|send|give|get|share|set|schedule|draft|book|do|finish|ask|raise|talk|sort|follow|find|figure|have)"
+    r"|(?:haven't|have\s+not)\s+(?:written|sent|given|shared|set|scheduled|drafted|done|finished|asked|raised|had)"
+    r"|owed\b)",
+    re.IGNORECASE,
+)
+
+
 def manager_side(sentence: str) -> str | None:
     """-> "commitment" (the manager owes it), "meeting" (the manager's 1:1
     rhythm) or None (keep it). Pure."""
     s = _plain(sentence)
     if _THEIRS.search(s):
         return None
-    if _COMMITMENT.search(s):
+    if _COMMITMENT.search(s) or _FRAGMENT.search(s):
+        return "commitment"
+    # The manager's private admission is theirs, never a line in the role.
+    if discloses_self_state(s):
         return "commitment"
     if _ONE_ON_ONE.search(s) and _RHYTHM.search(s):
         return "meeting"

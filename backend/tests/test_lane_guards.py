@@ -237,3 +237,32 @@ def test_a_line_about_a_promise_or_the_work_is_not_a_private_admission():
     ]:
         assert not discloses_self_state(line), line
     assert report_facing(["What's getting in the way?", MEI_ITEM_4_LINE]) == ["What's getting in the way?"]
+
+
+# ---- retest of 2026-10-01 (fragment-voice paste, model paraphrase) ----------
+
+def test_andre_lapse_is_caught_when_the_model_drops_it_from_its_own_statement():
+    from routes.notes_dump import separate_statement
+    piece = "Mid backend. Expected to send a weekly status; stopped after two. Delivery inconsistent."
+    statement, follow = separate_statement(
+        "Expected to send a weekly status update; delivery has been inconsistent.", [], piece, "fallback")
+    assert follow == [{"description": "Send a weekly status", "excerpt": "Expected to send a weekly status; stopped after two."}]
+    assert "weekly status" not in (statement or "")
+    assert "inconsistent" in (statement or "")
+
+
+def test_fragment_voice_manager_side_sentences_are_held_out_of_the_draft():
+    from intake_slices import for_drafting
+    piece = ("Senior full-stack. Ex-peer. Owns the design-doc review process. Need to talk through meets versus "
+             "exceeds, after calibration. Haven't raised it. I avoid the hard feedback with her more than with anyone.")
+    reads, held = for_drafting(piece)
+    assert "Owns the design-doc review process" in reads
+    for gone in ("Need to talk through", "Haven't raised it", "I avoid the hard feedback"):
+        assert gone not in reads
+        assert any(gone in h for h in held)
+
+
+def test_fragment_rule_leaves_a_reports_own_expectations_alone():
+    from intake_slices import for_drafting
+    piece = "Needs to own on-call. Should own the roadmap. Owns the review process."
+    assert for_drafting(piece) == (piece, [])

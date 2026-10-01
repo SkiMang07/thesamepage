@@ -56,7 +56,7 @@ from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
 from intake_slices import (MAX_SLICE, _bigrams, _cap, _words, echoes_commitment, echoes_held_back, follow_through_action, for_drafting,
-                           from_own_slice, is_promise, manager_side, sentences, shared_by_person, slice_by_person, sourced_by, split_lapses)
+                           from_own_slice, is_promise, manager_side, sentences, _clauses, shared_by_person, slice_by_person, sourced_by, split_lapses)
 from routes.documents import _MAX_UPLOAD_BYTES
 from routes.expectations_ai import _compute_coverage
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
@@ -596,6 +596,19 @@ def separate_statement(statement: str | None, own_commitments: list[dict], piece
     if not statement:
         return statement, []
     statement, lapses = split_lapses(statement)
+    if not lapses and piece:
+        # The model may have dropped the history from its own wording
+        # ("Expected to send a weekly status update"); the notes still say it.
+        for start, end, _ in sentences(piece):
+            sentence = piece[start:end].strip()
+            _, found = split_lapses(sentence)
+            if found and found[0][0]:
+                lapses.append(found[0])
+                action = follow_through_action(found[0][0])
+                if action and statement:
+                    keep = [c for c in _clauses(statement) if not echoes_commitment(c, [{"description": action}])]
+                    statement = " ".join(c if re.search(r"[.!?]$", c) else c + "." for c in keep) or None
+                break
     follow: list[dict] = []
     for before, lapse in lapses:
         action = follow_through_action(before)
