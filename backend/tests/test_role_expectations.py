@@ -780,3 +780,14 @@ def test_the_job_description_and_notes_still_set_targets_beside_a_document():
                                      "quote": "we agreed 110% net revenue retention for the year"})]},
         corpus_text=JD, source_available=True, context_text=NOTES, extra_numbers_text=PLAYBOOK)
     assert items[0]["target"]["source"] == "manager"
+
+
+def test_description_prompt_forbids_content_the_description_does_not_state():
+    prompt = rex._compose_prompt(jd_text=None, role_hint=None, ladders_block="(none)", org_values=[],
+                                 sibling_block="", include_identity=False, context=DESC, description_only=True)
+    assert 'Say only what the description says' in prompt
+    assert '"visible progress each week"' in prompt and "on the plan the person has set" in prompt
+    assert "never a fuller one built from what such a role usually does" in prompt
+    normal = rex._compose_prompt(jd_text=JD, role_hint=None, ladders_block="(none)", org_values=[],
+                                 sibling_block="", include_identity=False, context=None)
+    assert "Say only what the description says" not in normal
