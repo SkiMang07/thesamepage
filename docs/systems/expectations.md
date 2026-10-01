@@ -254,6 +254,14 @@ is **approved**: a draft is not yet a standard.
   the draft reads, no sentence repeating a word pair only a held-back line has,
   no 1:1 rhythm). The parse and description prompts also say this, but the
   code is what enforces it.
+- **A row says only what is about that person.** Who a sentence is about is the
+  slicer's call, never the model's. In `finish_expectations`, a row's statement
+  keeps a sentence only if `intake_slices.from_own_slice` passes it: it names no
+  one else on the team unless the person's slice names them too, and at least half
+  its content words are in the slice. The row's excerpt must be in the person's
+  slice or it is dropped (the row stays). When unsure the line is left out, so
+  "help Noor get ready for exec QBRs" (Odalys's) never shows on Noor's row. A row
+  with no slice (only attached files behind it) is not checked.
 - **What the manager owes becomes a commitment.** The same read proposes a
   "What you owe people" group: one row per thing the manager says they owe a
   person, as a short editable action ("Share quarterly priorities with Lena").

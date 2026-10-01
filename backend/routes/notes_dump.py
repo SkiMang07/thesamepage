@@ -55,7 +55,7 @@ import analytics
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from expectations_batch import MAX_ROLES, SOURCE_LABEL, draft_in_background, drafting_analysis
-from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, is_promise, manager_side, shared_by_person, slice_by_person
+from intake_slices import MAX_SLICE, _bigrams, _cap, echoes_held_back, for_drafting, from_own_slice, is_promise, manager_side, shared_by_person, slice_by_person
 from routes.documents import _MAX_UPLOAD_BYTES
 from routes.expectations_ai import _compute_coverage
 from routes.goals import GoalIn, _goal_values, _validate_level, _validate_references
@@ -482,15 +482,19 @@ def role_key(row: dict) -> str:
     return f"new:{_squash(new.get('job_role'))}|{new.get('job_level')}"
 
 
-def clean_statement(statement: str | None, reads: str, held: list[str]) -> str | None:
+def clean_statement(statement: str | None, reads: str, held: list[str], others: list[str] | None = None) -> str | None:
     """The review row's one-line statement, held to what the drafter reads: no
-    number the person's own side doesn't state, and no sentence restating the
+    number the person's own side doesn't state, no sentence restating the
     manager's side (a pair of words only a held-back sentence has, or the 1:1
-    rhythm). Pure."""
+    rhythm), and no sentence that is not from this person's own slice
+    (intake_slices.from_own_slice: it names someone else the slice doesn't, or
+    shares too few words with it). `others` is everyone else on the team; None
+    skips that last check (nothing typed to check against). Pure."""
     if not statement:
         return None
     cleaned, _ = strip_unsupported(" ".join(statement.split()), numbers_in(reads))
-    kept = [s for s in _sentences_of(cleaned) if not echoes_held_back(s, held, reads)]
+    kept = [s for s in _sentences_of(cleaned)
+            if not echoes_held_back(s, held, reads) and (others is None or from_own_slice(s, reads, others))]
     return " ".join(kept) or None
 
 
@@ -557,7 +561,7 @@ def _merge_slices(pieces: list[str]) -> str:
 
 
 def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set, covered_roles: set,
-                        rank: dict, shared: dict | None = None) -> list[dict]:
+                        rank: dict, shared: dict | None = None, roster: list[dict] | None = None) -> list[dict]:
     """Attach each row's slice, say plainly why a row can't be drafted, order by
     soonest 1:1 and preselect the first MAX_ROLES roles to draft. Pure.
 
@@ -574,7 +578,17 @@ def finish_expectations(rows: list[dict], *, slices: dict, open_draft_roles: set
         # The lines in it said of a group ("Everyone ...", "The other six ..."),
         # so the review can show which are about them alone.
         r["shared"] = [s for s in (shared or {}).get(r["report_id"], []) if s in reads]
-        if r.get("statement"):
+        # Who a sentence is about is the slicer's call, never the model's: the
+        # row's statement and excerpt must come from this person's own slice
+        # (their lines plus any said of a group). Someone with no slice has
+        # only files behind the row, which nothing here can check.
+        if piece:
+            others = [p["name"] for p in (roster or []) if p["id"] != r["report_id"] and p.get("name")]
+            others += [o["person_name"] for o in rows if o["report_id"] != r["report_id"] and o.get("person_name")]
+            r["statement"] = clean_statement(r.get("statement"), reads, held, others)
+            if r.get("excerpt") and _squash(r["excerpt"]) not in _squash(piece):
+                r["excerpt"] = None
+        elif r.get("statement"):
             r["statement"] = clean_statement(r["statement"], reads, held)
         rid = r.get("role_level_id")
         r["blocked"] = (
@@ -767,7 +781,8 @@ def _finish_expectations_for(supabase, user_id: str, ctx: dict, drafts: dict, *,
     finish_expectations(drafts["expectations"], slices=slices, open_draft_roles=open_roles,
                         covered_roles=covered, rank=queue_rank(roster, queue),
                         shared=shared_by_person(typed, roster, others=other_names,
-                                                want={e["report_id"] for e in drafts["expectations"]}))
+                                                want={e["report_id"] for e in drafts["expectations"]}),
+                        roster=roster)
 
 
 # ---------------------------------------------------------------------------

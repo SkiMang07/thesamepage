@@ -370,3 +370,18 @@ def test_a_paragraph_break_ends_a_group_run():
 def test_look_alike_openers_are_not_groups():
     text = "Ana owns support. The other thing I'd say is she should write more. The rest of the week I'm out."
     assert slice_by_person(text, GROUP_ROSTER) == {"ana": text}
+
+
+def test_from_own_slice_keeps_a_line_only_when_it_is_drawn_from_the_persons_slice():
+    from intake_slices import from_own_slice
+    noor = slice_by_person(RENATA, RENATA_ROSTER)["noor"]
+    others = ["Odalys X", "Gideon X"]
+    assert from_own_slice("Owns their renewals and QBRs.", noor, others)
+    assert from_own_slice("Nobody should be surprised.", noor, others)
+    # Said of Odalys, so it names someone Noor's slice never names.
+    assert not from_own_slice("Gets help from Odalys preparing for exec QBRs.", noor, others)
+    # Nothing in common with the slice: unsure, so out.
+    assert not from_own_slice("Mentors the new hires every Friday.", noor, others)
+    # Her own slice names Noor, so Noor is not "someone else" there.
+    odalys = slice_by_person(RENATA, RENATA_ROSTER)["odalys"]
+    assert from_own_slice("Helps Noor get ready for exec QBRs.", odalys, ["Noor X"])

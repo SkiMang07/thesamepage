@@ -22,6 +22,7 @@ import analytics  # noqa: E402
 import expectations_batch as eb  # noqa: E402
 import main  # noqa: E402
 import routes.notes_dump as nd  # noqa: E402
+from intake_slices import slice_by_person  # noqa: E402
 import routes.role_expectations as rex  # noqa: E402
 import utils  # noqa: E402
 
@@ -220,6 +221,60 @@ def test_a_statement_keeps_only_numbers_that_person_said():
     nd.finish_expectations(rows, slices={"andre": "Andre, weekly written status, two years."},
                            open_draft_roles=set(), covered_roles=set(), rank={})
     assert rows[0]["statement"] == "A weekly written status."
+
+
+def _renata_rows(noor_statement, noor_excerpt):
+    return [
+        {**_row("odalys", "Odalys X", role="rl_sr", statement=(
+            "Runs the big renewals herself, tells the manager early when one is going sideways, "
+            "and helps Noor get ready for exec QBRs.")),
+         "excerpt": "help Noor get ready for exec QBRs"},
+        {**_row("noor", "Noor X", role="rl_csm", statement=noor_statement), "excerpt": noor_excerpt},
+    ]
+
+
+def test_a_sentence_said_of_one_person_never_lands_on_another_persons_row():
+    """The 2026-10-01 Renata run: "help Noor get ready for exec QBRs" is what
+    the manager expects of Odalys, but Noor's row read "Also gets help from
+    Odalys preparing for exec QBRs" and quoted it. The slicer already gave
+    Noor only the group lines; the row's statement and excerpt are now held to
+    that slice by code, so the model never decides who a sentence is about."""
+    from tests.test_intake_slices import RENATA, RENATA_ROSTER
+    slices = slice_by_person(RENATA, RENATA_ROSTER)
+    rows = _renata_rows(
+        "Owns their renewals and QBRs, keeps health scores honest, and tells the manager about risk early. "
+        "Also gets help from Odalys preparing for exec QBRs.",
+        "help Noor get ready for exec QBRs")
+    nd.finish_expectations(rows, slices=slices, open_draft_roles=set(), covered_roles=set(), rank={}, roster=RENATA_ROSTER)
+    by = {r['report_id']: r for r in rows}
+    odalys, noor = by['odalys'], by['noor']
+    assert noor["statement"] == "Owns their renewals and QBRs, keeps health scores honest, and tells the manager about risk early."
+    assert "Odalys" not in noor["statement"]
+    assert noor["excerpt"] is None
+    assert "help Noor" not in noor["slice"]
+    # Odalys keeps her own row, her excerpt and the sentence that names Noor.
+    assert "helps Noor get ready for exec QBRs" in odalys["statement"]
+    assert "run the big renewals" in odalys["slice"]
+    assert odalys["excerpt"] == "help Noor get ready for exec QBRs"
+
+
+def test_a_statement_with_nothing_from_the_persons_slice_is_dropped_and_the_row_kept():
+    from tests.test_intake_slices import RENATA, RENATA_ROSTER
+    slices = slice_by_person(RENATA, RENATA_ROSTER)
+    rows = _renata_rows("Gets help from Odalys preparing for exec QBRs.", None)
+    nd.finish_expectations(rows, slices=slices, open_draft_roles=set(), covered_roles=set(), rank={}, roster=RENATA_ROSTER)
+    noor = {r['report_id']: r for r in rows}['noor']
+    assert noor["statement"] is None and noor["slice"] and noor["blocked"] is None
+
+
+def test_a_group_sentence_is_the_persons_own_and_the_rows_own_names_count_without_a_roster():
+    from tests.test_intake_slices import RENATA, RENATA_ROSTER
+    slices = slice_by_person(RENATA, RENATA_ROSTER)
+    rows = _renata_rows("Nobody should be surprised. Helps Odalys with exec QBRs.", "Nobody should be surprised.")
+    nd.finish_expectations(rows, slices=slices, open_draft_roles=set(), covered_roles=set(), rank={})  # no roster
+    noor = {r['report_id']: r for r in rows}['noor']
+    assert noor["statement"] == "Nobody should be surprised."
+    assert noor["excerpt"] == "Nobody should be surprised."
 
 
 def test_queue_rank_uses_expectation_queue_order():

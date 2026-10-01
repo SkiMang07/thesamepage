@@ -533,3 +533,33 @@ def echoes_held_back(sentence: str, held: list[str], kept: str) -> bool:
         return False
     only_held = _bigrams(" ".join(held)) - _bigrams(kept)
     return bool(_bigrams(sentence) & only_held) or manager_side(sentence) == "meeting"
+
+
+def _words(text: str) -> set[str]:
+    """Content words, lightly stemmed (a trailing s), so "owns" meets "own"."""
+    return {
+        w[:-1] if len(w) > 3 and w.endswith("s") else w
+        for w in re.findall(r"[a-z0-9:]+", _plain(text).lower()) if len(w) >= 3 and w not in _STOP
+    }
+
+
+def from_own_slice(sentence: str, piece: str, others: list[str], *, floor: float = 0.5) -> bool:
+    """Whether a line the model wrote about one person (a review row's
+    statement) is drawn from that person's own slice. Code decides this, not
+    the model: a sentence is kept only if
+
+      - it names no one else on the team unless the slice names them too
+        ("help Noor get ready" is Odalys's; Noor's row must not say it), and
+      - at least `floor` of its content words are in the slice.
+
+    When unsure it says no: a missing line is better than another person's
+    expectation. Pure."""
+    own = _words(piece)
+    words = _words(sentence)
+    if not words:
+        return False
+    for name in others:
+        for w in _words(name):
+            if w in words and w not in own:
+                return False
+    return len(words & own) / len(words) >= floor
