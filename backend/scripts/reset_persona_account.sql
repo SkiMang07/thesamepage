@@ -137,6 +137,7 @@ begin
     from pg_constraint c
     join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
     where c.contype = 'f'
+      and c.connamespace = 'public'::regnamespace  -- auth.* and storage.* are Supabase's; they cascade themselves
       and c.confrelid in ('auth.users'::regclass, 'public.users'::regclass)
       and c.confdeltype <> 'n'                      -- ON DELETE SET NULL can't block
       and array_length(c.conkey, 1) = 1
