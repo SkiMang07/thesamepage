@@ -876,7 +876,9 @@ function ConversationWeek({
                 onClick={(e) => onSelect({ type: "unscheduled" }, e.currentTarget)}
                 className="rounded text-ink-body underline decoration-control underline-offset-4 hover:text-ink"
               >
-                {plural(week.unscheduled_due.length, "person", "people")} due by cadence, no date set
+                {week.unscheduled_due.every((p) => p.days_since_last === null)
+                  ? `${plural(week.unscheduled_due.length, "person", "people")} with no 1:1 recorded yet, none scheduled`
+                  : `${plural(week.unscheduled_due.length, "person", "people")} due by cadence, no date set`}
               </button>
               {": "}
               {week.unscheduled_due.map((p, i) => (
@@ -1272,12 +1274,15 @@ function Detail({
   }
 
   if (selection.type === "unscheduled") {
+    const noneRecorded = week.unscheduled_due.length > 0 && week.unscheduled_due.every((p) => p.days_since_last === null);
     return (
       <section aria-labelledby="detail-heading">
-        <DetailHead label="Due by cadence" onClose={onClose} />
+        <DetailHead label={noneRecorded ? "No 1:1 recorded" : "Due by cadence"} onClose={onClose} />
         <h3 id="detail-heading" ref={headingRef} tabIndex={-1} className={h3}>No date set</h3>
         <p className="text-xs text-ink-secondary">
-          Due for a 1:1 by their cadence, with no upcoming date. They join the calendar once a date is chosen.
+          {noneRecorded
+            ? "No 1:1 with them is recorded here yet, and none is scheduled. That says nothing about whether you have met. They join the calendar once a date is chosen."
+            : "Due for a 1:1 by their cadence, with no upcoming date. They join the calendar once a date is chosen."}
         </p>
         <ul className="mt-2">
           {week.unscheduled_due.map((p) => (

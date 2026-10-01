@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { landingPath } from "@/lib/auth-landing";
 
 const PASSWORD_KEY = "tsp:signs-in-with-password";
 
@@ -60,7 +61,10 @@ function LoginForm() {
       try {
         window.localStorage.setItem(PASSWORD_KEY, "1");
       } catch {}
-      router.replace("/app/dashboard");
+      // Same landing as the emailed link: a manager with no direct reports
+      // goes straight to first run, not through an 8-second dashboard shell.
+      const next = await landingPath(supabase);
+      router.replace(next);
       router.refresh();
       return;
     }
