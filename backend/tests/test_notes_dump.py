@@ -530,3 +530,17 @@ def test_prompt_writes_person_notes_in_the_managers_voice_and_does_not_hedge_wha
     assert '("wants a staff path" stays "Wants a staff path")' in prompt
     assert "Hedge only what the notes themselves hedge" in prompt
     assert 'is "low" only when the notes themselves hedge it' in prompt
+
+
+def test_a_goal_starts_checked_only_when_the_managers_words_call_it_a_goal():
+    # Renata run 2026-10-01: "Going well means no late flags..." arrived as a
+    # pre-checked team goal. Models call that "high" because it is stated plainly.
+    notes = "Going well means no late flags, QBRs covered. Our goal this quarter is to cut churn on enterprise."
+    out = nd.validate_parse({"goals": [
+        {"level": "team", "title": "No surprises on renewals", "excerpt": "Going well means no late flags, QBRs covered", "confidence": "high"},
+        {"level": "team", "title": "Cut enterprise churn", "excerpt": "Our goal this quarter is to cut churn on enterprise", "confidence": "high"},
+        {"level": "team", "title": "Cut SMB churn", "excerpt": "Our goal is to cut SMB churn", "confidence": "low"},
+    ]}, _ctx(), notes)
+    assert [(g["title"], g["low"]) for g in out["goals"][:2]] == [
+        ("No surprises on renewals", True), ("Cut enterprise churn", False)]
+    assert out["goals"][2]["low"] is True
