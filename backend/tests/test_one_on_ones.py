@@ -639,3 +639,19 @@ def test_the_managers_own_scheduling_gripe_is_not_handed_to_the_report():
     assert "WHOSE LINE IS IT" in body
     assert "not a question for the report" in body
     assert "keeps getting squeezed" in body
+
+
+def test_the_prep_prompt_forbids_reading_the_person_and_keeps_the_managers_hedge():
+    # Renata run 2026-10-01: "missed QBRs and yellow scores" came back as
+    # "now showing signs of disengagement or overload" about a former peer.
+    body = str(_build_prep_prompt(
+        report_name="Cormac Reyes",
+        raw_notes="Missed two QBRs and two health scores are yellow. Not sure if it's capacity.",
+        open_commitments=[],
+        recent_summaries=[],
+        days_since_last=14,
+        cadence_days=14,
+    ))
+    assert "NEVER READ THE PERSON" in body
+    assert "showing signs of disengagement or overload" in body
+    assert "Hedge only what the notes themselves hedge" in body

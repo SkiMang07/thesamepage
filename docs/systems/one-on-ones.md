@@ -290,6 +290,8 @@ signals, secondhand notes from
 meetings beyond the team (framed as someone else's account, never fact — see
 `beyond.md`), role expectations, the Context Engine block (see
 `context-engine.md`), then the manager's raw notes.
+The prep prompt restates what the notes say and never reads the person: no state of
+mind or cause the notes don't give, and the manager's own hedge is kept as written.
 
 **Expectations are grounding context, not an agenda.** `_format_expectations_block()`
 explicitly instructs the model *not* to audit every expectation in one 1:1. This

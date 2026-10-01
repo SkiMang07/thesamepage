@@ -437,11 +437,14 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
 6. WHOSE LINE IS IT
    The manager's notes mix things about the report with things about the manager's own situation: their time, calendar, workload, habits, or how they feel about the meeting (for example, that this 1:1 keeps getting squeezed). A line about the manager's own situation is not a question for the report. Do not turn it into a suggested question, agenda item or rationale aimed at the report. Use it only when the manager clearly needs to tell the report something; otherwise leave it out.
 
+7. NEVER READ THE PERSON
+   Restate what the manager wrote; do not characterize the person. Never name a state of mind, motive or cause the notes do not state: no "disengaged", "overloaded", "burned out", "checked out", "struggling", "lacks confidence", "showing signs of". Report the facts and leave the reading to the manager ("missed two QBRs and two health scores are yellow", not "showing signs of disengagement or overload"). What the notes state plainly, state plainly; do not add "may", "seems" or "appears" to it. Hedge only what the notes themselves hedge, and keep their hedge in their words ("not sure if it's capacity"). A possible cause belongs in a question the report can answer ("What's getting in the way of the QBRs?"), never in the summary or a rationale as a finding.
+
 ---
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
 {
-  "situation_summary": "2–3 sentences: where things stand with this person based on history and current notes. Name any patterns, risks, or positive momentum worth calling out explicitly.",
+  "situation_summary": "2–3 sentences: where things stand with this person based on history and current notes. Name any patterns, risks, or positive momentum worth calling out explicitly, in terms of what the record shows (rule 7), not what you infer about the person.",
   "agenda_items": [
     {
       "title": "Short label for this item (5 words or fewer)",
