@@ -520,3 +520,13 @@ def test_prompt_resolves_relative_dues_low_and_never_dates_a_promise_made_in_the
     assert 'Set confidence to "low" on any commitment whose due_date you worked out' in prompt
     assert 'its row starts unchecked' in prompt
     assert '"promised in April"' in prompt and "due_date is null" in prompt
+
+
+def test_prompt_writes_person_notes_in_the_managers_voice_and_does_not_hedge_what_is_plain():
+    prompt = nd.build_prompt(_ctx(), "Priya wants a staff path.")
+    assert 'in their first person ("I haven\'t told her what exceeds looks like")' in prompt
+    assert 'Never call the writer "the manager" or "the user"' in prompt
+    assert 'What the notes state plainly, state plainly' in prompt
+    assert '("wants a staff path" stays "Wants a staff path")' in prompt
+    assert "Hedge only what the notes themselves hedge" in prompt
+    assert 'is "low" only when the notes themselves hedge it' in prompt
