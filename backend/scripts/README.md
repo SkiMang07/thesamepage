@@ -77,3 +77,15 @@ python -m pytest backend/tests/test_forkcast_demo_seed.py -q
 The tests cover deterministic identity, fictional email domains, performance
 distribution, the cross-surface Mina narrative, Mission Control eligibility,
 and date shifting.
+
+## Reset or delete a test persona account
+
+`reset_persona_account.sql` wipes a Digital Customers persona back to a
+brand-new user, or deletes the login entirely so sign-up can be retested. Run it
+in the Supabase SQL editor; the how-to-run header is at the top of the file.
+Edit the email (and `tsp.delete_login`) in its first statement. It refuses
+non-plus-tagged emails, shared orgs, and any run that would leave rows behind.
+
+`backend/tests/test_reset_persona_script.py` fails when `database/schema.sql`
+gains a table the script doesn't delete from, or the delete order breaks a
+foreign key. After adding a table, add its `delete from` line (children first).
