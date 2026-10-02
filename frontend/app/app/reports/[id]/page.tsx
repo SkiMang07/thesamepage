@@ -77,6 +77,7 @@ import { addDaysStr, localDateStr } from "@/components/team/dates";
 import { takeOneOnOneReceipt, type OneOnOneReceiptStash } from "@/lib/one-on-one-receipt";
 import ConversationPanel from "@/components/relationship/ConversationPanel";
 import CaptureBox from "@/components/relationship/CaptureBox";
+import PersonIntake from "@/components/PersonIntake";
 import FollowThrough from "@/components/relationship/FollowThrough";
 import PastConversations from "@/components/relationship/PastConversations";
 import OneOnOneReceipt, { type ReceiptView } from "@/components/relationship/OneOnOneReceipt";
@@ -197,6 +198,8 @@ function RelationshipDesk() {
   const stashTakenRef = useRef(false);
   const receiptHeadingFocused = useRef<string | null>(null);
   const [loadedVersion, setLoadedVersion] = useState(0);
+  // "Add what you know": open from setup (?intake=1) or from the button below the capture box.
+  const [intakeOpen, setIntakeOpen] = useState(searchParams.get("intake") === "1");
 
   useEffect(() => {
     return () => setPageContext(null);
@@ -618,6 +621,17 @@ function RelationshipDesk() {
           />
         )}
 
+        {intakeOpen && (
+          <PersonIntake
+            report={report}
+            roleLevels={roleLevels}
+            roleFamilies={roleFamilies}
+            orgUnits={orgUnits}
+            onSaved={() => { void loadAll().then(applyLoaded).catch(() => {}); }}
+            onClose={() => setIntakeOpen(false)}
+          />
+        )}
+
         <div className={`grid gap-9 ${twoColumn}`}>
           <div className="min-w-0">
             <ConversationPanel
@@ -641,6 +655,11 @@ function RelationshipDesk() {
               onShowCommitments={showCommitments}
             />
             <CaptureBox personFirstName={first} onSave={saveCapture} />
+            {!intakeOpen && (
+              <button type="button" onClick={() => setIntakeOpen(true)} className="mt-4 text-sm font-medium text-brand hover:text-brand-hover">
+                Add what you know about {first}
+              </button>
+            )}
           </div>
           <div className="min-w-0">
             <FollowThrough

@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Capture by person: three options</title>
+<style>
+/* App dark theme tokens, same vocabulary as 2026-09-29-onboarding-path/prototype.html. Fictional example data throughout; drafts are canned. */
+:root{color-scheme:dark;--bg:#182026;--surface:#222b32;--raised:#29333a;--input:#2d373e;--line:#3d4950;--ink:#f2f5f6;--body:#d4dadd;--muted:#aab7be;--faint:#6e7b83;--teal:#72c7bf;--tint:#173d3b;--amber:#efc281;--blue:#93c1f3;--control:#77848c;--red:#f0a1a1}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;border-radius:6px;padding:9px 12px;text-align:left}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+button:disabled{opacity:.4;cursor:default}
+p{margin:8px 0 14px;color:var(--body)}
+h1,h2,h3{margin:0;font-weight:400}
+h1,h2{font-family:Georgia,serif}
+h1{font-size:34px;letter-spacing:-.8px;line-height:1.15}
+h2{font-size:22px;line-height:1.25}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted);margin-bottom:8px}
+.eyebrow.teal{color:var(--teal)}.eyebrow.amber{color:var(--amber)}
+.meta{font-size:12px;color:var(--muted)}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.primary{background:var(--teal);color:#08191b!important;font-weight:600;padding:10px 16px}
+.primary:hover:not(:disabled){background:#8fd6cf}
+.secondary{border:1px solid var(--control);color:var(--body);padding:9px 13px}
+.secondary:hover:not(:disabled){border-color:var(--teal);color:var(--teal)}
+.quiet{color:var(--teal);padding:6px 2px;font-size:13px}
+.quiet:hover{color:#8fd6cf}
+.ghost{color:var(--muted);font-size:13px;padding:6px 8px}
+.ghost:hover{color:var(--ink)}
+textarea,input.txt,select{background:var(--input);border:1px solid var(--control);border-radius:5px;padding:9px 11px;width:100%;line-height:1.5}
+select{width:auto;max-width:100%;padding:5px 9px;border-radius:14px;font-size:12px;color:var(--body)}
+textarea{resize:vertical;min-height:84px}
+textarea:focus,input.txt:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--tint)}
+label.f{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
+label.f em{font-style:normal;color:var(--faint)}
+
+.pbar{position:sticky;top:0;z-index:50;padding:8px 20px;background:#0f161b;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pbar b{letter-spacing:1.4px;text-transform:uppercase;color:var(--amber);font-weight:600;margin-right:6px}
+.pbar button{font-size:12px;padding:5px 10px;border:1px solid var(--line);color:var(--muted)}
+.pbar button:hover{color:var(--teal);border-color:var(--teal)}
+.pbar button.on{background:var(--tint);border-color:var(--teal);color:var(--teal)}
+main{max-width:1000px;margin:0 auto;padding:30px 24px 70px}
+section.tab{display:none}section.tab.on{display:block;animation:appear .25s ease-out both}
+@keyframes appear{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.lede{font:16px/1.5 Georgia,serif;color:var(--body);max-width:62ch;margin:10px 0 22px}
+.panel{background:var(--surface);border-radius:9px;padding:20px 22px;margin-bottom:16px}
+.panel h3{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:500;margin-bottom:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;border-radius:20px;background:var(--input);color:var(--body);padding:4px 11px;border:1px solid transparent}
+.chip.done{background:var(--tint);color:var(--teal)}
+.chip.cur{border-color:var(--teal)}
+.chip.skip{color:var(--faint)}
+.callout{border-left:2px solid var(--amber);padding:4px 0 4px 14px;margin:14px 0}
+.callout p{margin:0;font-size:13px}
+.callout.good{border-color:var(--teal)}
+.callout.bad{border-color:var(--red)}
+.list{list-style:none;margin:8px 0 0;padding:0;border:1px solid var(--line);border-radius:8px}
+.list li{display:flex;gap:11px;padding:11px 13px;border-top:1px solid var(--line);align-items:flex-start}
+.list li:first-child{border-top:0}
+.list input[type=checkbox]{margin-top:4px;width:16px;height:16px;accent-color:var(--teal);flex-shrink:0}
+.list .body{flex:1;min-width:0}
+.list .lab{font-size:12px;color:var(--muted);font-weight:500}
+.list .quote{font-size:12px;color:var(--faint);margin-top:4px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.sec{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin:18px 0 0}
+.card{background:var(--surface);border-radius:9px;padding:16px 18px;margin-bottom:12px;border:1px solid transparent}
+.card.cur{border-color:#36635e}
+.card .hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card .nm{font-size:16px;font-weight:600}
+.card .st{margin-left:auto;font-size:12px;color:var(--muted)}
+.card.saved{opacity:.8}.card.saved .st{color:var(--teal)}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--teal);color:#102529;font-weight:600;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.seg{display:inline-flex;border:1px solid var(--control);border-radius:14px;overflow:hidden}
+.seg button{padding:3px 10px;font-size:12px;border-radius:0;color:var(--muted)}
+.seg button.on{background:var(--tint);color:var(--teal)}
+.mic{display:inline-flex;align-items:center;gap:8px}
+.mic .dot{width:9px;height:9px;border-radius:50%;background:var(--red);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.ghostbox{background:var(--input);border:1px dashed var(--control);border-radius:6px;padding:10px 12px;color:var(--muted);font-size:13px}
+.ghostbox .src{font-size:11px;color:var(--faint);margin-top:6px}
+.diag{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.box{border:1px solid var(--line);border-radius:7px;padding:9px 11px;font-size:12.5px;background:var(--input);margin:6px 0}
+.box.sep{border-color:#6b5533}
+.box.new{border-color:#36635e;background:var(--tint)}
+.arrow{color:var(--faint);text-align:center;font-size:12px;margin:2px 0}
+.big{font:30px/1 Georgia,serif}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:8px 0 16px}
+.stat{background:var(--input);border-radius:7px;padding:10px 12px}
+.stat .big{color:var(--amber)}.stat .meta{margin-top:4px}
+.page{border:1px solid var(--line);border-radius:10px;padding:18px 20px;background:#1d252b}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--raised);border:1px solid var(--line);padding:10px 16px;border-radius:8px;font-size:13px;z-index:90;animation:appear .25s ease-out both;max-width:90vw}
+table.cmp{width:100%;border-collapse:collapse;font-size:13px}
+table.cmp td,table.cmp th{padding:9px 10px;border-top:1px solid var(--line);vertical-align:top;text-align:left}
+table.cmp th{font-weight:500;color:var(--muted);font-size:12px}
+@media(max-width:760px){.cols2,.diag{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}main{padding:22px 14px 60px}h1{font-size:27px}}
+</style>
+</head>
+<body>
+<div class="pbar"><b>Prototype</b>
+  <button data-tab="a" class="on">A · Dump + chips</button>
+  <button data-tab="b">B · Person cards</button>
+  <button data-tab="c">C · Dump fills cards</button>
+  <button data-tab="d">Where it lives</button>
+  <span style="margin-left:auto">Fictional data · drafts are canned</span>
+</div>
+<main>
+
+<!-- ===================== A ===================== -->
+<section class="tab on" id="tab-a">
+  <p class="eyebrow amber">Option A · today</p>
+  <h1>One box, one read, chips to fix the guesses</h1>
+  <p class="lede">A manager with six people pastes one spoken run-on. The read guesses who each sentence is about. What follows mirrors the failure types seen in round 3 (Dana): a promise that lands nowhere, and role drafts with nothing to read.</p>
+  <div class="panel">
+    <h3>Your notes</h3>
+    <textarea id="a-paste" rows="8"></textarea>
+    <div class="row" style="margin-top:12px"><button class="primary" id="a-read">Read this</button><span class="meta" id="a-wait"></span></div>
+  </div>
+  <div id="a-review" hidden></div>
+</section>
+
+<!-- ===================== B ===================== -->
+<section class="tab" id="tab-b">
+  <p class="eyebrow teal">Option B · recommended</p>
+  <h1>One card per person, so nobody has to guess who it is about</h1>
+  <p class="lede">The roster came from first-run step 2, so the cards already exist. Each person's text is theirs by construction. Type, or speak for about thirty seconds. Skip anyone.</p>
+  <div class="panel" id="b-strip"></div>
+  <div id="b-cards"></div>
+</section>
+
+<!-- ===================== C ===================== -->
+<section class="tab" id="tab-c">
+  <p class="eyebrow amber">Option C · hybrid</p>
+  <h1>Paste once; the read fills the cards as suggestions</h1>
+  <p class="lede">Keeps the paste shortcut. The cost: the same sentence-to-person guessing as A, with a card review on top. The sentence it could not place waits at the bottom.</p>
+  <div class="panel">
+    <h3>Your notes</h3>
+    <textarea id="c-paste" rows="6"></textarea>
+    <div class="row" style="margin-top:12px"><button class="primary" id="c-read">Read and fill the cards</button></div>
+  </div>
+  <div id="c-out" hidden></div>
+</section>
+
+<!-- ===================== D ===================== -->
+<section class="tab" id="tab-d">
+  <p class="eyebrow">Where it lives</p>
+  <h1>A separate setup layer, or the app's own pages</h1>
+  <p class="lede">The dump is not only a screen; it is a second route into six tables, with its own state, modals and tests. Integrating means setup is a mode of pages the manager keeps using.</p>
+  <div class="stats">
+    <div class="stat"><div class="big">5,789</div><div class="meta">lines of onboarding-only code, 12 files (wc -l)</div></div>
+    <div class="stat"><div class="big">2,556</div><div class="meta">lines of their tests</div></div>
+    <div class="stat"><div class="big">12</div><div class="meta">users columns that exist only for setup</div></div>
+    <div class="stat"><div class="big">1,820</div><div class="meta">of those lines (with tests) only guess who a sentence is about</div></div>
+  </div>
+  <div class="diag">
+    <div class="panel">
+      <h3>Separate space (today)</h3>
+      <div class="box">Mission Control</div><div class="arrow">↓</div>
+      <div class="box sep">Setup card · header chip · ranker candidate</div><div class="arrow">↓</div>
+      <div class="box sep">4 modals: Notes dump · Org goals · Intro · Completion</div><div class="arrow">↓</div>
+      <div class="box sep">/parse (AI, 6 record types) → /apply (re-validates and writes)</div><div class="arrow">↓</div>
+      <div class="box">org_units · direct_reports · goals · dr_capture_notes · commitments · role drafts</div>
+      <p class="meta" style="margin-top:10px">The normal screens write the same tables by their own rules. Every rule change lands twice.</p>
+    </div>
+    <div class="panel">
+      <h3>Integrated</h3>
+      <div class="box">Mission Control</div><div class="arrow">↓</div>
+      <div class="box new">Setup card and chip stay, as pointers</div><div class="arrow">↓ opens the real page, composer focused</div>
+      <div class="box new">Person page / Team (Team, Role, capture) · /app/goals · /app/expectations</div><div class="arrow">↓ existing save paths</div>
+      <div class="box">commitments · dr_capture_notes · direct_reports · goals · role drafts</div>
+      <p class="meta" style="margin-top:10px">No new place. The intake modals, parse/apply routes and attribution code go.</p>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>The integrated person page</h3>
+    <div class="row" style="margin-bottom:10px"><span class="meta">Show</span>
+      <div class="seg" id="d-when"><button class="on" data-w="day1">Day one</button><button data-w="m6">Month six</button></div></div>
+    <div class="page" id="d-page"></div>
+    <p class="meta" style="margin-top:10px">The same composer both times. Day one, setup points here; month six, it is just where you add a note.</p>
+  </div>
+  <div class="panel">
+    <h3>What integrating gives up</h3>
+    <table class="cmp">
+      <tr><th>Loses</th><th>Keeps or answers it with</th></tr>
+      <tr><td>One screen with the whole team at once</td><td>Roster strip above the composer; progress comes from records</td></tr>
+      <tr><td>A distinct "setup" feel</td><td>Setup card and chip stay; the destinations are real pages</td></tr>
+      <tr><td>The intro and completion modals</td><td>Cut first; receipts can be one line on the card</td></tr>
+    </table>
+  </div>
+</section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
+const PEOPLE=['Tomás','Mei','Andre','Lena','Kwame','Sofia'];
+
+/* tabs */
+$$('.pbar button').forEach(b=>b.onclick=()=>{
+  $$('.pbar button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('section.tab').forEach(s=>s.classList.toggle('on',s.id==='tab-'+b.dataset.tab));
+});
+
+const PASTE="Okay so this is my team of six, Tomás, Mei, Andre, Sofia, Kwame and Lena, and I'll go through them. Mei is a senior full-stack engineer who used to be my peer, and she owns the design-doc review process on the team, and I owe her written feedback on her design doc, which has been three weeks now. Andre is a backend engineer, I asked him for a weekly written status, which he did twice and then he just stopped last month. Lena runs platform and SRE and she is going to confirm the on-call priorities with me. Kwame wants a growth plan and I haven't written it. Sofia asked me about a move to staff and I didn't have a good answer.";
+$('#a-paste').value=PASTE; $('#c-paste').value=PASTE;
+
+/* ================= A ================= */
+const LANES=[['you_owe','You owe'],['they_owe','They owe you'],['role','About the role'],['private','Private thought']];
+let A=null;
+function aInit(){
+  A={rows:[
+    {id:1,lane:'you_owe',person:'Mei',text:'Send written feedback on her design doc',quote:'I owe her written feedback on her design doc, which has been three weeks now',kept:true},
+    {id:2,lane:'you_owe',person:'Kwame',text:'Write his growth plan',quote:"Kwame wants a growth plan and I haven't written it",kept:true},
+    {id:3,lane:'they_owe',person:'Lena',text:'Confirm the on-call priorities',quote:'she is going to confirm the on-call priorities with me',kept:true},
+    {id:4,lane:'role',person:'Mei',text:'she owns the design-doc review process on the team',quote:null,kept:true},
+    {id:5,lane:'role',person:'Lena',text:'Lena runs platform and SRE',quote:null,kept:true},
+    {id:6,lane:'private',person:'Sofia',text:'Asked about a move to staff; I did not have a good answer',quote:"Sofia asked me about a move to staff and I didn't have a good answer",kept:true},
+    {id:7,lane:null,person:null,text:'which he did twice and then he just stopped last month',quote:null,kept:false,unplaced:true}
+  ]};
+}
+function aRender(){
+  const r=A.rows, placed=r.filter(x=>!x.unplaced||x.lane), un=r.filter(x=>x.unplaced&&!x.lane);
+  const sel=(x)=>`<div class="chips">
+    <select data-id="${x.id}" data-k="lane" aria-label="Where this goes">${x.lane?'':'<option value="" selected disabled>Place it…</option>'}${LANES.map(l=>`<option value="${l[0]}" ${x.lane===l[0]?'selected':''}>${l[1]}</option>`).join('')}</select>
+    <select data-id="${x.id}" data-k="person" aria-label="Who it is about">${x.person?'':'<option value="" selected disabled>Who?</option>'}${PEOPLE.map(p=>`<option ${x.person===p?'selected':''}>${p}</option>`).join('')}<option ${x.person==='none'?'selected':''} value="none">Not on my team</option></select></div>`;
+  const label=x=>x.lane==='you_owe'?`You owe ${x.person||'…'}`:x.lane==='they_owe'?`${x.person||'Someone'} owes you`:x.lane==='role'?`About the role · ${x.person||''}`:x.lane==='private'?x.person:'Not placed';
+  const li=x=>`<li><input type="checkbox" data-keep="${x.id}" ${x.kept?'checked':''} aria-label="Keep"><div class="body"><div class="lab">${esc(label(x))}</div><div>${esc(x.text)}</div>${x.quote&&x.lane!=='role'?`<div class="quote">From your notes: “${esc(x.quote)}”</div>`:''}${sel(x)}</div></li>`;
+  const roleFor=p=>placed.filter(x=>x.lane==='role'&&x.person===p&&x.kept).length;
+  const roleLine=p=>roleFor(p)?`<li><div class="body"><b>${p}</b> · the role draft reads ${roleFor(p)} sentence${roleFor(p)>1?'s':''}</div></li>`:`<li><div class="body"><b>${p}</b> · Nothing is tagged as about ${p}’s role, so there is nothing to draft from. Place a sentence under Not placed to change that.</div></li>`;
+  const kept=r.filter(x=>x.kept&&x.lane).length;
+  const noDraft=['Mei','Andre','Lena'].filter(p=>!roleFor(p)).length;
+  $('#a-review').hidden=false;
+  $('#a-review').innerHTML=`<div class="panel">
+    <p class="eyebrow">Review</p><h2>${placed.length} suggestions from your notes</h2>
+    <p class="meta">Nothing is saved until Save selected. The two tags on a row say where it goes and who it is about.</p>
+    <div class="sec">What you owe people</div><ul class="list">${placed.filter(x=>x.lane==='you_owe').map(li).join('')||'<li><div class="body meta">None</div></li>'}</ul>
+    <div class="sec">What people owe you</div><ul class="list">${placed.filter(x=>x.lane==='they_owe').map(li).join('')||'<li><div class="body meta">None</div></li>'}</ul>
+    <div class="sec">Role expectations</div><ul class="list">${placed.filter(x=>x.lane==='role').map(li).join('')}${['Mei','Andre','Lena'].map(roleLine).join('')}</ul>
+    <div class="sec">About each person</div><ul class="list">${placed.filter(x=>x.lane==='private').map(li).join('')}</ul>
+    ${un.length?`<div class="sec">Not placed · ${un.length}</div><ul class="list">${un.map(li).join('')}</ul>`:''}
+    <div class="callout bad"><p><b>What to notice.</b> ${noDraft} of 3 role drafts have nothing to read. ${un.length?'Andre’s weekly-status promise is not a row; the sentence about it is under Not placed, and it needs two chip changes before it counts.':'Andre’s promise only counted after two manual chip changes.'}</p></div>
+    <div class="row" style="margin-top:14px;justify-content:space-between"><span class="meta">Each correction is a tap, but the manager has to notice the miss first.</span><button class="primary" id="a-save">Save ${kept} selected</button></div>
+  </div>`;
+}
+$('#a-read').onclick=()=>{
+  const b=$('#a-read');b.disabled=true;b.textContent='Reading…';$('#a-wait').textContent='Typical: 10 to 40 seconds (shortened here)';
+  setTimeout(()=>{aInit();aRender();b.disabled=false;b.textContent='Read this';$('#a-wait').textContent='';$('#a-review').scrollIntoView({behavior:'smooth'})},900);
+};
+$('#a-review').addEventListener('change',e=>{
+  const t=e.target;
+  if(t.dataset.keep){A.rows.find(x=>x.id==t.dataset.keep).kept=t.checked;aRender();return}
+  if(t.dataset.k){const x=A.rows.find(x=>x.id==t.dataset.id);x[t.dataset.k]=t.value;
+    if(x.unplaced){x.kept=!!(x.lane&&x.person);if(x.lane==='they_owe'&&x.person==='Andre')x.text='Send a weekly written status'}
+    aRender()}
+});
+$('#a-review').addEventListener('click',e=>{if(e.target.id==='a-save')toast('Prototype: would save only the checked rows')});
+
+/* ================= B ================= */
+const D={
+ 'Tomás':{job:'',stand:'First 1:1 is Monday. He joined in the spring.',role:'',c:[],th:['Joined in the spring']},
+ Mei:{job:'Senior full-stack engineer, used to be my peer. She owns the design-doc review process on the team.',stand:'I owe her written feedback on her design doc, three weeks now. I need to talk with her about what meets versus exceeds means for her after calibration. Andre also sits on that review rota.',role:'Senior full-stack engineer',c:[{t:'Send written feedback on her design doc',d:'you',due:''},{t:'Talk through what meets versus exceeds means for her, after calibration',d:'you',due:''}],th:[]},
+ Andre:{job:'Backend engineer. Sends a weekly written status.',stand:'He sent the weekly status twice and then stopped last month.',role:'Backend engineer',c:[{t:'Send a weekly written status',d:'they',due:''}],th:['Status stopped last month after two weeks']},
+ Lena:{job:'Runs platform and SRE.',stand:'She is going to confirm the on-call priorities with me by Friday.',role:'Platform and SRE engineer',c:[{t:'Confirm the on-call priorities',d:'they',due:'Fri'}],th:[]},
+ Kwame:{job:'',stand:"Wants a growth plan. I haven't written it.",role:'',c:[{t:'Write his growth plan',d:'you',due:''}],th:[]},
+ Sofia:{job:'',stand:"Asked about a move to staff and I didn't have a good answer.",role:'',c:[],th:['Asked about a move to staff; no answer yet']}
+};
+const B={}; PEOPLE.forEach(p=>B[p]={job:'',stand:'',role:'',team:'',state:'empty',draft:null,rec:0,flags:[]});
+let curB=PEOPLE[0];
+function bStrip(){
+  const saved=PEOPLE.filter(p=>B[p].state==='saved').length;
+  $('#b-strip').innerHTML=`<h3>Your team · ${saved} of ${PEOPLE.length}</h3><div class="row" style="gap:6px">${PEOPLE.map(p=>`<button class="chip ${B[p].state==='saved'?'done':B[p].state==='skipped'?'skip':''} ${p===curB?'cur':''}" data-go="${p}">${B[p].state==='saved'?'✓ ':''}${p}</button>`).join('')}</div>
+  ${saved>=2?'<div class="callout good"><p>Two people is enough to build your first two prep sheets. Carry on, or stop here and come back from any person’s page.</p></div>':'<p class="meta" style="margin:10px 0 0">Ordered by soonest 1:1. Nothing is required.</p>'}`;
+}
+function bCards(){
+  $('#b-cards').innerHTML=PEOPLE.map(p=>{
+    const s=B[p];
+    if(s.state==='saved')return `<div class="card saved"><div class="hd"><span class="avatar">${p[0]}</span><span class="nm">${p}</span><span class="meta">${[s.role,s.team].filter(Boolean).join(' · ')}</span><span class="st">✓ Saved · ${s.rec} record${s.rec===1?'':'s'}</span></div></div>`;
+    if(s.state==='skipped')return `<div class="card saved"><div class="hd"><span class="avatar">${p[0]}</span><span class="nm">${p}</span><span class="st">Nothing to add for now · <button class="quiet" data-reopen="${p}">Reopen</button></span></div></div>`;
+    const open=p===curB;
+    if(!open)return `<div class="card"><div class="hd"><span class="avatar">${p[0]}</span><span class="nm">${p}</span><span class="st"><button class="quiet" data-go="${p}">Open</button></span></div></div>`;
+    return `<div class="card cur"><div class="hd"><span class="avatar">${p[0]}</span><span class="nm">${p}</span><span class="meta">Everything below is about ${p}.</span><button class="quiet" data-ex="${p}" style="margin-left:auto">Use example</button></div>
+      <div class="cols2">
+        <div><label class="f">Role <em>optional</em></label><select data-f="role" data-p="${p}"><option value="">Choose…</option><option ${s.role==='Senior full-stack engineer'?'selected':''}>Senior full-stack engineer</option><option ${s.role==='Backend engineer'?'selected':''}>Backend engineer</option><option ${s.role==='Platform and SRE engineer'?'selected':''}>Platform and SRE engineer</option><option>New role…</option></select></div>
+        <div><label class="f">Team <em>optional</em></label><select data-f="team" data-p="${p}"><option value="">Choose…</option><option ${s.team==='Platform'?'selected':''}>Platform</option><option ${s.team==='Product engineering'?'selected':''}>Product engineering</option><option>New team…</option></select></div>
+      </div>
+      <label class="f">Their job <em>optional · read by the role-expectations draft, nothing else is</em></label>
+      <textarea data-f="job" data-p="${p}" rows="2" placeholder="What ${p} owns, and how you would tell it is going well">${esc(s.job)}</textarea>
+      <label class="f">Where things stand <em>optional</em></label>
+      <textarea data-f="stand" data-p="${p}" rows="3" placeholder="What you owe ${p}, what ${p} owes you, anything you want to remember">${esc(s.stand)}</textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="secondary mic" data-mic="${p}" id="mic-${p}">🎙 Speak for 30 seconds</button>
+        <button class="primary" data-read="${p}" ${(s.job||s.stand)?'':'disabled'}>Read</button>
+        <button class="ghost" data-skip="${p}">Nothing to add</button>
+        <span class="meta" id="bwait-${p}"></span>
+      </div>
+      ${s.draft?bReview(p):''}
+    </div>`}).join('');
+}
+function bReview(p){
+  const s=B[p],d=s.draft;
+  return `<div class="sec">Review · nothing is saved until you choose Save</div>
+  <ul class="list">
+    ${d.c.map((c,i)=>`<li><input type="checkbox" checked aria-label="Keep"><div class="body"><div class="row" style="gap:8px"><div class="seg"><button class="${c.d==='you'?'on':''}" data-dir="${p}|${i}|you">You owe ${p}</button><button class="${c.d==='they'?'on':''}" data-dir="${p}|${i}|they">${p} owes you</button></div><span class="meta">due</span><input class="txt" style="width:90px;padding:4px 8px" value="${esc(c.due)}" placeholder="optional"></div><input class="txt" style="margin-top:7px" value="${esc(c.t)}"></div></li>`).join('')}
+    ${d.th.map(t=>`<li><input type="checkbox" checked aria-label="Keep"><div class="body"><div class="lab">Kept thought about ${p} · only you see it</div><input class="txt" value="${esc(t)}"></div></li>`).join('')}
+    ${s.job?`<li><div class="body"><div class="lab">Role draft</div>Queued from “Their job” only. Nothing from “Where things stand” goes into it.</div></li>`:''}
+    ${(d.c.length+d.th.length)===0&&!s.job?'<li><div class="body meta">Nothing to save from that.</div></li>':''}
+  </ul>
+  ${s.flags.map((f,i)=>`<div class="callout"><p>“${esc(f.sentence)}” mentions <b>${f.other}</b>. It stays on ${p}’s card unless you move it. <button class="quiet" data-move="${p}|${i}">Move it to ${f.other}’s card</button></p></div>`).join('')}
+  <div class="row" style="margin-top:12px"><button class="primary" data-save="${p}">Save</button><span class="meta">Saved as commitments and kept thoughts. This does not create a past 1:1.</span></div>`;
+}
+function bRender(){bStrip();bCards()}
+bRender();
+document.getElementById('tab-b').addEventListener('input',e=>{
+  const t=e.target,p=t.dataset.p;if(!p||!t.dataset.f)return;
+  B[p][t.dataset.f]=t.value;
+  if(t.dataset.f==='job'||t.dataset.f==='stand'){const r=document.querySelector(`[data-read="${p}"]`);if(r)r.disabled=!(B[p].job||B[p].stand)}
+});
+document.getElementById('tab-b').addEventListener('change',e=>{const t=e.target;if(t.tagName==='SELECT'&&t.dataset.p){B[t.dataset.p][t.dataset.f]=t.value}});
+document.getElementById('tab-b').addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;
+  const g=t.dataset;
+  if(g.go){curB=g.go;if(B[curB].state==='skipped')B[curB].state='empty';bRender()}
+  else if(g.reopen){B[g.reopen].state='empty';curB=g.reopen;bRender()}
+  else if(g.ex){const s=B[g.ex],x=D[g.ex];s.job=x.job;s.stand=x.stand;s.role=x.role||s.role;s.draft=null;bRender()}
+  else if(g.skip){B[g.skip].state='skipped';nextB();bRender()}
+  else if(g.mic){bMic(g.mic,t)}
+  else if(g.read){bRead(g.read,t)}
+  else if(g.dir){const[p,i,d]=g.dir.split('|');B[p].draft.c[+i].d=d;bRender()}
+  else if(g.move){const[p,i]=g.move.split('|');const f=B[p].flags[+i];B[p].stand=B[p].stand.replace(f.sentence,'').replace(/\s{2,}/g,' ').trim();B[f.other].stand=(B[f.other].stand+' '+f.sentence).trim();B[p].flags.splice(+i,1);toast('Moved to '+f.other+'’s card');bRender()}
+  else if(g.save){const p=g.save,s=B[p];s.rec=s.draft.c.length+s.draft.th.length+(s.job?1:0);s.state='saved';toast('Prototype: '+p+' saved');nextB();bRender()}
+});
+function nextB(){const n=PEOPLE.find(p=>B[p].state==='empty');if(n)curB=n}
+function bMic(p,btn){
+  btn.disabled=true;let n=0;
+  btn.innerHTML='<span class="dot"></span> Listening 0:0'+n;
+  const iv=setInterval(()=>{n++;btn.innerHTML='<span class="dot"></span> Listening 0:0'+n;if(n>=3){clearInterval(iv);const s=B[p],x=D[p];s.stand=(s.stand+' '+x.stand).trim();s.job=s.job||x.job;s.role=s.role||x.role;toast('Prototype: filled example speech');bRender()}},700);
+}
+function bRead(p,btn){
+  const s=B[p];btn.disabled=true;btn.textContent='Reading…';$('#bwait-'+p).textContent='Typical: a few seconds, one person at a time';
+  setTimeout(()=>{
+    const x=D[p];
+    s.draft={c:(x.c||[]).map(c=>({...c})),th:[...(x.th||[])]};
+    const others=PEOPLE.filter(q=>q!==p);
+    s.flags=[];
+    (s.stand.match(/[^.!?]+[.!?]?/g)||[]).map(z=>z.trim()).filter(Boolean).forEach(sentence=>{
+      const o=others.find(q=>new RegExp('\\b'+q+'\\b').test(sentence));
+      if(o)s.flags.push({sentence,other:o});
+    });
+    bRender();
+  },800);
+}
+
+/* ================= C ================= */
+const CS={
+ Mei:{job:'Senior full-stack engineer, used to be my peer. Owns the design-doc review process.',stand:'I owe her written feedback on her design doc, three weeks now.',q:'Mei is a senior full-stack engineer … I owe her written feedback on her design doc'},
+ Lena:{job:'Runs platform and SRE.',stand:'She is going to confirm the on-call priorities with me.',q:'Lena runs platform and SRE and she is going to confirm the on-call priorities'},
+ Kwame:{job:'',stand:"Wants a growth plan. I haven't written it.",q:"Kwame wants a growth plan and I haven't written it"},
+ Sofia:{job:'',stand:'Asked about a move to staff; no good answer yet.',q:"Sofia asked me about a move to staff"},
+ Andre:{job:'Backend engineer.',stand:'',q:'Andre is a backend engineer, I asked him for a weekly written status'},
+ 'Tomás':{job:'',stand:'',q:null}
+};
+const C={acc:{},clr:{},un:[{id:1,s:'which he did twice and then he just stopped last month',to:''}]};
+function cRender(){
+  const n=Object.keys(C.acc).filter(k=>C.acc[k]).length;
+  $('#c-out').hidden=false;
+  $('#c-out').innerHTML=`<p class="eyebrow">Suggested from your notes · nothing is saved</p>
+  ${PEOPLE.map(p=>{const s=CS[p];
+    if(C.clr[p])return `<div class="card saved"><div class="hd"><span class="avatar">${p[0]}</span><span class="nm">${p}</span><span class="st">Cleared · <button class="quiet" data-cu="${p}">Undo</button></span></div></div>`;
+    const empty=!s.job&&!s.stand;
+    return `<div class="card ${C.acc[p]?'saved':''}"><div class="hd"><span class="avatar">${p[0]}</span><span class="nm">${p}</span><span class="st">${C.acc[p]?'✓ Accepted':empty?'Nothing found':'Suggested'}</span></div>
+      ${empty?`<div class="ghostbox" style="margin-top:10px">Nothing in your notes was placed on ${p}.${p==='Andre'?' The sentence about his weekly status is under Not placed below.':''}</div>`:
+      `<div class="ghostbox" style="margin-top:10px">${s.job?`<div><b>Their job:</b> ${esc(s.job)}</div>`:''}${s.stand?`<div><b>Where things stand:</b> ${esc(s.stand)}</div>`:''}<div class="src">Guessed from: “${esc(s.q)}”</div></div>
+      <div class="row" style="margin-top:10px">${C.acc[p]?'':`<button class="secondary" data-ca="${p}">Accept</button>`}<button class="ghost" data-cc="${p}">Clear</button></div>`}
+    </div>`}).join('')}
+  <div class="sec">Not placed · ${C.un.filter(u=>!u.to).length}</div>
+  <ul class="list">${C.un.map(u=>`<li><div class="body"><div>${esc(u.s)}</div><div class="chips"><select data-cm="${u.id}"><option value="">Move to…</option>${PEOPLE.map(p=>`<option ${u.to===p?'selected':''}>${p}</option>`).join('')}</select></div></div></li>`).join('')}</ul>
+  <div class="callout bad"><p><b>What to notice.</b> The model still decides who each sentence is about, and the pronoun-only sentence still lands nowhere. The guard code from A has to stay. The manager gets per-person review, which is better than A, at the cost of the most code of the three.</p></div>
+  <div class="row" style="margin-top:14px"><button class="primary" id="c-go" ${n?'':'disabled'}>Review ${n} accepted card${n===1?'':'s'}</button><span class="meta">Opens each person’s review, as in B.</span></div>`;
+}
+$('#c-read').onclick=()=>{const b=$('#c-read');b.disabled=true;b.textContent='Reading…';setTimeout(()=>{cRender();b.disabled=false;b.textContent='Read and fill the cards'},900)};
+$('#c-out').addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;const g=t.dataset;
+  if(g.ca){C.acc[g.ca]=true;cRender()} else if(g.cc){C.clr[g.cc]=true;C.acc[g.cc]=false;cRender()} else if(g.cu){C.clr[g.cu]=false;cRender()}
+  else if(t.id==='c-go')toast('Prototype: would open each accepted person’s review');
+});
+$('#c-out').addEventListener('change',e=>{const t=e.target;if(t.dataset.cm){const u=C.un.find(x=>x.id==t.dataset.cm);u.to=t.value;if(t.value==='Andre'){CS.Andre.stand='He did twice and then stopped last month.';}cRender()}});
+
+/* ================= D ================= */
+let W='day1';
+function dRender(){
+  $('#d-page').innerHTML=W==='day1'?
+  `<div class="row"><span class="avatar">M</span><div><div style="font-size:18px;font-weight:600">Mei</div><div class="meta">Senior full-stack engineer · Platform</div></div><span class="chip" style="margin-left:auto">Setup 4 of 6</span></div>
+   <div class="callout good" style="margin-top:14px"><p>Add what you know about Mei. Her next 1:1 is the soonest. <b>Next: Andre</b></p></div>
+   <div class="row" style="gap:6px;margin:6px 0 12px"><span class="chip done">✓ Tomás</span><span class="chip cur">Mei</span><span class="chip">Andre</span><span class="chip">Lena</span><span class="chip">Kwame</span><span class="chip">Sofia</span></div>
+   <label class="f">Their job <em>optional</em></label><textarea rows="2" disabled placeholder="What Mei owns, and how you would tell it is going well"></textarea>
+   <label class="f">Where things stand <em>optional</em></label><textarea rows="2" disabled placeholder="What you owe her, what she owes you, anything to remember"></textarea>
+   <div class="row" style="margin-top:10px"><button class="secondary" disabled>🎙 Speak for 30 seconds</button><button class="primary" disabled>Read</button></div>`:
+  `<div class="row"><span class="avatar">M</span><div><div style="font-size:18px;font-weight:600">Mei</div><div class="meta">Senior full-stack engineer · Platform</div></div></div>
+   <div class="panel" style="margin-top:14px;background:var(--surface)"><h3>Next conversation · Thursday</h3><p style="margin:0">Carried forward: design-doc feedback (you owe, 3 weeks). Meets versus exceeds, after calibration.</p></div>
+   <label class="f">Add a note for the next 1:1</label><textarea rows="2" disabled placeholder="Anything to raise or remember"></textarea>
+   <div class="row" style="margin-top:10px"><button class="secondary" disabled>🎙 Speak</button><button class="primary" disabled>Add</button></div>`;
+}
+$('#d-when').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;W=b.dataset.w;$$('#d-when button').forEach(x=>x.classList.toggle('on',x===b));dRender()});
+dRender();
+</script>
+</body>
+</html>

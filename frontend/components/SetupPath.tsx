@@ -42,7 +42,6 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import NotesDumpModal from "@/components/NotesDumpModal";
 import OrgGoalsModal from "@/components/OrgGoalsModal";
 import SetupCompleteModal from "@/components/SetupCompleteModal";
 import SetupIntroModal from "@/components/SetupIntroModal";
@@ -55,6 +54,7 @@ import {
   PATH_STEPS,
   SETUP_REVEAL_EVENT,
   dismissSetupCard,
+  getTeamOverview,
   markSetupIntroSeen,
   pathStepsDone,
   reportSetupStepStarted,
@@ -145,8 +145,6 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
   // Drafts waiting come first: reviewing them is what finishes the step, and
   // describing those people again would only be refused.
   const review = !exp.done && !exp.blocked && toReview > 0;
-  // Otherwise the batch box leads when this is the step to do and roles are uncovered.
-  const batch = !review && nextKey === "expectations" && !exp.done && !exp.blocked && uncovered && undescribed;
   let expAction: { action: string; href: string; detail?: string; modal?: "notes"; secondary?: StepView["secondary"] };
   if (review) {
     const who = exp.review_people ?? [];
@@ -155,16 +153,8 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       href: "/app/expectations#needs-review",
       detail: `${who.length ? `First drafts for ${listNames(who)} are` : `${plural(toReview, "first draft is", "first drafts are")}`} waiting in Needs review. A role counts here once you approve it.${writingLine}`,
       secondary: undescribed
-        ? [{ action: "Describe the rest in one go", href: perRole.href, modal: "notes" as const }, oneAtATime]
+        ? [oneAtATime]
         : undefined,
-    };
-  } else if (batch) {
-    expAction = {
-      action: "Describe each person’s role",
-      href: perRole.href,
-      detail: `Talk or type what you expect of each person, all in one go. Up to five roles get a first draft for you to review. Nothing is approved for you.${writingLine}`,
-      modal: "notes",
-      secondary: [oneAtATime],
     };
   } else if (writing && !undescribed) {
     expAction = {
@@ -272,7 +262,6 @@ function SetupParamOpener({ onGoals }: { onGoals: () => void }) {
 export default function SetupPath() {
   const { onboarding } = useZoneData();
   const router = useRouter();
-  const [dumpOpen, setDumpOpen] = useState<false | "any" | "expectations">(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [introClosed, setIntroClosed] = useState(false);
   const [receiptClosed, setReceiptClosed] = useState(false);
@@ -315,14 +304,24 @@ export default function SetupPath() {
   }
 
   function openModal(step: StepView) {
-    if (step.modal === "notes") setDumpOpen("expectations");
-    else setGoalsOpen(true);
+    setGoalsOpen(true);
   }
 
   function openStep(step: StepView) {
     opened(step);
     if (step.modal) openModal(step);
     else router.push(step.href);
+  }
+
+  // Opens the first person with nothing recorded yet, composer open.
+  async function startPeople() {
+    try {
+      const people = await getTeamOverview();
+      const target = people.find((p) => p.open_commitment_count === 0) ?? people[0];
+      if (target) router.push(`/app/reports/${target.id}?intake=1`);
+    } catch {
+      router.push("/app/team");
+    }
   }
 
   function notNow() {
@@ -351,7 +350,6 @@ export default function SetupPath() {
           }}
         />
       )}
-      {dumpOpen && <NotesDumpModal intent={dumpOpen === "expectations" ? "expectations" : undefined} onClose={() => setDumpOpen(false)} />}
       {goalsOpen && <OrgGoalsModal onClose={() => setGoalsOpen(false)} />}
     </>
   );
@@ -455,22 +453,10 @@ export default function SetupPath() {
                       )}
                       {step.secondary?.map((s) => (
                         <p key={s.action} className="mt-2 text-[13px]">
-                          {s.modal ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                opened(step);
-                                setDumpOpen("expectations");
-                              }}
-                              className="font-medium text-brand hover:text-brand-hover"
-                            >
-                              {s.action}
-                            </button>
-                          ) : (
                             <Link href={s.href} onClick={() => opened(step)} className="font-medium text-brand hover:text-brand-hover">
                               {s.action}
                             </Link>
-                          )}
+
                         </p>
                       ))}
                       <p className="mt-2 text-[13px]">
@@ -543,10 +529,10 @@ export default function SetupPath() {
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-4">
           <p className="min-w-0 flex-1 text-[13px] text-ink-secondary">
-            Have notes, a doc or a list already? Add them and the drafts fill in what they cover. Optional.
+            Know something about each person already? Add it on their page, one person at a time. Optional.
           </p>
-          <button type="button" onClick={() => setDumpOpen("any")} className={`${BTN_SECONDARY} shrink-0`}>
-            Add what you already have
+          <button type="button" onClick={() => void startPeople()} className={`${BTN_SECONDARY} shrink-0`}>
+            Add what you know
           </button>
         </div>
       </section>

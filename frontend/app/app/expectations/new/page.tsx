@@ -46,6 +46,7 @@ function DefineRole() {
   const params = useSearchParams();
   const pinnedFamily = params.get("family");
   const assignId = params.get("assign");
+  const startDescribing = params.get("describe") === "1";
 
   const [step, setStep] = useState<Step>("input");
   const [text, setText] = useState("");
@@ -53,7 +54,7 @@ function DefineRole() {
   const [context, setContext] = useState("");
   const [documents, setDocuments] = useState<File[]>([]);
   const [ignore, setIgnore] = useState("");
-  const [describe, setDescribe] = useState(false);
+  const [describe, setDescribe] = useState(startDescribing);
   const [error, setError] = useState<string | null>(null);
   const [composed, setComposed] = useState<RoleCompose | null>(null);
   const [families, setFamilies] = useState<RoleFamily[]>([]);
@@ -65,6 +66,21 @@ function DefineRole() {
   const [ladder, setLadder] = useState<string>(NEW_LADDER);
   const [ladderName, setLadderName] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // "Their job", typed in a person's box (components/PersonIntake.tsx), arrives here.
+  useEffect(() => {
+    if (!assignId || !startDescribing) return;
+    try {
+      const key = `tsp:role-context:${assignId}`;
+      const carried = window.sessionStorage.getItem(key);
+      if (carried) {
+        setContext(carried);
+        window.sessionStorage.removeItem(key);
+      }
+    } catch {
+      /* storage unavailable: the box simply starts empty */
+    }
+  }, [assignId, startDescribing]);
 
   useEffect(() => {
     Promise.all([getRoleFamilies(), getRoleLevels()])

@@ -443,6 +443,23 @@ export const createCommitment = (body: {
 }): Promise<Commitment> =>
   authedFetch("/api/commitments", { method: "POST", body: JSON.stringify(body) });
 
+// Capture by person (backend/routes/person_intake.py). A draft only: nothing is
+// saved by this call. `committed_by` is null when the text did not say which
+// side owes it; the page makes the manager choose. `mentions` are sentences
+// that name another person on the team and were not read.
+export type PersonIntakeDraft = {
+  commitments: { key: string; description: string; committed_by: "manager" | "direct_report" | null; due_date: string | null; quote: string }[];
+  thoughts: { key: string; text: string; quote: string }[];
+  mentions: { sentence: string; person_id: string; person_name: string }[];
+  already_there: number;
+  // Rows the model offered that did not quote the manager's words; not listed.
+  dropped: number;
+  truncated: boolean;
+};
+
+export const draftPersonIntake = (reportId: string, text: string): Promise<PersonIntakeDraft> =>
+  authedFetch(`/api/person-intake/${reportId}/draft`, { method: "POST", body: JSON.stringify({ text }) });
+
 // ---------------------------------------------------------------------------
 // Goals (Session 10) — full company/department/team/individual hierarchy.
 // Own top-level page (/app/goals), not Settings — see docs/SESSION_HISTORY.md.
