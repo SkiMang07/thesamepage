@@ -671,7 +671,7 @@ def test_the_prep_prompt_forbids_reading_the_person_and_keeps_the_managers_hedge
     assert 'no "per the role expectations"' in body
 
 
-def test_the_prep_prompt_keeps_hr_and_boss_worries_off_the_reports_lines():
+def test_the_prep_prompt_restates_hr_and_boss_notes_without_inventing_facts():
     # Jamal run 2026-10-03: "Gwen needs a written summary on him for HR" came
     # back as "HR has flagged this" and an SBI script aimed at the report.
     body = str(_build_prep_prompt(
@@ -682,6 +682,7 @@ def test_the_prep_prompt_keeps_hr_and_boss_worries_off_the_reports_lines():
         days_since_last=7,
         cadence_days=7,
     ))
-    assert "Worries on the manager's side stay on the manager's side" in body
+    assert "Stay true to what the manager wrote" in body
+    assert "do not drop it either" in body
     assert '"HR has flagged this"' in body
     assert "Do not reach for the SBI template" in body
