@@ -669,3 +669,19 @@ def test_the_prep_prompt_forbids_reading_the_person_and_keeps_the_managers_hedge
     assert "bandwidth" in body and "Echo the uncertainty in their words or leave it out" in body
     assert '"I never asked what was said" is "you never asked what was said"' in body
     assert 'no "per the role expectations"' in body
+
+
+def test_the_prep_prompt_keeps_hr_and_boss_worries_off_the_reports_lines():
+    # Jamal run 2026-10-03: "Gwen needs a written summary on him for HR" came
+    # back as "HR has flagged this" and an SBI script aimed at the report.
+    body = str(_build_prep_prompt(
+        report_name="Brennan",
+        raw_notes="Worried HR will ask for a summary. Gwen needs one by Friday.",
+        open_commitments=[],
+        recent_summaries=[],
+        days_since_last=7,
+        cadence_days=7,
+    ))
+    assert "Worries on the manager's side stay on the manager's side" in body
+    assert '"HR has flagged this"' in body
+    assert "Do not reach for the SBI template" in body
