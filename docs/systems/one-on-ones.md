@@ -301,7 +301,10 @@ role is assigned.
 words — and `suggested_questions`, which are questions the report can answer.
 A line that *tells* the report something is written only when the notes say the
 manager intends to tell them or ask for help wording it; the prompt (rule 4) no
-longer asks for an opening line or SBI script by default. Context about HR, the
+longer asks for an opening line or SBI script by default. The exception is a
+commitment the manager owes: it always gets one plain status line. Nor may the
+sheet give the manager a purpose they didn't state, such as "building the
+record" or putting something in writing. Context about HR, the
 manager's boss, other people on the team, undecided matters (promotion, pay, a
 performance plan, a reorg), guesses about life outside work and the manager's
 own doubts is restated for the manager and never made the reason to raise

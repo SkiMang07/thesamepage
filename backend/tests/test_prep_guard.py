@@ -112,3 +112,8 @@ def test_the_prompt_restates_by_default_and_scripts_only_on_request():
     assert "never coach them toward telling" in body
     assert "MANAGER TALKING POINTS" not in body and "pre-write the SBI framing" not in body
     assert '"What\'s actually going on?"' in body
+    # Dana round 3 (live): owed items came back with no line, and an item was
+    # framed as "building the record". Both are prompt rules.
+    assert "on a commitment the manager owes the report, always give one plain line" in body
+    assert "Never leave such an item without a line" in body
+    assert "never frame an item as building a record, a paper trail, documentation or a case" in body
