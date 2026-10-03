@@ -593,7 +593,7 @@ def test_prep_output_parser_takes_the_json_and_never_raises():
     assert summary == "S"
     assert agenda == [{
         "title": "T", "rationale": "R", "from_your_notes": "", "suggested_questions": ["Q", "3"],
-        "held": [], "unsupported": [], "audience": "manager",
+        "commitment_refs": [], "held": [], "unsupported": [], "audience": "manager",
     }]
     assert parse_prep_output("no json at all") == ("Unable to generate summary — please try again.", [])
     assert parse_prep_output("[1, 2]")[1] == []

@@ -27,7 +27,12 @@ notes will not. There is no employee login yet.
    manager's own state are moved to "Held for you" and shown to the manager.
    Escalation words about HR/leadership that the record never used are flagged
    "Not in your notes".
-4. **Audience is in the stored sheet, default manager.** Each item carries
+4. **What the manager owes always has a line** (Andrew, 2026-10-03). The
+   model tags each item with the commitments it covers; code adds a fixed
+   status line ("This one's on me. Here's where it stands.") to any item tagged
+   with a manager-owed commitment that has none. Chosen over word-matching items
+   to commitments (misses and mismatches) and a stronger prompt (held 1 in 2).
+5. **Audience is in the stored sheet, default manager.** Each item carries
    `audience: "manager"`; only `title` and `suggested_questions` could ever be
    shared, and only once the manager shares the item. No migration
    (`prep_guide` is jsonb). Absent = manager.
@@ -46,6 +51,8 @@ notes will not. There is no employee login yet.
   rule only; a boss named without being tagged as the boss in the notes is not
   caught; career questions said as questions pass, statements about a pending
   promotion or pay are held.
+- The owed line depends on the model tagging the item. An untagged item gets
+  nothing added; the fixed line reads the same every time.
 - Deferred, not built: UI copy telling managers the sheet is shareable, a private
   notes area, a way to move a held line back into the questions, the employee
   view itself.

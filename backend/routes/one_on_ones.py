@@ -45,7 +45,7 @@ import analytics
 import context_engine
 from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
-from prep_guard import GuardContext, guard_item, unsupported_words
+from prep_guard import GuardContext, commitment_ref, guard_item, manager_owed_refs, normalize_refs, unsupported_words
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
@@ -109,6 +109,8 @@ class AgendaItem(BaseModel):
     held: list[HeldLine] = Field(default_factory=list)
     unsupported: list[UnsupportedClaim] = Field(default_factory=list)
     audience: str = "manager"
+    # Prompt refs of the open commitments this item covers (prep_guard).
+    commitment_refs: list[str] = Field(default_factory=list)
 
 
 class PrepResponse(BaseModel):
@@ -345,8 +347,8 @@ def _build_prep_prompt(
 
     if open_commitments:
         commitments_block = "\n".join(
-            f"  • [{_owner_label(c)} owes] {c['description']} (due: {c.get('due_date') or 'unspecified'})"
-            for c in open_commitments
+            f"  • {commitment_ref(i)} [{_owner_label(c)} owes] {c['description']} (due: {c.get('due_date') or 'unspecified'})"
+            for i, c in enumerate(open_commitments)
         )
     else:
         commitments_block = "  (None on record.)"
@@ -444,7 +446,7 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
 4. RESTATE BY DEFAULT, SCRIPT ON REQUEST
    Every agenda item carries "from_your_notes": what the manager wrote that the item comes from, in their words (a short quote or a close restatement, with their hedge). It is read by the manager only. Leave it "" when the item comes only from the record (a commitment, history).
    "suggested_questions" are questions the report can answer. They are not statements of what the manager thinks, has decided, or has been told.
-   The one standing exception: on a commitment the manager owes the report, always give one plain line for the manager to give its status in their own terms ("I owe you the design doc feedback. It's not done yet; here's when you'll have it."). Never leave such an item without a line. Framework 1 asks for exactly this.
+   The one standing exception: on a commitment the manager owes the report, always give one plain line for the manager to give its status in their own terms ("I owe you the design doc feedback. It's not done yet; here's when you'll have it."). Never leave such an item without a line, and list the commitment's C-number in the item's "commitment_refs". Framework 1 asks for exactly this.
    Otherwise, write a line that TELLS the report something only when the notes say the manager intends to tell them ("need to tell him", "want to let her know", "have to give him feedback") or ask for help saying it ("how do I say", "help me word"). Then write one plain sentence in the manager's own wording, with no preamble ("I want you to know", "I want to be transparent"). Never decide for the manager that something should be shared, and never coach them toward telling ("he should hear it from you").
    Context about HR, the manager's boss or leadership, other people on the team, a decision that isn't made (promotion, pay, a performance plan, a reorg, someone's job), a guess about the person's life outside work, and the manager's own doubts is the manager's own context. Restate it in "from_your_notes" or the summary, in their words. Do not turn it into a suggested question, and do not make it the reason to raise something with the report ("HR wants documentation, so this needs a clear conversation now"). The manager decides what to do with it.
 
@@ -480,6 +482,7 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
       "title": "Short label for this item (5 words or fewer)",
       "rationale": "Why this item matters right now — one sentence, grounded in the notes or history",
       "from_your_notes": "What the manager wrote that this item comes from, in their words, or \"\" (rule 4)",
+      "commitment_refs": ["The C-number of each open commitment this item covers, e.g. \"C1\"; [] if none"],
       "suggested_questions": ["Question the report can answer", "Another"]
     }
   ]
@@ -1059,6 +1062,7 @@ def assemble_prep_inputs(
             report_name=report["name"],
             others=[r["name"] for r in roster if r.get("id") != direct_report_id and r.get("name")],
             source=guard_source,
+            manager_owed=manager_owed_refs(open_commitments),
         ).to_dict(),
         "built_without": prep_built_without(
             has_team=bool(report.get("org_unit_id")),
@@ -1201,6 +1205,7 @@ def parse_prep_output(raw: str, guard: GuardContext | None = None) -> tuple[str,
             "rationale": str(item.get("rationale") or ""),
             "from_your_notes": str(item.get("from_your_notes") or ""),
             "suggested_questions": [str(q) for q in questions if isinstance(q, (str, int, float)) and str(q).strip()],
+            "commitment_refs": normalize_refs(item.get("commitment_refs")),
         }, ctx))
     return str(parsed.get("situation_summary") or ""), agenda
 

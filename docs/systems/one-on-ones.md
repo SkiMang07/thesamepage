@@ -333,6 +333,15 @@ manual and overnight alike:
   `assemble_prep_inputs()`'s `guard.source`: notes, carry-forwards, the kept
   opening line, signals, secondhand notes, commitments and history — not the
   prompt's rules, whose examples name the very words being checked.
+- **A line on what the manager owes.** The prompt lists open commitments as
+  `C1`, `C2`… and each item returns the `commitment_refs` it covers. An item
+  tagged with a commitment the manager owes (`GuardContext.manager_owed`, from
+  `manager_owed_refs()`; no `committed_by` counts as the manager's, as in the
+  prompt) that has no status line of its own gets `prep_guard.OWED_LINE`
+  ("This one's on me. Here's where it stands.") first. Fixed wording on
+  purpose: the title says what it is. The prompt rule alone gave the line 1
+  time in 2 (Dayna round, Andre's sheet). An item the model doesn't tag gets
+  nothing added.
 - **Audience.** Every item is stored with `audience: "manager"`. Only `title`
   and `suggested_questions` (`prep_guard.SHAREABLE_FIELDS`) could ever be shown
   to the report, and only once the manager shares the item; `from_your_notes`,

@@ -117,3 +117,67 @@ def test_the_prompt_restates_by_default_and_scripts_only_on_request():
     assert "on a commitment the manager owes the report, always give one plain line" in body
     assert "Never leave such an item without a line" in body
     assert "never frame an item as building a record, a paper trail, documentation or a case" in body
+
+
+# --- A line on what the manager owes (Dayna round, 2026-10-03) ---------------
+# Andre's sheet came back with "Your commitment: delivery expectations" and no
+# line to say, even with the prompt rule. The guard now adds one.
+
+from prep_guard import OWED_LINE, manager_owed_refs, normalize_refs  # noqa: E402
+
+ANDRE_COMMITMENTS = [
+    {"description": "Write down what good delivery looks like at his level", "committed_by": "manager"},
+    {"description": "Send a weekly written status", "committed_by": "direct_report"},
+]
+
+
+def _andre(items):
+    ctx = GuardContext(report_name="Andre", source="", manager_owed=manager_owed_refs(ANDRE_COMMITMENTS))
+    return parse_prep_output(json.dumps({"situation_summary": "", "agenda_items": items}), ctx)[1]
+
+
+def test_an_owed_item_with_no_line_gets_the_status_line():
+    [item] = _andre([{"title": "Your commitment: delivery expectations", "rationale": "Open, no due date.",
+                      "commitment_refs": ["C1"], "suggested_questions": []}])
+    assert item["suggested_questions"] == [OWED_LINE]
+    assert item["commitment_refs"] == ["C1"]
+
+
+def test_the_models_own_status_line_is_kept_and_nothing_added():
+    line = "I owe you feedback on the design doc. It's not done yet; here's when you'll have it."
+    [item] = _andre([{"title": "Design doc feedback", "rationale": "", "commitment_refs": ["C1"],
+                      "suggested_questions": [line, "What would help most in it?"]}])
+    assert item["suggested_questions"] == [line, "What would help most in it?"]
+
+
+def test_a_question_alone_still_gets_the_status_line_first():
+    [item] = _andre([{"title": "Delivery standard", "rationale": "", "commitment_refs": [1],
+                      "suggested_questions": ["What does good look like to you?"]}])
+    assert item["suggested_questions"] == [OWED_LINE, "What does good look like to you?"]
+
+
+def test_items_on_what_the_report_owes_or_untagged_are_left_alone():
+    owed_by_report, untagged = _andre([
+        {"title": "Weekly status", "rationale": "", "commitment_refs": ["C2"], "suggested_questions": []},
+        {"title": "Delivery", "rationale": "", "suggested_questions": []},
+    ])
+    assert owed_by_report["suggested_questions"] == [] and untagged["suggested_questions"] == []
+
+
+def test_refs_are_read_however_the_model_writes_them():
+    assert normalize_refs(["C1", "c2", 3, " C1 ", "first", True, None]) == ["C1", "C2", "C3"]
+    assert normalize_refs("C1") == []
+    # Old commitments with no committed_by read as the manager's, as in the prompt.
+    assert manager_owed_refs([{"committed_by": None}, {"committed_by": "direct_report"}]) == ["C1"]
+
+
+def test_the_prompt_numbers_commitments_and_the_guard_context_round_trips():
+    body = str(_build_prep_prompt(
+        report_name="Andre", raw_notes="", open_commitments=ANDRE_COMMITMENTS,
+        recent_summaries=[], days_since_last=None, cadence_days=7))
+    assert "C1 [manager owes] Write down what good delivery" in body
+    assert "C2 [Andre owes] Send a weekly written status" in body
+    assert '"commitment_refs"' in body
+    ctx = GuardContext(report_name="Andre", manager_owed=["C1"])
+    assert GuardContext.from_dict(ctx.to_dict()).manager_owed == ["C1"]
+    assert GuardContext.from_dict({"source": "x"}).manager_owed == []

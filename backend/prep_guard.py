@@ -25,7 +25,12 @@ it can't happen anyway, without the model deciding anything:
    leadership, an escalation word ("asked", "flagged", "start documenting")
    that never appears in what was given to the model is listed in the item's
    `unsupported` so the sheet can say "Not in your notes: asked".
-3. AUDIENCE. Every item is stored with `audience: "manager"`. Only the fields in
+3. A LINE ON WHAT THE MANAGER OWES. An item the model tags with an open
+   commitment the manager owes the report (`commitment_refs`, matched against
+   GuardContext.manager_owed) always carries a line for the manager to give its
+   status. If the model wrote none, OWED_LINE is added. A prompt rule alone
+   gave this line 1 time in 2 (Dayna round, 2026-10-03).
+4. AUDIENCE. Every item is stored with `audience: "manager"`. Only the fields in
    SHAREABLE_FIELDS could ever be shown to the report, and only once the manager
    chooses to share. A sheet saved without the field is manager-only.
 
@@ -51,6 +56,8 @@ class GuardContext:
     report_name: str = ""
     others: list[str] = field(default_factory=list)
     source: str = ""
+    # Prompt refs ("C1", "C2"...) of open commitments the manager owes the report.
+    manager_owed: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict | None) -> "GuardContext":
@@ -59,10 +66,47 @@ class GuardContext:
             report_name=str(d.get("report_name") or ""),
             others=[str(n) for n in (d.get("others") or []) if n],
             source=str(d.get("source") or ""),
+            manager_owed=[str(r) for r in (d.get("manager_owed") or []) if r],
         )
 
     def to_dict(self) -> dict:
-        return {"report_name": self.report_name, "others": self.others, "source": self.source}
+        return {"report_name": self.report_name, "others": self.others, "source": self.source,
+                "manager_owed": self.manager_owed}
+
+
+# --- What the manager owes ---------------------------------------------------
+# Fixed wording on purpose: the item's title says what it is, and this reads
+# right whatever the commitment's description says.
+OWED_LINE = "This one's on me. Here's where it stands."
+_STATUS_LINE = re.compile(
+    r"\b(I owe|on me|I said I'?d|I promised|I committed|where (it|that|this) stands|"
+    r"not done yet|you'?ll have it)\b", re.IGNORECASE)
+
+
+def commitment_ref(index: int) -> str:
+    """The ref the prompt shows for the open commitment at 0-based `index`."""
+    return f"C{index + 1}"
+
+
+def manager_owed_refs(open_commitments: list[dict]) -> list[str]:
+    """Refs of the commitments the manager owes. Same reading as the prompt:
+    anything not owed by the direct report is the manager's."""
+    return [commitment_ref(i) for i, c in enumerate(open_commitments)
+            if c.get("committed_by") != "direct_report"]
+
+
+def normalize_refs(raw) -> list[str]:
+    """The model's commitment_refs as "C<n>" strings; anything else dropped."""
+    out: list[str] = []
+    for r in raw if isinstance(raw, list) else []:
+        if isinstance(r, bool):
+            continue
+        if isinstance(r, int):
+            r = f"C{r}"
+        m = re.fullmatch(r"\s*c?\s*(\d+)\s*", str(r), re.IGNORECASE)
+        if m and f"C{m.group(1)}" not in out:
+            out.append(f"C{m.group(1)}")
+    return out
 
 
 def _rx(*parts: str, flags=re.IGNORECASE) -> re.Pattern:
@@ -274,6 +318,9 @@ def guard_item(item: dict, ctx: GuardContext) -> dict:
                 line_words.append(w)
     if line_words:
         unsupported.append({"field": "suggested_questions", "words": line_words})
+    if (set(item.get("commitment_refs") or []) & set(ctx.manager_owed)
+            and not any(_STATUS_LINE.search(q) for q in kept)):
+        kept = [OWED_LINE, *kept]
     return {
         **item,
         "suggested_questions": kept,
