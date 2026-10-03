@@ -107,6 +107,55 @@ def test_an_already_open_commitment_on_the_same_side_is_not_drafted_again():
     assert [c["committed_by"] for c in out["commitments"]] == ["direct_report"]
 
 
+# ── kept thoughts never repeat a drafted commitment ──────────────────────
+
+BRAM = (
+    "I promised Bram I would move two accounts over to him, and the transfer status is unclear. "
+    "I asked for a weekly written status; he did it twice, then stopped. "
+    "The Halvorsen status update has not arrived and I told him I would check on it. "
+    "I worry he is carrying too much."
+)
+
+
+def _draft(commitments, thoughts):
+    return pi.validate({"commitments": commitments, "kept_thoughts": thoughts}, BRAM, [])
+
+
+def test_a_thought_that_restates_a_commitment_from_the_same_sentence_is_dropped():
+    out = _draft(
+        [{"description": "Finish the transfer of two accounts to Bram", "committed_by": "manager", "quote": "I would move two accounts over to him"}],
+        [{"text": "Account transfer status is unclear", "quote": "the transfer status is unclear"}],
+    )
+    assert len(out["commitments"]) == 1 and out["thoughts"] == []
+
+
+def test_a_thought_whose_quote_sits_inside_a_commitment_quote_is_dropped():
+    out = _draft(
+        [{"description": "Check on the Halvorsen status update", "committed_by": "manager", "quote": "The Halvorsen status update has not arrived and I told him I would check on it"}],
+        [{"text": "Halvorsen status update has not arrived", "quote": "Halvorsen status update has not arrived"}],
+    )
+    assert out["thoughts"] == []
+
+
+def test_a_lapse_that_shares_a_sentence_with_a_standing_ask_is_kept():
+    out = _draft(
+        [{"description": "Send a weekly written status", "committed_by": "direct_report", "quote": "I asked for a weekly written status"}],
+        [{"text": "He did it twice, then stopped", "quote": "he did it twice, then stopped"}],
+    )
+    assert [t["text"] for t in out["thoughts"]] == ["He did it twice, then stopped"]
+
+
+def test_a_thought_from_a_different_sentence_is_kept_and_renumbered():
+    out = _draft(
+        [{"description": "Finish the transfer of two accounts to Bram", "committed_by": "manager", "quote": "I would move two accounts over to him"}],
+        [
+            {"text": "Account transfer status is unclear", "quote": "the transfer status is unclear"},
+            {"text": "Worried he is carrying too much", "quote": "I worry he is carrying too much"},
+        ],
+    )
+    assert [(t["key"], t["text"]) for t in out["thoughts"]] == [("t0", "Worried he is carrying too much")]
+
+
 # ── the route: drafts only, nothing written, no text in the event ────────
 
 class _Q:

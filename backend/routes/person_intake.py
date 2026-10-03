@@ -99,6 +99,7 @@ Produce:
    - quote: the shortest exact phrase copied from the text that supports the row. It must appear in the text word for word.
 
 2. kept_thoughts: things the manager would want in front of them before the next 1:1 that are not actions (a worry, a question the person asked, context, a lapse). Short, in the manager's own words where possible. Each needs a quote too.
+   - A kept thought must add something a commitment row does not say. Never restate a commitment as a thought ("the transfer is unclear", "the status update has not arrived" when the commitment is already "Send the status update"). If the only point of a sentence is the open action, it is a commitment and not a thought.
 
 Never invent. An empty list is a valid answer. Return ONLY valid JSON, no commentary, no code fences:
 
@@ -130,6 +131,46 @@ def _iso(value) -> str | None:
         return None
 
 
+_FILLER = frozenset(
+    "a an the and or but of to in on at for with by from as is are was were be been being it its this that these those "
+    "has have had not no yet still just has hasnt hasn't have haven't i me my we our you your he she him her his hers "
+    "they them their will would should could can may might do does did done about into over up out so than then there "
+    "here also very".split()
+)
+
+
+def _words(s: str) -> set[str]:
+    """Content words, lightly stemmed so "account" matches "accounts"."""
+    return {w[:-1] if w.endswith("s") and len(w) > 3 else w for w in _norm(s).split() if w not in _FILLER and len(w) > 2}
+
+
+def _sentence_of(quote: str, sentences: list[str]) -> int | None:
+    q = _norm(quote)
+    for i, s in enumerate(sentences):
+        if q and q in _norm(s):
+            return i
+    return None
+
+
+def restates_commitment(thought: dict, commitments: list[dict], sentences: list[str]) -> bool:
+    """True when a kept thought only repeats a drafted commitment: its quote sits inside
+    that commitment's quote (or the reverse), or it comes from the same sentence and
+    most of its content words already appear in the commitment. A lapse that shares a
+    sentence with a standing ask adds new words ("did it twice, then stopped"), so it stays."""
+    tq = _norm(thought["quote"])
+    tw = _words(thought["text"]) | _words(thought["quote"])
+    t_at = _sentence_of(thought["quote"], sentences)
+    for c in commitments:
+        cq = _norm(c["quote"])
+        if tq in cq or cq in tq:
+            return True
+        if t_at is not None and t_at == _sentence_of(c["quote"], sentences) and tw:
+            covered = tw & (_words(c["description"]) | _words(c["quote"]))
+            if len(covered) / len(tw) >= 0.5:
+                return True
+    return False
+
+
 def validate(parsed: dict, text: str, open_rows: list[dict]) -> dict:
     """Keep only rows the manager's own words support (guard 2) and that are not
     already open for this person on the same side."""
@@ -157,7 +198,9 @@ def validate(parsed: dict, text: str, open_rows: list[dict]) -> dict:
             thoughts.append({"text": t, "quote": quote})
         else:
             dropped += 1
-    commitments, thoughts = commitments[:MAX_COMMITMENTS], thoughts[:MAX_THOUGHTS]
+    commitments = commitments[:MAX_COMMITMENTS]
+    sentences = split_sentences(text)
+    thoughts = [t for t in thoughts if not restates_commitment(t, commitments, sentences)][:MAX_THOUGHTS]
     return {
         "commitments": [{"key": f"c{i}", **c} for i, c in enumerate(commitments)],
         "thoughts": [{"key": f"t{i}", **t} for i, t in enumerate(thoughts)],
