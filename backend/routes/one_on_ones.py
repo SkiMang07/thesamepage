@@ -45,7 +45,7 @@ import analytics
 import context_engine
 from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
-from private_lane import report_facing
+from prep_guard import GuardContext, guard_item, unsupported_words
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
@@ -87,10 +87,28 @@ class PrepRequest(BaseModel):
     opening_line: str | None = None
 
 
+class HeldLine(BaseModel):
+    line: str
+    reason: str
+    label: str
+
+
+class UnsupportedClaim(BaseModel):
+    field: str
+    words: list[str]
+
+
 class AgendaItem(BaseModel):
     title: str
     rationale: str
     suggested_questions: list[str]
+    # prep_guard.py: the manager's words this item came from; report-facing
+    # lines held for the manager's decision; escalation words the record
+    # never used; who may read the item ("manager" until the employee view).
+    from_your_notes: str = ""
+    held: list[HeldLine] = Field(default_factory=list)
+    unsupported: list[UnsupportedClaim] = Field(default_factory=list)
+    audience: str = "manager"
 
 
 class PrepResponse(BaseModel):
@@ -106,6 +124,7 @@ class PrepResponse(BaseModel):
     prepared_at: str | None = None
     drew_on: list[str] | None = None
     built_without: list[str] | None = None
+    summary_unsupported: list[str] = Field(default_factory=list)
 
 
 class NewCommitmentIn(BaseModel):
@@ -346,7 +365,7 @@ These were explicitly carried forward by the manager. Address each one in the ag
         opening_block = f"""
 SUGGESTED OPENING LINE (drafted at the last wrap-up and kept by the manager):
   "{opening_line}"
-Unless newer context above clearly resolves it, make this the first suggested question of the first agenda item.
+Unless newer context above clearly resolves it, make this the first suggested question of the first agenda item. The manager kept it, so use it as written.
 """
 
     suggested_topics_block = ""
@@ -414,11 +433,7 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
        Reality: "What's actually happening now?"
        Options: "What options do you see?" or "What could you try next?"
        Way forward: "What will you commit to by next time?"
-   - PERFORMANCE CONCERNS → prepare SBI framing the manager can use:
-       Situation: when and where the behavior was observed
-       Behavior: the specific, observable action (not an interpretation)
-       Impact: what it caused for the team, project, or manager
-       Write suggested phrasing, not just labels.
+   - PERFORMANCE CONCERNS → ask what happened and what is in the way. Write feedback phrasing only when the notes ask for feedback (rule 7).
    - POSITIVE MOMENTUM → reinforce with "What made that work?" — build repeatable behavior, not just celebrate outcomes.
    - ENGAGEMENT / MOTIVATION SIGNALS → surface with "What's energizing you right now?" and "What's feeling like a drag?"
    - CAREER / GROWTH SIGNALS → ask "What would make this role feel like it's moving in the right direction for you?"
@@ -426,8 +441,11 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
 3. AGENDA PRIORITY
    Order items by urgency. If there are commitments to review AND an urgent issue, open with commitments (quick check, 1–2 mins each) and then pivot to the urgent topic. Do not bury time-sensitive items at the end.
 
-4. MANAGER TALKING POINTS
-   If the notes suggest the manager needs to proactively share something (a decision, context, feedback), include it as an agenda item with a suggested opening line. For feedback, pre-write the SBI framing.
+4. RESTATE BY DEFAULT, SCRIPT ON REQUEST
+   Every agenda item carries "from_your_notes": what the manager wrote that the item comes from, in their words (a short quote or a close restatement, with their hedge). It is read by the manager only. Leave it "" when the item comes only from the record (a commitment, history).
+   "suggested_questions" are questions the report can answer. They are not statements of what the manager thinks, has decided, or has been told.
+   Write a line that TELLS the report something only when the notes say the manager intends to tell them ("need to tell him", "want to let her know", "have to give him feedback") or ask for help saying it ("how do I say", "help me word"). Then write one plain sentence in the manager's own wording, with no preamble ("I want you to know", "I want to be transparent"). Never decide for the manager that something should be shared, and never coach them toward telling ("he should hear it from you").
+   Context about HR, the manager's boss or leadership, other people on the team, a decision that isn't made (promotion, pay, a performance plan, a reorg, someone's job), a guess about the person's life outside work, and the manager's own doubts is the manager's own context. Restate it in "from_your_notes" or the summary, in their words. Do not turn it into a suggested question, and do not make it the reason to raise something with the report ("HR wants documentation, so this needs a clear conversation now"). The manager decides what to do with it.
 
 5. CLOSING QUESTION
    Always include one final agenda item: a closing check-in. Use a variation of:
@@ -442,6 +460,7 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
    Restate what the manager wrote; do not characterize the person. Never name a state of mind, motive or cause the notes do not state: no "disengaged", "overloaded", "burned out", "checked out", "struggling", "lacks confidence", "showing signs of". Report the facts and leave the reading to the manager ("missed two QBRs and two health scores are yellow", not "showing signs of disengagement or overload"). What the notes state plainly, state plainly; do not add "may", "seems" or "appears" to it. Hedge only what the notes themselves hedge, and keep their hedge in their words ("not sure if it's capacity"). A possible cause belongs in a question the report can answer ("What's getting in the way of the QBRs?"), never in the summary or a rationale as a finding.
    Keep the hedge and add no outcome. If the notes say someone "may have" said or done something, the output says "may have", not "told her" or "decided". Never add a result the notes do not state ("hasn't followed up", "never resulted in anything", "wasn't resolved").
    Questions never imply fault or effort: no "What haven't you tried?", "Why haven't you...?", "Didn't you...?". Ask what happened and what is in the way. This matters most when the person used to be the manager's peer.
+   Never weigh what the person said against the record ("'I'm fine' doesn't give much to go on given the numbers") and never ask in a way that doubts their answer ("What's actually going on?", "What's really happening?"). If the notes record what they said, restate it and ask an open question.
    Open causes stay open. If the notes list a cause as undecided ("not sure if it's capacity or something else"), do not introduce it, lean on it or build a question or rationale around it, and do not reach for its near-synonyms (bandwidth, workload, scheduling). Echo the uncertainty in their words or leave it out. Ask what happened and what is in the way, with no cause named.
    When the notes say what the manager did or did not do, keep their words. "I never asked what was said" is "you never asked what was said", not "you haven't followed up on it". Do not compress it into a shorter phrase that sounds like a lapse.
    Never cite the role expectations as a rule: no "per the role expectations", "according to the expectations", "as the role requires". Say the plain thing ("QBRs are Cormac's to run") and let the manager see where it came from in the line below the sheet.
@@ -458,7 +477,8 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
     {
       "title": "Short label for this item (5 words or fewer)",
       "rationale": "Why this item matters right now — one sentence, grounded in the notes or history",
-      "suggested_questions": ["Question 1", "Question 2"]
+      "from_your_notes": "What the manager wrote that this item comes from, in their words, or \"\" (rule 4)",
+      "suggested_questions": ["Question the report can answer", "Another"]
     }
   ]
 }
@@ -1011,8 +1031,33 @@ def assemble_prep_inputs(
         secondhand_notes=secondhand_notes,
         opening_line=opening_line,
     )
+    # prep_guard: who else is on this manager's roster, and every piece of
+    # record text the model was given (not the prompt's rules, whose examples
+    # name the very words the guard looks for).
+    roster = (
+        supabase.table("direct_reports")
+        .select("id,name")
+        .eq("manager_id", user_id)
+        .is_("archived_at", "null")
+        .execute()
+        .data
+    ) or []
+    guard_source = "\n".join([
+        raw_notes or "",
+        *(carry_forward_items or []),
+        opening_line or "",
+        *(suggested_topics or []),
+        *(str(n.get("note") or "") for n in secondhand_notes or []),
+        *(str(c.get("description") or "") for c in open_commitments),
+        *recent_summaries,
+    ])
     return {
         "prompt": prompt,
+        "guard": GuardContext(
+            report_name=report["name"],
+            others=[r["name"] for r in roster if r.get("id") != direct_report_id and r.get("name")],
+            source=guard_source,
+        ).to_dict(),
         "built_without": prep_built_without(
             has_team=bool(report.get("org_unit_id")),
             has_role_expectations=has_configured_expectations(role_expectations),
@@ -1121,10 +1166,17 @@ def prep_drew_on(
     return labels
 
 
-def parse_prep_output(raw: str) -> tuple[str, list[dict]]:
+def parse_prep_output(raw: str, guard: GuardContext | None = None) -> tuple[str, list[dict]]:
     """The model's JSON as (situation_summary, agenda_items). A reply that
     won't parse yields the retry message and an empty agenda, never an
-    exception — the same fallback /prep has always shown."""
+    exception — the same fallback /prep has always shown.
+
+    Every item goes through prep_guard.guard_item: a suggested line carrying
+    the manager's own context (HR, their boss, another person, a pending
+    decision, their own state...) is moved to the item's `held` list, never
+    deleted; escalation words the record never used are listed in
+    `unsupported`; and the item is stored manager-only (`audience`)."""
+    ctx = guard or GuardContext()
     raw_clean = raw.strip()
     # The model sometimes wraps JSON in ```json...``` or adds a remark.
     start = raw_clean.find("{")
@@ -1142,14 +1194,18 @@ def parse_prep_output(raw: str) -> tuple[str, list[dict]]:
         if not isinstance(item, dict):
             continue
         questions = item.get("suggested_questions") or []
-        agenda.append({
+        agenda.append(guard_item({
             "title": str(item.get("title") or ""),
             "rationale": str(item.get("rationale") or ""),
-            # A line the manager may say aloud never carries their own private
-            # state (private_lane.py): the notes are only theirs to read.
-            "suggested_questions": report_facing([str(q) for q in questions if isinstance(q, (str, int, float))]),
-        })
+            "from_your_notes": str(item.get("from_your_notes") or ""),
+            "suggested_questions": [str(q) for q in questions if isinstance(q, (str, int, float)) and str(q).strip()],
+        }, ctx))
     return str(parsed.get("situation_summary") or ""), agenda
+
+
+def summary_unsupported(situation_summary: str, guard: GuardContext | None) -> list[str]:
+    """Escalation words in the summary that the record never used."""
+    return unsupported_words(situation_summary, (guard or GuardContext()).source)
 
 
 def build_prep_guide(
@@ -1161,6 +1217,7 @@ def build_prep_guide(
     prepared_by: str,
     drew_on: list[str] | None = None,
     built_without: list[str] | None = None,
+    summary_unsupported: list[str] | None = None,
 ) -> dict:
     """The stored prep_guide. prepared_by is 'manager' (they pressed
     Prepare) or 'overnight' (the worker prepared it ahead of the meeting);
@@ -1182,6 +1239,8 @@ def build_prep_guide(
         guide["drew_on"] = drew_on
     if built_without:
         guide["built_without"] = built_without
+    if summary_unsupported:
+        guide["summary_unsupported"] = summary_unsupported
     return guide
 
 
@@ -1274,7 +1333,8 @@ def prep_one_on_one(
         context=f"1:1 prep for {inputs['report_name']}",
     )
 
-    situation_summary, agenda_dicts = parse_prep_output(raw)
+    guard = GuardContext.from_dict(inputs.get("guard"))
+    situation_summary, agenda_dicts = parse_prep_output(raw, guard)
     agenda_items = [AgendaItem(**item) for item in agenda_dicts]
     open_commitments = inputs["open_commitments"]
 
@@ -1296,6 +1356,7 @@ def prep_one_on_one(
             suggested_topics=len(suggested_topics),
         ),
         built_without=inputs.get("built_without"),
+        summary_unsupported=summary_unsupported(situation_summary, guard),
     )
     # Analytics (backend/analytics.py): was there a sheet before this one?
     # Checked before the write so the answer isn't this sheet itself.
@@ -1342,7 +1403,14 @@ def prep_one_on_one(
     analytics.capture(
         user_id,
         "prep_sheet_saved",
-        {"is_first": not had_prep_sheet, "regenerated": regenerated},
+        {
+            "is_first": not had_prep_sheet,
+            "regenerated": regenerated,
+            # Counts only — never the lines or the reasons' wording.
+            "held_lines": sum(len(i.get("held") or []) for i in agenda_dicts),
+            "unsupported_claims": sum(len(i.get("unsupported") or []) for i in agenda_dicts)
+            + (1 if prep_guide.get("summary_unsupported") else 0),
+        },
     )
 
     return PrepResponse(
@@ -1358,6 +1426,7 @@ def prep_one_on_one(
         prepared_at=prep_guide["prepared_at"],
         drew_on=prep_guide["drew_on"],
         built_without=prep_guide.get("built_without") or [],
+        summary_unsupported=prep_guide.get("summary_unsupported") or [],
     )
 
 

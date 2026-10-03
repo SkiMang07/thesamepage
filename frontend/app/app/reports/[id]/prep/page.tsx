@@ -44,8 +44,21 @@ const BUILT_WITHOUT_HREF: Record<string, string> = {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+// Words the sheet used about HR or leadership that the notes never did
+// (backend/prep_guard.py). The text stays; the manager sees what to check.
+function NotInYourNotes({ words }: { words: string[] }) {
+  if (!words.length) return null;
+  return (
+    <p className="mt-3 text-xs text-amber-700">
+      Not in your notes: {words.map((w) => `“${w}”`).join(", ")}. Check the wording before you use it.
+    </p>
+  );
+}
+
 function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
   const [open, setOpen] = useState(index === 0); // first card open by default
+  const held = item.held ?? [];
+  const unsupportedWords = Array.from(new Set((item.unsupported ?? []).flatMap((u) => u.words)));
 
   return (
     <div className="rounded-lg border border-hairline bg-surface">
@@ -58,6 +71,11 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
             {index + 1}
           </span>
           <p className="mt-0.5 font-medium text-ink">{item.title}</p>
+          {!open && held.length > 0 && (
+            <p className="mt-1 text-xs text-ink-muted">
+              {held.length} {held.length === 1 ? "line" : "lines"} held for you
+            </p>
+          )}
         </div>
         <span className="ml-4 mt-1 shrink-0 text-ink-muted">{open ? "▲" : "▼"}</span>
       </button>
@@ -65,14 +83,39 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
       {open && (
         <div className="border-t border-divider px-5 pb-5 pt-4">
           <p className="text-sm text-ink-secondary italic">{item.rationale}</p>
-          <ul className="mt-4 space-y-3">
-            {item.suggested_questions.map((q, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="mt-0.5 shrink-0 text-ink-faint">→</span>
-                <p className="text-ink-body">{q}</p>
-              </li>
-            ))}
-          </ul>
+          {item.from_your_notes?.trim() && (
+            <div className="mt-3 border-l-2 border-hairline pl-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">From your notes</p>
+              <p className="mt-0.5 text-sm text-ink-secondary">{item.from_your_notes}</p>
+            </div>
+          )}
+          {item.suggested_questions.length > 0 && (
+            <ul className="mt-4 space-y-3">
+              {item.suggested_questions.map((q, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="mt-0.5 shrink-0 text-ink-faint">→</span>
+                  <p className="text-ink-body">{q}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {held.length > 0 && (
+            <div className="mt-4 rounded-md border border-dashed border-hairline px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Held for you</p>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                These lines carry your own context. Say them only if you choose to.
+              </p>
+              <ul className="mt-3 space-y-3">
+                {held.map((h, i) => (
+                  <li key={i}>
+                    <p className="text-sm text-ink-secondary">{h.line}</p>
+                    <p className="mt-0.5 text-xs text-ink-muted">{h.label}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <NotInYourNotes words={unsupportedWords} />
         </div>
       )}
     </div>
@@ -241,6 +284,7 @@ function PrepFlow() {
             prepared_at: session.prep_guide.prepared_at ?? null,
             drew_on: session.prep_guide.drew_on,
             built_without: session.prep_guide.built_without,
+            summary_unsupported: session.prep_guide.summary_unsupported,
           });
           setStep(editSources ? 1 : 2);
         }
@@ -703,6 +747,7 @@ function PrepFlow() {
                 Where things stand
               </p>
               <p className="mt-2 text-ink-body">{prep.situation_summary}</p>
+              <NotInYourNotes words={prep.summary_unsupported ?? []} />
             </div>
 
             {/* Open commitments reminder */}

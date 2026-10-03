@@ -54,5 +54,8 @@ def discloses_self_state(question: str) -> bool:
 
 def report_facing(questions: list[str]) -> list[str]:
     """The suggested questions the manager can safely say to the report: those
-    that do not carry the manager's private state. Order kept. Pure."""
+    that do not carry the manager's private state. Order kept. Pure.
+
+    The prep sheet no longer filters with this: prep_guard.py holds such a
+    line for the manager instead of dropping it."""
     return [q for q in questions if not discloses_self_state(q)]

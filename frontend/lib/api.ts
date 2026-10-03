@@ -228,6 +228,8 @@ export type PrepGuide = {
   // ("role expectations", "team goals", ...). Absent when nothing was missing
   // and on sheets saved before 2026-10-01.
   built_without?: string[];
+  // Escalation words in the summary that the record never used.
+  summary_unsupported?: string[];
 };
 
 export type OneOnOne = {
@@ -280,10 +282,29 @@ export type Commitment = {
   source_id?: string | null;
 };
 
+// A line the guard held back from suggested_questions because it carries the
+// manager's own context (backend/prep_guard.py). Shown to the manager, never
+// dropped: they decide whether to say it.
+export type HeldLine = {
+  line: string;
+  reason: string;
+  label: string;
+};
+
 export type AgendaItem = {
   title: string;
   rationale: string;
   suggested_questions: string[];
+  // The manager's words this item came from; "" or absent when it came from
+  // the record alone. Manager-only.
+  from_your_notes?: string;
+  held?: HeldLine[];
+  // Escalation words ("asked", "flagged") in a sentence about HR or
+  // leadership that nothing the model was given used.
+  unsupported?: { field: string; words: string[] }[];
+  // Who may read the item. "manager" until the employee view exists; only
+  // title and suggested_questions could ever be shared. Absent = manager.
+  audience?: "manager" | "report";
 };
 
 export type PrepResponse = {
@@ -303,6 +324,7 @@ export type PrepResponse = {
   prepared_at?: string | null;
   drew_on?: string[];
   built_without?: string[];
+  summary_unsupported?: string[];
 };
 
 // AI-drafted wrap-up of a 1:1 — reviewed and edited by the manager before

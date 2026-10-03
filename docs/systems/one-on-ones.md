@@ -296,13 +296,55 @@ outcome is added, no question implies fault, and the sheet speaks to the manager
 "you". "Drew on: role expectations" and "Built without: role expectations" go by
 whether the role has configured (approved) metrics, skills or values, not by whether a
 role is assigned.
-The notes are private to the manager, and the sheet's suggested questions are lines
-they may say aloud, so the model's output is checked in code: `parse_prep_output`
-runs every suggested question through `private_lane.report_facing`, which removes
-one in which the manager talks about their own avoidance, dread or discomfort ("I
-hold back on hard feedback with you"). It applies to manual and overnight prep
-alike. The rationale and summary are addressed to the manager and may still say it.
-The prompt asks for the same thing (rule 6), but the code is what enforces it.
+**Restate by default, script on request.** Each agenda item carries
+`from_your_notes` — what the manager wrote that the item comes from, in their
+words — and `suggested_questions`, which are questions the report can answer.
+A line that *tells* the report something is written only when the notes say the
+manager intends to tell them or ask for help wording it; the prompt (rule 4) no
+longer asks for an opening line or SBI script by default. Context about HR, the
+manager's boss, other people on the team, undecided matters (promotion, pay, a
+performance plan, a reorg), guesses about life outside work and the manager's
+own doubts is restated for the manager and never made the reason to raise
+something with the report. The AI does not scrub or classify any of it: the
+manager is responsible for what goes on the sheet.
+
+**The report-facing guard** (`backend/prep_guard.py`) enforces that in code,
+because the prompt alone did not (Jamal round 3: "HR wants documentation"
+became "I want you to know HR has asked me to start documenting performance
+here"). `parse_prep_output(raw, guard)` runs every item through `guard_item`,
+manual and overnight alike:
+
+- **Held, never dropped.** A suggested line that mentions HR, the manager's boss
+  or leadership (including a name the notes tag as their boss, "Priya (my
+  boss)"), another roster person, a performance process (PIP, documentation,
+  warning), an org change, a pending decision said as a statement, a comparison
+  with others, personal life the record doesn't raise, or the manager's own
+  state or doubts (`private_lane.discloses_self_state` plus self-doubt
+  patterns) moves to the item's `held` list with a plain label. The sheet shows
+  it under "Held for you"; the manager says it or doesn't. One reason per line.
+- **Not in your notes.** In any sentence about HR or leadership, an escalation
+  word ("asked", "flagged", "start documenting", "escalated"...) that never
+  appears in the record the model was given is listed in `unsupported` (per
+  item) or `prep_guide.summary_unsupported`, and the sheet says "Not in your
+  notes: …". The text itself is left alone. The record is
+  `assemble_prep_inputs()`'s `guard.source`: notes, carry-forwards, the kept
+  opening line, signals, secondhand notes, commitments and history — not the
+  prompt's rules, whose examples name the very words being checked.
+- **Audience.** Every item is stored with `audience: "manager"`. Only `title`
+  and `suggested_questions` (`prep_guard.SHAREABLE_FIELDS`) could ever be shown
+  to the report, and only once the manager shares the item; `from_your_notes`,
+  `rationale`, `held` and the summary never are. A sheet without the field is
+  manager-only. Nothing reads it yet: it is the switch the employee view will
+  filter on. The UI copy telling managers the sheet is shareable, and a private
+  notes area, are deferred.
+
+Deliberately lexical: the guard does not read tone ("given the numbers",
+"What's actually going on?"); that is a prompt rule. A boss mentioned only by a
+name the notes don't tag as the boss is not caught. Fixtures:
+`backend/tests/fixtures/prep_sensitive_context.json` (one bad model reply per
+sensitive shape, plus a clean control) with `tests/test_prep_guard.py`.
+`prep_sheet_saved` analytics carries `held_lines` and `unsupported_claims`
+counts, never text.
 
 **Expectations are grounding context, not an agenda.** `_format_expectations_block()`
 explicitly instructs the model *not* to audit every expectation in one 1:1. This

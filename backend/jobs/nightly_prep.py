@@ -39,8 +39,10 @@ from routes.one_on_ones import (
     assemble_prep_inputs,
     build_prep_guide,
     parse_prep_output,
+    summary_unsupported,
     prep_drew_on,
 )
+from prep_guard import GuardContext
 from utils import get_org
 
 logger = logging.getLogger("jobs.nightly_prep")
@@ -256,6 +258,8 @@ def build_request(admin, occurrence: dict) -> dict | None:
             "document_ids": inputs["document_ids"],
             "drew_on": drew_on,
             "built_without": inputs.get("built_without") or [],
+            # prep_guard context; cleared with the rest of the input by _finish.
+            "guard": inputs.get("guard") or {},
         },
     }
 
@@ -366,7 +370,10 @@ def apply_result(admin, job: dict, text: str | None, error: str | None) -> str:
         _finish(admin, [job["id"]], "skipped", "already_prepared", keep)
         return "skipped"
 
-    situation_summary, agenda = parse_prep_output(text)
+    # A job queued before the guard context existed still gets the guard,
+    # checked against the notes it recorded.
+    guard = GuardContext.from_dict(snapshot.get("guard") or {"source": snapshot.get("raw_notes") or ""})
+    situation_summary, agenda = parse_prep_output(text, guard)
     if not agenda:
         # Never leave the "please try again" fallback on a sheet nobody asked
         # for; the manager's own Prepare is still one click away.
@@ -381,6 +388,7 @@ def apply_result(admin, job: dict, text: str | None, error: str | None) -> str:
         prepared_by="overnight",
         drew_on=snapshot.get("drew_on") or [],
         built_without=snapshot.get("built_without") or [],
+        summary_unsupported=summary_unsupported(situation_summary, guard),
     )
     saved = (
         admin.table("one_on_ones")

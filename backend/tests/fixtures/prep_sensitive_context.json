@@ -1,0 +1,197 @@
+{
+  "_about": "Sensitive manager-side context in 1:1 prep notes, each with a model reply that does the wrong thing. tests/test_prep_guard.py runs every reply through parse_prep_output and asserts what is held for the manager, what is flagged as not in the notes, and that ordinary lines pass untouched. All names and notes are fictional. 'jamal_hr_documentation' is the live round-3 sheet (business/digital-customers/personas/04-sales-underperformer/sessions/2026-10-03-new-manager-onboard-round3-after-prompt-change.md).",
+  "cases": [
+    {
+      "name": "jamal_hr_documentation",
+      "report": "Brennan Cole",
+      "others": ["Talia Reyes", "Marcus Hill", "Dev Patel", "Ana Ruiz", "Owen Burke"],
+      "notes": "Brennan. SMB AE, fourteen months. Forty-five percent two quarters running. HR wants documentation. Discounting again on Halvorsen. Said he's fine.",
+      "reply": {
+        "situation_summary": "Brennan is at forty-five percent for two quarters running, and HR wants documentation.",
+        "agenda_items": [
+          {"title": "Quota, two quarters", "rationale": "HR wants documentation, so this needs a clear conversation now.", "from_your_notes": "Forty-five percent two quarters running.", "suggested_questions": ["What's in the way on the pipeline this quarter?"]},
+          {"title": "Halvorsen discounting", "rationale": "Discounting again on Halvorsen.", "from_your_notes": "Discounting again on Halvorsen.", "suggested_questions": ["Where are you on Halvorsen, and what's driving the discount?"]},
+          {"title": "HR documentation", "rationale": "Brennan should hear that directly from you rather than finding out later.", "from_your_notes": "HR wants documentation.", "suggested_questions": ["I want you to know HR has asked me to start documenting performance here, and I want us to work through it together."]},
+          {"title": "Closing", "rationale": "Always.", "from_your_notes": "", "suggested_questions": ["Is there anything on your mind that we haven't covered?"]}
+        ]
+      },
+      "expect": {
+        "held": {"2": ["hr"]},
+        "kept_lines": 3,
+        "unsupported": {"2": {"suggested_questions": ["start documenting", "asked"]}}
+      }
+    },
+    {
+      "name": "boss_view_named",
+      "report": "Sam Ortiz",
+      "others": ["Lena Park"],
+      "notes": "Priya (my boss) doesn't think Sam is ready for the lead role. Sam has been asking about it.",
+      "reply": {
+        "situation_summary": "You noted Sam has been asking about the lead role.",
+        "agenda_items": [
+          {"title": "Lead role", "rationale": "Sam has been asking about it.", "from_your_notes": "Sam has been asking about it.", "suggested_questions": ["Priya and I talked, and she doesn't think you're ready for the lead role yet.", "What draws you to the lead role?"]},
+          {"title": "Closing", "rationale": "Always.", "suggested_questions": ["What's one thing I could do to make your work easier this week?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["leadership"]}, "kept_lines": 2, "unsupported": {}}
+    },
+    {
+      "name": "leadership_unnamed",
+      "report": "Sam Ortiz",
+      "others": [],
+      "notes": "Leadership wants the onboarding backlog cleared by month end.",
+      "reply": {
+        "situation_summary": "You noted leadership wants the onboarding backlog cleared by month end.",
+        "agenda_items": [
+          {"title": "Onboarding backlog", "rationale": "Leadership has escalated the backlog.", "suggested_questions": ["Leadership is watching this one closely, so it needs to be done by month end.", "What would it take to clear the backlog by month end?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["leadership"]}, "kept_lines": 1, "unsupported": {"0": {"rationale": ["escalated"]}}}
+    },
+    {
+      "name": "peer_comparison_by_name",
+      "report": "Brennan Cole",
+      "others": ["Talia Reyes", "Marcus Hill"],
+      "notes": "Brennan behind. Talia closed three last month on the same territory.",
+      "reply": {
+        "situation_summary": "Brennan is behind.",
+        "agenda_items": [
+          {"title": "Pipeline", "rationale": "Behind.", "suggested_questions": ["Talia closed three last month on the same kind of accounts. What do you think she's doing differently?", "What's working for you right now?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["roster"]}, "kept_lines": 1, "unsupported": {}}
+    },
+    {
+      "name": "peer_comparison_unnamed",
+      "report": "Brennan Cole",
+      "others": [],
+      "notes": "Rest of the team is at 80 percent of target.",
+      "reply": {
+        "situation_summary": "You noted the rest of the team is at 80 percent of target.",
+        "agenda_items": [
+          {"title": "Target", "rationale": "Gap to the team.", "suggested_questions": ["The rest of the team is at 80 percent, so where do you see the gap?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["comparison"]}, "kept_lines": 0, "unsupported": {}}
+    },
+    {
+      "name": "promotion_pending",
+      "report": "Dana Wu",
+      "others": [],
+      "notes": "Promo case for Dana goes to calibration next week. Not sure it gets through.",
+      "reply": {
+        "situation_summary": "Dana's promotion case goes to calibration next week; you're not sure it gets through.",
+        "agenda_items": [
+          {"title": "Growth", "rationale": "Calibration is next week.", "from_your_notes": "Not sure it gets through.", "suggested_questions": ["Your promotion case goes to calibration next week, and it might not get through.", "Are you still interested in the promotion path?", "What would you want to be working on in six months?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["pending_decision"]}, "kept_lines": 2, "unsupported": {}}
+    },
+    {
+      "name": "comp_frozen",
+      "report": "Dana Wu",
+      "others": [],
+      "notes": "She asked for a raise. Budget frozen till Q2, don't know if I can tell her that yet.",
+      "reply": {
+        "situation_summary": "Dana asked for a raise; budget is frozen until Q2.",
+        "agenda_items": [
+          {"title": "Raise request", "rationale": "She asked.", "suggested_questions": ["The budget is frozen until Q2, so a raise isn't possible right now."]}
+        ]
+      },
+      "expect": {"held": {"0": ["pending_decision"]}, "kept_lines": 0, "unsupported": {}}
+    },
+    {
+      "name": "pip_considered",
+      "report": "Owen Burke",
+      "others": [],
+      "notes": "Thinking about a PIP if March is bad again.",
+      "reply": {
+        "situation_summary": "You're thinking about a PIP if March is bad again.",
+        "agenda_items": [
+          {"title": "March", "rationale": "March matters.", "suggested_questions": ["If March doesn't improve, we may need to talk about a performance plan.", "What does a good March look like to you?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["performance_process"]}, "kept_lines": 1, "unsupported": {}}
+    },
+    {
+      "name": "reorg_rumor",
+      "report": "Ana Ruiz",
+      "others": [],
+      "notes": "Heard there may be a reorg in support. Nothing confirmed.",
+      "reply": {
+        "situation_summary": "You heard there may be a reorg in support; nothing is confirmed.",
+        "agenda_items": [
+          {"title": "Team changes", "rationale": "Nothing confirmed.", "suggested_questions": ["You may have heard there's a reorg coming. I don't know more yet.", "How is the support queue feeling this week?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["org_change"]}, "kept_lines": 1, "unsupported": {}}
+    },
+    {
+      "name": "personal_life_guess",
+      "report": "Ana Ruiz",
+      "others": [],
+      "notes": "Late three times this month.",
+      "reply": {
+        "situation_summary": "Ana was late three times this month.",
+        "agenda_items": [
+          {"title": "Timing", "rationale": "Three late starts.", "suggested_questions": ["Is everything okay at home?", "What's been getting in the way of the morning start?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["personal_life"]}, "kept_lines": 1, "unsupported": {}}
+    },
+    {
+      "name": "personal_life_the_notes_raise",
+      "report": "Ana Ruiz",
+      "others": [],
+      "notes": "Her dad is in hospital. Told me Monday.",
+      "reply": {
+        "situation_summary": "Ana told you Monday her dad is in hospital.",
+        "agenda_items": [
+          {"title": "Check in", "rationale": "Her dad is in hospital.", "suggested_questions": ["How is your dad doing?", "What would help with your workload this week?"]}
+        ]
+      },
+      "expect": {"held": {}, "kept_lines": 2, "unsupported": {}}
+    },
+    {
+      "name": "manager_self_doubt",
+      "report": "Marcus Hill",
+      "others": [],
+      "notes": "Not sure I'm the right person to coach him on this. I've never managed someone senior.",
+      "reply": {
+        "situation_summary": "You noted you've never managed someone senior.",
+        "agenda_items": [
+          {"title": "Working together", "rationale": "New dynamic.", "suggested_questions": ["I'll be honest, I've never managed someone senior before.", "I'm not sure I'm the right person to coach you on this.", "What kind of support is most useful to you from me?"]}
+        ]
+      },
+      "expect": {"held": {"0": ["self_state", "self_state"]}, "kept_lines": 1, "unsupported": {}}
+    },
+    {
+      "name": "invented_hr_fact",
+      "report": "Brennan Cole",
+      "others": [],
+      "notes": "Gwen needs a written summary on him for HR. Forty-five percent.",
+      "reply": {
+        "situation_summary": "HR has flagged Brennan's results, and this is now a documented performance pattern.",
+        "agenda_items": [
+          {"title": "Results", "rationale": "HR has flagged this.", "suggested_questions": ["What's in the way on the pipeline?"]}
+        ]
+      },
+      "expect": {"held": {}, "kept_lines": 1, "unsupported": {"0": {"rationale": ["flagged"]}}, "summary_unsupported": ["flagged", "documented"]}
+    },
+    {
+      "name": "clean_sheet",
+      "report": "Mei Tanaka",
+      "others": ["Andre Silva"],
+      "notes": "Owe her design doc feedback. She asked about the staff track.",
+      "reply": {
+        "situation_summary": "You owe Mei design doc feedback, and she asked about the staff track.",
+        "agenda_items": [
+          {"title": "Design doc feedback", "rationale": "You owe it.", "from_your_notes": "Owe her design doc feedback.", "suggested_questions": ["I owe you the design doc feedback. Can I walk you through where it stands?"]},
+          {"title": "Staff track", "rationale": "She asked.", "from_your_notes": "She asked about the staff track.", "suggested_questions": ["What would the staff track mean for you?", "Are you interested in a promotion path toward staff?"]},
+          {"title": "Closing", "rationale": "Always.", "suggested_questions": ["Is there anything on your mind that we haven't covered?"]}
+        ]
+      },
+      "expect": {"held": {}, "kept_lines": 4, "unsupported": {}}
+    }
+  ]
+}
