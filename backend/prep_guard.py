@@ -97,10 +97,16 @@ _PENDING_DECISION = [_rx(
     r"\bpromot\w+", r"\braises?\b", r"\bpay\s+(?:rise|increase|bump|review)\b",
     r"\bcomp(?:ensation)?\b", r"\bsalar\w+", r"\bbonus\w*", r"\bequity\b", r"\btitle\s+change\b",
 )]
+# Comparisons with PEOPLE only: "compared to last quarter" is an ordinary
+# question (Jamal round 4 held it until this was narrowed).
+_OTHERS = (r"(?:the\s+rest\s+of\s+the\s+team|everyone\s+else|your\s+peers|the\s+others|others|"
+           r"others\s+on\s+the\s+team|the\s+team|the\s+other\s+(?:reps|aes|engineers|people|folks))")
 _COMPARISON = [_rx(
-    r"\bcompared\s+(?:to|with)\b",
-    r"\b(?:than|like)\s+(?:the\s+rest\s+of\s+the\s+team|everyone\s+else|your\s+peers|the\s+others|"
-    r"others\s+on\s+the\s+team|the\s+other\s+(?:reps|aes|engineers|people))\b",
+    r"\bcompared\s+(?:to|with)\s+" + _OTHERS + r"\b",
+    r"\bthan\s+" + _OTHERS + r"\b",
+    # "like" is everywhere ("what would you like the team to know?"): only the
+    # unambiguous groups count after it.
+    r"\blike\s+(?:the\s+rest\s+of\s+the\s+team|everyone\s+else|your\s+peers|the\s+other\s+(?:reps|aes|engineers))\b",
     r"\b(?:the\s+rest\s+of\s+the\s+team|everyone\s+else|your\s+peers)\s+(?:is|are|has|have|hit|did)\b",
 )]
 _SELF_DOUBT = [_rx(

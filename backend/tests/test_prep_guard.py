@@ -81,6 +81,9 @@ def test_ordinary_career_and_work_questions_pass():
         "I owe you the design doc feedback and I want to give you a status on it.",
         "What's getting in the way of the QBRs?",
         "Can you walk me through the documentation for the API change?",
+        "What's different or the same compared to last quarter?",        # Jamal round 4, live
+        "How does this month look compared with September?",
+        "What would you like the team to know about Halvorsen?",
     ]:
         assert hold_reason(line, ctx) is None, line
 
