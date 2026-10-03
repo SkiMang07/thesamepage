@@ -93,6 +93,7 @@ Produce:
    - committed_by "direct_report": the person owes the manager ("she is going to confirm priorities", "he said he'd send the plan", "I asked for a weekly status").
    - committed_by null: an action is clearly owed but the text does not say by whom. Never guess a side.
    - A standing ask that has lapsed ("I asked for a weekly written status; he did it twice, then stopped") is a direct_report commitment ("Send a weekly written status"). Put the lapse itself in kept_thoughts.
+   - A commitment is only ever between the manager and THIS person. Something owed to or by anyone else is NOT a commitment: a deliverable the manager owes their boss or HR ("Gwen needs a written summary on him for HR"), a request from another team, a promise that depends on a third party. Put it in kept_thoughts instead, in the manager's words, so it is not filed as owed to this person.
    - Not commitments: things already done, what the person's job is, general hopes, feelings, vague intentions ("we should think about...").
    - description: one short actionable sentence starting with a verb, from the manager's point of view of the action ("Send written feedback on her design doc").
    - due_date: ISO date only if the text states or clearly implies one, resolved from today's date. Otherwise null.

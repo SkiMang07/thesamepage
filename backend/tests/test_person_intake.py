@@ -156,6 +156,12 @@ def test_a_thought_from_a_different_sentence_is_kept_and_renumbered():
     assert [(t["key"], t["text"]) for t in out["thoughts"]] == [("t0", "Worried he is carrying too much")]
 
 
+def test_the_prompt_keeps_third_party_deliverables_out_of_commitments():
+    prompt = pi.build_prompt("Brennan Ostrowski", "text", "2026-10-03")
+    assert "only ever between the manager and THIS person" in prompt.prefix
+    assert "boss or HR" in prompt.prefix
+
+
 # ── the route: drafts only, nothing written, no text in the event ────────
 
 class _Q:
