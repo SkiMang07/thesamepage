@@ -70,6 +70,9 @@ create table users (
   setup_card_snoozed_until timestamptz,
   setup_skipped_steps text[] not null default '{}',
   knowledge_skipped_at timestamptz,
+  -- The first-1:1 wrap-up reminder was handed to HubSpot (2026-10-05,
+  -- jobs/wrapup_reminder.py). Stamped once.
+  wrapup_reminder_sent_at timestamptz,
   created_at timestamptz not null default now()
 );
 

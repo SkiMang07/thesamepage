@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     # Product analytics. Empty means no events are sent (analytics.py).
     POSTHOG_PROJECT_KEY: str = ""
+    # HubSpot private-app token (contacts write). Empty means the first-1:1
+    # wrap-up reminder is off (hubspot.py, jobs/wrapup_reminder.py).
+    HUBSPOT_TOKEN: str = ""
 
     # App
     ENVIRONMENT: str = "development"

@@ -144,7 +144,7 @@ This is the one part of the direction that changes what an existing user sees, s
 ## 5. Out of scope
 
 - Importing the manager's existing per-person doc (B's larger idea). Worth its own scoping; it runs through Context Engine extraction plus a review step.
-- Lifecycle email and the "week three, haven't opened it" answer.
+- Lifecycle email and the "week three, haven't opened it" answer. One exception, built 2026-10-05: the first-1:1 wrap-up reminder (§11).
 - IC invites (stay behind `IC_INVITES_ENABLED = false`).
 - Roles, teams, expectations during onboarding. They stay where they are.
 
@@ -243,3 +243,5 @@ Knowledge documents are not a setup step and the first 1:1 is not either. Docume
 - Analytics (catalog first): `setup_intro_resolved`, `setup_card_dismissed`, `set_up_receipt_seen`; counts and enums only. Tests: additions to `test_onboarding.py`, `test_mission_control_engine.py`, `test_prep_drew_on.py`, `test_nightly_prep.py`.
 
 **Not built.** The split view (a step on the left, the sheet gaining lines on the right). The expert review put it behind per-step analytics (now built) and a real with-context versus without-context sheet comparison (not yet done); "Built without" and the ranker candidate give the delta and the way back in the meantime.
+
+**The return for the first wrap-up (Andrew, 2026-10-05).** Onboarded needs a logged 1:1, and nothing outside the app brought a manager back after their real meeting. One email, once per manager, on the evening of their first 1:1's date (18:00 in the series timezone, New York when unset) if nothing is logged yet, up to 48 hours late. Sent by HubSpot, not the app: `jobs/wrapup_reminder.py` writes the meeting day to the manager's HubSpot contact and the "First 1:1 wrap-up reminder" workflow sends it, under the "Product reminders" subscription type. The email is from Andrew, does not name the report, and links to Mission Control, where Week in Focus already shows the meeting as "Not logged" with "Wrap up & log". Stamped on `users.wrapup_reminder_sent_at`; analytics `wrapup_reminder_sent`. Mechanics in `docs/ENGINEERING.md` → Background worker. Until it runs, Andrew emails beta managers by hand the next morning, only those still unlogged, so the unprompted logging rate stays measurable.

@@ -39,10 +39,19 @@ def in_nightly_window(now: datetime) -> bool:
 def tick(admin, now: datetime | None = None) -> dict:
     from jobs import nightly_prep
 
+    from jobs import wrapup_reminder
+
     now = now or datetime.now(timezone.utc)
-    result = {"collected": nightly_prep.collect(admin, now), "submitted": 0}
+    result = {"collected": nightly_prep.collect(admin, now), "submitted": 0, "reminded": 0}
     if in_nightly_window(now):
         result["submitted"] = nightly_prep.submit_due(admin, now)
+    # Every tick: the first-1:1 wrap-up reminder decides its own timing (the
+    # evening of the meeting in the manager's timezone) and is a no-op until
+    # HUBSPOT_TOKEN is set. Its failure never costs the prep work above.
+    try:
+        result["reminded"] = wrapup_reminder.run(admin, now)
+    except Exception:
+        logger.exception("wrapup reminder failed")
     return result
 
 

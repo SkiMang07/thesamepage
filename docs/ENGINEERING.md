@@ -198,6 +198,20 @@ left (the same rule as `ensure_entitlement()`), never for archived people.
 Railway logs carry `nightly_prep` lines per phase (counts only) and the usual
 `ai_call` lines.
 
+**The first-1:1 wrap-up reminder** (`jobs/wrapup_reminder.py`, Andrew
+2026-10-05) also runs on every tick, and on its own as
+`python -m jobs.wrapup_reminder` (one pass, then exit) so it can run on a
+Railway cron service every 30 minutes while the full worker stays parked; that
+pass never starts overnight prep or calls a model. A manager with no logged
+1:1 whose first 1:1 date has reached 18:00 in the series timezone (New York
+when the series says UTC), and not more than 48 hours past that, gets one
+reminder ever: `users.wrapup_reminder_sent_at` is claimed first, then the
+meeting day is written to the manager's HubSpot contact
+(`wrapup_reminder_due`), and the HubSpot workflow "First 1:1 wrap-up reminder"
+sends the email. A HubSpot refusal releases the claim for the next pass. Only
+the manager's email, first name and the meeting day reach HubSpot; the email
+never names the report. Off until `HUBSPOT_TOKEN` is set.
+
 ### Entitlement and the read-only gate
 
 Each manager has one `subscriptions` row: a founding place (`founding_number`
@@ -503,6 +517,7 @@ while Andrew is actively running the backend locally, and it is a separate
 | `SENTRY_DSN` | Sentry | Railway | not a secret; leaks only let someone send you errors |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry → thesamepage-frontend → Client Keys | Vercel (Config, not Secret) | public by design, ships in the browser bundle |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `POSTHOG_PROJECT_KEY` | PostHog → Settings → Project → General → Project API key (`phc_`) | Vercel (Config), Railway | same value in both; public by design, ships in the browser bundle; a leak only lets someone send events, and the free plan drops them past 1M |
+| `HUBSPOT_TOKEN` | HubSpot → Settings → Integrations → Private Apps → "tsp-railway-2026-10" (scope: contacts write) | Railway (API and the reminder cron) | empty turns the first-1:1 wrap-up reminder off; writes contacts only |
 | `SENTRY_AUTH_TOKEN` (optional) | Sentry → Settings → Auth Tokens (org token) | Vercel (Secret) | only for source-map upload at build; the build works without it |
 
 **Name keys `tsp-<host>-<yyyy-mm>`** (`tsp-railway-2026-09`), so the dashboard
