@@ -719,7 +719,7 @@ create table role_expectation_decisions (
   item_key          text,
   config_kind       text check (config_kind is null or config_kind in ('metrics', 'skills', 'values')),
   config_id         uuid,
-  topic             text not null default 'other' check (topic in ('target', 'measure', 'scope', 'wording', 'other')),
+  topic             text not null default 'other' check (topic in ('target', 'measure', 'scope', 'wording', 'other', 'level')),
   question          text not null,
   context           text,
   status            text not null default 'deferred' check (status in ('deferred', 'resolved', 'dropped')),

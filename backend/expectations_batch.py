@@ -227,6 +227,7 @@ def compose_for_row(supabase, draft: dict, *, call=None, sleep=time.sleep) -> di
         org_value_names=[v["name"] for v in org_values],
         context_text=context,
         mode="description",
+        ask_level=not rex.ladder_has_levels(supabase, role),
     )
     # Kept within the first five notes the analysis stores.
     if promised:

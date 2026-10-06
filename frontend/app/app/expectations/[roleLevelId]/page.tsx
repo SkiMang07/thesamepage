@@ -26,11 +26,14 @@ import {
   discardRoleDraft,
   getRoleWorkspace,
   getRolesOverview,
+  keepOneStandard,
   openRoleDraft,
   reanalyzeRoleDraft,
   redraftRoleDraft,
   saveRoleDraft,
+  splitRoleLevel,
 } from "@/lib/api";
+import NoteField from "@/components/NoteField";
 import PageShell from "@/components/PageShell";
 import { SkeletonSection } from "@/components/Skeleton";
 import ItemEditor from "@/components/expectations/ItemEditor";
@@ -587,7 +590,20 @@ function Workspace({
 function ApprovedView({ ws, focus, onOpened }: { ws: RoleWorkspace; focus: string | null; onOpened: (w: RoleWorkspace, focus: string | null) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [splitting, setSplitting] = useState<string | null>(null);
   const focusedDecision = focus?.startsWith("decision:") ? focus.slice(9) : null;
+
+  async function keepOne(decisionId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      onOpened(await keepOneStandard(decisionId), null);
+    } catch (e) {
+      setError(errorText(e, "That answer couldn’t be saved just now. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function refine(decisionId?: string) {
     setBusy(true);
@@ -627,15 +643,33 @@ function ApprovedView({ ws, focus, onOpened }: { ws: RoleWorkspace; focus: strin
                 key={d.id}
                 className={`flex flex-col gap-2 border-t border-amber-500/25 py-3 first:border-t-0 sm:flex-row sm:items-center sm:justify-between ${focusedDecision === d.id ? "rounded-md ring-2 ring-amber-500/50 ring-offset-2 ring-offset-amber-50" : ""}`}
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-ink">{d.question}</p>
                   <p className="text-xs text-amber-800">
-                    {d.topic === "target" ? "Approved without a target · not judged against a number" : "Parked"} · back {formatDay(d.follow_up_on)}
+                    {d.topic === "level"
+                      ? "Open until you decide · everyone in this role is held to the lines below"
+                      : `${d.topic === "target" ? "Approved without a target · not judged against a number" : "Parked"} · back ${formatDay(d.follow_up_on)}`}
                   </p>
+                  {d.topic === "level" && splitting === d.id && (
+                    <SplitPanel ws={ws} decisionId={d.id} onCancel={() => setSplitting(null)} />
+                  )}
                 </div>
-                <button type="button" onClick={() => refine(d.id)} disabled={busy} className={`${BTN_SECONDARY} shrink-0 bg-surface`}>
-                  Resolve in a revision →
-                </button>
+                {d.topic === "level" ? (
+                  splitting !== d.id && (
+                    <div className="flex shrink-0 flex-wrap gap-2 self-start">
+                      <button type="button" onClick={() => setSplitting(d.id)} disabled={busy} className={`${BTN_SECONDARY} bg-surface`}>
+                        Split into two levels
+                      </button>
+                      <button type="button" onClick={() => keepOne(d.id)} disabled={busy} className={`${BTN_GHOST}`}>
+                        Keep one standard
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <button type="button" onClick={() => refine(d.id)} disabled={busy} className={`${BTN_SECONDARY} shrink-0 bg-surface`}>
+                    Resolve in a revision →
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -668,6 +702,119 @@ function ApprovedView({ ws, focus, onOpened }: { ws: RoleWorkspace; focus: strin
         </aside>
       </div>
     </PageShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Split into two levels: a new level above this one, starting from the same
+// approved lines, with the people the manager picks moved onto it. What the
+// new level asks differently is drafted from the manager's words and opens
+// for review; nothing about it is used until they approve it.
+// ---------------------------------------------------------------------------
+
+function SplitPanel({ ws, decisionId, onCancel }: { ws: RoleWorkspace; decisionId: string; onCancel: () => void }) {
+  const router = useRouter();
+  const [title, setTitle] = useState(`Senior ${ws.role.title}`);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [difference, setDifference] = useState("");
+  const [busy, setBusy] = useState<"split" | "draft" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const willDraft = difference.trim().length >= 40;
+
+  function toggle(id: string) {
+    setPicked((p) => {
+      const next = new Set(p);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function split() {
+    setBusy("split");
+    setError(null);
+    let newId: string;
+    try {
+      newId = (await splitRoleLevel(ws.role.id, { title: title.trim(), people_ids: Array.from(picked), decision_id: decisionId })).role_level_id;
+    } catch (e) {
+      setError(errorText(e, "The role couldn’t be split just now. Nothing changed — try again."));
+      setBusy(null);
+      return;
+    }
+    if (willDraft) {
+      setBusy("draft");
+      try {
+        const composed = await composeRoleFromJd({ context: difference, roleLevelId: newId });
+        await openRoleDraft({
+          role_level_id: newId,
+          context: composed.context,
+          items: composed.items,
+          questions: composed.questions,
+          notes: composed.notes,
+        });
+      } catch {
+        // The split stands; the new level opens with the shared lines and
+        // "Refine expectations" is one click away.
+      }
+    }
+    router.push(`/app/expectations/${newId}`);
+  }
+
+  return (
+    <div className="mt-3 space-y-4 rounded-lg bg-surface p-4">
+      <div>
+        <label className={LABEL} htmlFor="split-title">
+          New level, above this one
+        </label>
+        <input id="split-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={!!busy} className={INPUT} maxLength={120} />
+      </div>
+      <fieldset>
+        <legend className={LABEL}>Who moves to it</legend>
+        {ws.people.length === 0 ? (
+          <p className="text-sm text-ink-secondary">Nobody is in this role yet.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-x-5 gap-y-2">
+            {ws.people.map((p) => (
+              <li key={p.id}>
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} disabled={!!busy} />
+                  {p.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </fieldset>
+      <div>
+        <label className={LABEL} htmlFor="split-difference">
+          What does this level ask that the current one doesn’t?
+        </label>
+        <NoteField
+          id="split-difference"
+          value={difference}
+          onChange={setDifference}
+          disabled={!!busy}
+          rows={3}
+          placeholder="In your words. Optional."
+        />
+        <p className="mt-1 text-xs text-ink-secondary">
+          Both levels start with the same lines, so nobody loses their expectations. {willDraft ? "Your words become a draft for the new level to review; nothing changes until you approve it." : "Write a sentence or two here to get a draft of what’s different."}
+        </p>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={split} disabled={!!busy || !title.trim() || picked.size === 0} className={BTN_PRIMARY}>
+          {busy === "split" ? "Splitting…" : busy === "draft" ? "Drafting what’s different…" : `Split and move ${picked.size || ""}`.trim()}
+        </button>
+        <button type="button" onClick={onCancel} disabled={!!busy} className={BTN_GHOST}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -159,6 +159,7 @@ and one explicit confirmation + **Approve** for the whole role.
   Python and again inside the SQL function).
 - **Only a missing target blocks approval.** Any other open question is optional:
   approving parks it 30 days out (the same persisted decision as "Bring this back"),
+  except a level question, which stays due (see *One standard or two levels*),
   and the review page says so. Otherwise a question ends answered, parked with a date,
   or "Not needed". Deferral always goes through `POST /drafts/{id}/defer` (one question) or
   `/defer-many` (every listed open question on one date, one draft write and version
@@ -384,6 +385,33 @@ is **approved**: a draft is not yet a standard.
 | `POST /drafts/{id}/discard` | discard; approved expectations untouched |
 | `POST /drafts/{id}/redraft` | re-queue a failed or stale batch draft from its stored slice (AI in background, 10/min) |
 | `POST /drafts/{id}/approve` | approve the whole role (422 lists what still needs a decision) |
+| `POST /roles/{id}/split` | answer the level question by splitting: new level above, same approved lines, chosen people moved, decision resolved |
+| `POST /decisions/{id}/close` | answer the level question with "keep one standard" (level questions only) |
+
+**One standard or two levels.** A question about whether one standard should
+cover everyone in the role has topic `level` (migration
+`2026-10-06_role_level_question.sql` adds it to the decisions check). The
+compose prompt asks it once when the manager says people are at different
+levels; a question that asks one-standard-or-several in so many words is
+retagged `level`; and when the manager's own words raise seniority (junior,
+senior, "not the same bar") and no question asks, a system question is added
+(`ensure_level_question`). It isn't asked on a ladder that already has more
+than one level. Approving leaves it due today rather than parking it a month
+out, so it waits under *Needs review* and on the role page until answered.
+There it has two answers. *Keep one standard* resolves it. *Split into two
+levels* takes a title (prefilled "Senior <role>"), the people who move and,
+optionally, what the new level asks that this one doesn't: the server adds a
+level above the top of the same ladder (an ungrouped role gets a ladder named
+after it), approves a copy of this role's lines for it in the same step (a
+target still being decided keeps its return date), moves the people and
+resolves the question. Nobody who moves loses their expectations, the setup
+step or Assessments. If the manager wrote what's different, it goes through
+the normal describe compose for the new level and opens as a revision whose
+new lines are suggestions to review; nothing about the new level changes
+until they approve. The compose prompt writes every line for anyone in the
+role, never a named person. Verified against local Postgres with RLS:
+approve keeps the level question due, the split, a cross-org 404, the
+ungrouped case and no re-ask on the new level. Analytics: `role_level_split`.
 
 Every draft write carries `version`. The older `/api/expectations/draft`,
 `/api/expectations/{kind}/batch` (still used for company values) and

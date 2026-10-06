@@ -2467,7 +2467,8 @@ export type RoleItem = {
 export type RoleQuestion = {
   id: string;
   item_key: string | null;
-  topic: "target" | "measure" | "scope" | "wording" | "other";
+  // "level": one standard for everyone in the role, or separate levels.
+  topic: "target" | "measure" | "scope" | "wording" | "other" | "level";
   question: string;
   why: string | null;
   answer_mode: "field" | "answer";
@@ -2707,6 +2708,22 @@ export const discardRoleDraft = (draftId: string): Promise<{ discarded: boolean 
 
 export const approveRoleDraft = (draftId: string, version: number): Promise<RoleWorkspace> =>
   authedFetch(`/api/role-expectations/drafts/${draftId}/approve`, { method: "POST", body: JSON.stringify({ version }) });
+
+// Answers the level question with "split into two levels": a new level above
+// this one on the same ladder, starting from the same approved lines, with the
+// chosen people moved onto it.
+export const splitRoleLevel = (
+  roleLevelId: string,
+  body: { title: string; people_ids: string[]; decision_id?: string | null }
+): Promise<{ role_level_id: string; moved: number; items: number }> =>
+  authedFetch(`/api/role-expectations/roles/${roleLevelId}/split`, { method: "POST", body: JSON.stringify(body) });
+
+// Answers the level question with "keep one standard".
+export const keepOneStandard = (decisionId: string): Promise<RoleWorkspace> =>
+  authedFetch(`/api/role-expectations/decisions/${decisionId}/close`, {
+    method: "POST",
+    body: JSON.stringify({ resolution: "one_standard" }),
+  });
 
 export const assignReportRole = (reportId: string, report: DirectReport, roleLevelId: string | null): Promise<DirectReport> =>
   authedFetch(`/api/direct-reports/${reportId}`, {

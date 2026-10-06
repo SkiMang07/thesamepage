@@ -89,7 +89,22 @@ _RPC_ERRORS = {"P0002": 404, "40001": 409, "22023": 422, "28000": 401}
 SECTIONS = ("responsibility", "skill", "value")
 _ORDER_TYPES = {"primary", "secondary", "tertiary"}
 _PERIODS = {"week", "month", "quarter", "annual", "none"}
-_TOPICS = {"target", "measure", "scope", "wording", "other"}
+_TOPICS = {"target", "measure", "scope", "wording", "other", "level"}
+
+# Whether one standard should cover everyone in the role (finding #3, Theo run
+# 2026-10-06: "Jonah is junior and Dakota is senior so honestly it's not the
+# same bar"). A question about it carries topic "level": it is never parked a
+# month out on approval, and its answer can split the role into two levels.
+# A question is retagged "level" when it asks one-standard-or-several in so
+# many words; the manager's notes raising seniority add the question when the
+# model didn't ask it.
+_STANDARD_SPLIT = re.compile(
+    r"\b(?:one|a single|single|shared|same|separate|different|two|multiple)\s+(?:shared\s+)?"
+    r"(?:standard|bar|version|level|profile)s?\b", re.IGNORECASE)
+_SENIORITY = re.compile(
+    r"\b(?:junior|senior|mid[- ]level|entry[- ]level|more experienced|less experienced|"
+    r"not the same bar|same bar|different bars?|different levels?)\b", re.IGNORECASE)
+LEVEL_QUESTION_ID = "level"
 _FIELDS = {"title", "responsibility", "meets", "exceeds"}
 _MAX_AI_QUESTIONS = 3
 _MAX_SUGGESTIONS = 5
@@ -415,10 +430,13 @@ def normalize_question(raw: dict) -> dict | None:
         return None
     status = raw.get("status") if raw.get("status") in ("open", "answered", "deferred", "dismissed") else "open"
     field = raw.get("field") if raw.get("field") in _FIELDS | {"target"} else None
+    topic = raw.get("topic") if raw.get("topic") in _TOPICS else "other"
+    if topic not in ("target", "level") and _STANDARD_SPLIT.search(text):
+        topic = "level"
     return {
         "id": raw.get("id") if isinstance(raw.get("id"), str) and raw.get("id") else f"q-{uuid.uuid4().hex[:12]}",
         "item_key": raw.get("item_key") if isinstance(raw.get("item_key"), str) and raw.get("item_key") else None,
-        "topic": raw.get("topic") if raw.get("topic") in _TOPICS else "other",
+        "topic": topic,
         "question": text,
         "why": _clean_text(raw.get("why"), 400) or None,
         "answer_mode": "field" if raw.get("answer_mode") == "field" and field else "answer",
@@ -430,6 +448,34 @@ def normalize_question(raw: dict) -> dict | None:
         "origin": raw.get("origin") if raw.get("origin") in ("system", "ai", "decision") else "ai",
         "created_at": raw.get("created_at") or _now_iso(),
     }
+
+
+def ensure_level_question(questions: list[dict], context_text: str | None) -> list[dict]:
+    """When the manager's own words say people in the role aren't at one level
+    and no question asks about it yet, add the one that does. Never more than
+    one level question."""
+    if any(q["topic"] == "level" for q in questions):
+        return questions
+    if not context_text or not _SENIORITY.search(context_text):
+        return questions
+    return [*questions, normalize_question({
+        "id": LEVEL_QUESTION_ID,
+        "topic": "level",
+        "question": "You said people in this role aren't all at the same level. Keep one standard for everyone, "
+                    "or split it into separate levels?",
+        "why": "Prep sheets and assessments hold everyone in a role to the same lines.",
+        "origin": "system",
+    })]
+
+
+def ladder_has_levels(supabase, role: dict | None) -> bool:
+    """The role's ladder already has more than one level: the level question
+    has been answered, so it isn't asked again (a split's new level would
+    otherwise ask it of itself when the manager describes it as senior)."""
+    if not role or not role.get("role_family_id"):
+        return False
+    rows = supabase.table("role_levels").select("id").eq("role_family_id", role["role_family_id"]).execute().data
+    return len(rows) > 1
 
 
 def target_question_id(item_key: str) -> str:
@@ -911,13 +957,15 @@ Company values that already apply to every role: {values_line}
 {sibling_block}
 {_DOCUMENT_RULES}
 
-QUESTIONS: ask only what the manager must decide and the job description and notes leave open — ambiguous scope, wording that can't be observed, a measure that's unclear. Do NOT ask about missing numeric targets (the app asks those itself). Refer to items by their index in your items array. Zero questions is fine.
+Write every expectation for anyone who holds this role, never for a named person: when the notes say what someone should do ("I expect Dakota to run the release train"), write what anyone at this level does ("Runs the release train").
+
+QUESTIONS: ask only what the manager must decide and the job description and notes leave open — ambiguous scope, wording that can't be observed, a measure that's unclear. If the manager says people in this role are at different levels (junior and senior, not the same bar), ask once whether to keep one standard or split the role into separate levels, with topic "level" and no item_index. Do NOT ask about missing numeric targets (the app asks those itself). Refer to items by their index in your items array. Zero questions is fine.
 
 Return ONLY valid JSON, no commentary:
 {{
   {'"is_job_description": true, "reason": null, "other_roles_note": null, "role": {...}, "match": {...},' if include_identity else ''}
   "items": [{{"section": "responsibility", "measure": "numeric", "title": "...", "responsibility": "...", "meets": "...", "exceeds": "", "measurement_period": "quarter", "target": null, "source_quote": "...", "order_type": "primary"{', "basis": "described"' if description_only else ''}}}],
-  "questions": [{{"item_index": 0, "topic": "scope" | "wording" | "measure" | "other", "question": "...", "why": "one short sentence on why it matters"}}]{conflicts_shape}
+  "questions": [{{"item_index": 0, "topic": "scope" | "wording" | "measure" | "level" | "other", "question": "...", "why": "one short sentence on why it matters"}}]{conflicts_shape}
 }}
 
 measurement_period is one of week, month, quarter, annual, none (numeric items only). order_type is primary (the 2-4 things that matter most), secondary or tertiary. Keep the draft honest and compact: 3-8 responsibilities, 2-5 skills."""
@@ -927,7 +975,8 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
                       org_value_names: list[str] | None = None,
                       context_text: str | None = None,
                       mode: str = "jd",
-                      extra_numbers_text: str | None = None) -> tuple[list[dict], list[dict], list[str]]:
+                      extra_numbers_text: str | None = None,
+                      ask_level: bool = True) -> tuple[list[dict], list[dict], list[str]]:
     """Validate the model's items/questions. Returns (items, questions, notes).
     context_text is the manager's notes: its numbers are stated, and a target
     quoted from it is kept with source 'manager'.
@@ -1043,6 +1092,10 @@ def sanitize_composed(parsed: dict, *, corpus_text: str, source_available: bool,
             if unsupported_numbers(q["why"], allowed):
                 q["why"] = None
             questions.append(q)
+    if ask_level:
+        questions = ensure_level_question(questions, context_text)
+    else:
+        questions = [q for q in questions if q["topic"] != "level"]
     return items, reconcile_questions(items, questions), notes
 
 
@@ -1493,6 +1546,7 @@ def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), au
     context = _clean_text(body.context, _MAX_CONTEXT) or None
     corpus = (source_text or "") + " " + _role_title(role)
 
+    ask_level = not ladder_has_levels(supabase, role)
     composed_items: list[dict] = []
     composed_questions: list[dict] = []
     compose_mode = "description" if any(
@@ -1502,7 +1556,7 @@ def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), au
         composed_items, composed_questions, _ = sanitize_composed(
             {"items": body.items, "questions": []}, corpus_text=corpus, source_available=bool(source_text),
             org_value_names=[v["name"] for v in _org_values(supabase)], context_text=context, mode=compose_mode,
-            extra_numbers_text=_document_numbers_text(body.document_numbers))
+            extra_numbers_text=_document_numbers_text(body.document_numbers), ask_level=ask_level)
         # Questions composed earlier reference items by key; keep those that still match.
         keys = {i["key"] for i in composed_items}
         for q in body.questions or []:
@@ -1510,6 +1564,8 @@ def create_draft(body: DraftCreateIn, auth=Depends(get_authenticated_client), au
             if not nq or nq["topic"] == "target" or unsupported_numbers(nq["question"], numbers_in(corpus) | numbers_in(context)):
                 continue
             nq["status"], nq["answer"], nq["decision_id"] = "open", None, None
+            if nq["topic"] == "level" and (not ask_level or any(x["topic"] == "level" for x in composed_questions)):
+                continue
             if nq["item_key"] is None or nq["item_key"] in keys:
                 composed_questions.append(nq)
 
@@ -1747,7 +1803,7 @@ RULES:
 Return ONLY valid JSON:
 {{
   "summary": "one sentence on where the draft stands",
-  "questions": [{{"item_key": "key or null", "topic": "scope" | "wording" | "measure" | "other", "question": "...", "why": "..."}}],
+  "questions": [{{"item_key": "key or null", "topic": "scope" | "wording" | "measure" | "level" | "other", "question": "...", "why": "..."}}],
   "suggestions": [
     {{"type": "rewrite", "item_key": "...", "field": "meets" | "exceeds" | "responsibility" | "title", "text": "...", "why": "..."}},
     {{"type": "target", "item_key": "...", "text": "the target exactly as the manager or source stated it", "why": "..."}},
@@ -2117,9 +2173,12 @@ def _park_open_optional(supabase, draft: dict, user_id: str) -> dict:
     open_optional = [q for q in questions if q["status"] == "open" and q["topic"] != "target"]
     if not open_optional:
         return draft
-    when = date.today() + timedelta(days=_OPTIONAL_PARK_DAYS)
-    parked = {q["id"]: _park_question(supabase, draft, user_id, q, when) for q in open_optional}
-    questions = [{**x, "status": "deferred", "decision_id": parked[x["id"]], "follow_up_on": when.isoformat()}
+    later = date.today() + timedelta(days=_OPTIONAL_PARK_DAYS)
+    # A level question isn't parked a month out: it stays due (today) until
+    # the manager answers it, so it waits under Needs review and on the role.
+    when = {q["id"]: date.today() if q["topic"] == "level" else later for q in open_optional}
+    parked = {q["id"]: _park_question(supabase, draft, user_id, q, when[q["id"]]) for q in open_optional}
+    questions = [{**x, "status": "deferred", "decision_id": parked[x["id"]], "follow_up_on": when[x["id"]].isoformat()}
                  if x["id"] in parked else x for x in questions]
     return _write_draft(supabase, draft, {"questions": reconcile_questions(draft["items"], questions)})
 
@@ -2153,3 +2212,133 @@ def approve_draft(draft_id: str, body: ApproveIn, auth=Depends(get_authenticated
     out = get_role(approved["role_level_id"], auth=auth)
     out["approved_draft"] = {"id": approved["id"], "approved_at": approved.get("approved_at")}
     return out
+
+
+# ---------------------------------------------------------------------------
+# One standard or two levels (finding #3)
+# ---------------------------------------------------------------------------
+
+class SplitIn(BaseModel):
+    title: str
+    people_ids: list[str]
+    # The level question this answers; resolved when the split lands.
+    decision_id: str | None = None
+
+
+def _resolve_decision(supabase, decision_id: str | None, role_level_id: str, resolution: str) -> None:
+    if not decision_id:
+        return
+    supabase.table("role_expectation_decisions").update({
+        "status": "resolved", "resolution": resolution, "resolved_at": _now_iso(),
+    }).eq("id", decision_id).eq("role_level_id", role_level_id).eq("status", "deferred").execute()
+
+
+def split_items(approved_items: list[dict]) -> list[dict]:
+    """The approved lines as a new level's starting draft: same wording, new
+    keys, nothing linked to the source's config rows. A pre-workflow target
+    comes across unresolved, as in copy_from_role."""
+    out = []
+    for si in approved_items:
+        item = {**si, "key": _new_key(), "config_id": None, "config_kind": None, "origin": "copied", "edited": False}
+        if item.get("legacy_target"):
+            item["legacy_target"] = False
+            item["target"] = {"status": "unresolved"}
+        out.append(item)
+    return out
+
+
+@router.post("/roles/{role_level_id}/split")
+def split_role_level(role_level_id: str, body: SplitIn, auth=Depends(get_authenticated_client),
+                     authorization: str = Header(None)):
+    """Answer the level question with "split into two levels": a new level
+    above this one on the same ladder, starting from this role's approved
+    lines (approved for it in the same step, so nobody who moves loses their
+    expectations or their Assessments), and the people the manager picked
+    moved onto it. What the new level asks differently is drafted afterwards
+    through the normal compose -> review -> approve path."""
+    user_id, supabase = auth
+    org_id = ensure_org(user_id, supabase, get_email_from_token(authorization))
+    role = _fetch_role(supabase, role_level_id)
+    title = _clean_text(body.title, 120)
+    if not title:
+        raise HTTPException(status_code=422, detail="Name the new level.")
+    approved_items = items_from_configs(_approved_configs(supabase, role_level_id))
+    if not approved_items:
+        raise HTTPException(status_code=409, detail="Approve this role's expectations first — the new level starts from them.")
+    people = {p["id"]: p for p in _people_for(supabase, role_level_id)}
+    ids = list(dict.fromkeys(body.people_ids))
+    if not ids:
+        raise HTTPException(status_code=422, detail="Choose who moves to the new level.")
+    if any(i not in people for i in ids):
+        raise HTTPException(status_code=422, detail="Someone you chose isn't in this role any more. Reload and try again.")
+
+    # The ladder: an ungrouped role gets one named after it, so the two
+    # levels read as one ladder everywhere.
+    family_id = role.get("role_family_id")
+    if not family_id:
+        family_id = supabase.table("role_families").insert({"org_id": org_id, "name": role["job_role"]}).execute().data[0]["id"]
+        supabase.table("role_levels").update({"role_family_id": family_id}).eq("id", role_level_id).execute()
+    top = max((r["job_level"] for r in supabase.table("role_levels").select("job_level")
+               .eq("role_family_id", family_id).execute().data), default=role["job_level"])
+    new_level = supabase.table("role_levels").insert({
+        "org_id": org_id, "job_role": title, "job_level": top + 1, "role_family_id": family_id,
+        "functional_team": role.get("functional_team"),
+    }).execute().data[0]
+
+    # Same lines, approved for the new level in one go. A target still being
+    # decided keeps its return date from the source.
+    items = split_items(approved_items)
+    draft = supabase.table("role_expectation_drafts").insert({
+        "org_id": org_id, "role_level_id": new_level["id"], "created_by": user_id, "kind": "new",
+        "status": "open", "source_text": None, "source_label": None, "items": items,
+        "questions": reconcile_questions(items, []), "suggestions": [],
+        "analysis": {"status": "idle", "notes": [], "split_from": role_level_id},
+    }).execute().data[0]
+    source_dates = {d["item_key"]: d["follow_up_on"] for d in _open_decisions(supabase, role_level_id) if d["topic"] == "target"}
+    by_title = {_squash(i["title"]): i for i in approved_items}
+    questions = [q for q in (normalize_question(q) for q in draft["questions"]) if q]
+    for i, q in enumerate(questions):
+        if q["topic"] != "target" or q["status"] != "open":
+            continue
+        item = next((x for x in items if x["key"] == q["item_key"]), None)
+        src = by_title.get(_squash(item["title"])) if item else None
+        when_raw = source_dates.get((src or {}).get("config_id") or "")
+        when = date.fromisoformat(when_raw[:10]) if when_raw else date.today() + timedelta(days=_OPTIONAL_PARK_DAYS)
+        decision_id = _park_question(supabase, draft, user_id, q, max(when, date.today()))
+        questions[i] = {**q, "status": "deferred", "decision_id": decision_id, "follow_up_on": max(when, date.today()).isoformat()}
+    draft = _write_draft(supabase, draft, {"questions": questions})
+    supabase.rpc("approve_role_expectation_draft", {"p_draft_id": draft["id"], "p_expected_version": draft["version"]}).execute()
+
+    moved = (
+        supabase.table("direct_reports").update({"role_level_id": new_level["id"]})
+        .in_("id", ids).eq("manager_id", user_id).eq("role_level_id", role_level_id).execute().data
+    )
+    names = [people[i]["name"] for i in ids if i in people]
+    _resolve_decision(supabase, body.decision_id, role_level_id,
+                      f"Split into two levels: {title} added above, with {', '.join(names)}.")
+    analytics.capture(user_id, "role_level_split", {"moved": len(moved), "items": len(items)})
+    return {"role_level_id": new_level["id"], "moved": len(moved), "items": len(items)}
+
+
+class CloseDecisionIn(BaseModel):
+    resolution: str
+
+
+_CLOSE_RESOLUTIONS = {"one_standard": "Kept one standard for everyone in this role."}
+
+
+@router.post("/decisions/{decision_id}/close")
+def close_decision(decision_id: str, body: CloseDecisionIn, auth=Depends(get_authenticated_client)):
+    """Answer an open level question with "keep one standard". Only level
+    questions close this way; the rest are resolved in a revision."""
+    _, supabase = auth
+    resolution = _CLOSE_RESOLUTIONS.get(body.resolution)
+    if not resolution:
+        raise HTTPException(status_code=422, detail="Unknown answer")
+    rows = supabase.table("role_expectation_decisions").select("id,role_level_id,topic,status").eq("id", decision_id).execute().data
+    if not rows or rows[0]["status"] != "deferred":
+        raise HTTPException(status_code=404, detail="That question is already answered. Reload to see where it stands.")
+    if rows[0]["topic"] != "level":
+        raise HTTPException(status_code=422, detail="Resolve this one in a revision.")
+    _resolve_decision(supabase, decision_id, rows[0]["role_level_id"], resolution)
+    return get_role(rows[0]["role_level_id"], auth=auth)
