@@ -507,7 +507,7 @@ function PrepFlow() {
               </select>
             </label>
             <p className="text-xs text-ink-muted sm:col-span-2">
-              This schedules the rhythm inside The Same Page. Calendar invitations will come with calendar sync.
+              This sets how often the 1:1 repeats. Calendar invitations will come with calendar sync.
               {oneOnOneId && (
                 <span className="ml-1 text-ink-secondary" aria-live="polite">
                   {scheduleSaving ? "Saving…" : scheduleSaved ? "Saved." : ""}

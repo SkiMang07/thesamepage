@@ -138,7 +138,7 @@ export default function AppNav() {
                   ))}
                 </span>
                 <span className="hidden text-ink-muted sm:inline">
-                  {pathStepsDone(zone.onboarding)} of {PATH_STEPS}
+                  {pathStepsDone(zone.onboarding)} of {PATH_STEPS} done
                 </span>
               </Link>
             )}

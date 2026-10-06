@@ -230,7 +230,7 @@ def step_target(steps: dict, key: str) -> dict:
     """The label and link for a step's one action, for surfaces outside the setup
     card (the Mission Control candidate). Mirrors what the card offers."""
     if key == "org":
-        return {"label": "Place your people", "href": "/app/settings?section=people"}
+        return {"label": "Place your people", "href": "/app/settings?section=people&from=setup"}
     if key == "expectations":
         waiting = steps["expectations"].get("drafts_to_review") or 0
         if waiting:

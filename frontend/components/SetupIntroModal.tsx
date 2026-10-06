@@ -79,7 +79,7 @@ export default function SetupIntroModal({
           suits you and in as many sittings as you like. You can skip any step for now. Setup shows in the header until each step is done or skipped.
         </p>
         <p className="mt-2 text-[13px] text-ink-secondary">
-          If you have notes or a document already, “Add what you already have” on the setup card fills in what they cover.
+          If you have notes or a document already, “Add what you know” on the setup card fills in what they cover.
         </p>
 
         <div className="mt-5 flex flex-wrap items-center justify-end gap-2">

@@ -172,7 +172,7 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       changes: "Puts each person in a team and gives them a role, so a prep sheet knows who they work alongside and what they do.",
       time: "About 3 minutes",
       action: "Place your people",
-      href: "/app/settings?section=people",
+      href: "/app/settings?section=people&from=setup",
       done: org.done,
       skipped: org.skipped,
       blocked: false,

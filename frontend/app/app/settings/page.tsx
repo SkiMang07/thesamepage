@@ -21,6 +21,8 @@ import {
   Profile,
   RoleFamily,
   RoleLevel,
+  FIRST_RUN_STEPS,
+  PATH_STEPS,
   SetupStatus,
   SetupStatusPerson,
   WorkUnitConfig,
@@ -125,6 +127,11 @@ function SettingsFlow() {
   // clicking a different person or switching sections and back doesn't
   // resurrect a stale filter.
   const [peopleFilterUnitId, setPeopleFilterUnitId] = useState<string | null>(unitParam);
+  // Opened from the setup card ("Place your people"): setup mode. Only the
+  // people editor, a step banner that says what done means, and the way back.
+  // The area list and its green checks stay out of it; they answer a different
+  // question ("is anything broken?") and read as "done" mid-setup.
+  const fromSetup = searchParams.get("from") === "setup" && section === "people";
 
   // Shared data
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
@@ -215,12 +222,14 @@ function SettingsFlow() {
 
       {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
-      {readinessLoaded && readyCount < FOUNDATIONS.length && (
+      {!fromSetup && readinessLoaded && readyCount < FOUNDATIONS.length && (
         <FoundationReadiness readyCount={readyCount} total={FOUNDATIONS.length} loading={false} />
       )}
 
-      <div className={`${SECTION_GAP} grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]`}>
-        <FoundationMap
+      {fromSetup && <SetupStepBanner reports={reports} loaded={readinessLoaded} />}
+
+      <div className={`${SECTION_GAP} grid items-start gap-5 ${fromSetup ? "" : "lg:grid-cols-[19rem_minmax(0,1fr)]"}`}>
+        {!fromSetup && <FoundationMap
           selected={section}
           onSelect={selectSection}
           readiness={readinessBySection}
@@ -231,10 +240,10 @@ function SettingsFlow() {
           roleLevels={roleLevels}
           capacity={capacitySummary}
           workUnits={workUnitSummary}
-        />
+        />}
 
         <section className={`${CARD} min-w-0 overflow-hidden`}>
-          <FoundationEditorHeader section={section} ready={readinessBySection[section]} loaded={readinessLoaded} profile={profile} setupStatus={setupStatus} />
+          <FoundationEditorHeader section={section} ready={readinessBySection[section]} loaded={readinessLoaded} profile={profile} setupStatus={setupStatus} setupMode={fromSetup} />
           <div className="p-5 sm:p-6">
             {section === "profile" && profile && (
               <ProfileSection profile={profile} onSaved={setProfile} onError={setError} />
@@ -455,7 +464,7 @@ const EDITOR_COPY: Record<SectionId, { eyebrow: string; title: string; descripti
     eyebrow: "People & structure",
     title: "Connect people to the organization",
     description: "Add people and connect each one to the role and team that supply their management context.",
-    scope: "Setup and assignments live here. Ongoing relationship work stays in Team and each Relationship Desk; hierarchy maintenance stays in Org.",
+    scope: "Add people and give each one a team and a role here. Day-to-day work with someone happens on their page; reshaping teams and departments happens in Org.",
   },
   roles: {
     eyebrow: "Roles & expectations",
@@ -467,7 +476,7 @@ const EDITOR_COPY: Record<SectionId, { eyebrow: string; title: string; descripti
     eyebrow: "Operating defaults",
     title: "Set the starting assumptions",
     description: "Give conversations and capacity an honest baseline before person-specific context takes over.",
-    scope: "These defaults apply to all direct reports. An explicit setting on a person's Relationship Desk still wins.",
+    scope: "These defaults apply to all direct reports. A setting made on a person's own page still wins.",
   },
   account: {
     eyebrow: "Your account",
@@ -477,18 +486,54 @@ const EDITOR_COPY: Record<SectionId, { eyebrow: string; title: string; descripti
   },
 };
 
+// Setup step 4 ("Team and roles"), opened from the setup card. Done means
+// what the server counts as done (routes/onboarding.py): every person has a
+// team and a role. Counted from the roster on this page, so it updates as the
+// manager assigns.
+function SetupStepBanner({ reports, loaded }: { reports: DirectReport[]; loaded: boolean }) {
+  const unplaced = reports.filter((r) => !r.org_unit_id || !r.role_level_id);
+  const done = loaded && reports.length > 0 && unplaced.length === 0;
+  const first = (name: string) => name.trim().split(/\s+/)[0] || name;
+  return (
+    <section
+      role="status"
+      className={`${SECTION_GAP} flex flex-wrap items-center justify-between gap-4 rounded-lg border px-5 py-4 ${done ? "border-brand bg-brand/10" : "border-hairline bg-surface"}`}
+    >
+      <div className="min-w-0">
+        <p className="text-xs text-ink-muted">Setup · step {FIRST_RUN_STEPS + 1} of {PATH_STEPS}</p>
+        <h2 className="mt-1 text-lg font-semibold text-ink">{done ? "Team and roles: done" : "Team and roles"}</h2>
+        <p className="mt-1 text-sm text-ink-body">
+          {!loaded
+            ? "Checking your people…"
+            : reports.length === 0
+              ? "Add your people below, then give each one a team and a role."
+              : done
+                ? `All ${reports.length} people have a team and a role. Prep sheets now know who each person works alongside and what they do.`
+                : `${reports.length - unplaced.length} of ${reports.length} have a team and a role. Still to place: ${unplaced.map((r) => first(r.name)).join(", ")}.`}
+        </p>
+      </div>
+      <Link href="/app/dashboard#setup" className={done ? BTN_PRIMARY : BTN_SECONDARY}>
+        Back to setup
+      </Link>
+    </section>
+  );
+}
+
 function FoundationEditorHeader({
   section,
   ready,
   loaded,
   profile,
   setupStatus,
+  setupMode = false,
 }: {
   section: SectionId;
   ready: boolean;
   loaded: boolean;
   profile: Profile | null;
   setupStatus: SetupStatus | null;
+  /** From the setup card: the banner above says where things stand. */
+  setupMode?: boolean;
 }) {
   const copy = EDITOR_COPY[section];
   let statusLabel = ready ? "Configured" : "Needs attention";
@@ -503,7 +548,7 @@ function FoundationEditorHeader({
           <h2 className="mt-1 text-lg font-semibold text-ink">{copy.title}</h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-secondary">{copy.description}</p>
         </div>
-        {loaded ? (
+        {setupMode ? null : loaded ? (
           <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${ready ? "bg-teal-50 text-teal-700" : "bg-amber-50 text-amber-700"}`}>
             {ready ? "✓" : "!"} {statusLabel}
           </span>
@@ -511,9 +556,11 @@ function FoundationEditorHeader({
           <span className="shrink-0 rounded-full bg-sunken px-2.5 py-1 text-xs font-medium text-ink-muted">Checking…</span>
         )}
       </div>
-      <div className={`mt-4 rounded-lg px-3 py-2.5 text-xs leading-relaxed ${!loaded || ready ? "bg-brand-tint text-ink-body" : "bg-amber-50 text-amber-800"}`}>
-        <span className="font-semibold">Scope:</span> {copy.scope}
-      </div>
+      {!setupMode && (
+        <div className={`mt-4 rounded-lg px-3 py-2.5 text-xs leading-relaxed ${!loaded || ready ? "bg-brand-tint text-ink-body" : "bg-amber-50 text-amber-800"}`}>
+          <span className="font-semibold">Scope:</span> {copy.scope}
+        </div>
+      )}
     </div>
   );
 }
@@ -1266,7 +1313,7 @@ function PeopleSection({
     <div>
       <h2 className="font-medium text-ink">Set up your team</h2>
       <p className="mt-1 text-sm text-ink-secondary">
-        Add your people, then wire each one to a role and a team — create either inline, right here, if it doesn&apos;t exist
+        Add your people, then give each one a role and a team. Create either right here if it doesn&apos;t exist
         yet. Expectations follow the role automatically. Editing levels within a ladder, or merging near-duplicate roles,
         still happens in{" "}
         <button onClick={onNavigateToRoles} className="underline">

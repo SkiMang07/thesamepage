@@ -763,7 +763,7 @@ def build_brief(
                     if has_role
                     else f"Add {report['name']}’s role to prep against the expectations you set."
                 ),
-                "detail": "Optional. Prep works without it.",
+                "detail": "The next prep sheet measures against it.",
                 "href": "/app/expectations" if has_role else "/app/settings",
                 "action_label": "Review expectations" if has_role else "Add role",
             }

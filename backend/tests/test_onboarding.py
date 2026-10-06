@@ -653,7 +653,7 @@ def test_the_receipt_never_uses_watching_words_or_cheer():
 def test_step_targets_mirror_what_the_card_offers():
     steps = _all_true(goal_levels={"team"}, queue=[{"report_id": "p9", "person_name": "Sam Lee", "role_level_id": None,
                                                     "role_label": None, "next_1on1_on": None}])
-    assert step_target(steps, "org") == {"label": "Place your people", "href": "/app/settings?section=people"}
+    assert step_target(steps, "org") == {"label": "Place your people", "href": "/app/settings?section=people&from=setup"}
     assert step_target(steps, "expectations") == {"label": "Pick a role for Sam", "href": "/app/expectations/new?assign=p9"}
     assert step_target(steps, "goals")["href"] == "/app/dashboard?setup=goals"
     steps = _all_true(queue=[{"report_id": "p9", "person_name": "Sam Lee", "role_level_id": "r4",
