@@ -38,6 +38,7 @@ from routes.one_on_ones import (
     PREP_MAX_TOKENS,
     assemble_prep_inputs,
     build_prep_guide,
+    drew_on_expectations,
     parse_prep_output,
     summary_unsupported,
     prep_drew_on,
@@ -386,7 +387,7 @@ def apply_result(admin, job: dict, text: str | None, error: str | None) -> str:
         snapshot.get("open_commitments") or [],
         source_notes=snapshot.get("raw_notes") or "",
         prepared_by="overnight",
-        drew_on=snapshot.get("drew_on") or [],
+        drew_on=drew_on_expectations(snapshot.get("drew_on") or [], agenda, guard),
         built_without=snapshot.get("built_without") or [],
         summary_unsupported=summary_unsupported(situation_summary, guard),
     )

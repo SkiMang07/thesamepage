@@ -58,6 +58,7 @@ function NotInYourNotes({ words }: { words: string[] }) {
 function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
   const [open, setOpen] = useState(index === 0); // first card open by default
   const held = item.held ?? [];
+  const used = item.expectations_used ?? [];
   const unsupportedWords = Array.from(new Set((item.unsupported ?? []).flatMap((u) => u.words)));
 
   return (
@@ -87,6 +88,18 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
             <div className="mt-3 border-l-2 border-hairline pl-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">From your notes</p>
               <p className="mt-0.5 text-sm text-ink-secondary">{item.from_your_notes}</p>
+            </div>
+          )}
+          {used.length > 0 && (
+            <div className="mt-3 border-l-2 border-hairline pl-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Measured against</p>
+              <ul className="mt-0.5 space-y-0.5">
+                {used.map((u) => (
+                  <li key={u.ref} className="text-sm text-ink-secondary">
+                    {u.line}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           {item.suggested_questions.length > 0 && (

@@ -30,7 +30,12 @@ it can't happen anyway, without the model deciding anything:
    GuardContext.manager_owed) always carries a line for the manager to give its
    status. If the model wrote none, OWED_LINE is added. A prompt rule alone
    gave this line 1 time in 2 (Dayna round, 2026-10-03).
-4. AUDIENCE. Every item is stored with `audience: "manager"`. Only the fields in
+4. THE EXPECTATIONS IT USED. An item may list the role expectations it drew
+   on (`expectation_refs`, "E1", "E2"... as numbered in the prompt). Refs that
+   point at no expectation are dropped; the rest are resolved to the line the
+   manager approved (`expectations_used`), snapshotted so the sheet keeps
+   showing what it was built against. Manager-facing, like the rationale.
+5. AUDIENCE. Every item is stored with `audience: "manager"`. Only the fields in
    SHAREABLE_FIELDS could ever be shown to the report, and only once the manager
    chooses to share. A sheet saved without the field is manager-only.
 
@@ -58,6 +63,9 @@ class GuardContext:
     source: str = ""
     # Prompt refs ("C1", "C2"...) of open commitments the manager owes the report.
     manager_owed: list[str] = field(default_factory=list)
+    # Prompt refs ("E1", "E2"...) of the role's expectations -> the plain line
+    # the sheet shows when an item draws on one.
+    expectations: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, d: dict | None) -> "GuardContext":
@@ -67,11 +75,12 @@ class GuardContext:
             others=[str(n) for n in (d.get("others") or []) if n],
             source=str(d.get("source") or ""),
             manager_owed=[str(r) for r in (d.get("manager_owed") or []) if r],
+            expectations={str(k): str(v) for k, v in (d.get("expectations") or {}).items() if k and v},
         )
 
     def to_dict(self) -> dict:
         return {"report_name": self.report_name, "others": self.others, "source": self.source,
-                "manager_owed": self.manager_owed}
+                "manager_owed": self.manager_owed, "expectations": self.expectations}
 
 
 # --- What the manager owes ---------------------------------------------------
@@ -95,18 +104,31 @@ def manager_owed_refs(open_commitments: list[dict]) -> list[str]:
             if c.get("committed_by") != "direct_report"]
 
 
-def normalize_refs(raw) -> list[str]:
-    """The model's commitment_refs as "C<n>" strings; anything else dropped."""
+def normalize_refs(raw, prefix: str = "C") -> list[str]:
+    """The model's refs as "<prefix><n>" strings ("C2" for commitment_refs,
+    "E3" for expectation_refs); anything else dropped."""
     out: list[str] = []
     for r in raw if isinstance(raw, list) else []:
         if isinstance(r, bool):
             continue
         if isinstance(r, int):
-            r = f"C{r}"
-        m = re.fullmatch(r"\s*c?\s*(\d+)\s*", str(r), re.IGNORECASE)
-        if m and f"C{m.group(1)}" not in out:
-            out.append(f"C{m.group(1)}")
+            r = f"{prefix}{r}"
+        m = re.fullmatch(r"\s*" + re.escape(prefix) + r"?\s*(\d+)\s*", str(r), re.IGNORECASE)
+        if m and f"{prefix}{m.group(1)}" not in out:
+            out.append(f"{prefix}{m.group(1)}")
     return out
+
+
+def expectation_ref(index: int) -> str:
+    """The ref the prompt shows for the role expectation at 0-based `index`."""
+    return f"E{index + 1}"
+
+
+def expectations_used(raw_refs, ctx: "GuardContext") -> list[dict]:
+    """An item's expectation_refs resolved to the approved lines, in the
+    model's order. Refs the prompt never showed are dropped. Pure."""
+    return [{"ref": r, "line": ctx.expectations[r]}
+            for r in normalize_refs(raw_refs, "E") if r in ctx.expectations]
 
 
 def _rx(*parts: str, flags=re.IGNORECASE) -> re.Pattern:
@@ -321,8 +343,11 @@ def guard_item(item: dict, ctx: GuardContext) -> dict:
     if (set(item.get("commitment_refs") or []) & set(ctx.manager_owed)
             and not any(_STATUS_LINE.search(q) for q in kept)):
         kept = [OWED_LINE, *kept]
+    used = expectations_used(item.get("expectation_refs"), ctx)
     return {
         **item,
+        "expectation_refs": [u["ref"] for u in used],
+        "expectations_used": used,
         "suggested_questions": kept,
         "held": held,
         "unsupported": unsupported,

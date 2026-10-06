@@ -45,7 +45,7 @@ import analytics
 import context_engine
 from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
-from prep_guard import GuardContext, commitment_ref, guard_item, manager_owed_refs, normalize_refs, unsupported_words
+from prep_guard import GuardContext, commitment_ref, expectation_ref, guard_item, manager_owed_refs, normalize_refs, unsupported_words
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
@@ -93,6 +93,11 @@ class HeldLine(BaseModel):
     label: str
 
 
+class ExpectationUsed(BaseModel):
+    ref: str
+    line: str
+
+
 class UnsupportedClaim(BaseModel):
     field: str
     words: list[str]
@@ -111,6 +116,10 @@ class AgendaItem(BaseModel):
     audience: str = "manager"
     # Prompt refs of the open commitments this item covers (prep_guard).
     commitment_refs: list[str] = Field(default_factory=list)
+    # The role expectations this item drew on, resolved to the approved lines
+    # (prep_guard). Manager-facing.
+    expectation_refs: list[str] = Field(default_factory=list)
+    expectations_used: list[ExpectationUsed] = Field(default_factory=list)
 
 
 class PrepResponse(BaseModel):
@@ -194,6 +203,40 @@ class ScheduleUpdate(BaseModel):
 # Prompt builder — this is the core product IP
 # ---------------------------------------------------------------------------
 
+_EXPECTATION_KINDS = (("metrics", "metric_name"), ("skills", "skill_name"), ("values", "value_name"))
+
+
+def numbered_expectations(expectations: dict | None) -> list[tuple[str, str, dict]]:
+    """(ref, kind, row) for every configured expectation, in the order the
+    prompt shows them: metrics, then skills, then values. The refs ("E1"...)
+    are what an agenda item's expectation_refs point at."""
+    rows = [
+        (kind, row)
+        for kind, _name_col in _EXPECTATION_KINDS
+        for row in (expectations or {}).get(kind) or []
+    ]
+    return [(expectation_ref(i), kind, row) for i, (kind, row) in enumerate(rows)]
+
+
+def expectation_line(kind: str, row: dict) -> str:
+    """The plain line the sheet shows for one expectation: what the manager
+    approved, with the target when one is set."""
+    name_col = dict(_EXPECTATION_KINDS)[kind]
+    line = str(row.get("expectation") or row.get(name_col) or "").strip()
+    if kind == "metrics" and row.get("target_status") == "set" and row.get("target"):
+        line += f" (target: {row['target']})"
+    return line
+
+
+def expectation_lines(expectations: dict | None) -> dict[str, str]:
+    """{"E1": line, ...}: what prep_guard resolves expectation_refs against."""
+    return {
+        ref: line
+        for ref, kind, row in numbered_expectations(expectations)
+        if (line := expectation_line(kind, row))
+    }
+
+
 def _format_expectations_block(report_name: str, expectations: dict | None) -> str:
     """Optional prompt section: the role's configured expectations (Settings >
     Expectations). Empty string when the DR has no role assigned — the prompt
@@ -206,12 +249,14 @@ def _format_expectations_block(report_name: str, expectations: dict | None) -> s
     if role.get("functional_team"):
         role_label += f" ({role['functional_team']})"
 
+    numbered = numbered_expectations(expectations)
+
     def _items(kind: str, name_col: str) -> str:
-        rows = expectations.get(kind) or []
+        rows = [(ref, r) for ref, k, r in numbered if k == kind]
         if not rows:
             return ""
         lines = []
-        for r in rows:
+        for ref, r in rows:
             parts = [r[name_col]]
             if r.get("expectation"):
                 parts.append(f"expectation: {r['expectation']}")
@@ -226,7 +271,7 @@ def _format_expectations_block(report_name: str, expectations: dict | None) -> s
                 parts.append("no target set yet — do not assume or suggest a number")
             if r.get("exceeds"):
                 parts.append(f"exceeds: {r['exceeds']}")
-            lines.append("    • " + " — ".join(parts))
+            lines.append(f"    • {ref} " + " — ".join(parts))
         label = {"metrics": "Metrics", "skills": "Skills", "values": "Values"}[kind]
         return f"  {label}:\n" + "\n".join(lines)
 
@@ -255,7 +300,9 @@ ROLE CONTEXT — {report_name}'s role: {role_label}.{responsibilities}
     return f"""
 ROLE EXPECTATIONS — what good looks like for {report_name}'s role ({role_label}):{responsibilities}
 {body}
-When the manager's notes or history touch performance, feedback, growth, or career direction, ground your questions and any SBI phrasing in these specific expectations — name the relevant metric, skill, or value explicitly. Do NOT audit every expectation in one 1:1; pull in only the ones the notes make relevant. If nothing in the notes connects to them, leave them out entirely.
+When the manager's notes or history touch performance, feedback, growth, level, reviews, or career direction, ground your questions and any SBI phrasing in these specific expectations — name the relevant metric, skill, or value explicitly. Do NOT audit every expectation in one 1:1; pull in only the ones the notes make relevant. If nothing in the notes connects to them, leave them out entirely.
+These expectations are the standard the manager approved for this role. When the manager's notes say they are unsure what good looks like, what the bar is, or what to expect at this person's level, answer the manager with these lines in the rationale; do not ask {report_name} to define the standard (rule 4).
+List the E-number of every expectation an item draws on in that item's "expectation_refs"; the manager sees those lines under the item as what the item was measured against. Tag an expectation only when the item is about that standard (how the person is doing against it, or what it asks of them), not because the topic touches the same work. Logistics, scheduling, time off and handoffs draw on none. Most items draw on none.
 """
 
 
@@ -280,7 +327,7 @@ COVER THESE, in this order, one agenda item each:
    "What's one thing I could do to make your work easier this week?"
    This is non-negotiable — it is the most important question in any 1:1.
 
-If role expectations or company context appear in the material below, you may use them in items 2 and 3. Do not assume anything they don't state.
+If role expectations or company context appear in the material below, you may use them in items 2 and 3, and list the E-number of each expectation an item draws on in its "expectation_refs". Do not assume anything they don't state.
 
 ---
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
@@ -291,6 +338,7 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
     {
       "title": "Short label for this item (5 words or fewer)",
       "rationale": "One sentence on why this item belongs in a first 1:1. Do not refer to anything on record; nothing is.",
+      "expectation_refs": ["The E-number of each role expectation this item draws on, e.g. \"E2\"; [] if none"],
       "suggested_questions": ["Question 1", "Question 2"]
     }
   ]
@@ -438,7 +486,7 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
    - PERFORMANCE CONCERNS → ask what happened and what is in the way. Write feedback phrasing only when the notes ask for feedback (rule 7).
    - POSITIVE MOMENTUM → reinforce with "What made that work?" — build repeatable behavior, not just celebrate outcomes.
    - ENGAGEMENT / MOTIVATION SIGNALS → surface with "What's energizing you right now?" and "What's feeling like a drag?"
-   - CAREER / GROWTH SIGNALS → ask "What would make this role feel like it's moving in the right direction for you?"
+   - CAREER / GROWTH SIGNALS (from the report: something they said, asked for or want) → ask "What would make this role feel like it's moving in the right direction for you?" The manager's own uncertainty about this person's level, bar or what good looks like is not a signal from the report, and neither is a review cycle coming up; both are the manager's context (rule 4).
 
 3. AGENDA PRIORITY
    Order items by urgency. If there are commitments to review AND an urgent issue, open with commitments (quick check, 1–2 mins each) and then pivot to the urgent topic. Do not bury time-sensitive items at the end.
@@ -448,7 +496,8 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
    "suggested_questions" are questions the report can answer. They are not statements of what the manager thinks, has decided, or has been told.
    The one standing exception: on a commitment the manager owes the report, always give one plain line for the manager to give its status in their own terms ("I owe you the design doc feedback. It's not done yet; here's when you'll have it."). Never leave such an item without a line, and list the commitment's C-number in the item's "commitment_refs". Framework 1 asks for exactly this.
    Otherwise, write a line that TELLS the report something only when the notes say the manager intends to tell them ("need to tell him", "want to let her know", "have to give him feedback") or ask for help saying it ("how do I say", "help me word"). Then write one plain sentence in the manager's own wording, with no preamble ("I want you to know", "I want to be transparent"). Never decide for the manager that something should be shared, and never coach them toward telling ("he should hear it from you").
-   Context about HR, the manager's boss or leadership, other people on the team, a decision that isn't made (promotion, pay, a performance plan, a reorg, someone's job), a guess about the person's life outside work, and the manager's own doubts is the manager's own context. Restate it in "from_your_notes" or the summary, in their words. Do not turn it into a suggested question, and do not make it the reason to raise something with the report ("HR wants documentation, so this needs a clear conversation now"). The manager decides what to do with it.
+   Context about HR, the manager's boss or leadership, other people on the team, a decision that isn't made (promotion, pay, a performance plan, a reorg, someone's job), a guess about the person's life outside work, and the manager's own doubts is the manager's own context. Restate it in "from_your_notes" or the summary, in their words. Do not turn it into a suggested question, and do not make it the reason to raise something with the report ("HR wants documentation, so this needs a clear conversation now", "you noted uncertainty about what good looks like, so it's worth surfacing with him directly"). The manager decides what to do with it.
+   When the manager's doubt is about what good looks like for this person and ROLE EXPECTATIONS appear below, the doubt is answered for the manager, not handed to the report: in the rationale, name the specific expectations that set the bar in plain words and list their E-numbers in "expectation_refs". If the notes say this person's level is different from the standard (junior, senior), say plainly that the approved expectations are one standard for the role. Do not ask the report what good looks like.
 
 5. CLOSING QUESTION
    Always include one final agenda item: a closing check-in. Use a variation of:
@@ -467,7 +516,7 @@ FRAMEWORKS TO APPLY — read carefully before generating output:
    Never weigh what the person said against the record ("'I'm fine' doesn't give much to go on given the numbers") and never ask in a way that doubts their answer ("What's actually going on?", "What's really happening?"). If the notes record what they said, restate it and ask an open question.
    Open causes stay open. If the notes list a cause as undecided ("not sure if it's capacity or something else"), do not introduce it, lean on it or build a question or rationale around it, and do not reach for its near-synonyms (bandwidth, workload, scheduling). Echo the uncertainty in their words or leave it out. Ask what happened and what is in the way, with no cause named.
    When the notes say what the manager did or did not do, keep their words. "I never asked what was said" is "you never asked what was said", not "you haven't followed up on it". Do not compress it into a shorter phrase that sounds like a lapse.
-   Never cite the role expectations as a rule: no "per the role expectations", "according to the expectations", "as the role requires". Say the plain thing ("QBRs are Cormac's to run") and let the manager see where it came from in the line below the sheet.
+   Never cite the role expectations as a rule: no "per the role expectations", "according to the expectations", "as the role requires". Say the plain thing ("QBRs are Cormac's to run") and list the expectation's E-number in "expectation_refs"; the manager sees the approved line under the item.
    Stay true to what the manager wrote. If the notes mention what HR, their boss or another team wants or may do, restate it in their words with their hedge ("HR wants documentation", "worried HR will ask"). Never turn it into a fact they did not state ("HR has flagged this", "this is now a documented pattern", "HR asked for documentation"), and do not drop it either: the manager decides what goes on the sheet.
    Do not reach for the SBI template (Situation / Behavior / Impact) or any HR-style documentation phrasing unless the manager's notes ask for feedback or a conversation about performance; even then, write one plain suggested sentence in the manager's own wording, and never a labelled script.
    The sheet is read by the manager. Write to them as "you" ("you noted she seemed flat", "you haven't asked yet"), and never call them "the manager".
@@ -483,6 +532,7 @@ Return ONLY valid JSON. No commentary, no markdown, no code fences.
       "rationale": "Why this item matters right now — one sentence, grounded in the notes or history",
       "from_your_notes": "What the manager wrote that this item comes from, in their words, or \"\" (rule 4)",
       "commitment_refs": ["The C-number of each open commitment this item covers, e.g. \"C1\"; [] if none"],
+      "expectation_refs": ["The E-number of each role expectation this item draws on, e.g. \"E2\"; [] if none"],
       "suggested_questions": ["Question the report can answer", "Another"]
     }
   ]
@@ -1063,6 +1113,7 @@ def assemble_prep_inputs(
             others=[r["name"] for r in roster if r.get("id") != direct_report_id and r.get("name")],
             source=guard_source,
             manager_owed=manager_owed_refs(open_commitments),
+            expectations=expectation_lines(role_expectations),
         ).to_dict(),
         "built_without": prep_built_without(
             has_team=bool(report.get("org_unit_id")),
@@ -1172,6 +1223,21 @@ def prep_drew_on(
     return labels
 
 
+def drew_on_expectations(drew_on: list[str], agenda_items: list[dict], guard: GuardContext | None) -> list[str]:
+    """Sharpen the "role expectations" label once the sheet exists: "2 of 7
+    role expectations" when items drew on some, and no label when none
+    applied this time. Left as is when the guard has no numbered expectations
+    (a job queued before they existed). Shared by /prep and the worker."""
+    total = len((guard or GuardContext()).expectations)
+    if not total or "role expectations" not in drew_on:
+        return drew_on
+    used = {u["ref"] for item in agenda_items for u in item.get("expectations_used") or []}
+    if not used:
+        return [label for label in drew_on if label != "role expectations"]
+    label = f"{len(used)} of {_plural(total, 'role expectation')}"
+    return [label if lbl == "role expectations" else lbl for lbl in drew_on]
+
+
 def parse_prep_output(raw: str, guard: GuardContext | None = None) -> tuple[str, list[dict]]:
     """The model's JSON as (situation_summary, agenda_items). A reply that
     won't parse yields the retry message and an empty agenda, never an
@@ -1206,6 +1272,7 @@ def parse_prep_output(raw: str, guard: GuardContext | None = None) -> tuple[str,
             "from_your_notes": str(item.get("from_your_notes") or ""),
             "suggested_questions": [str(q) for q in questions if isinstance(q, (str, int, float)) and str(q).strip()],
             "commitment_refs": normalize_refs(item.get("commitment_refs")),
+            "expectation_refs": item.get("expectation_refs"),
         }, ctx))
     return str(parsed.get("situation_summary") or ""), agenda
 
@@ -1355,12 +1422,16 @@ def prep_one_on_one(
         open_commitments,
         source_notes=body.raw_notes,
         prepared_by="manager",
-        drew_on=prep_drew_on(
-            inputs,
-            opening_line=opening_line,
-            carry_forward_items=carry_forward_items,
-            has_notes=bool(body.raw_notes.strip()),
-            suggested_topics=len(suggested_topics),
+        drew_on=drew_on_expectations(
+            prep_drew_on(
+                inputs,
+                opening_line=opening_line,
+                carry_forward_items=carry_forward_items,
+                has_notes=bool(body.raw_notes.strip()),
+                suggested_topics=len(suggested_topics),
+            ),
+            agenda_dicts,
+            guard,
         ),
         built_without=inputs.get("built_without"),
         summary_unsupported=summary_unsupported(situation_summary, guard),

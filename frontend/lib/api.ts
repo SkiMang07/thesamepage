@@ -299,6 +299,9 @@ export type AgendaItem = {
   // the record alone. Manager-only.
   from_your_notes?: string;
   held?: HeldLine[];
+  // The role expectations this item drew on, as the lines the manager
+  // approved (prep_guard). Manager-only. Absent on sheets saved before them.
+  expectations_used?: { ref: string; line: string }[];
   // Escalation words ("asked", "flagged") in a sentence about HR or
   // leadership that nothing the model was given used.
   unsupported?: { field: string; words: string[] }[];

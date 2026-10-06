@@ -293,9 +293,12 @@ meetings beyond the team (framed as someone else's account, never fact — see
 The prep prompt restates what the notes say and never reads the person: no state of
 mind or cause the notes don't give, the manager's own hedge is kept as written, no
 outcome is added, no question implies fault, and the sheet speaks to the manager as
-"you". "Drew on: role expectations" and "Built without: role expectations" go by
-whether the role has configured (approved) metrics, skills or values, not by whether a
-role is assigned.
+"you". "Built without: role expectations" goes by whether the role has
+configured (approved) metrics, skills or values, not by whether a role is
+assigned. When it has them, the byline names how many the sheet used ("2 of 7
+role expectations") and leaves the label off when none applied
+(`drew_on_expectations()`, after parsing, manual and overnight alike). A job
+queued before the expectations were numbered keeps the plain label.
 **Restate by default, script on request.** Each agenda item carries
 `from_your_notes` — what the manager wrote that the item comes from, in their
 words — and `suggested_questions`, which are questions the report can answer.
@@ -361,6 +364,27 @@ counts, never text.
 **Expectations are grounding context, not an agenda.** `_format_expectations_block()`
 explicitly instructs the model *not* to audit every expectation in one 1:1. This
 restraint is the template every other AI prompt in the app copied.
+
+**The sheet shows which expectations it used.** The prompt numbers the role's
+approved expectations `E1`, `E2`… (metrics, then skills, then values,
+`numbered_expectations()`), and each item returns the `expectation_refs` it draws
+on. The model tags one only when the item is about that standard; logistics and
+handoffs draw on none. `prep_guard` resolves the refs against
+`GuardContext.expectations` (`expectation_lines()`: the approved expectation, or
+its name, plus a set target), drops any that point at nothing, and stores
+`expectations_used` on the item as a snapshot. The prep page shows them under the
+item as "Measured against", manager-facing (not in `SHAREABLE_FIELDS`). Sheets
+saved before show nothing.
+
+**The manager's doubt about the bar is answered for the manager.** When the notes
+say the manager is unsure what good looks like for this person, the rationale
+names the approved expectations that set the bar and tags them; the report is
+never asked to define the standard. The growth question in framework 2 fires on
+a signal from the report, not on the manager's doubt or a review cycle coming up.
+If the notes say the person's level differs from the standard, the rationale says
+plainly that the approved expectations are one standard for the role. Theo run,
+2026-10-05: "he's junior so not sure what good looks like for him yet" had become
+two questions for Jonah. Fixture: `tests/test_prep_expectations.py`.
 
 `/prep` is the only Context Engine call site today, and it's rate-limited.
 
