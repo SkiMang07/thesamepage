@@ -31,6 +31,7 @@ import { SECTION_GAP } from "@/components/ZoneMap";
 import { deriveOneOnOneSuggestions, OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
 
 import NoteField from "@/components/NoteField";
+import NotePromises, { useNotePromises } from "@/components/NotePromises";
 
 // Where each "Built without" label is fixed (setup inputs the sheet was built
 // without; the labels come from prep_built_without() on the server).
@@ -233,6 +234,12 @@ function PrepFlow() {
   const [wrappingUp, setWrappingUp] = useState(false);
   const [draft, setDraft] = useState<WrapUpDraft | null>(null);
 
+  // Promises in the note the sheet was just built from, offered as
+  // commitments under the sheet (components/NotePromises.tsx). Held here so
+  // the step 2 / wrap-up round trip does not read the note twice. An added
+  // commitment joins the open list a rebuild starts from.
+  const promises = useNotePromises(id, (c) => setOpenCommitments((cs) => [...cs, c]));
+
   useEffect(() => {
     // Name only — used for the "who owes this" toggle on the review screen.
     getDirectReport(id)
@@ -356,6 +363,8 @@ function PrepFlow() {
       setRecurrenceWeeks(result.recurrence_weeks);
       setCarryForwardItems(result.carry_forward_items);
       setStep(2);
+      // Only a sheet built here from a note; a reopened sheet is not re-read.
+      promises.read(notes);
       // Captured content is now folded into this sheet — clear the inbox so
       // it doesn't get pulled in again next time. Best-effort: a failure
       // here just leaves a stale row to be re-included next prep, not worth
@@ -662,6 +671,14 @@ function PrepFlow() {
                 {prep.agenda_items.length} {prep.agenda_items.length === 1 ? "item" : "items"}
                 {scheduleDate ? ` for ${longDayLabel(scheduleDate)}` : ""}. It’s on {reportName.split(" ")[0] || "their"}’s page.
               </p>
+              {promises.waiting > 0 && (
+                <p className="mt-1 text-sm text-ink-body">
+                  <a href="#note-promises" className="font-medium text-brand hover:text-brand-hover hover:underline">
+                    {promises.waiting} {promises.waiting === 1 ? "promise" : "promises"} in your note
+                  </a>{" "}
+                  to add as commitments, below the agenda.
+                </p>
+              )}
               <p className="mt-1 text-sm text-ink-secondary">
                 Steps {FIRST_RUN_STEPS + 1} to {PATH_STEPS} are next, on Mission Control: team and roles, expectations, goals.
               </p>
@@ -797,6 +814,8 @@ function PrepFlow() {
                 <AgendaCard key={i} item={item} index={i} />
               ))}
             </div>
+
+            <NotePromises np={promises} reportName={reportName} />
           </div>
 
           {/* Right — what's actually happening on the call */}

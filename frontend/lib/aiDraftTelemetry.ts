@@ -10,6 +10,7 @@
 export type AiDraftSurface =
   | "one_on_one_wrapup"
   | "person_intake"
+  | "prep_note_promises"
   | "team_wrapup"
   | "beyond_wrapup"
   | "development_plan"

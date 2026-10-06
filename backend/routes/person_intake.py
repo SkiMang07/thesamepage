@@ -1,7 +1,8 @@
 """Capture by person (docs/design-proposals/2026-10-02-capture-by-person/).
 
 The manager writes or says what they know about ONE person, on that person's
-page. Because the text arrives attached to a person, nothing is guessed about
+page. The prep page reuses the same reading on the note a sheet was just built
+from (source "prep_note"), to offer the promises in it as commitments. Because the text arrives attached to a person, nothing is guessed about
 who it is about. This route only drafts: it reads that text and returns what
 the manager owes the person, what the person owes the manager, and short
 things worth keeping. Nothing is written here (Hard Rule 6). The manager
@@ -21,6 +22,7 @@ Three guards keep wrong data out, in order of how little they trust the model:
 import json
 import re
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -39,6 +41,10 @@ MAX_THOUGHTS = 8
 
 class IntakeDraftIn(BaseModel):
     text: str = Field(min_length=1)
+    # Where the text came from, for analytics only; the reading is identical.
+    # "prep_note": the note a prep sheet was just built from ("Promises in
+    # your note" under the sheet), which shows the commitments only.
+    source: Literal["intake", "prep_note"] = "intake"
 
 
 # ── guard 1: who a sentence is about is decided by the page, not the model ──
@@ -83,7 +89,15 @@ def separate(text: str, this: dict, others: list[dict]) -> tuple[str, list[dict]
 
 # ── the one AI call ─────────────────────────────────────────────────────────
 
-def build_prompt(name: str, text: str, today_iso: str) -> CachedPrompt:
+# A prep note is written for the next 1:1, so most of it is what the manager
+# means to raise in that meeting. Those lines are the agenda, not promises.
+# Said in the body only, so the intake prefix (and its cache) is unchanged.
+PREP_NOTE_RULE = """THIS TEXT IS THE MANAGER'S NOTES FOR THEIR NEXT 1:1 WITH {name}. Most of it is what the manager plans to raise, ask, check or mention IN that meeting ("ask how they like feedback", "check how on-call is going", "mention the release win", "talk about the reorg"). Those are agenda items for the meeting, NOT commitments: leave them out entirely. A commitment here is only something already promised or asked for before this meeting that is still open ("I said 4 months ago we'd talk about X, never did", "asked her to write down Y, hasn't happened", "I owe him feedback"). Kept thoughts: return an empty list.
+
+"""
+
+
+def build_prompt(name: str, text: str, today_iso: str, source: str = "intake") -> CachedPrompt:
     prefix = """You are helping a manager record what they already know about ONE direct report. Everything the manager wrote is about that one person; you are never deciding who a sentence is about. Return only what the text states. The manager reviews and edits everything before anything is saved.
 
 Produce:
@@ -105,7 +119,8 @@ Produce:
 Never invent. An empty list is a valid answer. Return ONLY valid JSON, no commentary, no code fences:
 
 {"commitments": [{"description": "...", "committed_by": "manager", "due_date": null, "quote": "..."}], "kept_thoughts": [{"text": "...", "quote": "..."}]}"""
-    body = f"""THE PERSON: {name}
+    rule = PREP_NOTE_RULE.format(name=name) if source == "prep_note" else ""
+    body = rule + f"""THE PERSON: {name}
 
 Today's date: {today_iso}
 
@@ -247,7 +262,7 @@ def draft_person_intake(request: Request, report_id: str, body: IntakeDraftIn, a
     result = {"commitments": [], "thoughts": [], "already_there": 0, "dropped": 0}
     if readable.strip():
         raw = generate_text(
-            build_prompt(this["name"], readable, date.today().isoformat()),
+            build_prompt(this["name"], readable, date.today().isoformat(), body.source),
             model=AI_DEFAULT_MODEL_HEAVY, max_tokens=1500,
         )
         open_rows = (
@@ -257,6 +272,7 @@ def draft_person_intake(request: Request, report_id: str, body: IntakeDraftIn, a
         result = validate(_parse_json(raw), readable, open_rows)
 
     analytics.capture(user_id, "person_intake_drafted", {
+        "source": body.source,
         "input_size": _size_bucket(len(text)),
         "commitments": len(result["commitments"]),
         "thoughts": len(result["thoughts"]),

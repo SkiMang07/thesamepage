@@ -19,6 +19,8 @@ Intake happens on each person's page. The page fixes the person, so the model ne
 
 Slower than one paste for a whole team, accepted: correctness over speed. About 1,800 lines of attribution machinery become removable.
 
+The prep page reuses the same reader on the note a sheet was just built from ("Promises in your note", `source: "prep_note"`, commitments only), so promises in a first note become commitments the manager confirms. The guards are the same; the prompt body adds one prep-note rule (agenda lines are not commitments). See `docs/systems/one-on-ones.md` → Promises in the note.
+
 ## Reopen if
 
 Measured attribution on a sealed per-roster eval reaches zero severe errors, or per-person capture shows setup completion falling sharply.

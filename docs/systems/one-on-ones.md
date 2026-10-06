@@ -247,6 +247,32 @@ the manual path have no list and show the author line alone.
 The wrap-up review says "Drafted from your notes by The Same Page" above the
 editable summary and commitments.
 
+### Promises in the note
+
+A note often holds promises already made ("I said 4 months ago we'd talk about
+lead or staff, never did"; "asked her to write down what she took over, hasn't
+happened"). The sheet raises them as topics but does not track them. So right
+after a sheet is built on the prep page from a non-empty note, the same note
+goes through the capture-by-person reader (`POST /api/person-intake/{id}/draft`
+with `source: "prep_note"`; `docs/decisions/capture-by-person.md`), and its
+commitments show under the agenda as **Promises in your note**
+(`components/NotePromises.tsx`). The reader's guards hold unchanged: every row
+quotes the note, a sentence naming someone else on the team is not read, an
+owner the note did not state is never guessed, and a commitment already open on
+the same side is not drafted again. For a prep note only, the prompt body adds
+one rule: what the manager plans to raise, ask, check or mention in the meeting
+is the agenda, not a commitment. Kept thoughts are not shown; the sheet already
+carries the note.
+
+Each row is added with **Add to commitments** (`POST /api/commitments`, the
+manager's chosen side and due date) or set aside with **Not a promise**. Nothing
+is added without that choice. A row added or set aside is remembered for the tab
+by its quote, so rebuilding from the same note does not ask again. The state is
+held by the prep page (`useNotePromises`), so going to the wrap-up and back does
+not read the note twice. A reopened sheet is not re-read. On a first-run sheet
+the receipt links to the block while rows are waiting. The prep prompt itself is
+untouched: extraction there was rejected as a risk to the tuned prompt.
+
 ### Prepared overnight
 
 **Parked (2026-09-26):** built, tested and deployed with the API, but not running — the Railway worker service has deliberately not been created. Until it is, no sheet is ever marked "Prepared overnight" and every

@@ -97,6 +97,12 @@ def test_route_sends_the_event(client, sent, monkeypatch):
     assert props["surface"] == "development_plan" and props["items_drafted"] == 3
 
 
+def test_route_accepts_the_prep_note_promises_surface(client, sent):
+    r = client.post("/api/telemetry/ai-draft", json=_body(surface="prep_note_promises", items_drafted=2, items_kept=1))
+    assert r.status_code == 200, r.text
+    assert sent[-1][2]["surface"] == "prep_note_promises"
+
+
 @pytest.mark.parametrize("bad", [
     {"draft_text": "Jack will own the migration"},          # any extra field
     {"surface": "free text"},

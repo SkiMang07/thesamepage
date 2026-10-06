@@ -266,3 +266,35 @@ def test_garbage_from_the_model_is_an_empty_draft_not_an_error(client, monkeypat
     monkeypatch.setattr(pi, "generate_text", lambda *a, **k: "not json at all")
     r = c.post("/api/person-intake/dr1/draft", json={"text": "I owe her feedback."})
     assert r.status_code == 200 and r.json()["commitments"] == [] and r.json()["thoughts"] == []
+
+
+# ── the prep page reuses the reader on the note a sheet was built from ────
+
+def test_a_prep_note_is_read_the_same_way_and_tagged_for_analytics(client, monkeypatch):
+    c, db, sent = client
+    monkeypatch.setattr(pi, "generate_text", lambda *a, **k: _reply(
+        commitments=[{"description": "Talk with her about what lead or staff looks like", "committed_by": "manager",
+                      "quote": "we'd talk about what lead or staff looks like here"}],
+        kept_thoughts=[]))
+    text = "I said like 4 months ago we'd talk about what lead or staff looks like here, never did."
+    r = c.post("/api/person-intake/dr1/draft", json={"text": text, "source": "prep_note"})
+    assert r.status_code == 200 and len(r.json()["commitments"]) == 1
+    assert db.writes == []
+    ev, props = sent[-1]
+    assert ev == "person_intake_drafted" and props["source"] == "prep_note"
+
+
+def test_source_defaults_to_intake_and_refuses_anything_else(client, monkeypatch):
+    c, _db, sent = client
+    monkeypatch.setattr(pi, "generate_text", lambda *a, **k: "{}")
+    assert c.post("/api/person-intake/dr1/draft", json={"text": "I owe her feedback."}).status_code == 200
+    assert sent[-1][1]["source"] == "intake"
+    assert c.post("/api/person-intake/dr1/draft", json={"text": "hi", "source": "elsewhere"}).status_code == 422
+
+
+def test_a_prep_note_tells_the_model_agenda_lines_are_not_commitments():
+    prep = pi.build_prompt("Mei Tanaka", "Ask how she likes feedback.", "2026-10-06", "prep_note")
+    intake = pi.build_prompt("Mei Tanaka", "Ask how she likes feedback.", "2026-10-06")
+    assert prep.prefix == intake.prefix                     # the cached prefix is shared
+    assert "NOT commitments" in prep.body and "NEXT 1:1 WITH Mei Tanaka" in prep.body
+    assert "NOT commitments" not in intake.body

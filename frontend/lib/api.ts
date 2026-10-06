@@ -482,8 +482,14 @@ export type PersonIntakeDraft = {
   truncated: boolean;
 };
 
-export const draftPersonIntake = (reportId: string, text: string): Promise<PersonIntakeDraft> =>
-  authedFetch(`/api/person-intake/${reportId}/draft`, { method: "POST", body: JSON.stringify({ text }) });
+// source "prep_note": the note a prep sheet was just built from (analytics
+// only; the reading is the same).
+export const draftPersonIntake = (
+  reportId: string,
+  text: string,
+  source: "intake" | "prep_note" = "intake",
+): Promise<PersonIntakeDraft> =>
+  authedFetch(`/api/person-intake/${reportId}/draft`, { method: "POST", body: JSON.stringify({ text, source }) });
 
 // ---------------------------------------------------------------------------
 // Goals (Session 10) — full company/department/team/individual hierarchy.
