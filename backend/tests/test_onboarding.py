@@ -659,13 +659,13 @@ def test_step_targets_mirror_what_the_card_offers():
     steps = _all_true(queue=[{"report_id": "p9", "person_name": "Sam Lee", "role_level_id": "r4",
                               "role_label": "AE L1", "next_1on1_on": None}])
     assert step_target(steps, "expectations") == {"label": "Set expectations for AE L1", "href": "/app/expectations/r4"}
-    assert step_target(steps, "goals") == {"label": "Write a team goal", "href": "/app/goals"}
+    assert step_target(steps, "goals") == {"label": "Write your team\u2019s goal", "href": "/app/goals?new=1&level=team"}
 
 
 def test_setup_prompt_offers_a_way_back_only_mid_setup():
     mid = setup_prompt("m", _Client(_incomplete(users=[_prompt_user(setup_card_dismissals=1)])))
     assert mid["next_step"] == "goals" and mid["card_level"] == "quiet" and mid["user_id"] == "m"
-    assert mid["done_count"] == 2 and mid["total"] == 3 and mid["href"] == "/app/goals"
+    assert mid["done_count"] == 2 and mid["total"] == 3 and mid["href"] == "/app/goals?new=1&level=team"
     assert setup_prompt("m", _Client(_tables(users=[_prompt_user()], one_on_ones=[_sheet()]))) is None   # set up
     not_activated = _tables(goals=[], one_on_ones=[], users=[_prompt_user()])
     assert setup_prompt("m", _Client(not_activated)) is None

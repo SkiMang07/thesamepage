@@ -59,7 +59,7 @@ import {
 import GoalSheet from "@/components/goals/GoalSheet";
 import GoalUpdateForm, { UpdateDraft, isDraftDirty } from "@/components/goals/GoalUpdateForm";
 import GoalDetail from "@/components/goals/GoalDetail";
-import GoalForm from "@/components/goals/GoalForm";
+import GoalForm, { type GoalFormDefaults } from "@/components/goals/GoalForm";
 import UpdatesFeed from "@/components/goals/UpdatesFeed";
 import StillCurrent from "@/components/goals/StillCurrent";
 import Dialog from "@/components/goals/Dialog";
@@ -68,7 +68,7 @@ import { useOpenRecord } from "@/lib/scribeCitations";
 
 type Filter = "all" | "review" | "missing" | "closed";
 type View = "board" | "updates";
-type Editor = { kind: "new" } | { kind: "edit"; id: string } | null;
+type Editor = { kind: "new"; defaults?: GoalFormDefaults } | { kind: "edit"; id: string } | null;
 type Receipt = { goalId: string; title: string; detail: string; warning?: string } | null;
 type Confirm = { title: string; body: string; action: string; cancel: string; danger?: boolean; run: () => void } | null;
 type ParsedUpdate = { status: GoalStatus; value: number | null; completion: number | null; note: string | null };
@@ -86,13 +86,17 @@ function errorText(e: unknown, fallback: string) {
 }
 
 function readUrl() {
-  if (typeof window === "undefined") return { level: null, scope: null, goal: null };
+  if (typeof window === "undefined") return { level: null, scope: null, goal: null, isNew: false, supports: null };
   const q = new URLSearchParams(window.location.search);
   const level = q.get("level");
   return {
     level: LEVELS.some((l) => l.id === level) ? (level as GoalLevel) : null,
     scope: q.get("scope"),
     goal: q.get("goal"),
+    // ?new=1 opens the New goal form, prefilled from level + scope (+ supports),
+    // so every "Add a goal" link elsewhere lands on the right form.
+    isNew: q.get("new") === "1",
+    supports: q.get("supports"),
   };
 }
 
@@ -194,6 +198,26 @@ export default function GoalsPage() {
     setScope(deep ? "all" : url.scope ?? "all");
     if (deep) setDetailId(deep.id);
     else if (url.goal) setPageError("That goal isn't in your goals. It may have been deleted.");
+    else if (url.isNew) {
+      const lvl = url.level ?? "individual";
+      const id = url.scope && url.scope !== "all" && url.scope !== "none" ? url.scope : undefined;
+      setEditor({
+        kind: "new",
+        defaults: {
+          level: lvl,
+          directReportId: lvl === "individual" ? id : undefined,
+          orgUnitId: lvl === "team" || lvl === "department" ? id : undefined,
+          parentGoalId: url.supports && g.value.some((x) => x.id === url.supports) ? url.supports : undefined,
+        },
+      });
+    }
+    if (url.isNew || url.supports) {
+      // One-shot intent: a refresh shouldn't reopen the form.
+      const q = new URLSearchParams(window.location.search);
+      q.delete("new");
+      q.delete("supports");
+      window.history.replaceState(null, "", `${window.location.pathname}${q.toString() ? `?${q}` : ""}`);
+    }
     setLoading(false);
   }, []);
 
@@ -649,11 +673,13 @@ export default function GoalsPage() {
                   <GoalForm
                     key={editor.kind === "edit" ? editor.id : "new"}
                     goal={editingGoal}
-                    defaults={{
-                      level,
-                      orgUnitId: scopeId(level, effectiveScope, ["team", "department"]),
-                      directReportId: scopeId(level, effectiveScope, ["individual"]),
-                    }}
+                    defaults={
+                      (editor.kind === "new" && editor.defaults) || {
+                        level,
+                        orgUnitId: scopeId(level, effectiveScope, ["team", "department"]),
+                        directReportId: scopeId(level, effectiveScope, ["individual"]),
+                      }
+                    }
                     reports={reports}
                     orgUnits={orgUnits}
                     allGoals={goals}

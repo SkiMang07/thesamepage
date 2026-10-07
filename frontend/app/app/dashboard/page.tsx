@@ -588,8 +588,8 @@ function LegacyDashboardPage() {
             emptyState={
               <p className="px-5 py-6 text-sm text-ink-secondary">
                 No organization, department, or team goals yet.{" "}
-                <Link href="/app/goals" className="underline hover:text-ink-body">
-                  Add one from the Goals page
+                <Link href="/app/goals?new=1&level=team" className="underline hover:text-ink-body">
+                  Add a team goal
                 </Link>
                 .
               </p>

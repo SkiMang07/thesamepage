@@ -248,7 +248,8 @@ def step_target(steps: dict, key: str) -> dict:
     if not steps["goals"]["has_org_goal"]:
         # The goals modal lives on Mission Control; the param opens it there.
         return {"label": "Add company or department goals", "href": "/app/dashboard?setup=goals"}
-    return {"label": "Write a team goal", "href": "/app/goals"}
+    # The New goal form, set to a team goal (the only team is picked for you).
+    return {"label": "Write your team\u2019s goal", "href": "/app/goals?new=1&level=team"}
 
 
 def expectation_queue(

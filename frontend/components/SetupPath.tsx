@@ -78,6 +78,9 @@ type StepView = {
   secondary?: { action: string; href: string; modal?: "notes" }[];
   // A second line under the highlighted step: what comes first, and what is next.
   detail?: string;
+  // A step with two halves (goals: org + team) lists both, each with its own
+  // check, so finishing one half visibly counts.
+  parts?: { label: string; done: boolean; note?: string }[];
   done: boolean;
   // "Skip for now": counts toward ending setup, is not done, and can be undone.
   skipped: boolean;
@@ -124,6 +127,9 @@ function expectationsAction(next: ExpectationQueueEntry | null | undefined, rest
     detail: `${next.role_label ?? "This role"} is ${first(next.person_name)}’s.${when}${then}`,
   };
 }
+
+// The New goal form, set to a team goal (the only team is picked for you).
+const TEAM_GOAL_HREF = "/app/goals?new=1&level=team";
 
 export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | null): StepView[] {
   const org = s.org;
@@ -218,10 +224,18 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       title: "Org and team goals",
       changes: "Links each person’s work to the goals it serves.",
       time: "About 3 minutes",
-      action: goals.has_org_goal ? "Write a team goal" : "Add company or department goals",
-      href: "/app/goals",
-      modal: goals.has_org_goal ? undefined : "goals",
-      detail: !goals.has_org_goal && !goals.has_team_goal ? "A team goal is yours to write. Add it on the Goals page." : undefined,
+      action: goals.has_org_goal || goals.parked ? "Write your team’s goal" : "Add company or department goals",
+      href: TEAM_GOAL_HREF,
+      modal: goals.has_org_goal || goals.parked ? undefined : "goals",
+      secondary: !goals.has_org_goal && !goals.has_team_goal && !goals.parked ? [{ action: "Or write your team’s goal first", href: TEAM_GOAL_HREF }] : undefined,
+      parts: [
+        {
+          label: "Company or department goals",
+          done: goals.has_org_goal,
+          note: !goals.has_org_goal && goals.unknown ? "asked your boss" : undefined,
+        },
+        { label: "Your team’s goal", done: goals.has_team_goal },
+      ],
       done: goals.done,
       skipped: goals.skipped,
       blocked: false,
@@ -236,8 +250,8 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
               ? "Company goals not known yet · no team goal"
               : "No org or team goal"
             : !goals.has_org_goal
-              ? "Org goal missing"
-              : "Team goal missing",
+              ? "1 of 2 done · company or department goals next"
+              : "1 of 2 done · your team’s goal next",
     },
   ];
 }
@@ -350,7 +364,7 @@ export default function SetupPath() {
           }}
         />
       )}
-      {goalsOpen && <OrgGoalsModal onClose={() => setGoalsOpen(false)} />}
+      {goalsOpen && <OrgGoalsModal onClose={() => setGoalsOpen(false)} teamGoalNeeded={!onboarding.steps.goals.has_team_goal} />}
     </>
   );
 
@@ -435,6 +449,20 @@ export default function SetupPath() {
                         {step.time} · {step.status}
                       </p>
                       {step.detail && <p className="mt-1 text-[13px] text-ink-secondary">{step.detail}</p>}
+                      {step.parts && (
+                        <ul className="mt-2 space-y-1 text-[13px]">
+                          {step.parts.map((part) => (
+                            <li key={part.label} className={part.done ? "text-ink-secondary" : "text-ink"}>
+                              <span aria-hidden className={`mr-2 inline-block w-3 ${part.done ? "text-brand" : "text-ink-muted"}`}>
+                                {part.done ? "✓" : "○"}
+                              </span>
+                              {part.label}
+                              <span className="sr-only">{part.done ? ", done" : ", not done"}</span>
+                              {part.note && <span className="ml-1 text-ink-muted">· {part.note}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {step.modal ? (
                         <button
                           type="button"

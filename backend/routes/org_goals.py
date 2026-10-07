@@ -201,6 +201,9 @@ class OrgGoalItem(_Strict):
     title: str = Field(max_length=160)
     success_metrics: str | None = Field(default=None, max_length=500)
     org_unit_name: str | None = Field(default=None, max_length=80)
+    # The department the manager picked on the review screen. Wins over the
+    # name the model read; must be a department the caller can see.
+    org_unit_id: str | None = Field(default=None, max_length=64)
     period_label: str | None = Field(default=None, max_length=80)
     set_by: str | None = Field(default=None, max_length=80)
     due_date: str | None = None
@@ -229,8 +232,10 @@ def _clean(value: str | None) -> str | None:
 def apply_goals(supabase, user_id: str, body: ApplyIn) -> dict:
     saved, skipped = 0, 0
     refused: list[dict] = []
+    saved_goals: list[dict] = []
     units = supabase.table("org_units").select("id,name,unit_type").execute().data
     unit_by_name = {u["name"].strip().lower(): u for u in units}
+    unit_by_id = {u["id"]: u for u in units}
     existing = {
         (g["level"], g["title"].strip().lower())
         for g in supabase.table("goals").select("title,level").eq("owner_id", user_id).neq("status", "cancelled").execute().data
@@ -244,7 +249,9 @@ def apply_goals(supabase, user_id: str, body: ApplyIn) -> dict:
         if (item.level, title.lower()) in existing:
             skipped += 1
             continue
-        unit = unit_by_name.get((item.org_unit_name or "").strip().lower()) if item.level == "department" else None
+        unit = None
+        if item.level == "department":
+            unit = unit_by_id.get(item.org_unit_id) if item.org_unit_id else unit_by_name.get((item.org_unit_name or "").strip().lower())
         unit_id = unit["id"] if unit and unit["unit_type"] == "department" else None
         try:
             due = date.fromisoformat(item.due_date[:10]).isoformat() if item.due_date else None
@@ -256,19 +263,23 @@ def apply_goals(supabase, user_id: str, body: ApplyIn) -> dict:
                 level=item.level, due_date=due, org_unit_id=unit_id,
             ))
             _validate_references(supabase, user_id, values)
-            supabase.table("goals").insert({
+            inserted = supabase.table("goals").insert({
                 **values,
                 "owner_id": user_id,
                 "period_label": _clean(item.period_label),
                 "set_by": _clean(item.set_by),
                 "confirmed_on": today,
-            }).execute()
+            }).execute().data
         except HTTPException as exc:
             refused.append({"kind": "goal", "reason": str(exc.detail)})
             continue
         existing.add((item.level, title.lower()))
         saved += 1
-    return {"saved": saved, "skipped_existing": skipped, "refused": refused}
+        if inserted:
+            saved_goals.append({"id": inserted[0]["id"], "level": item.level, "title": title, "org_unit_id": unit_id})
+    # saved_goals lets the receipt send the manager straight to a team goal
+    # that supports what they just added.
+    return {"saved": saved, "skipped_existing": skipped, "refused": refused, "saved_goals": saved_goals}
 
 
 @router.post("/apply")

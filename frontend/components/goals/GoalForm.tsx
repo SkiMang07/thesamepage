@@ -1,8 +1,15 @@
 "use client";
 
-// Create / edit a goal — the one form both paths use. Title, level and its
-// association, parent, status, due date, description, the written success
+// Create / edit a goal — the one form both paths use. Title, whose goal it is,
+// what it supports, status, due date, description, the written success
 // criterion, and an optional numeric measure.
+//
+// "Whose goal?" is one picker: Company, a department, a team or a person. The
+// level is derived from the pick, so level and link can no longer disagree or
+// be left half-answered. A goal is unlinked only when nothing of that kind
+// exists yet (no teams set up), or when an older goal was saved that way.
+// "Supports" (parent_goal_id) only offers goals above this one, with the
+// owner's own team and department first.
 //
 // The measure is one optional number per goal: what is counted, its format
 // (count / number / percentage), a display unit, how a reading compares
@@ -56,16 +63,49 @@ type Values = {
   measure: MeasureDraft;
 };
 
-function initialValues(goal: Goal | null | undefined, defaults: { level: GoalLevel; orgUnitId?: string; directReportId?: string }): Values {
+export type GoalFormDefaults = { level: GoalLevel; orgUnitId?: string; directReportId?: string; parentGoalId?: string };
+
+const LEVEL_RANK: Record<GoalLevel, number> = { individual: 0, team: 1, department: 2, company: 3 };
+
+/** "team:<id>", "individual:<id>", "company:", or "team:" for a level with no link. */
+function ownerKey(level: GoalLevel, directReportId: string, orgUnitId: string) {
+  if (level === "company") return "company:";
+  if (level === "individual") return `individual:${directReportId}`;
+  return `${level}:${orgUnitId}`;
+}
+
+function parseOwner(key: string): { level: GoalLevel; id: string } {
+  const i = key.indexOf(":");
+  return { level: key.slice(0, i) as GoalLevel, id: key.slice(i + 1) };
+}
+
+function ancestorUnitIds(unitId: string | null | undefined, units: OrgUnit[]) {
+  const out = new Set<string>();
+  let cur = unitId ?? null;
+  while (cur && !out.has(cur) && out.size < 50) {
+    out.add(cur);
+    cur = units.find((u) => u.id === cur)?.parent_unit_id ?? null;
+  }
+  return out;
+}
+
+function initialValues(goal: Goal | null | undefined, defaults: GoalFormDefaults, units: OrgUnit[]): Values {
   const m = goal?.measure;
+  // A new team or department goal with only one unit of that kind: that's the one.
+  const onlyUnit = (level: GoalLevel) => {
+    const of = units.filter((u) => u.unit_type === level);
+    return of.length === 1 ? of[0].id : "";
+  };
   return {
     title: goal?.title ?? "",
     description: goal?.description ?? "",
     successMetrics: goal?.success_metrics ?? "",
     level: goal?.level ?? defaults.level,
     directReportId: goal ? goal.direct_report_id ?? "" : defaults.directReportId ?? "",
-    orgUnitId: goal ? goal.org_unit_id ?? "" : defaults.orgUnitId ?? "",
-    parentGoalId: goal?.parent_goal_id ?? "",
+    orgUnitId: goal
+      ? goal.org_unit_id ?? ""
+      : defaults.orgUnitId ?? (defaults.level === "team" || defaults.level === "department" ? onlyUnit(defaults.level) : ""),
+    parentGoalId: goal ? goal.parent_goal_id ?? "" : defaults.parentGoalId ?? "",
     status: goal?.status ?? "active",
     dueDate: goal?.due_date ?? "",
     measure: {
@@ -106,7 +146,7 @@ export default function GoalForm({
   vocabulary,
 }: {
   goal?: Goal | null;
-  defaults: { level: GoalLevel; orgUnitId?: string; directReportId?: string };
+  defaults: GoalFormDefaults;
   reports: DirectReport[];
   orgUnits: OrgUnit[];
   allGoals: Goal[];
@@ -115,7 +155,7 @@ export default function GoalForm({
   onDirtyChange?: (dirty: boolean) => void;
   vocabulary?: string;
 }) {
-  const start = useMemo(() => initialValues(goal, defaults), [goal?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const start = useMemo(() => initialValues(goal, defaults, orgUnits), [goal?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [v, setV] = useState<Values>(start);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,17 +170,47 @@ export default function GoalForm({
   const set = (patch: Partial<Values>) => setV((cur) => ({ ...cur, ...patch }));
   const setMeasure = (patch: Partial<MeasureDraft>) => setV((cur) => ({ ...cur, measure: { ...cur.measure, ...patch } }));
 
-  const matchingUnits = orgUnits.filter((ou) => ou.unit_type === v.level);
-  const blocked = goal ? descendantIds(goal.id, allGoals) : new Set<string>();
-  const parentChoices = allGoals.filter((g) => g.id !== goal?.id && !blocked.has(g.id));
+  const departments = orgUnits.filter((ou) => ou.unit_type === "department");
+  const teams = orgUnits.filter((ou) => ou.unit_type === "team");
+  const owner = ownerKey(v.level, v.directReportId, v.orgUnitId);
+  // A level picked with no link: only offered when nothing of that kind exists
+  // yet, or to keep an older unlinked goal representable.
+  const unlinked = (level: GoalLevel) => {
+    const exists = level === "team" ? teams.length > 0 : level === "department" ? departments.length > 0 : reports.length > 0;
+    return !exists || owner === `${level}:`;
+  };
 
-  function changeLevel(level: GoalLevel) {
+  function changeOwner(key: string) {
+    const { level, id } = parseOwner(key);
+    const parent = allGoals.find((g) => g.id === v.parentGoalId);
     set({
       level,
-      directReportId: level === "individual" ? v.directReportId : "",
-      orgUnitId: orgUnits.some((ou) => ou.id === v.orgUnitId && ou.unit_type === level) ? v.orgUnitId : "",
+      directReportId: level === "individual" ? id : "",
+      orgUnitId: level === "team" || level === "department" ? id : "",
+      // A parent at or below the new level no longer fits.
+      parentGoalId: parent && LEVEL_RANK[parent.level] > LEVEL_RANK[level] ? v.parentGoalId : "",
     });
   }
+
+  // What this goal can support: goals above it, never itself or its own
+  // descendants. The owner's own chain (their team, its department) first.
+  const blocked = goal ? descendantIds(goal.id, allGoals) : new Set<string>();
+  const ownerUnit =
+    v.level === "individual" ? reports.find((r) => r.id === v.directReportId)?.org_unit_id ?? null : v.orgUnitId || null;
+  const chain = ancestorUnitIds(ownerUnit, orgUnits);
+  const above = allGoals.filter(
+    (g) =>
+      g.id !== goal?.id &&
+      !blocked.has(g.id) &&
+      g.status !== "cancelled" &&
+      (LEVEL_RANK[g.level] > LEVEL_RANK[v.level] || g.id === v.parentGoalId),
+  );
+  const isNear = (g: Goal) => g.level === "company" || (!!g.org_unit_id && chain.has(g.org_unit_id));
+  const supportsChoices = [...above].sort(
+    (a, b) => Number(isNear(b)) - Number(isNear(a)) || LEVEL_RANK[a.level] - LEVEL_RANK[b.level] || a.title.localeCompare(b.title),
+  );
+  const supportLabel = (g: Goal) =>
+    g.level === "company" ? `Company · ${g.title}` : `${g.org_unit_name ?? g.direct_report_name ?? LEVELS.find((l) => l.id === g.level)?.label} · ${g.title}`;
 
   function buildMeasure(): { ok: true; measure: GoalMeasure | null } | { ok: false; error: string } {
     const md = v.measure;
@@ -165,6 +235,9 @@ export default function GoalForm({
     e.preventDefault();
     if (saving) return;
     if (!v.title.trim()) return setError("Give the goal a title.");
+    if (v.level === "individual" && !v.directReportId) return setError("Pick the person this goal is for.");
+    if (v.level === "team" && !v.orgUnitId && teams.length) return setError("Pick the team this goal is for.");
+    if (v.level === "department" && !v.orgUnitId && departments.length) return setError("Pick the department this goal is for.");
     const measure = buildMeasure();
     if (!measure.ok) return setError(measure.error);
     const body: GoalIn = {
@@ -176,7 +249,7 @@ export default function GoalForm({
       due_date: v.dueDate || null,
       direct_report_id: v.level === "individual" ? v.directReportId || null : null,
       org_unit_id: v.level === "team" || v.level === "department" ? v.orgUnitId || null : null,
-      parent_goal_id: v.parentGoalId || null,
+      parent_goal_id: v.level === "company" ? null : v.parentGoalId || null,
     };
     // Only send the measure when it changed, so an edit that never touched
     // it can't collide with the lock.
@@ -199,53 +272,63 @@ export default function GoalForm({
 
   return (
     <form noValidate onSubmit={handleSubmit} className="space-y-5" aria-label={isEdit ? "Edit goal" : "New goal"}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_11rem]">
-        <div>
-          <label htmlFor="goal-title" className={LABEL}>Title</label>
-          <input id="goal-title" value={v.title} onChange={(e) => set({ title: e.target.value })} className={INPUT} placeholder="e.g. Make customer handoffs consistent" />
-        </div>
-        <div>
-          <label htmlFor="goal-level" className={LABEL}>Level</label>
-          <select id="goal-level" value={v.level} onChange={(e) => changeLevel(e.target.value as GoalLevel)} className={INPUT}>
-            {LEVELS.map((l) => (
-              <option key={l.id} value={l.id}>{l.label}</option>
-            ))}
-          </select>
-        </div>
+      <div>
+        <label htmlFor="goal-title" className={LABEL}>Title</label>
+        <input id="goal-title" value={v.title} onChange={(e) => set({ title: e.target.value })} className={INPUT} placeholder="e.g. Make customer handoffs consistent" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {v.level === "individual" && (
-          <div>
-            <label htmlFor="goal-report" className={LABEL}>Direct report</label>
-            <select id="goal-report" value={v.directReportId} onChange={(e) => set({ directReportId: e.target.value })} className={INPUT}>
-              <option value="">Not linked to a report</option>
-              {reports.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        {(v.level === "team" || v.level === "department") && (
-          <div>
-            <label htmlFor="goal-unit" className={LABEL}>{v.level === "team" ? "Team" : "Department"} (optional)</label>
-            <select id="goal-unit" value={v.orgUnitId} onChange={(e) => set({ orgUnitId: e.target.value })} className={INPUT}>
-              <option value="">Not linked to a specific {v.level}</option>
-              {matchingUnits.map((ou) => (
-                <option key={ou.id} value={ou.id}>{ou.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="goal-parent" className={LABEL}>Parent goal (optional)</label>
-          <select id="goal-parent" value={v.parentGoalId} onChange={(e) => set({ parentGoalId: e.target.value })} className={`${INPUT} truncate`}>
-            <option value="">No parent</option>
-            {parentChoices.map((g) => (
-              <option key={g.id} value={g.id}>[{g.level}] {g.title}</option>
-            ))}
+          <label htmlFor="goal-owner" className={LABEL}>Whose goal?</label>
+          <select id="goal-owner" value={owner} onChange={(e) => changeOwner(e.target.value)} className={INPUT}>
+            {v.level === "individual" && !v.directReportId && <option value="individual:">Pick a person</option>}
+            <option value="company:">The company</option>
+            {(departments.length > 0 || unlinked("department")) && (
+              <optgroup label="Departments">
+                {departments.map((ou) => (
+                  <option key={ou.id} value={`department:${ou.id}`}>{ou.name}</option>
+                ))}
+                {unlinked("department") && (
+                  <option value="department:">{departments.length ? (isEdit ? "Not linked to a department" : "Pick a department") : "A department (none set up yet)"}</option>
+                )}
+              </optgroup>
+            )}
+            {(teams.length > 0 || unlinked("team")) && (
+              <optgroup label="Teams">
+                {teams.map((ou) => (
+                  <option key={ou.id} value={`team:${ou.id}`}>{ou.name}</option>
+                ))}
+                {unlinked("team") && (
+                  <option value="team:">{teams.length ? (isEdit ? "Not linked to a team" : "Pick a team") : "A team (none set up yet)"}</option>
+                )}
+              </optgroup>
+            )}
+            {reports.length > 0 && (
+              <optgroup label="People">
+                {reports.map((r) => (
+                  <option key={r.id} value={`individual:${r.id}`}>{r.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {owner === "team:" && teams.length > 0 && <p className="mt-1 text-xs text-amber-700">Pick the team. Without one, it won&apos;t show on the Team page.</p>}
+          {owner === "department:" && departments.length > 0 && <p className="mt-1 text-xs text-amber-700">Pick the department. Without one, it won&apos;t show on its teams&apos; pages.</p>}
+          {v.level === "individual" && !v.directReportId && <p className="mt-1 text-xs text-amber-700">Pick the person this goal is for.</p>}
         </div>
+        {v.level !== "company" && (
+          <div>
+            <label htmlFor="goal-parent" className={LABEL}>Supports (optional)</label>
+            <select id="goal-parent" value={v.parentGoalId} onChange={(e) => set({ parentGoalId: e.target.value })} className={`${INPUT} truncate`}>
+              <option value="">{supportsChoices.length ? "Nothing above it" : "No goals above this one yet"}</option>
+              {supportsChoices.map((g) => (
+                <option key={g.id} value={g.id}>{supportLabel(g)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="goal-status" className={LABEL}>Status</label>
           <select id="goal-status" value={v.status} onChange={(e) => set({ status: e.target.value as GoalStatus })} className={INPUT}>

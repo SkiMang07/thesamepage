@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 // Shared work and Commitments on /app/team.
 //
-// Shared work is exception-first, not exception-only: goals and projects
-// explicitly marked at risk lead; everything else in scope is one disclosure
-// away. Each row expands to its latest check-in and to EXPLICIT connections
+// Shared work shows everything in scope: goals and projects explicitly marked
+// at risk lead and carry a subtle amber edge; nothing healthy is hidden behind
+// a disclosure (same rule as /app/goals). Each row expands to its latest check-in and to EXPLICIT connections
 // only — a project's goal_id, a commitment's source_type/source_id. A shared
 // owner is never treated as a link, and a standalone project is described as
 // standalone, not as a problem. Progress appears only from a recorded
@@ -32,6 +32,7 @@ import PersonAvatar from "@/components/team/PersonAvatar";
 import { commitmentSource } from "@/components/team/meeting-prep";
 import { TeamScope, inheritedFrom } from "@/components/team/scope";
 import { dueLabel, dueState, instantDate, localDateStr, shortDate } from "@/components/team/dates";
+import { goalsHref } from "@/lib/goals";
 import { BTN_PRIMARY_SM, ERROR_TEXT, INPUT, LABEL, SELECT, STATUS_GLYPH, Status } from "@/lib/tokens";
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -52,16 +53,6 @@ const LEVEL_LABEL: Record<string, string> = {
 type WorkRow =
   | { kind: "goal"; id: string; goal: TeamGoal }
   | { kind: "project"; id: string; project: Project };
-
-function otherLabel(rest: WorkRow[]): string {
-  const goals = rest.filter((r) => r.kind === "goal").length;
-  const projects = rest.length - goals;
-  const parts = [
-    goals ? `${goals} other goal${goals === 1 ? "" : "s"}` : null,
-    projects ? `${projects} ${goals ? "" : "other "}project${projects === 1 ? "" : "s"}` : null,
-  ].filter(Boolean);
-  return parts.join(" & ");
-}
 
 function daysSince(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -85,11 +76,9 @@ export function SharedWork({
   unitName: (id: string | null) => string;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     setExpanded(null);
-    setShowAll(false);
   }, [scope.teamId]);
 
   const levelOrder: Record<string, number> = { company: 0, department: 1, team: 2 };
@@ -104,7 +93,7 @@ export function SharedWork({
   const statusOf = (r: WorkRow) => (r.kind === "goal" ? r.goal.status : r.project.status);
   const attention = rows.filter((r) => statusOf(r) === "at_risk");
   const rest = rows.filter((r) => statusOf(r) !== "at_risk");
-  const visible = showAll ? [...attention, ...rest] : attention;
+  const visible = [...attention, ...rest];
 
   return (
     <section id="team-work" aria-labelledby="team-work-heading" className="scroll-mt-6">
@@ -113,20 +102,17 @@ export function SharedWork({
           Shared work
         </h2>
         <span className="flex gap-4 text-sm">
-          <Link href="/app/goals" className="text-brand hover:text-brand-hover">Goals →</Link>
+          <Link href={goalsHref({ level: "team", scope: scope.teamId })} className="text-brand hover:text-brand-hover">Goals →</Link>
           <Link href="/app/projects" className="text-brand hover:text-brand-hover">Projects →</Link>
         </span>
       </div>
 
       {rows.length === 0 ? (
         <p className="py-4 text-sm text-ink-muted">
-          No active goals or projects in this scope. <Link href="/app/goals" className="text-brand hover:text-brand-hover">Set a goal →</Link>
+          No active goals or projects in this scope. <Link href={goalsHref({ level: "team", scope: scope.teamId, create: true })} className="text-brand hover:text-brand-hover">Set a team goal →</Link>
         </p>
       ) : (
         <>
-          {attention.length === 0 && !showAll && (
-            <p className="pb-3 text-sm text-ink-muted">No goals or projects are marked at risk.</p>
-          )}
           <div className="space-y-2.5">
             {visible.map((row) => (
               <WorkRowView
@@ -142,11 +128,6 @@ export function SharedWork({
               />
             ))}
           </div>
-          {rest.length > 0 && (
-            <button type="button" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} className="mt-3 text-sm text-brand hover:text-brand-hover">
-              {showAll ? "Show only work marked at risk" : `Show ${otherLabel(rest)} →`}
-            </button>
-          )}
         </>
       )}
     </section>
@@ -208,7 +189,7 @@ function WorkRowView({
   const panelId = `work-${row.id}`;
 
   return (
-    <article className="overflow-hidden rounded-lg bg-surface">
+    <article className={`overflow-hidden rounded-lg border bg-surface ${status === "at_risk" ? "border-amber-500/45" : "border-transparent"}`}>
       <button
         type="button"
         onClick={onToggle}
@@ -268,7 +249,7 @@ function WorkRowView({
                 <Connections>
                   {(linkedGoal || row.project.goal_title) && (
                     <Node label="Supports goal">
-                      <Link href="/app/goals" className="text-sm text-brand hover:text-brand-hover">
+                      <Link href={row.project.goal_id ? `/app/goals?goal=${row.project.goal_id}` : "/app/goals"} className="text-sm text-brand hover:text-brand-hover">
                         {linkedGoal?.title ?? row.project.goal_title} →
                       </Link>
                       {!linkedGoal && <span className="mt-1 block text-xs text-ink-muted">Not in this team&apos;s view</span>}
@@ -285,7 +266,7 @@ function WorkRowView({
           <p className="mt-4 text-xs text-ink-muted">
             {inherited && inheritedName ? `Belongs to ${inheritedName}, shown here because it sits above this team. ` : ""}
             {!inherited && orgUnitId ? `${unitName(orgUnitId)} · ` : ""}
-            <Link href={isGoal ? "/app/goals" : "/app/projects"} className="text-brand hover:text-brand-hover">
+            <Link href={isGoal ? `/app/goals?goal=${record.id}` : "/app/projects"} className="text-brand hover:text-brand-hover">
               Open in {isGoal ? "Goals" : "Projects"} →
             </Link>
           </p>

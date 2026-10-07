@@ -710,6 +710,7 @@ function RelationshipDesk() {
       {/* Work */}
       <div id="desk-panel-work" role="tabpanel" aria-labelledby="desk-tab-work" hidden={view !== "work"} className="pt-7">
         <WorkView
+          personId={id}
           personName={report.name}
           goals={goals}
           projects={projects}

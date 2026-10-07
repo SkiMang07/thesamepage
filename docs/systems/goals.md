@@ -19,9 +19,18 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
   Scribe drawer opens.
 - **Level and scope.** Individual / Team / Department / Company. Scope is by id
   — direct report id at Individual, org unit id at Team and Department —
-  never by name (a repeated name gets a counter in the picker). "No person /
-  team / department linked" is its own scope, distinct from All. The page opens
-  on the first level that has goals unless the URL says otherwise.
+  never by name (a repeated name gets a counter in the picker). Every person,
+  team or department is in the picker, not only those with goals, so a link to
+  someone with none lands on them and their empty state. "No person / team /
+  department linked" is its own scope, distinct from All. The page opens on
+  the first level that has goals unless the URL says otherwise.
+- **Links in.** `goalsHref()` (`lib/goals.ts`) builds every link into the page:
+  `?level=&scope=` to land on someone, plus `new=1` to open the New goal form
+  prefilled for them and `supports=<goal id>` to set what it supports. `new`
+  and `supports` are one-shot and stripped from the URL after load. The person
+  page, Team page, setup card, org-goals receipt, prep "Built without" and the
+  Mission Control empty state all use it; nothing links to a bare
+  `/app/goals` to add a goal.
 - **Filters and search.** All (open), Needs review, No check-ins, Closed, and a
   search over title, scope, success criterion and measure label.
 - **Updates.** The same check-in rows, newest first, for the level and scope
@@ -34,7 +43,14 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
   every recorded value as a table, latest update with source, full history,
   parent / child / project connections, description, Edit and Delete.
 - **Create / edit** use one form (`GoalForm`) in the focused view, with the
-  optional measure section. Description and success criterion are `NoteField`s,
+  optional measure section. **"Whose goal?"** is one picker (the company, then
+  departments, teams and people by name); the level is derived from the pick.
+  A team or department goal must name its unit when any exist; with exactly
+  one, it is preselected. Unlinked is offered only when none of that kind
+  exist yet, or to show an older unlinked goal, which must be linked on its
+  next save. **"Supports"** (`parent_goal_id`) lists only goals above this
+  one, never cancelled ones, with the owner's own team and department chain
+  and company goals first; a company goal has no Supports. Description and success criterion are `NoteField`s,
   so dictation is available.
 - **Review together.** Pick goals from the current level and scope (open goals
   only, all ticked by default, status opt-in), then a full-screen local

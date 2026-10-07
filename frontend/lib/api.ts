@@ -2328,6 +2328,7 @@ export type OrgGoalsApplyBody = {
     title: string;
     success_metrics: string | null;
     org_unit_name: string | null;
+    org_unit_id?: string | null;
     period_label: string | null;
     set_by: string | null;
     due_date: string | null;
@@ -2336,7 +2337,12 @@ export type OrgGoalsApplyBody = {
   edited: number;
   seconds_to_confirm: number;
 };
-export type OrgGoalsApplyResult = { saved: number; skipped_existing: number; refused: { kind: string; reason: string }[] };
+export type OrgGoalsApplyResult = {
+  saved: number;
+  skipped_existing: number;
+  refused: { kind: string; reason: string }[];
+  saved_goals?: { id: string; level: "company" | "department"; title: string; org_unit_id: string | null }[];
+};
 
 export const parseOrgGoals = (input: { text: string; files: File[] }): Promise<OrgGoalsParsed> => {
   const formData = new FormData();

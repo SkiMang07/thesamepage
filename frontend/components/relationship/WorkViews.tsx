@@ -7,6 +7,7 @@
 // Goals and Projects.
 
 import Link from "next/link";
+import { goalsHref } from "@/lib/goals";
 import type { CapacityOverviewItem, DevelopmentBundle, Goal, GoalStatus, Project } from "@/lib/api";
 import { instantDate, shortDate } from "@/components/team/dates";
 import { EYEBROW } from "@/lib/tokens";
@@ -127,6 +128,7 @@ export function DeskPreviews({
 }
 
 export function WorkView({
+  personId,
   personName,
   goals,
   projects,
@@ -136,6 +138,7 @@ export function WorkView({
   capacityFailed,
   onOpenSettings,
 }: {
+  personId: string;
   personName: string;
   goals: Goal[];
   projects: Project[];
@@ -154,12 +157,12 @@ export function WorkView({
       <section aria-labelledby="work-goals" className="rounded-xl border border-hairline bg-surface px-5 py-5">
         <div className="flex items-center justify-between">
           <h2 id="work-goals" className={EYEBROW}>Goals{!goalsFailed && goals.length > 0 && ` · ${goals.length}`}</h2>
-          <Link href="/app/goals" className="text-xs text-brand hover:text-brand-hover">Open Goals →</Link>
+          <Link href={goalsHref({ level: "individual", scope: personId })} className="text-xs text-brand hover:text-brand-hover">Open Goals →</Link>
         </div>
         {goalsFailed ? (
           <p className="mt-3 text-sm text-amber-700">Goals couldn&apos;t load.</p>
         ) : goals.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-secondary">No goals for {first} yet. <Link href="/app/goals" className="text-brand underline">Add one in Goals</Link>.</p>
+          <p className="mt-3 text-sm text-ink-secondary">No goals for {first} yet. <Link href={goalsHref({ level: "individual", scope: personId, create: true })} className="text-brand underline">Add a goal for {first}</Link>.</p>
         ) : (
           <ul className="mt-3 divide-y divide-divider">
             {goals.map((g) => (

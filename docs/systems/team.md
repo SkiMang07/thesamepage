@@ -54,8 +54,10 @@ Plan shows ✓ only when an agenda is recorded. **Run is never shown as done**
 
 ### Shared work and commitments
 
-Goals and active projects in scope are one list, exception-first: rows
-marked `at_risk` show; the rest are behind "Show N other goals & projects".
+Goals and active projects in scope are one list, all shown: rows marked
+`at_risk` lead and carry a subtle amber border (a border, not a `ring-*`;
+see Known issues below); nothing healthy is hidden. "Goals →" opens Goals
+on the selected team, and the empty state opens a New team goal for it.
 A row expands to its latest check-in (progress only if a percentage was
 recorded; amber after 14 days) and **explicit** connections only —
 `projects.goal_id` and commitments whose `source_type`/`source_id` point at
@@ -395,3 +397,12 @@ at `/app/login?password`, so a new manager never meets a password field.
 Managers can sign out either from the global avatar menu or from the explicit
 **Account** section in `/app/settings`; both clear the Supabase session and
 return to `/app/login` without changing workspace data.
+
+## Known issues
+
+- `ring-*` utilities render nothing app-wide: `ringOffsetColor.DEFAULT` in
+  `tailwind.config.js` is `rgb(var(--c-canvas) / <alpha-value>)`, and the
+  `<alpha-value>` placeholder is never substituted for the base
+  `--tw-ring-offset-color`, so every ring's `box-shadow` is invalid. Fixing it
+  turns on every ring in the app at once (focus, overdue chips, the saved-goal
+  flash), so it needs its own visual pass.

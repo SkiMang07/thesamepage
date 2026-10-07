@@ -54,6 +54,19 @@ const DIRECTION_SYMBOL: Record<GoalMeasureDirection, string> = { at_least: "≥"
 // constant as CheckInPanel (docs/systems/check-ins.md).
 export const STALE_DAYS = 14;
 
+/** A link into /app/goals that says where to land: a level, whose goals (a
+ *  person, team or department id), and optionally the New goal form prefilled
+ *  for them, supporting a given goal. Every "add a goal" link uses this. */
+export function goalsHref(opts: { level?: GoalLevel; scope?: string | null; create?: boolean; supports?: string | null } = {}) {
+  const q = new URLSearchParams();
+  if (opts.level) q.set("level", opts.level);
+  if (opts.scope) q.set("scope", opts.scope);
+  if (opts.create) q.set("new", "1");
+  if (opts.supports) q.set("supports", opts.supports);
+  const qs = q.toString();
+  return qs ? `/app/goals?${qs}` : "/app/goals";
+}
+
 export function isOpen(g: Pick<Goal, "status">) {
   return g.status !== "completed" && g.status !== "cancelled";
 }
@@ -213,7 +226,12 @@ export type ScopeOption = { id: Scope; label: string };
 export function scopeOptions(level: GoalLevel, goals: Goal[], reports: DirectReport[], units: OrgUnit[]): ScopeOption[] {
   if (level === "company") return [];
   const levelGoals = goals.filter((g) => g.level === level);
+  // Every person, team or department of this level is a scope, not only the
+  // ones that already have goals: a link to someone with no goals yet has to
+  // land on them (and their empty state), never fall back to All.
   const ids = new Set(levelGoals.map(associationId).filter((id): id is string => !!id));
+  if (level === "individual") reports.forEach((r) => ids.add(r.id));
+  else units.filter((u) => u.unit_type === level).forEach((u) => ids.add(u.id));
   const named: { id: string; label: string }[] = [];
   for (const id of ids) {
     const fromList =

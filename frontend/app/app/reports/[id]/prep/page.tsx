@@ -39,8 +39,8 @@ import MoveOneOnOne from "@/components/MoveOneOnOne";
 const BUILT_WITHOUT_HREF: Record<string, string> = {
   "team and org": "/app/settings?section=people",
   "role expectations": "/app/expectations",
-  "org goals": "/app/goals",
-  "team goals": "/app/goals",
+  "org goals": "/app/goals?new=1&level=company",
+  "team goals": "/app/goals?new=1&level=team",
 };
 // ---------------------------------------------------------------------------
 // Sub-components

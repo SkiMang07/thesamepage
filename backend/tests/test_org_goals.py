@@ -368,3 +368,28 @@ def test_the_goals_list_carries_the_flag_and_the_new_fields():
     (out,) = goals_mod._shape_rows([dict(row)])
     assert out["needs_confirmation"] is True and out["period_label"] == "FY20" and out["set_by"] == "CEO"
     assert "period_label" in goals_mod._SELECT_COLUMNS and "confirmed_on" in goals_mod._SELECT_COLUMNS
+
+
+def test_apply_takes_the_department_picked_on_review_and_returns_what_it_saved(client):
+    c, db, _ = client
+    payload = {"goals": [
+        # The model read no department name; the manager picked one.
+        {"level": "department", "title": "Answer every ticket within a day", "org_unit_name": None, "org_unit_id": "ou1"},
+        # A team unit is not a department: saved unlinked, never linked to the wrong kind.
+        {"level": "department", "title": "Ship onboarding v2", "org_unit_id": "ou2"},
+        {"level": "company", "title": "Grow NDR", "org_unit_id": "ou1"},
+    ]}
+    r = c.post("/api/onboarding/org-goals/apply", json=payload)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["saved"] == 3
+    rows = {g["title"]: g for g in db.rows["goals"]}
+    assert rows["Answer every ticket within a day"]["org_unit_id"] == "ou1"
+    assert rows["Ship onboarding v2"]["org_unit_id"] is None
+    assert rows["Grow NDR"]["org_unit_id"] is None
+    saved = {g["title"]: g for g in body["saved_goals"]}
+    assert set(saved) == set(rows) - {"Cut churn"}
+    assert saved["Answer every ticket within a day"] == {
+        "id": rows["Answer every ticket within a day"]["id"], "level": "department",
+        "title": "Answer every ticket within a day", "org_unit_id": "ou1",
+    }
