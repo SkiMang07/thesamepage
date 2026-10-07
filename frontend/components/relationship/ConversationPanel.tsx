@@ -11,6 +11,7 @@ import Link from "next/link";
 import type { CaptureNote, OneOnOne } from "@/lib/api";
 import type { OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
 import { BTN_PRIMARY } from "@/lib/tokens";
+import MoveOneOnOne from "@/components/MoveOneOnOne";
 import { instantDate, localDateStr, shortDate } from "@/components/team/dates";
 import {
   cadenceSentence,
@@ -46,6 +47,7 @@ export default function ConversationPanel({
   commitmentsFailed,
   onReadLastSummary,
   onShowCommitments,
+  onNextMoved,
 }: {
   personId: string;
   personFirstName: string;
@@ -65,6 +67,7 @@ export default function ConversationPanel({
   commitmentsFailed: boolean;
   onReadLastSummary: () => void;
   onShowCommitments: () => void;
+  onNextMoved: (saved: OneOnOne) => void;
 }) {
   const [open, setOpen] = useState<Disclosure>(null);
   const toggle = (d: Exclude<Disclosure, null>) => setOpen((cur) => (cur === d ? null : d));
@@ -142,15 +145,36 @@ export default function ConversationPanel({
           <h2 id="next-conversation-heading" className="font-serif text-[1.9rem] font-normal leading-tight tracking-[-0.01em] text-ink">
             {historyFailed ? "Couldn't load" : nextDate ? fullDate(nextDate) : "No date set"}
           </h2>
-          <Link href={scheduleHref} className="text-xs font-medium text-brand hover:text-brand-hover">
-            Date &amp; repeat <span aria-hidden="true">↗</span>
-          </Link>
+          <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
+            {next && !historyFailed && (
+              <MoveOneOnOne
+                key={next.id}
+                sessionId={next.id}
+                date={nextDate ?? ""}
+                recurrenceWeeks={next.recurrence_weeks}
+                usualDate={next.series_slot_at ? next.series_slot_at.slice(0, 10) : null}
+                onMoved={onNextMoved}
+                label="Move to"
+                compact
+                actionLabel={nextDate ? "Move" : "Set date"}
+              />
+            )}
+            <Link href={scheduleHref} className="text-xs font-medium text-brand hover:text-brand-hover">
+              {next ? "Repeat" : "Date & repeat"} <span aria-hidden="true">↗</span>
+            </Link>
+          </div>
         </div>
         <p className={`mt-1 text-xs ${historyFailed ? "text-amber-700" : "text-ink-secondary"}`}>
           {historyFailed
             ? "The next conversation's date and preparation couldn't load. Refresh to try again."
             : nextDate
-            ? [repeat ?? "Doesn't repeat", "No start time recorded"].join(" · ")
+            ? [
+                repeat ?? "Doesn't repeat",
+                next?.series_slot_at && next.series_slot_at.slice(0, 10) !== nextDate
+                  ? `Moved from ${fullDate(next.series_slot_at.slice(0, 10))}`
+                  : null,
+                "No start time recorded",
+              ].filter(Boolean).join(" · ")
             : cadenceSentence(cadence) ?? "Not scheduled. Pick a date when you know it."}
         </p>
         {datePassed && (

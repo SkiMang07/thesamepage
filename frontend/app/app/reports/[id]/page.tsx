@@ -653,6 +653,9 @@ function RelationshipDesk() {
               commitmentsFailed={failed(S.commitments)}
               onReadLastSummary={() => lastCompleted && openConversation(lastCompleted.id)}
               onShowCommitments={showCommitments}
+              onNextMoved={(saved) =>
+                setHistory((rows) => rows.map((row) => (row.id === saved.id ? { ...row, ...saved } : row)))
+              }
             />
             <CaptureBox personFirstName={first} onSave={saveCapture} />
             {!intakeOpen && (

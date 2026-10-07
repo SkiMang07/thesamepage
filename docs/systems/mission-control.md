@@ -30,7 +30,10 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
    and meetings beyond the team all appear. On the current week, people due by
    cadence with no date set get one line below the week (names link to prep; the line
    opens their cadence detail in the right-hand column). They are not
-   calendar events.
+   calendar events. A selected unfinished 1:1 has **Move** under its actions
+   (the shared control in `one-on-ones.md` → Moving a 1:1); the week payload
+   carries `recurrence_weeks` on 1:1s so it can ask "Just this 1:1" or "This
+   and every one after". Moving a 1:1 out of the week shown closes its details.
 4. **Follow-through.** "Mine" and "My team" bars split into Completed / Due
    this week / Overdue. Each bar shows proportions within its own group.
    Segments are toned at rest and solid when selected (`METER_SEGMENT`, see

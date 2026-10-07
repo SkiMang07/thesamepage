@@ -5,12 +5,15 @@ from types import SimpleNamespace
 from routes.one_on_ones import (
     LogOneOnOneIn,
     NewCommitmentIn,
+    ScheduleUpdate,
+    _keeps_single_move,
     _build_prep_prompt,
     _clean_follow_up_items,
     _next_occurrence_at,
     _serialize_session,
     log_one_on_one,
     parse_prep_output,
+    update_session_schedule,
 )
 
 
@@ -690,3 +693,149 @@ def test_the_prep_prompt_restates_hr_and_boss_notes_without_inventing_facts():
     assert "do not drop it either" in body
     assert '"HR has flagged this"' in body
     assert "Do not reach for the SBI template" in body
+
+
+# ---------------------------------------------------------------------------
+# Moving a 1:1: "Just this 1:1" vs "This and every one after"
+# ---------------------------------------------------------------------------
+
+# A Tuesday far enough out that "skip dates already past" never interferes.
+USUAL_TUE = "2027-03-02T12:00:00+00:00"
+
+
+def _weekly_client():
+    client = _MemoryClient()
+    client.rows["one_on_ones"][0]["scheduled_at"] = USUAL_TUE
+    client.rows["one_on_one_series"][0].update({"interval_weeks": 1, "anchor_at": USUAL_TUE})
+    return client
+
+
+def _move(client, date, scope, recurrence_weeks=1):
+    return update_session_schedule(
+        "current",
+        ScheduleUpdate(
+            scheduled_at=f"{date}T12:00:00+00:00",
+            recurrence_weeks=recurrence_weeks,
+            timezone="America/New_York",
+            scope=scope,
+        ),
+        auth=("manager", client),
+    )
+
+
+def _log(client, meeting_date):
+    return _resolve(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                one_on_one_id="current",
+                summary="Talked it through.",
+                meeting_date=meeting_date,
+            ),
+            auth=("manager", client),
+        )
+    )
+
+
+def test_just_this_one_moves_the_date_and_leaves_the_series_alone():
+    client = _weekly_client()
+    saved = _move(client, "2027-03-04", "occurrence")
+
+    row = client.rows["one_on_ones"][0]
+    series = client.rows["one_on_one_series"][0]
+    assert row["scheduled_at"] == "2027-03-04T12:00:00+00:00"
+    assert row["series_slot_at"] == USUAL_TUE
+    assert series["anchor_at"] == USUAL_TUE
+    assert series["interval_weeks"] == 1 and series["active"] is True
+    # Still reported as repeating, and the prep sheet is untouched.
+    assert saved["recurrence_weeks"] == 1
+    assert row["prep_guide"] == {"situation_summary": "Current prep"}
+
+
+def test_logging_a_singly_moved_1_1_puts_the_next_one_back_on_the_usual_day():
+    client = _weekly_client()
+    _move(client, "2027-03-04", "occurrence")  # Tue -> Thu, this one only
+
+    result = _log(client, "2027-03-04")
+
+    assert result["next_session"]["scheduled_at"] == "2027-03-09T12:00:00+00:00"  # Tue
+    assert not result["next_session"].get("series_slot_at")
+
+
+def test_a_single_move_earlier_does_not_double_book_the_slot_it_replaced():
+    client = _weekly_client()
+    _move(client, "2027-03-01", "occurrence")  # Tue -> Mon, this one only
+
+    result = _log(client, "2027-03-01")
+
+    # Monday's meeting WAS Tuesday's slot: the next one is the Tuesday after.
+    assert result["next_session"]["scheduled_at"] == "2027-03-09T12:00:00+00:00"
+
+
+def test_a_single_move_past_the_next_usual_day_skips_to_the_one_after():
+    client = _weekly_client()
+    _move(client, "2027-03-10", "occurrence")  # pushed past next Tuesday
+
+    result = _log(client, "2027-03-10")
+
+    assert result["next_session"]["scheduled_at"] == "2027-03-16T12:00:00+00:00"
+
+
+def test_this_and_every_one_after_re_anchors_the_series():
+    client = _weekly_client()
+    _move(client, "2027-03-04", "series")
+
+    row = client.rows["one_on_ones"][0]
+    assert row["scheduled_at"] == "2027-03-04T12:00:00+00:00"
+    assert client.rows["one_on_one_series"][0]["anchor_at"] == "2027-03-04T12:00:00+00:00"
+
+    result = _log(client, "2027-03-04")
+    assert result["next_session"]["scheduled_at"] == "2027-03-11T12:00:00+00:00"  # Thu
+
+
+def test_every_one_after_clears_an_earlier_single_move():
+    client = _weekly_client()
+    _move(client, "2027-03-04", "occurrence")
+    _move(client, "2027-03-05", "series")
+
+    row = client.rows["one_on_ones"][0]
+    assert row["series_slot_at"] is None
+    assert client.rows["one_on_one_series"][0]["anchor_at"] == "2027-03-05T12:00:00+00:00"
+
+
+def test_moving_twice_remembers_the_original_usual_day_and_moving_back_forgets_it():
+    client = _weekly_client()
+    _move(client, "2027-03-04", "occurrence")
+    _move(client, "2027-03-05", "occurrence")
+    assert client.rows["one_on_ones"][0]["series_slot_at"] == USUAL_TUE
+
+    _move(client, "2027-03-02", "occurrence")
+    row = client.rows["one_on_ones"][0]
+    assert row["scheduled_at"] == USUAL_TUE
+    assert row["series_slot_at"] is None
+
+
+def test_moving_a_1_1_that_does_not_repeat_just_sets_the_date():
+    client = _weekly_client()
+    client.rows["one_on_ones"][0]["series_id"] = None
+    saved = _move(client, "2027-03-04", "occurrence", recurrence_weeks=None)
+
+    row = client.rows["one_on_ones"][0]
+    assert row["scheduled_at"] == "2027-03-04T12:00:00+00:00"
+    assert not row.get("series_slot_at")
+    assert saved["recurrence_weeks"] is None
+
+
+def test_rebuilding_the_sheet_keeps_a_single_move_but_a_real_change_does_not():
+    moved = {"scheduled_at": "2027-03-04T12:00:00+00:00", "series_slot_at": USUAL_TUE}
+    weekly = {"interval_weeks": 1, "active": True}
+    assert _keeps_single_move(moved, weekly, "2027-03-04T12:00:00+00:00", 1)
+    assert not _keeps_single_move(moved, weekly, "2027-03-05T12:00:00+00:00", 1)
+    assert not _keeps_single_move(moved, weekly, "2027-03-04T12:00:00+00:00", 2)
+    assert not _keeps_single_move({**moved, "series_slot_at": None}, weekly, "2027-03-04T12:00:00+00:00", 1)
+
+
+def test_next_occurrence_can_be_held_after_the_day_a_moved_meeting_happened():
+    now = datetime(2027, 1, 1, tzinfo=timezone.utc)
+    assert _next_occurrence_at(USUAL_TUE, 1, now) == "2027-03-09T12:00:00+00:00"
+    assert _next_occurrence_at(USUAL_TUE, 1, now, after="2027-03-10T12:00:00+00:00") == "2027-03-16T12:00:00+00:00"

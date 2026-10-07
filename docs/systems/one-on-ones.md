@@ -12,7 +12,7 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
 | `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one. `opening_line` omitted keeps the occurrence's; null clears it. Returns the sheet's `drew_on` source list |
-| `PATCH /session/{id}/schedule` | edits an unfinished occurrence's date and 1–4 week repeat rule |
+| `PATCH /session/{id}/schedule` | edits an unfinished occurrence's date and 1–4 week repeat rule; `scope` moves just this one or this and every one after |
 | `POST /wrapup` | notes → draft summary, commitments, carry-forward topics, and an `opening_line` for the next 1:1 |
 | `GET`/`POST /{direct_report_id}/captures`, `DELETE /captures/{id}` | between-session capture notes |
 
@@ -95,9 +95,10 @@ Relationship reads top to bottom:
   about {first name}** opens the Scribe drawer on this person with an editable
   prompt in the composer (`scribe.md` → Frontend); nothing sends until Send. An unprepared
   occurrence with a kept opening line shows it first ("Open with"). Compact disclosures show kept thoughts (removable), work check-ins,
-  suggested signals and the open-commitment count. **Date & repeat** links to
-  `/prep#schedule`, which focuses the canonical date control; on an existing
-  workspace that control now saves on change, through the same schedule write.
+  suggested signals and the open-commitment count. **Move** (or **Set date**
+  when undated) opens the shared move control in place (see Moving a 1:1);
+  **Repeat** links to `/prep#schedule`, which focuses the canonical date control
+  beside the repeat select.
 - **Keep a thought** directly below: one field, one explicit save to the capture
   endpoint. Text clears only after the server confirms; failures keep it.
 - **Follow-through** beside it: open commitments grouped by owner (You, then the
@@ -169,13 +170,47 @@ a real calendar start time. The browser timezone is already stored on the
 series for that later integration. Copy says “Repeat this 1:1,” never “invite”:
 The Same Page does not send a calendar invitation yet.
 
-Logging always creates the next occurrence. A recurring occurrence gets its
-date from the prior scheduled date plus the interval, never from when the
-manager happened to log it; an ad-hoc occurrence leaves the next workspace
-undated. If logging is late enough that one or more recurring occurrences are
-already past, the rollover advances to the next future date instead of creating
-stale shells. Removing repeat deactivates the series; dismissing its unfinished
-occurrence also stops it.
+### Moving a 1:1
+
+Every place a 1:1 date shows uses one control, `components/MoveOneOnOne.tsx`:
+the prep page (step 1 review and the step 2 sheet header, both as the
+`#meeting-schedule` field), **Move** on the Relationship Desk's next
+conversation, and **Move** on the selected 1:1 in Mission Control's week strip.
+
+Nothing saves while a date is typed or picked. A date input reads empty while a
+date is typed by keyboard, and Tab lands on its calendar icon before leaving
+it, so saving on change or blur sent half-typed dates, skipped saves, and
+cleared the repeat. The new date waits in the field until the manager answers:
+
+- **Repeating 1:1:** "Just this 1:1" or "This and every one after", asked every
+  time, the way calendars do.
+- **One-off 1:1:** "Save date" (Enter also saves).
+- **Cleared date:** "Remove date", which also stops the repeat.
+
+`PATCH /session/{id}/schedule` takes `scope`. `"series"` (the default) sets the
+date and repeat rule and re-anchors the series on the new date. `"occurrence"`
+moves only this 1:1: the series keeps its anchor, interval and timezone, and
+the occurrence stores the usual date it stands in for in
+`one_on_ones.series_slot_at` (kept through further single moves, cleared when
+it is moved back to that day or by any series-wide change). A 1:1 that doesn't
+repeat has no usual day, so `"occurrence"` behaves as `"series"` for it. The
+repeat select still saves straight away as a series-wide change. Moving never
+touches or rebuilds the prep sheet, and rebuilding a sheet with an unchanged
+date keeps a single move in place instead of re-anchoring the series on it.
+
+### Rolling forward
+
+Logging always creates the next occurrence. A recurring occurrence's next date
+steps the interval forward from the date the manager confirmed on the review
+screen (or, failing that, the scheduled date), never from when they happened
+to log it. A singly-moved occurrence instead steps from its `series_slot_at`,
+so the next one lands back on the usual day, and always after the day the
+moved meeting happened (a meeting moved past the next usual day skips to the
+one after). An ad-hoc occurrence leaves the next workspace undated. If logging
+is late enough that one or more recurring occurrences are already past, the
+rollover advances to the next future date instead of creating stale shells.
+Removing repeat deactivates the series; dismissing its unfinished occurrence
+also stops it.
 
 ## Cadence
 

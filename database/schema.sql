@@ -272,6 +272,10 @@ create table one_on_ones (
                     constraint one_on_ones_carry_forward_items_array
                     check (jsonb_typeof(carry_forward_items) = 'array'),
   opening_line     text,
+  -- The series' usual date this occurrence stands in for, set only when it
+  -- was moved by itself ("Just this 1:1"). Null: scheduled_at is the usual
+  -- day. Logging steps the next occurrence from here. (2026-10-07)
+  series_slot_at   timestamptz,
   created_at       timestamptz not null default now(),
   constraint one_on_ones_series_owner_fkey
     foreign key (series_id, manager_id, direct_report_id)

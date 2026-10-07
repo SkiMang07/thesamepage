@@ -616,7 +616,7 @@ def _load_week_snapshot(user_id: str, supabase, local_date: date) -> dict:
         "one_on_ones",
         lambda: (
             supabase.table("one_on_ones")
-            .select("id,direct_report_id,scheduled_at,summary,prep_guide,carry_forward_items")
+            .select("id,direct_report_id,scheduled_at,summary,prep_guide,carry_forward_items,one_on_one_series(interval_weeks,active)")
             .eq("manager_id", user_id)
             .gte("scheduled_at", lower)
             .lt("scheduled_at", upper)

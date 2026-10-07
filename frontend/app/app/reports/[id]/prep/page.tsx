@@ -32,6 +32,7 @@ import { deriveOneOnOneSuggestions, OneOnOneSuggestion } from "@/lib/one-on-one-
 
 import NoteField from "@/components/NoteField";
 import NotePromises, { useNotePromises } from "@/components/NotePromises";
+import MoveOneOnOne from "@/components/MoveOneOnOne";
 
 // Where each "Built without" label is fixed (setup inputs the sheet was built
 // without; the labels come from prep_built_without() on the server).
@@ -204,6 +205,8 @@ function PrepFlow() {
   const [hasCompletedOneOnOne, setHasCompletedOneOnOne] = useState<boolean | null>(null);
   const [scheduleDate, setScheduleDate] = useState("");
   const [recurrenceWeeks, setRecurrenceWeeks] = useState<RecurrenceWeeks | null>(null);
+  // The series' usual day, when this one 1:1 was moved off it by itself.
+  const [usualDate, setUsualDate] = useState<string | null>(null);
   const [carryForwardItems, setCarryForwardItems] = useState<string[]>([]);
   // The opener kept at the last wrap-up. Null once removed in review.
   const [openingLine, setOpeningLine] = useState<string | null>(null);
@@ -288,6 +291,7 @@ function PrepFlow() {
         setOneOnOneId(session.id);
         setScheduleDate(scheduledAtToDate(session.scheduled_at));
         setRecurrenceWeeks(session.recurrence_weeks ?? null);
+        setUsualDate(scheduledAtToDate(session.series_slot_at) || null);
         setCarryForwardItems(session.carry_forward_items ?? []);
         setOpeningLine(session.opening_line?.trim() || null);
         if (session.prep_guide) {
@@ -361,6 +365,7 @@ function PrepFlow() {
       setOneOnOneId(result.id);
       setScheduleDate(scheduledAtToDate(result.scheduled_at));
       setRecurrenceWeeks(result.recurrence_weeks);
+      setUsualDate(scheduledAtToDate(result.series_slot_at) || null);
       setCarryForwardItems(result.carry_forward_items);
       setStep(2);
       // Only a sheet built here from a note; a reopened sheet is not re-read.
@@ -380,6 +385,17 @@ function PrepFlow() {
     }
   }
 
+  // What the server saved is what the page shows: a move or a repeat change
+  // never touches the prep sheet, so only the schedule fields follow it.
+  function applySchedule(saved: { scheduled_at: string | null; recurrence_weeks?: number | null; series_slot_at?: string | null }) {
+    setScheduleDate(scheduledAtToDate(saved.scheduled_at));
+    setRecurrenceWeeks((saved.recurrence_weeks ?? null) as RecurrenceWeeks | null);
+    setUsualDate(scheduledAtToDate(saved.series_slot_at) || null);
+    setScheduleSaved(false);
+  }
+
+  // The repeat rule. A changed date goes through MoveOneOnOne instead, which
+  // asks before it saves anything.
   async function persistSchedule(nextDate: string, nextRecurrence: RecurrenceWeeks | null) {
     if (!oneOnOneId) return;
     setScheduleSaving(true);
@@ -391,8 +407,7 @@ function PrepFlow() {
         recurrence_weeks: nextDate ? nextRecurrence : null,
         timezone: browserTimezone(),
       });
-      setScheduleDate(scheduledAtToDate(saved.scheduled_at));
-      setRecurrenceWeeks(saved.recurrence_weeks ?? null);
+      applySchedule(saved);
       setScheduleSaved(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not save the meeting date.");
@@ -468,25 +483,36 @@ function PrepFlow() {
 
         <form onSubmit={handleGenerate} className={SECTION_GAP}>
           <div className="mb-5 grid gap-4 rounded-xl border border-hairline bg-surface p-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="text-sm font-medium text-ink-body">Meeting date</span>
-              <input
-                id="meeting-schedule"
-                type="date"
-                value={scheduleDate}
-                onChange={(e) => {
-                  const nextDate = e.target.value;
-                  setScheduleDate(nextDate);
-                  if (!nextDate) setRecurrenceWeeks(null);
-                }}
-                // An existing workspace saves its date straight away, through
-                // the same write the prep sheet uses, so "Date & repeat" from
-                // the Relationship Desk works without building an agenda.
-                // Without one, the date is saved when the agenda is built.
-                onBlur={() => oneOnOneId && persistSchedule(scheduleDate, scheduleDate ? recurrenceWeeks : null)}
-                className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink-body focus:border-brand focus:outline-none"
+            {oneOnOneId ? (
+              // An existing workspace moves its date here without building an
+              // agenda, so "Date & repeat" from the Relationship Desk works on
+              // its own. Nothing saves until the manager confirms the move.
+              <MoveOneOnOne
+                variant="field"
+                sessionId={oneOnOneId}
+                inputId="meeting-schedule"
+                date={scheduleDate}
+                recurrenceWeeks={recurrenceWeeks}
+                usualDate={usualDate}
+                onMoved={applySchedule}
               />
-            </label>
+            ) : (
+              // No workspace yet: the date is saved when the agenda is built.
+              // Typing a date passes through an empty value; that must not
+              // clear the repeat, which is only dropped if the date is still
+              // empty when the agenda is built.
+              <label className="block">
+                <span className="text-sm font-medium text-ink-body">Meeting date</span>
+                <input
+                  id="meeting-schedule"
+                  type="date"
+                  value={scheduleDate}
+                  onChange={(e) => setScheduleDate(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                  className="mt-2 w-full rounded-md border border-control bg-sunken px-3 py-2 text-sm text-ink-body focus:border-brand focus:outline-none"
+                />
+              </label>
+            )}
             <label className="block">
               <span className="text-sm font-medium text-ink-body">Repeat this 1:1</span>
               <select
@@ -731,21 +757,18 @@ function PrepFlow() {
                 </p>
               </div>
               <div className="flex flex-wrap items-end gap-2">
-                <label className="block">
-                  <span className="block text-[11px] font-medium uppercase tracking-wide text-ink-muted">Meeting date</span>
-                  <input
-                    id="meeting-schedule"
-                    type="date"
-                    value={scheduleDate}
-                    onChange={(e) => {
-                      const nextDate = e.target.value;
-                      setScheduleDate(nextDate);
-                      if (!nextDate) setRecurrenceWeeks(null);
-                    }}
-                    onBlur={() => persistSchedule(scheduleDate, scheduleDate ? recurrenceWeeks : null)}
-                    className="mt-1 rounded-md border border-control bg-sunken px-2.5 py-1.5 text-sm text-ink-body focus:border-brand focus:outline-none"
+                {oneOnOneId && (
+                  <MoveOneOnOne
+                    variant="field"
+                    compact
+                    sessionId={oneOnOneId}
+                    inputId="meeting-schedule"
+                    date={scheduleDate}
+                    recurrenceWeeks={recurrenceWeeks}
+                    usualDate={usualDate}
+                    onMoved={applySchedule}
                   />
-                </label>
+                )}
                 <label className="block">
                   <span className="block text-[11px] font-medium uppercase tracking-wide text-ink-muted">Repeats</span>
                   <select

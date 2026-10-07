@@ -39,6 +39,8 @@ import json
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 import analytics
@@ -129,6 +131,8 @@ class PrepResponse(BaseModel):
     open_commitments_to_check: list[dict]
     scheduled_at: str | None = None
     recurrence_weeks: int | None = None
+    # The series' usual date, when this one 1:1 was moved off it by itself.
+    series_slot_at: str | None = None
     carry_forward_items: list[str] = Field(default_factory=list)
     opening_line: str | None = None
     prepared_by: str = "manager"
@@ -197,6 +201,11 @@ class ScheduleUpdate(BaseModel):
     scheduled_at: str | None = None
     recurrence_weeks: int | None = None
     timezone: str = "UTC"
+    # Only matters for a repeating 1:1. "series" (the default, and every
+    # pre-existing caller) re-anchors the series on the new date: this and
+    # every one after. "occurrence" moves just this 1:1 and leaves the series
+    # on its usual day.
+    scope: Literal["series", "occurrence"] = "series"
 
 
 # ---------------------------------------------------------------------------
@@ -729,21 +738,52 @@ def _validate_recurrence(recurrence_weeks: int | None, scheduled_at: str | None)
         raise HTTPException(status_code=422, detail="A recurring 1:1 needs a meeting date")
 
 
-def _next_occurrence_at(scheduled_at: str, interval_weeks: int, now: datetime | None = None) -> str:
+def _parse_ts(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _next_occurrence_at(
+    scheduled_at: str,
+    interval_weeks: int,
+    now: datetime | None = None,
+    after: str | None = None,
+) -> str:
     """Advance from the scheduled occurrence, preserving the series rhythm.
 
     If an old meeting is logged late, skip already-past occurrences instead of
-    creating a new scheduled shell in the past.
+    creating a new scheduled shell in the past. `after` is a second floor:
+    when a single occurrence was moved off its usual day, the rhythm still
+    steps from the usual day, but the next one must land after the day the
+    moved meeting actually happened.
     """
-    current = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
+    current = _parse_ts(scheduled_at)
     reference = now or datetime.now(timezone.utc)
+    if after:
+        reference = max(reference, _parse_ts(after))
     step = timedelta(weeks=interval_weeks)
     candidate = current + step
     while candidate <= reference:
         candidate += step
     return candidate.astimezone(timezone.utc).isoformat()
+
+
+def _keeps_single_move(
+    existing: dict | None,
+    existing_series: dict,
+    scheduled_at: str | None,
+    recurrence_weeks: int | None,
+) -> bool:
+    """True when a save leaves a singly-moved occurrence's date and repeat
+    exactly as they were, so it must not re-anchor the series."""
+    return bool(
+        existing
+        and existing.get("series_slot_at")
+        and scheduled_at
+        and (existing.get("scheduled_at") or "")[:10] == scheduled_at[:10]
+        and existing_series.get("active")
+        and recurrence_weeks == existing_series.get("interval_weeks")
+    )
 
 
 def _upsert_series_for_session(
@@ -754,10 +794,56 @@ def _upsert_series_for_session(
     scheduled_at: str | None,
     recurrence_weeks: int | None,
     recurrence_timezone: str,
+    scope: str = "series",
 ) -> dict:
-    """Persist schedule fields and return the updated occurrence."""
-    _validate_recurrence(recurrence_weeks, scheduled_at)
+    """Persist schedule fields and return the updated occurrence.
+
+    scope="series" sets the date and repeat rule together and re-anchors the
+    series on that date (this and every one after). scope="occurrence" moves
+    only this 1:1: the series keeps its anchor, interval and timezone, and
+    the occurrence remembers the usual day it stands in for in
+    series_slot_at, so logging it rolls the next one forward from the usual
+    day rather than from the moved one. A 1:1 that doesn't repeat has no
+    usual day to keep, so "occurrence" is the same as "series" for it.
+    """
     series_id = session.get("series_id")
+
+    if scope == "occurrence" and series_id:
+        if not scheduled_at:
+            raise HTTPException(status_code=422, detail="Pick the date to move this 1:1 to")
+        rows = (
+            supabase.table("one_on_one_series")
+            .select("id,interval_weeks,timezone,active")
+            .eq("id", series_id)
+            .eq("manager_id", user_id)
+            .eq("active", True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        if rows:
+            series = rows[0]
+            usual_at = session.get("series_slot_at") or session.get("scheduled_at")
+            # Moved back onto its usual day: nothing left to remember.
+            if usual_at and usual_at[:10] == scheduled_at[:10]:
+                usual_at = None
+            saved = (
+                supabase.table("one_on_ones")
+                .update({"scheduled_at": scheduled_at, "series_slot_at": usual_at})
+                .eq("id", session["id"])
+                .eq("manager_id", user_id)
+                .eq("direct_report_id", direct_report_id)
+                .execute()
+                .data
+            )
+            if not saved:
+                raise HTTPException(status_code=404, detail="1:1 session not found")
+            updated = saved[0]
+            updated["recurrence_weeks"] = series["interval_weeks"]
+            updated["recurrence_timezone"] = series.get("timezone")
+            return updated
+
+    _validate_recurrence(recurrence_weeks, scheduled_at)
 
     if recurrence_weeks is not None:
         series = None
@@ -802,9 +888,15 @@ def _upsert_series_for_session(
         supabase.table("one_on_one_series").update({"active": False}).eq("id", series_id).eq("manager_id", user_id).execute()
         series_id = None
 
+    occurrence_updates: dict = {"scheduled_at": scheduled_at, "series_id": series_id}
+    # A series-wide change puts this occurrence back on the series' day.
+    # Written only when there is a remembered day to clear, so callers that
+    # never move a single occurrence don't depend on the column.
+    if session.get("series_slot_at"):
+        occurrence_updates["series_slot_at"] = None
     saved = (
         supabase.table("one_on_ones")
-        .update({"scheduled_at": scheduled_at, "series_id": series_id})
+        .update(occurrence_updates)
         .eq("id", session["id"])
         .eq("manager_id", user_id)
         .eq("direct_report_id", direct_report_id)
@@ -1466,6 +1558,11 @@ def prep_one_on_one(
             .data[0]
         )
 
+    # Building the sheet never moves the meeting. If this occurrence was
+    # moved by itself off the series' usual day and the date and repeat
+    # arrive unchanged, keep it that way instead of re-anchoring the whole
+    # series on the moved date.
+    keeps_single_move = _keeps_single_move(existing, existing_series, scheduled_at, recurrence_weeks)
     saved = _upsert_series_for_session(
         supabase,
         user_id,
@@ -1474,6 +1571,7 @@ def prep_one_on_one(
         scheduled_at,
         recurrence_weeks,
         recurrence_timezone,
+        scope="occurrence" if keeps_single_move else "series",
     )
 
     # The golden-path signal: is_first marks the manager's first saved sheet
@@ -1498,6 +1596,7 @@ def prep_one_on_one(
         open_commitments_to_check=open_commitments,
         scheduled_at=scheduled_at,
         recurrence_weeks=recurrence_weeks,
+        series_slot_at=saved.get("series_slot_at"),
         carry_forward_items=carry_forward_items,
         opening_line=opening_line,
         prepared_by=prep_guide["prepared_by"],
@@ -1602,7 +1701,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         # can't be used to overwrite someone else's row.
         source_rows = (
             supabase.table("one_on_ones")
-            .select("id,series_id,scheduled_at,summary,notes,logged_at")
+            .select("*")
             .eq("id", body.one_on_one_id)
             .eq("manager_id", user_id)
             .eq("direct_report_id", body.direct_report_id)
@@ -1728,8 +1827,20 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
             # logging it. _next_occurrence_at() skips occurrences already in the
             # past, so backfilling a meeting from last week still lands the next
             # one in the future instead of creating a stale shell.
-            current_at = meeting_at or source_session.get("scheduled_at") or series["anchor_at"]
-            next_at = _next_occurrence_at(current_at, series["interval_weeks"])
+            #
+            # Except for a 1:1 moved by itself ("Just this 1:1"): it stood in
+            # for one usual-day slot, so the next one steps from that slot
+            # and lands back on the usual day, after the moved meeting.
+            usual_at = source_session.get("series_slot_at")
+            if usual_at:
+                next_at = _next_occurrence_at(
+                    usual_at,
+                    series["interval_weeks"],
+                    after=meeting_at or source_session.get("scheduled_at"),
+                )
+            else:
+                current_at = meeting_at or source_session.get("scheduled_at") or series["anchor_at"]
+                next_at = _next_occurrence_at(current_at, series["interval_weeks"])
         else:
             next_at = None
 
@@ -1758,6 +1869,8 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
                 # and the rolled-forward date.
                 workspace_updates["series_id"] = series["id"] if series else None
                 workspace_updates["scheduled_at"] = next_at
+                if open_rows[0].get("series_slot_at"):
+                    workspace_updates["series_slot_at"] = None
             # Otherwise the open row is an untouched workspace that already has
             # its own schedule — very likely the prepped occurrence this ad-hoc
             # conversation was deliberately logged apart from. It collects the
@@ -1903,7 +2016,13 @@ def update_session_schedule(
     body: ScheduleUpdate,
     auth=Depends(get_authenticated_client),
 ):
-    """Edit the date/repeat rule for an unfinished occurrence."""
+    """Edit the date/repeat rule for an unfinished occurrence.
+
+    For a repeating 1:1, body.scope says whether a new date moves just this
+    one ("occurrence") or this and every one after ("series"). The prep
+    sheet is never touched: moving a meeting doesn't rebuild what was
+    prepared for it.
+    """
     user_id, supabase = auth
     rows = (
         supabase.table("one_on_ones")
@@ -1927,11 +2046,12 @@ def update_session_schedule(
         scheduled_at,
         body.recurrence_weeks,
         body.timezone,
+        scope=body.scope,
     )
     saved["one_on_one_series"] = {
-        "interval_weeks": body.recurrence_weeks,
-        "timezone": body.timezone,
-        "active": body.recurrence_weeks is not None,
+        "interval_weeks": saved.get("recurrence_weeks"),
+        "timezone": saved.get("recurrence_timezone"),
+        "active": saved.get("recurrence_weeks") is not None,
     }
     return _serialize_session(saved)
 

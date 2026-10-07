@@ -242,6 +242,9 @@ export type OneOnOne = {
   series_id?: string | null;
   recurrence_weeks?: 1 | 2 | 3 | 4 | null;
   recurrence_timezone?: string | null;
+  // Set only when this one 1:1 was moved off the series' usual day
+  // ("Just this 1:1"): the usual date it stands in for.
+  series_slot_at?: string | null;
   carry_forward_items: string[];
   // One line to open this 1:1 with, kept at the previous wrap-up.
   opening_line?: string | null;
@@ -321,6 +324,7 @@ export type PrepResponse = {
   open_commitments_to_check: Pick<Commitment, "id" | "description" | "due_date" | "committed_by">[];
   scheduled_at: string | null;
   recurrence_weeks: 1 | 2 | 3 | 4 | null;
+  series_slot_at?: string | null;
   carry_forward_items: string[];
   opening_line?: string | null;
   prepared_by?: "manager" | "overnight";
@@ -1164,6 +1168,9 @@ export type WeekConversation = {
   agenda: string[];
   summary: string | null;
   carry_forward_count: number;
+  // Unfinished 1:1s only: the repeat interval, so Move can ask "just this
+  // one or every one after". Absent for other kinds.
+  recurrence_weeks?: number | null;
 };
 
 export type WeekCommitmentState = "completed" | "due" | "overdue";
@@ -1677,6 +1684,9 @@ export const updateOneOnOneSchedule = (
     scheduled_at: string | null;
     recurrence_weeks: 1 | 2 | 3 | 4 | null;
     timezone: string;
+    // For a repeating 1:1: "occurrence" moves just this one, "series"
+    // (the default) moves this and every one after.
+    scope?: "occurrence" | "series";
   }
 ): Promise<OneOnOne> =>
   authedFetch(`/api/one-on-ones/session/${id}/schedule`, {

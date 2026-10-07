@@ -86,6 +86,13 @@ def _meeting_state(*, completed: bool, prepared: bool, day: date, today: date) -
     return "prep_saved" if prepared else "to_prepare"
 
 
+def _recurrence_weeks(row: dict) -> int | None:
+    series = row.get("one_on_one_series") or {}
+    if isinstance(series, list):
+        series = series[0] if series else {}
+    return series.get("interval_weeks") if series.get("active") else None
+
+
 def _conversations(snapshot: dict, week_start: date, week_end: date, today: date) -> list[dict]:
     reports = {row["id"]: row for row in snapshot.get("reports", [])}
     items: list[dict] = []
@@ -120,6 +127,9 @@ def _conversations(snapshot: dict, week_start: date, week_end: date, today: date
             "agenda": _agenda_titles(row.get("prep_guide")) if not completed else [],
             "summary": _excerpt(row.get("summary")) if completed else None,
             "carry_forward_count": len(row.get("carry_forward_items") or []) if not completed else 0,
+            # The selected card's Move asks "just this one or every one
+            # after" only when the 1:1 repeats.
+            "recurrence_weeks": _recurrence_weeks(row) if not completed else None,
         })
 
     agenda_counts = snapshot.get("team_agenda_counts", {})

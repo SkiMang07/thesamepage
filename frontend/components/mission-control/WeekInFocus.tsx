@@ -64,6 +64,7 @@ import {
   eventFor,
   startOfNextLocalDay,
 } from "@/components/mission-control/ActionBrief";
+import MoveOneOnOne from "@/components/MoveOneOnOne";
 
 // ---------------------------------------------------------------------------
 // Dates. The payload's dates are plain YYYY-MM-DD in the manager's week.
@@ -439,6 +440,12 @@ export function WeekInFocus({
               colorFor={colorFor}
               onClose={closeDetail}
               onSelect={select}
+              onMoved={(day) => {
+                // A 1:1 moved out of the week shown leaves nothing to select.
+                if (!week || day < week.week.start || day > week.week.end) closeDetail();
+                setToast(day ? "1:1 moved." : "Date removed.");
+                onRefresh();
+              }}
             />
           )}
         </div>
@@ -1187,6 +1194,7 @@ function Detail({
   colorFor,
   onClose,
   onSelect,
+  onMoved,
 }: {
   week: WeekData;
   selection: Exclude<Selection, { type: "home" }>;
@@ -1194,6 +1202,8 @@ function Detail({
   colorFor: ColorFor;
   onClose: () => void;
   onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
+  /** A 1:1's new date (YYYY-MM-DD), or "" when it was removed. */
+  onMoved: (day: string) => void;
 }) {
   const h3 = "mb-2 mt-3.5 font-serif text-[1.55rem] font-normal leading-tight text-ink focus:outline-none";
 
@@ -1269,6 +1279,19 @@ function Detail({
             <Link href={c.person_href} className="text-xs text-brand hover:text-brand-hover">Person page →</Link>
           )}
         </div>
+        {c.kind === "one_on_one" && c.state !== "completed" && (
+          <div className="mt-3">
+            <MoveOneOnOne
+              key={c.record_id}
+              sessionId={c.record_id}
+              date={c.date}
+              recurrenceWeeks={c.recurrence_weeks ?? null}
+              onMoved={(saved) => onMoved((saved.scheduled_at ?? "").slice(0, 10))}
+              label="Move to"
+              compact
+            />
+          </div>
+        )}
       </section>
     );
   }
