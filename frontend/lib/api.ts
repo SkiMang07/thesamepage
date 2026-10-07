@@ -2597,6 +2597,8 @@ export type RolesReviewItem = {
   type: "draft" | "revision" | "decision";
   role_level_id: string;
   decision_id?: string;
+  // "level": the one-standard-or-two-levels question, answered from the list.
+  topic?: string;
   label: string;
   kind_label: string;
   detail: string;

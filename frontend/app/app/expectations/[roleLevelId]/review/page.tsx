@@ -57,8 +57,11 @@ export default function ReviewPage() {
   const open = draft.questions.filter((q) => q.status === "open");
   const parked = draft.questions.filter((q) => q.status === "deferred");
   const answered = draft.questions.filter((q) => q.status === "answered" && q.topic !== "target" && q.answer);
-  // A missing target needs a decision; any other open question is optional and approval parks it (30 days, as the server does).
+  // A missing target needs a decision. The level question stays open after approval until it is answered on the role page;
+  // any other open question is optional and approval parks it (30 days, as the server does).
   const needDecision = open.filter((q) => q.topic === "target").length;
+  const levelOpen = open.filter((q) => q.topic === "level").length;
+  const parkable = open.length - needDecision - levelOpen;
   const optionalBackOn = formatDay(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
   const pending = draft.suggestions.filter((s) => s.status === "pending").length;
   const revision = draft.kind === "revision" && ws.approved_items.length > 0;
@@ -131,16 +134,20 @@ export default function ReviewPage() {
               </h2>
               {needDecision < open.length && (
                 <p className="mt-1 text-sm text-ink-body">
-                  {needDecision > 0 ? "The other questions are optional. " : "These are optional. "}
-                  If you approve without answering, {open.length - needDecision === 1 ? "it comes" : "they come"} back on {optionalBackOn}.
+                  {needDecision > 0 ? "The other questions are optional. " : open.length - needDecision === 1 ? "This is optional. " : "These are optional. "}
+                  {parkable > 0 &&
+                    `If you approve without answering, ${
+                      levelOpen ? (parkable === 1 ? "the other question comes" : "the other questions come") : parkable === 1 ? "it comes" : "they come"
+                    } back on ${optionalBackOn}. `}
+                  {levelOpen > 0 && "The level question stays open until you choose one standard or two levels."}
                 </p>
               )}
-              {open.length > 1 && (
+              {open.length - levelOpen > 1 && (
                 <div className="mt-3 border-t border-amber-500/25 pt-3">
                   <FollowUpPicker
                     busy={busy}
-                    label="Come back to all of these on"
-                    onChoose={(d) => run(() => deferRoleQuestions(draft.id, draft.version, open.map((q) => q.id), d))}
+                    label={levelOpen ? "Come back to the others on" : "Come back to all of these on"}
+                    onChoose={(d) => run(() => deferRoleQuestions(draft.id, draft.version, open.filter((q) => q.topic !== "level").map((q) => q.id), d))}
                   />
                 </div>
               )}
@@ -154,9 +161,11 @@ export default function ReviewPage() {
                         The responsibility can be used now. A numerical result won’t be evaluated until a target is defined and approved.
                       </p>
                     ) : null}
-                    <div className="mt-2">
-                      <FollowUpPicker busy={busy} label="Bring this back" onChoose={(d) => run(() => deferRoleQuestion(draft.id, draft.version, q.id, d))} />
-                    </div>
+                    {q.topic !== "level" && (
+                      <div className="mt-2">
+                        <FollowUpPicker busy={busy} label="Bring this back" onChoose={(d) => run(() => deferRoleQuestion(draft.id, draft.version, q.id, d))} />
+                      </div>
+                    )}
                     <div className="mt-2 flex flex-wrap gap-3 text-sm">
                       <Link href={`${base}?focus=${encodeURIComponent(q.id)}`} className="font-medium text-brand hover:text-brand-hover">
                         {q.topic === "target" ? "Set the target" : "Answer it"}

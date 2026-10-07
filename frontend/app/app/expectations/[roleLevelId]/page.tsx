@@ -102,7 +102,7 @@ function RoleView() {
     return <Workspace key={ws.draft.id} initial={ws} focus={focus} onFocusUsed={() => setFocus(null)} onReplace={setWs} router={router} />;
   }
   if (ws.approved_items.length) {
-    return <ApprovedView ws={ws} focus={focus} onOpened={(w, f) => { setFocus(f); setWs(w); }} />;
+    return <ApprovedView ws={ws} focus={focus} split={params.get("split") === "1"} onOpened={(w, f) => { setFocus(f); setWs(w); }} />;
   }
   return <StartView ws={ws} onOpened={setWs} />;
 }
@@ -587,11 +587,25 @@ function Workspace({
 // Approved, nothing open: what's in use, and the details still open
 // ---------------------------------------------------------------------------
 
-function ApprovedView({ ws, focus, onOpened }: { ws: RoleWorkspace; focus: string | null; onOpened: (w: RoleWorkspace, focus: string | null) => void }) {
+function ApprovedView({
+  ws,
+  focus,
+  split = false,
+  onOpened,
+}: {
+  ws: RoleWorkspace;
+  focus: string | null;
+  split?: boolean;
+  onOpened: (w: RoleWorkspace, focus: string | null) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [splitting, setSplitting] = useState<string | null>(null);
   const focusedDecision = focus?.startsWith("decision:") ? focus.slice(9) : null;
+  // ?split=1 (from "Split into two levels" on the roles list) opens the split
+  // panel on the focused level question.
+  const [splitting, setSplitting] = useState<string | null>(() =>
+    split && focusedDecision && ws.open_decisions.some((d) => d.id === focusedDecision && d.topic === "level") ? focusedDecision : null
+  );
 
   async function keepOne(decisionId: string) {
     setBusy(true);

@@ -408,7 +408,13 @@ RULES:
 # Validation of the model's match proposal
 # ---------------------------------------------------------------------------
 
-def _validate_match(raw_match: dict, families: list[dict], role_levels: list[dict], job_level: int) -> ImportMatch:
+def _same_title(a: str | None, b: str | None) -> bool:
+    norm = lambda t: " ".join((t or "").lower().replace("-", " ").split())
+    return bool(norm(a)) and norm(a) == norm(b)
+
+
+def _validate_match(raw_match: dict, families: list[dict], role_levels: list[dict], job_level: int,
+                    job_role: str | None = None) -> ImportMatch:
     """Never trust the model's ids. A family id it invented, or one from
     another org (impossible through RLS, but the check is free), degrades to
     create_new rather than reaching the review screen as a preselected
@@ -418,7 +424,13 @@ def _validate_match(raw_match: dict, families: list[dict], role_levels: list[dic
     a level at the inferred number, the action becomes "exists" against THAT
     level — the review screen's own collision UI (scoping §3.2) then only
     has to handle collisions the manager creates by editing the level or
-    ladder afterwards."""
+    ladder afterwards.
+
+    Except when the model proposed a NEW level ("attach") and the occupied
+    level holds a different role: the model's own reading is that this role
+    needs a level of its own, so the default becomes a new ladder named after
+    the role rather than opening someone else's role. (Live, 2026-10-06: a QA
+    role "needs its own level" defaulted to Mobile Engineer, Level 1.)"""
     families_by_id = {f["id"]: f for f in families}
     action = raw_match.get("suggested_action")
     if action not in _VALID_ACTIONS:
@@ -443,7 +455,14 @@ def _validate_match(raw_match: dict, families: list[dict], role_levels: list[dic
             (rl for rl in role_levels if rl.get("role_family_id") == family_id and rl.get("job_level") == job_level),
             None,
         )
-        if collision:
+        if collision and action == "attach" and job_role and not _same_title(collision.get("job_role"), job_role):
+            ladder_name = families_by_id[family_id]["name"]
+            action = "create_new"
+            raw_match = {**raw_match, "rationale": (
+                f"{ladder_name} already has a Level {job_level} ({collision.get('job_role')}), so this starts a new "
+                f"ladder named after the role. Pick a ladder below to place it there instead."
+            )}
+        elif collision:
             action = "exists"
             existing_level_id = collision["id"]
         elif action == "exists":
@@ -633,6 +652,6 @@ def draft_role_import(
         is_job_description=True,
         other_roles_note=note.strip() if isinstance(note, str) and note.strip() else None,
         role=role,
-        match=_validate_match(parsed.get("match") or {}, families, role_levels, role.job_level),
+        match=_validate_match(parsed.get("match") or {}, families, role_levels, role.job_level, role.job_role),
         expectations=parse_draft_items(parsed.get("expectations") or {}),
     )

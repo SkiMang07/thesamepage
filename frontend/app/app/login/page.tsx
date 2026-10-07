@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { landingPath } from "@/lib/auth-landing";
@@ -16,6 +16,17 @@ function LoginForm() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Until the page has loaded its script, a click on the button does nothing
+  // (live, 2026-10-06). It stays disabled until then, and anything typed or
+  // autofilled before that point is picked up rather than lost.
+  const [ready, setReady] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const typed = emailRef.current?.value;
+    if (typed) setEmail((current) => current || typed);
+    setReady(true);
+  }, []);
 
   // The password option is only offered to someone who already signs in with
   // one: a new manager has no password, and trying one only earns Supabase's
@@ -40,6 +51,7 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!ready) return;
     setLoading(true);
     setError(null);
     const supabase = createClient();
@@ -109,6 +121,7 @@ function LoginForm() {
       ) : (
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <input
+            ref={emailRef}
             type="email"
             autoComplete="email"
             required
@@ -131,7 +144,7 @@ function LoginForm() {
           {error && <p className="text-sm text-red-700">{error}</p>}
           <button
             type="submit"
-            disabled={loading || !email.trim() || (method === "password" && !password)}
+            disabled={!ready || loading || !email.trim() || (method === "password" && !password)}
             className="w-full rounded-md bg-brand px-4 py-2 text-on-brand disabled:opacity-40"
           >
             {loading

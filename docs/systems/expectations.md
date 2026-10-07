@@ -86,9 +86,12 @@ disagree, the notes win** (title and level included), and a target stated in the
 notes is a stated target (`target_source` `manager`). The notes are kept on the
 draft as `analysis.context` and go into every reanalysis. `POST /import` makes one AI call: placement proposal
 (attach / new ladder / existing level, validated server-side by `roles_import`'s
-helpers) plus a first draft and at most three focused questions. The manager
-confirms title, level and ladder; an existing ladder+level opens that role instead
-of creating a second one. `?family=` pins a ladder; `?assign=` assigns a person
+helpers) plus a first draft and at most three focused questions. When the model
+proposes a new level on a ladder ("attach") whose level number is already held by a
+role with a different title, the proposal becomes a new ladder named after the role,
+with a literal rationale naming the occupied level; the same title still opens the
+existing role. The manager confirms title, level and ladder; an existing ladder+level
+opens that role instead of creating a second one. `?family=` pins a ladder; `?assign=` assigns a person
 (Settings → People's "Define it from a job description"). "Start without a draft"
 skips AI. The JD text is never lost on failure.
 
@@ -159,8 +162,10 @@ and one explicit confirmation + **Approve** for the whole role.
   Python and again inside the SQL function).
 - **Only a missing target blocks approval.** Any other open question is optional:
   approving parks it 30 days out (the same persisted decision as "Bring this back"),
-  except a level question, which stays due (see *One standard or two levels*),
-  and the review page says so. Otherwise a question ends answered, parked with a date,
+  except a level question, which stays due (see *One standard or two levels*).
+  The review page gives the return date only for the questions that will be parked,
+  says the level question stays open until the manager chooses one standard or two
+  levels, and offers no "bring this back" date for it. Otherwise a question ends answered, parked with a date,
   or "Not needed". Deferral always goes through `POST /drafts/{id}/defer` (one question) or
   `/defer-many` (every listed open question on one date, one draft write and version
   bump; unknown ids are skipped, 404 only if none match, at most 40), so there is
@@ -397,9 +402,12 @@ retagged `level`; and when the manager's own words raise seniority (junior,
 senior, "not the same bar") and no question asks, a system question is added
 (`ensure_level_question`). It isn't asked on a ladder that already has more
 than one level. Approving leaves it due today rather than parking it a month
-out, so it waits under *Needs review* and on the role page until answered.
-There it has two answers. *Keep one standard* resolves it. *Split into two
-levels* takes a title (prefilled "Senior <role>"), the people who move and,
+out, so it waits under *Needs review* on the overview ("Approved · level question
+open", with both answers on the row; the overview treats it as approved once the role
+has approved lines, though it has no `config_id`) and on the role page until answered.
+It has two answers. *Keep one standard* resolves it (from the overview row too). *Split into two
+levels* (the overview row links to the role page with `?split=1`, which opens the
+panel) takes a title (prefilled "Senior <role>"), the people who move and,
 optionally, what the new level asks that this one doesn't: the server adds a
 level above the top of the same ladder (an ungrouped role gets a ladder named
 after it), approves a copy of this role's lines for it in the same step (a

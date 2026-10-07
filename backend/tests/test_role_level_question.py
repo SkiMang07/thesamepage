@@ -95,3 +95,46 @@ def test_a_ladder_that_already_has_levels_is_not_asked_again():
                                             context_text="Dakota is senior and leads releases", mode="description",
                                             ask_level=False)
     assert questions == []
+
+
+class _OverviewDB:
+    """Every query returns the table's rows; the overview's own logic is what's under test."""
+    def __init__(self, tables): self.tables, self._t = tables, None
+    def table(self, name): self._t = name; return self
+    def __getattr__(self, _name): return lambda *_a, **_k: self
+    def execute(self): return SimpleNamespace(data=list(self.tables.get(self._t, [])))
+
+
+def _overview(decision_topic, config_id=None, open_draft=False):
+    today = date.today().isoformat()
+    drafts = [{"id": "dr0", "role_level_id": "rl1", "kind": "new", "status": "approved", "questions": [], "items": [],
+               "updated_at": today, "approved_at": today, "analysis": None}]
+    if open_draft:
+        drafts.append({**drafts[0], "id": "dr1", "kind": "revision", "status": "open", "approved_at": None})
+    db = _OverviewDB({
+        "role_levels": [{"id": "rl1", "job_role": "QA Engineer", "job_level": 1, "role_family_id": None, "job_responsibilities": ""}],
+        "role_expectation_drafts": drafts,
+        "role_expectation_decisions": [{"id": "dec1", "role_level_id": "rl1", "question": "One standard or two levels?",
+                                        "topic": decision_topic, "follow_up_on": today, "status": "deferred",
+                                        "config_id": config_id, "item_key": None}],
+        "skill_configs": [{"id": "s1", "role_level_id": "rl1", "area": "skill"}],
+    })
+    return rex.get_overview(auth=("u1", db))
+
+
+def test_an_open_level_question_is_listed_with_the_approved_role():
+    out = _overview("level")
+    [item] = [i for i in out["needs_review"] if i["type"] == "decision"]
+    assert item["topic"] == "level" and item["decision_id"] == "dec1"
+    assert item["kind_label"] == "Approved · level question open"
+    assert out["levels"][0]["open_decisions"][0]["approved"] is True
+
+
+def test_a_role_wide_question_other_than_level_is_still_not_listed_alone():
+    out = _overview("scope")
+    assert [i for i in out["needs_review"] if i["type"] == "decision"] == []
+
+
+def test_inside_an_open_revision_the_level_question_belongs_to_the_draft_entry():
+    out = _overview("level", open_draft=True)
+    assert [i["type"] for i in out["needs_review"]] == ["revision"]

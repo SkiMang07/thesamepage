@@ -19,13 +19,14 @@ import {
   getRoleFamilies,
   getRoleLevels,
   getRolesOverview,
+  keepOneStandard,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import { SkeletonSection } from "@/components/Skeleton";
 import LadderManager from "@/components/expectations/LadderManager";
 import CompanyValues from "@/components/expectations/CompanyValues";
 import { Notice, formatDay } from "@/components/expectations/shared";
-import { BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW } from "@/lib/tokens";
+import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW } from "@/lib/tokens";
 import { approvedNotice } from "@/lib/expectations-notice";
 
 export default function ExpectationsPage() {
@@ -52,6 +53,8 @@ function ExpectationsOverview() {
   const [manageError, setManageError] = useState<string | null>(null);
   const notice = params.get("notice");
   const noticeRole = params.get("role");
+  const [keeping, setKeeping] = useState<string | null>(null);
+  const [keepError, setKeepError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     getRolesOverview()
@@ -61,6 +64,24 @@ function ExpectationsOverview() {
       })
       .catch(() => setError("Roles couldn’t be loaded. This is a connection problem, not an empty workspace."));
   }, []);
+
+  // "Keep one standard" answers the level question in place; the role page
+  // answers it the same way (POST /decisions/{id}/close).
+  const keepOne = useCallback(
+    async (decisionId: string) => {
+      setKeeping(decisionId);
+      setKeepError(null);
+      try {
+        await keepOneStandard(decisionId);
+        load();
+      } catch {
+        setKeepError("That answer couldn’t be saved just now. Try again.");
+      } finally {
+        setKeeping(null);
+      }
+    },
+    [load]
+  );
 
   useEffect(() => {
     load();
@@ -167,6 +188,11 @@ function ExpectationsOverview() {
               <h2 id="needs-review-heading" className="text-base font-semibold text-amber-800">
                 Needs review
               </h2>
+              {keepError && (
+                <p role="alert" className="mt-1 text-sm text-red-700">
+                  {keepError}
+                </p>
+              )}
               <ul className="mt-1">
                 {data.needs_review.map((item) => (
                   <li
@@ -178,12 +204,26 @@ function ExpectationsOverview() {
                       <p className="mt-0.5 text-sm text-amber-800">
                         <span className="font-medium">{item.kind_label}</span>
                         {item.detail ? ` · ${item.detail}` : ""}
-                        {item.type === "decision" && item.follow_up_on ? ` · due ${formatDay(item.follow_up_on)}` : ""}
+                        {item.type === "decision" && item.topic !== "level" && item.follow_up_on ? ` · due ${formatDay(item.follow_up_on)}` : ""}
                       </p>
+                      {item.topic === "level" && (
+                        <p className="mt-0.5 text-xs text-ink-muted">Open until you decide · everyone in this role is held to the same lines</p>
+                      )}
                     </div>
-                    <Link href={reviewHref(item)} className={`${BTN_SECONDARY} shrink-0 self-start bg-surface sm:self-auto`}>
-                      {item.type === "decision" ? "Resolve" : item.type === "revision" ? "Continue revision" : "Continue draft"} →
-                    </Link>
+                    {item.type === "decision" && item.topic === "level" && item.decision_id ? (
+                      <div className="flex shrink-0 flex-wrap gap-2 self-start sm:self-auto">
+                        <Link href={`${reviewHref(item)}&split=1`} className={`${BTN_SECONDARY} bg-surface`}>
+                          Split into two levels
+                        </Link>
+                        <button type="button" disabled={keeping === item.decision_id} onClick={() => keepOne(item.decision_id!)} className={BTN_GHOST}>
+                          {keeping === item.decision_id ? "Saving…" : "Keep one standard"}
+                        </button>
+                      </div>
+                    ) : (
+                      <Link href={reviewHref(item)} className={`${BTN_SECONDARY} shrink-0 self-start bg-surface sm:self-auto`}>
+                        {item.type === "decision" ? "Resolve" : item.type === "revision" ? "Continue revision" : "Continue draft"} →
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -328,7 +368,11 @@ function LevelRow({ level }: { level: RolesOverviewLevel }) {
       c.values ? `${c.values} role value${c.values === 1 ? "" : "s"}` : null,
     ].filter(Boolean);
     status = `Approved expectations${level.approved_at ? ` · ${formatDay(level.approved_at)}` : ""}${parts.length ? ` · ${parts.join(", ")}` : ""}`;
-    if (openDecision) status += ` · ${openDecision.topic === "target" ? "target" : "detail"} open until ${formatDay(openDecision.follow_up_on)}`;
+    if (openDecision)
+      status +=
+        openDecision.topic === "level"
+          ? " · level question open"
+          : ` · ${openDecision.topic === "target" ? "target" : "detail"} open until ${formatDay(openDecision.follow_up_on)}`;
     action = (
       <span className="flex items-center gap-3">
         <span className="rounded bg-brand-tint px-2 py-0.5 text-xs font-medium text-brand">✓ In use</span>

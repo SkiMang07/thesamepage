@@ -812,6 +812,12 @@ def get_overview(auth=Depends(get_authenticated_client)):
                 "approved": dec.get("config_id") is not None,
                 "item_key": dec.get("item_key"),
             }
+            # The level question is about the whole role, not one approved
+            # line, so it has no config_id; it counts as approved once the
+            # role's expectations are.
+            is_level = dec.get("topic") == "level"
+            if is_level and has_approved:
+                entry["approved"] = True
             role_dec_out.append(entry)
             # A decision inside an open draft is part of that draft's entry.
             if draft or not entry["approved"]:
@@ -820,8 +826,9 @@ def get_overview(auth=Depends(get_authenticated_client)):
                 "type": "decision",
                 "role_level_id": role["id"],
                 "decision_id": dec["id"],
+                "topic": dec.get("topic"),
                 "label": label(role),
-                "kind_label": "Approved · one detail open",
+                "kind_label": "Approved · level question open" if is_level else "Approved · one detail open",
                 "detail": dec["question"],
                 "follow_up_on": dec["follow_up_on"],
                 "due": due,
@@ -1401,7 +1408,7 @@ def compose_from_job_description(
         role = _validate_role(parsed.get("role") or {})
         if role is None:
             return ComposeOut(is_job_description=False, reason="Couldn't find a job title in that — check it's the full job description.")
-        match = _validate_match(parsed.get("match") or {}, families, role_levels, role.job_level)
+        match = _validate_match(parsed.get("match") or {}, families, role_levels, role.job_level, role.job_role)
     else:
         role, match = None, None
 
