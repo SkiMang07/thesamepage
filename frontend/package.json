@@ -14,6 +14,7 @@
     "test:scribe-citations": "node --experimental-strip-types --test lib/scribeCitations.test.mjs",
     "test:expectations-notice": "node --experimental-strip-types --test lib/expectations-notice.test.mjs",
     "test:follow-through": "node --experimental-strip-types --test lib/followThrough.test.mjs",
+    "test:commitments-table": "node --experimental-strip-types --test lib/commitmentsTable.test.mjs",
     "test:role-draft-cap": "node --experimental-strip-types --test lib/roleDraftCap.test.mjs",
     "test:member-label": "node --experimental-strip-types --test lib/memberLabel.test.mjs",
     "test:wait-message": "node --experimental-strip-types --test lib/waitMessage.test.mjs",

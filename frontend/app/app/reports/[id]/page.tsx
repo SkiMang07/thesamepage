@@ -370,6 +370,17 @@ function RelationshipDesk() {
     setScrollTarget(sessionId);
   }
 
+  // ?conversation=<id> opens that conversation once history has loaded — the
+  // commitments table links a 1:1 commitment to the 1:1 it was made in.
+  const conversationParam = searchParams.get("conversation");
+  const conversationOpened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!conversationParam || conversationOpened.current === conversationParam) return;
+    if (!history.some((s) => s.id === conversationParam && s.status === "completed")) return;
+    conversationOpened.current = conversationParam;
+    openConversation(conversationParam);
+  }, [conversationParam, history]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function dismissReceipt() {
     setReceipt(null);
     stashRef.current = null;
@@ -471,7 +482,7 @@ function RelationshipDesk() {
     setUpdatingId(commitmentId);
     setCommitmentError(null);
     try {
-      const updated = await updateCommitment(commitmentId, status);
+      const updated = await updateCommitment(commitmentId, status, "person");
       setCommitments((cs) => cs.map((c) => (c.id === commitmentId ? { ...c, ...updated } : c)));
       return true;
     } catch {

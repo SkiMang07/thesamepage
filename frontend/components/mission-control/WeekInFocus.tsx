@@ -4,9 +4,11 @@
 //
 // Selected design: docs/design-proposals/2026-09-24-week-in-focus/ (BUILD_BRIEF.md
 // + prototype-source.html). Composition, in order: editorial heading; three
-// factual, clickable counts; the conversation week; follow-through by owner;
-// a quiet right-hand column holding the action brief's next move (replaced by
-// details when something is selected); then Goals & progress, full width.
+// factual, clickable counts; the conversation week; a quiet right-hand column
+// holding the action brief's next move (replaced by details when something is
+// selected); then the commitments table and Goals & progress, full width.
+// The table (components/commitments/CommitmentsTable.tsx, 2026-10-08)
+// replaced the Follow-through bars: every open commitment, closable in place.
 //
 // Data: GET /api/dashboard/week (backend/mission_control_week.py) for
 // everything factual, GET /api/dashboard/brief for the recommendation. Every
@@ -24,7 +26,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuickAdd } from "@/lib/quick-add-context";
-import { followThroughCopy } from "@/lib/followThrough";
+import CommitmentsTable, { type TableRequest } from "@/components/commitments/CommitmentsTable";
 import {
   GoalLevel,
   GoalStatus,
@@ -47,9 +49,6 @@ import {
   EYEBROW,
   IDENTITY_TEXT,
   IDENTITY_VAR,
-  METER_SEGMENT,
-  METER_SEGMENT_SELECTED,
-  METER_SWATCH,
   STATUS_GLYPH,
   identityIndex,
 } from "@/lib/tokens";
@@ -175,7 +174,6 @@ const COMMITMENT_STATE_LABEL: Record<WeekCommitmentState, string> = {
   due: "Due this week",
   overdue: "Overdue",
 };
-const STATES: WeekCommitmentState[] = ["completed", "due", "overdue"];
 
 const STATUS_LABEL: Record<GoalStatus, string> = {
   active: "Active",
@@ -280,6 +278,8 @@ export function WeekInFocus({
   const [selection, setSelection] = useState<Selection>({ type: "home" });
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [toast, setToast] = useState("");
+  // The "Overdue commitments" count filters and scrolls to the table.
+  const [tableRequest, setTableRequest] = useState<TableRequest | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const colorFor = useIdentityColors();
@@ -403,7 +403,7 @@ export function WeekInFocus({
   };
 
   // The next move / details column. Beside the week in two-column mode; in
-  // one column it comes straight after the counts, not below Follow-through,
+  // one column it comes straight after the counts, not below the week,
   // so a narrow window or an open Scribe drawer does not bury it.
   const side = (
     <aside
@@ -412,7 +412,7 @@ export function WeekInFocus({
     >
       <div
         // Sticky in two-column mode so a drill-down opened from low on the
-        // page (Follow-through) shows its details beside the click.
+        // page shows its details beside the click.
         className={twoColumn ? "sticky top-[72px] -ml-1 max-h-[calc(100vh-88px)] overflow-y-auto pl-1 pr-1" : undefined}
         onKeyDown={(e) => {
           if (e.key === "Escape" && selection.type !== "home") closeDetail();
@@ -454,7 +454,7 @@ export function WeekInFocus({
   );
 
   // Early use with nothing recorded yet: three zero tiles and an empty
-  // Follow-through block say nothing, so neither renders (DESIGN.md, Empty
+  // commitments table say nothing, so neither renders (DESIGN.md, Empty
   // states). Both return with the first recorded 1:1, check-in or commitment.
   const nothingRecorded =
     brief?.mode === "early_use" &&
@@ -524,7 +524,16 @@ export function WeekInFocus({
               </>
             ) : (
               <div aria-busy={weekLoading} className={`transition-opacity motion-reduce:transition-none ${weekLoading ? "opacity-60" : ""}`}>
-                {!nothingRecorded && <Metrics week={week} ok={ok} selection={selection} onSelect={select} stacked={rootWidth < 460} />}
+                {!nothingRecorded && (
+                  <Metrics
+                    week={week}
+                    ok={ok}
+                    selection={selection}
+                    onSelect={select}
+                    onOverdue={() => setTableRequest((r) => ({ owner: "everyone", state: "overdue", nonce: (r?.nonce ?? 0) + 1 }))}
+                    stacked={rootWidth < 460}
+                  />
+                )}
                 {!twoColumn && <div className="mb-8 border-b border-hairline pb-8">{side}</div>}
                 <ConversationWeek
                   week={week}
@@ -537,13 +546,18 @@ export function WeekInFocus({
                   onStepWeek={onWeekOf ? stepWeek : undefined}
                   stepping={weekLoading}
                 />
-                {!nothingRecorded && <FollowThrough week={week} ok={ok("commitments")} selection={selection} onSelect={select} />}
               </div>
             )}
           </div>
 
           {twoColumn && side}
         </div>
+
+        {!nothingRecorded && (
+          <div className="mt-8 border-t border-hairline pt-8">
+            <CommitmentsTable surface="table" reloadKey={updatedAt?.getTime()} request={tableRequest} />
+          </div>
+        )}
 
         {week && !weekFailed && (
           <GoalsProgress week={week} ok={ok("goals")} width={rootWidth} onRetry={onRetryWeek} />
@@ -572,12 +586,14 @@ function Metrics({
   ok,
   selection,
   onSelect,
+  onOverdue,
   stacked,
 }: {
   week: WeekData;
   ok: (domain: string) => boolean;
   selection: Selection;
   onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
+  onOverdue: () => void;
   stacked: boolean;
 }) {
   const conversationsOk = ok("one_on_ones") && ok("team_meetings") && ok("outside_meetings");
@@ -631,7 +647,10 @@ function Metrics({
         className={stat}
         aria-pressed={pressed({ type: "records", owner: "all", state: "overdue" })}
         disabled={!ok("commitments")}
-        onClick={(e) => onSelect({ type: "records", owner: "all", state: "overdue" }, e.currentTarget)}
+        // This week's overdue count is the table's Overdue filter, so it goes
+        // there, where each one can be closed. An earlier week's ("still open
+        // from that week") is a week-scoped list the table can't show.
+        onClick={(e) => (current ? onOverdue() : onSelect({ type: "records", owner: "all", state: "overdue" }, e.currentTarget))}
       >
         <span className={`${num} ${ok("commitments") && overdue.length > 0 ? "text-amber-600" : "text-ink"}`}>
           {ok("commitments") ? overdue.length : "—"}
@@ -933,101 +952,6 @@ function ConversationRow({
         </span>
       </span>
     </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Follow-through
-// ---------------------------------------------------------------------------
-
-function FollowThrough({
-  week,
-  ok,
-  selection,
-  onSelect,
-}: {
-  week: WeekData;
-  ok: boolean;
-  selection: Selection;
-  onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
-}) {
-  const groups: { owner: WeekCommitmentOwner; label: string; noun: string }[] = [
-    { owner: "mine", label: "Mine", noun: "my" },
-    { owner: "team", label: "My team", noun: "team" },
-  ];
-  const phrase = weekPhrase(week.week);
-  const current = isCurrentWeek(week.week);
-
-  return (
-    <section aria-labelledby="follow-through-heading">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <h2 id="follow-through-heading" className="text-[17px] font-medium text-ink">Follow-through</h2>
-        <span className="text-2xs text-ink-muted">
-          {current ? "Done and due this week, plus anything overdue" : `Done or due ${phrase}, as of today`}
-        </span>
-      </div>
-      {!ok ? (
-        <p className="rounded-lg bg-surface px-4 py-5 text-sm text-ink-secondary">Commitments couldn’t be loaded, so no counts are shown.</p>
-      ) : (
-        <>
-          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-2xs text-ink-muted">
-            {STATES.map((s) => (
-              <span key={s} className="inline-flex items-center gap-1">
-                <span className={`inline-block h-2 w-2 rounded-[2px] ${METER_SWATCH[s]}`} aria-hidden="true" />
-                {COMMITMENT_STATE_LABEL[s]}
-              </span>
-            ))}
-          </div>
-          {groups.map((g) => {
-            const counts = Object.fromEntries(
-              STATES.map((s) => [s, week.commitments.filter((c) => c.owner === g.owner && c.state === s).length])
-            ) as Record<WeekCommitmentState, number>;
-            const total = counts.completed + counts.due + counts.overdue;
-            const copy = followThroughCopy(total, week.undated_open_commitments[g.owner], phrase);
-            return (
-              <div key={g.owner} className="mt-4">
-                <div className="mb-2 flex justify-between text-xs">
-                  <span className="text-ink">{g.label}</span>
-                  <span className="text-2xs text-ink-muted">{copy.countLabel}</span>
-                </div>
-                {total === 0 ? (
-                  <p className="rounded-[3px] bg-surface px-3 py-1.5 text-2xs text-ink-muted">
-                    {copy.emptyText}
-                  </p>
-                ) : (
-                  <div
-                    role="group"
-                    className="flex h-7 gap-[3px]"
-                    aria-label={`${g.label}: ${counts.completed} completed, ${counts.due} due this week, ${counts.overdue} overdue`}
-                  >
-                    {STATES.filter((s) => counts[s] > 0).map((s) => {
-                      const active = selection.type === "records" && selection.owner === g.owner && selection.state === s;
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          aria-pressed={active}
-                          aria-label={`View ${counts[s]} ${g.noun} ${COMMITMENT_STATE_LABEL[s].toLowerCase()} commitment${counts[s] === 1 ? "" : "s"}`}
-                          onClick={(e) => onSelect({ type: "records", owner: g.owner, state: s }, e.currentTarget)}
-                          style={{ flexGrow: counts[s], flexBasis: 0 }}
-                          className={`min-w-[22px] rounded-[3px] text-2xs font-medium transition-colors ${active ? METER_SEGMENT_SELECTED[s] : METER_SEGMENT[s]}`}
-                        >
-                          {counts[s]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {copy.undatedNote && <p className="mt-1.5 text-2xs text-ink-muted">{copy.undatedNote}</p>}
-              </div>
-            );
-          })}
-          <p className="mt-4 text-2xs text-ink-muted">
-            Each bar shows the split within its group. Select a segment to see its commitments.
-          </p>
-        </>
-      )}
-    </section>
   );
 }
 

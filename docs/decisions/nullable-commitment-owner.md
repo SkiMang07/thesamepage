@@ -57,6 +57,12 @@ rather than guessing, and UI owner pickers offer "You" as the first option.
   counterpart rows (Mission Control's snapshot does; Away already filters to
   `manager`). See `docs/systems/beyond.md`.
 
+- **Refined 2026-10-08:** `committed_by` is who owes it on every source. Team
+  rows used to be saved `manager` with `direct_report_id` naming whoever owed
+  them; a team row naming a person is now `direct_report`, so "null report
+  means yours" and "committed_by = manager means yours" agree. See
+  `docs/systems/commitments.md` → Who owes it.
+
 ## What should reopen this
 
 Real multi-assignee commitments (one commitment fanning out to several people).

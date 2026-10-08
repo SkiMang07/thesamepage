@@ -1094,7 +1094,9 @@ def log_team_meeting(
                     "org_unit_id": meeting.get("org_unit_id"),
                     "description": commitment.description.strip(),
                     "due_date": commitment.due_date or None,
-                    "committed_by": "manager",
+                    # Who owes it: the named person, else the manager. The same
+                    # rule 1:1s use, so every surface agrees on whose it is.
+                    "committed_by": "direct_report" if commitment.direct_report_id else "manager",
                     "source_type": "team_meeting",
                     "source_id": meeting_id,
                     "status": "open",
@@ -1269,8 +1271,9 @@ def list_team_commitments(auth=Depends(get_authenticated_client)):
 def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authenticated_client)):
     """Create a commitment assigned to one direct report, flagged so it also
     shows up on this team-wide list (in addition to wherever commitments
-    already surface — dashboard, DR detail, prep). Manager-authored only, so
-    committed_by is always 'manager' here; source_type 'manual' matches the
+    already surface — dashboard, DR detail, prep). The picker names who owes
+    it: a person (committed_by 'direct_report') or You (null report,
+    'manager'). source_type 'manual' matches the
     existing convention for commitments not extracted from a 1:1 wrap-up."""
     user_id, supabase = auth
     description = body.description.strip()
@@ -1313,7 +1316,7 @@ def create_team_commitment(body: TeamCommitmentIn, auth=Depends(get_authenticate
                 "org_unit_id": org_unit_id,
                 "description": description,
                 "due_date": body.due_date,
-                "committed_by": "manager",
+                "committed_by": "direct_report" if body.direct_report_id else "manager",
                 "source_type": "manual",
                 "is_team_commitment": True,
             }

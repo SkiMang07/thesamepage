@@ -458,8 +458,63 @@ export const getCommitments = (params?: { directReportId?: string; status?: "ope
   return authedFetch(`/api/commitments${qs ? `?${qs}` : ""}`);
 };
 
-export const updateCommitment = (id: string, status: "open" | "done" | "dropped"): Promise<Commitment> =>
-  authedFetch(`/api/commitments/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+export const updateCommitment = (
+  id: string,
+  status: "open" | "done" | "dropped",
+  surface?: CommitmentEdit["surface"],
+): Promise<Commitment> =>
+  authedFetch(`/api/commitments/${id}`, { method: "PATCH", body: JSON.stringify(surface ? { status, surface } : { status }) });
+
+// Edit a commitment (2026-10-08). Only the fields sent change; due_date: null
+// clears the date. owner flips who owes it — on a 1:1 row the person stays and
+// only the side changes; a team row can move to any of your people or to you
+// (owner "manager"). surface is analytics only.
+export type CommitmentEdit = {
+  status?: "open" | "done" | "dropped";
+  description?: string;
+  due_date?: string | null;
+  owner?: "manager" | "direct_report";
+  direct_report_id?: string | null;
+  surface?: "table" | "team_table" | "person" | "team" | "beyond" | "other";
+};
+
+export const editCommitment = (id: string, edit: CommitmentEdit): Promise<Commitment> =>
+  authedFetch(`/api/commitments/${id}`, { method: "PATCH", body: JSON.stringify(edit) });
+
+// The commitments table on Mission Control and the Team page
+// (GET /api/commitments/board): open commitments plus those finished in the
+// last `recent_days`, with who owes each and where it was made resolved
+// server-side. owner: "you" (owed by the manager; with_name is who to),
+// "report" (owner_name owes it), "counterpart" (someone outside the team).
+export type BoardCommitment = {
+  id: string;
+  description: string;
+  status: "open" | "done" | "dropped";
+  due_date: string | null;
+  created_at: string;
+  completed_at: string | null;
+  owner: "you" | "report" | "counterpart";
+  owner_name: string | null;
+  with_name: string | null;
+  direct_report_id: string | null;
+  outside_person_id: string | null;
+  is_team_commitment: boolean;
+  org_unit_id: string | null;
+  source: {
+    type: "one_on_one" | "team_meeting" | "outside_meeting" | "goal" | "project" | "manual";
+    label: string;
+    date: string | null;
+    href: string | null;
+  };
+};
+
+export type CommitmentBoard = {
+  commitments: BoardCommitment[];
+  people: { id: string; name: string; org_unit_id: string | null }[];
+  recent_days: number;
+};
+
+export const getCommitmentBoard = (): Promise<CommitmentBoard> => authedFetch("/api/commitments/board");
 
 // Standalone commitment creation — Session 32 (Scribe confirm handler).
 // Uses POST /api/commitments, separate from 1:1 log and team commitments paths.

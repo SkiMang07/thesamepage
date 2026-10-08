@@ -98,7 +98,7 @@ export default function OutsidePersonPage() {
 
   async function toggle(c: BeyondCommitment) {
     const next = c.status === "done" ? "open" : "done";
-    await updateCommitment(c.id, next);
+    await updateCommitment(c.id, next, "beyond");
     setData((d) =>
       d ? { ...d, commitments: d.commitments.map((row) => (row.id === c.id ? { ...row, status: next } : row)) } : d
     );

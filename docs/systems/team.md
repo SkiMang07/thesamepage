@@ -25,16 +25,19 @@ components live in `frontend/components/team/`.
    inline capture, a state-appropriate primary action and collapsed
    preparation. Other open meetings, Quick log, Edit plan, Delete and
    meeting history sit under the card.
-4. **Shared work** (`SharedWork`) beside **Commitments** (`TeamCommitments`).
-5. **People** (`TeamPeople`) — roster grid; the Relationship Desk is each
+4. **Shared work** (`SharedWork`), full width.
+5. **Commitments** — the shared commitments table (`docs/systems/commitments.md`),
+   full width: this team's meeting commitments and Team-page adds, with a
+   manager-only box to include 1:1 commitments with the team's people.
+6. **People** (`TeamPeople`) — roster grid; the Relationship Desk is each
    person's primary door; "Team details & access" holds current work, the
    private update record and account access (invites stay behind
    `IC_INVITES_ENABLED = false`).
 
 Layout is measured (ResizeObserver on the page root), not viewport-based,
 so opening Scribe reflows it: ≥1000px content wide (meeting|280px context,
-work|340px commitments, three roster columns); ≥740 medium; ≥600 split
-(work stacks over a two-column commitment list); below that one column.
+three roster columns); ≥740 medium; ≥600 split; below that one column.
+Shared work and Commitments are full width at every size.
 
 There is no attention brief, KPI strip or team score. Attention shows where
 it applies: the meeting's "Needs wrap-up"/"Needs a date" chip, overdue
@@ -65,13 +68,9 @@ the goal or project. A shared owner is never a link. A standalone project is
 described as standalone, not as a problem. Inherited work says which parent
 unit it belongs to.
 
-Commitments: open ones ordered by due date (undated last), with "Overdue ·
-date" (amber text and rail), "Due soon · date" (within 7 days), "Due date"
-or "No due date". Filters All open / Overdue / Mine plus an Owner select;
-counts come from the same list the rows do. Three rows first, then "View all
-N". A row expands to its source (meeting, project, goal, 1:1 or "Added on
-the Team page"), added date, Mark done and the owner's Relationship Desk.
-Scope changes clear filters and expanded rows.
+Commitments are the shared commitments table; its rules, and which rows the
+Team page holds, are in `docs/systems/commitments.md`. "+ Add" above it adds a
+team commitment owned by a person or by you.
 
 ## Endpoints (`/api/team`)
 
@@ -331,8 +330,12 @@ equality including null = null."
 
 `commitments.is_team_commitment` (boolean) rather than a new table or a real
 multi-assignee model. The flag only decides whether a commitment also appears on
-the team-wide list. Resolving one reuses `PATCH /api/commitments/{id}` unchanged
+the team-wide list. Resolving or editing one is `PATCH /api/commitments/{id}`
 — the flag changes where it's listed, not how it resolves.
+
+**`committed_by` is who owes it**, as on a 1:1 row: a team row naming a person
+is `direct_report`, one with no person is `manager` (2026-10-08; see
+`docs/systems/commitments.md` → Who owes it).
 
 **`direct_report_id` is optional: a null one is the manager's own** — see
 `docs/decisions/nullable-commitment-owner.md`, which any new commitments surface

@@ -1,7 +1,7 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Shared work and Commitments on /app/team.
+// Shared work on /app/team, and the form that adds a team commitment.
 //
 // Shared work shows everything in scope: goals and projects explicitly marked
 // at risk lead and carry a subtle amber edge; nothing healthy is hidden behind
@@ -11,27 +11,24 @@
 // standalone, not as a problem. Progress appears only from a recorded
 // check-in: no check-in is "no progress recorded", never 0%.
 //
-// Commitments are ordered by due date with explicit overdue / due-soon /
-// undated text, three rows first, and filters whose counts are computed from
-// the same list the rows come from.
+// The page's Commitments list is the shared commitments table
+// (components/commitments/CommitmentsTable.tsx); AddCommitment below is its
+// "+ Add" form.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Project,
   TeamCommitment,
   TeamGoal,
-  TeamMeeting,
   TeamMember,
   createTeamCommitment,
-  updateCommitment,
 } from "@/lib/api";
 import NoteField from "@/components/NoteField";
 import PersonAvatar from "@/components/team/PersonAvatar";
-import { commitmentSource } from "@/components/team/meeting-prep";
 import { TeamScope, inheritedFrom } from "@/components/team/scope";
-import { dueLabel, dueState, instantDate, localDateStr, shortDate } from "@/components/team/dates";
+import { dueLabel, instantDate, shortDate } from "@/components/team/dates";
 import { goalsHref } from "@/lib/goals";
 import { BTN_PRIMARY_SM, ERROR_TEXT, INPUT, LABEL, SELECT, STATUS_GLYPH, Status } from "@/lib/tokens";
 
@@ -325,261 +322,11 @@ function CommitmentNode({ c }: { c: TeamCommitment }) {
 }
 
 // ---------------------------------------------------------------------------
-// Commitments
+// Adding a team commitment (the Commitments table on /app/team holds the list:
+// components/commitments/CommitmentsTable.tsx)
 // ---------------------------------------------------------------------------
 
-type Filter = "all" | "overdue" | "mine";
-const INITIAL_ROWS = 3;
-
-export function TeamCommitments({
-  commitments,
-  setCommitments,
-  members,
-  selectedTeamId,
-  meetings,
-  goals,
-  projects,
-  twoColumn,
-}: {
-  /** Commitments in the selected scope (any status). */
-  commitments: TeamCommitment[];
-  setCommitments: React.Dispatch<React.SetStateAction<TeamCommitment[]>>;
-  members: TeamMember[];
-  selectedTeamId: string | null;
-  meetings: TeamMeeting[];
-  goals: TeamGoal[];
-  projects: Project[];
-  twoColumn: boolean;
-}) {
-  const [filter, setFilter] = useState<Filter>("all");
-  const [person, setPerson] = useState<string>("");
-  const [showAll, setShowAll] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-
-  // A different scope has different people and records: clear anything that
-  // could now point at someone who isn't here.
-  useEffect(() => {
-    setFilter("all");
-    setPerson("");
-    setShowAll(false);
-    setExpanded(null);
-    setAdding(false);
-  }, [selectedTeamId]);
-  useEffect(() => {
-    if (person && person !== "you" && !members.some((m) => m.id === person)) setPerson("");
-  }, [members, person]);
-
-  const today = localDateStr();
-  const open = useMemo(
-    () =>
-      commitments
-        .filter((c) => c.status === "open")
-        .sort((a, b) => {
-          if (!a.due_date && !b.due_date) return a.created_at < b.created_at ? -1 : 1;
-          if (!a.due_date) return 1;
-          if (!b.due_date) return -1;
-          return a.due_date.localeCompare(b.due_date);
-        }),
-    [commitments]
-  );
-
-  const byPerson = person === "" ? open : open.filter((c) => (person === "you" ? !c.direct_report_id : c.direct_report_id === person));
-  const counts = {
-    all: byPerson.length,
-    overdue: byPerson.filter((c) => dueState(c.due_date, today) === "overdue").length,
-    mine: open.filter((c) => !c.direct_report_id).length,
-  };
-  const shown = (filter === "mine"
-    ? open.filter((c) => !c.direct_report_id)
-    : byPerson.filter((c) => filter === "all" || dueState(c.due_date, today) === filter));
-  const rows = showAll ? shown : shown.slice(0, INITIAL_ROWS);
-
-  const filters: { key: Filter; label: string; count: number }[] = [
-    { key: "all", label: "All open", count: counts.all },
-    { key: "overdue", label: "Overdue", count: counts.overdue },
-    { key: "mine", label: "Mine", count: counts.mine },
-  ];
-
-  return (
-    <section id="team-commitments" aria-labelledby="team-commitments-heading" className="scroll-mt-6">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="team-commitments-heading" className="font-serif text-[1.6rem] font-normal leading-tight tracking-[-0.01em] text-ink">
-          Commitments
-        </h2>
-        <button type="button" onClick={() => setAdding((v) => !v)} aria-expanded={adding} className="text-sm text-brand hover:text-brand-hover">
-          {adding ? "Cancel" : "+ Add"}
-        </button>
-      </div>
-
-      {adding && (
-        <AddCommitment
-          members={members}
-          selectedTeamId={selectedTeamId}
-          onCreated={(c) => {
-            setCommitments((rows) => [c, ...rows]);
-            setAdding(false);
-          }}
-        />
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-1" role="group" aria-label="Filter commitments">
-        {filters.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            aria-pressed={filter === f.key}
-            onClick={() => {
-              setFilter(f.key);
-              setShowAll(false);
-              if (f.key === "mine") setPerson("");
-            }}
-            className={`rounded-md px-2.5 py-1 text-xs ${
-              filter === f.key ? "bg-brand-tint text-brand" : "text-ink-secondary hover:bg-sunken hover:text-ink"
-            }`}
-          >
-            {f.label} · <span className="font-sans tabular-nums">{f.count}</span>
-          </button>
-        ))}
-      </div>
-      {members.length > 0 && filter !== "mine" && (
-        <label className="mt-2 flex items-center gap-2 text-xs text-ink-muted">
-          Owner
-          <select
-            value={person}
-            onChange={(e) => {
-              setPerson(e.target.value);
-              setShowAll(false);
-            }}
-            className="h-7 min-w-0 max-w-52 flex-1 rounded-md border border-control bg-sunken px-2 text-xs text-ink-body"
-          >
-            <option value="">Everyone</option>
-            <option value="you">You</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {rows.length === 0 ? (
-        <p className="py-5 text-sm text-ink-muted">
-          {open.length === 0 ? "No open team commitments." : "No open commitments match this filter."}
-        </p>
-      ) : (
-        <ul className={twoColumn ? "grid grid-cols-2 gap-x-6" : ""}>
-          {rows.map((c) => (
-            <CommitmentRow
-              key={c.id}
-              c={c}
-              open={expanded === c.id}
-              onToggle={() => setExpanded((cur) => (cur === c.id ? null : c.id))}
-              meetings={meetings}
-              goals={goals}
-              projects={projects}
-              onUpdated={(updated) =>
-                setCommitments((all) =>
-                  all.map((row) => (row.id === updated.id ? { ...row, ...updated, direct_report_name: row.direct_report_name } : row))
-                )
-              }
-            />
-          ))}
-        </ul>
-      )}
-      {shown.length > INITIAL_ROWS && (
-        <button type="button" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} className="mt-3 text-sm text-brand hover:text-brand-hover">
-          {showAll ? "Show fewer" : `View all ${shown.length} commitments →`}
-        </button>
-      )}
-    </section>
-  );
-}
-
-function CommitmentRow({
-  c,
-  open,
-  onToggle,
-  meetings,
-  goals,
-  projects,
-  onUpdated,
-}: {
-  c: TeamCommitment;
-  open: boolean;
-  onToggle: () => void;
-  meetings: TeamMeeting[];
-  goals: TeamGoal[];
-  projects: Project[];
-  onUpdated: (c: TeamCommitment) => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const state = dueState(c.due_date);
-  const owner = c.direct_report_name ?? "You";
-  const source = commitmentSource(c, meetings, { goals, projects });
-
-  async function markDone() {
-    if (saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      onUpdated(await updateCommitment(c.id, "done"));
-    } catch {
-      setError("Couldn't mark it done. Try again.");
-      setSaving(false);
-    }
-  }
-
-  return (
-    <li className={`border-b border-hairline py-3.5 ${state === "overdue" ? "border-l-2 border-l-amber-500 pl-3" : ""}`}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="block w-full rounded text-left text-sm leading-6 text-ink hover:text-ink-body"
-      >
-        {c.description}
-      </button>
-      <div className="mt-2 flex items-center gap-2">
-        <PersonAvatar id={c.direct_report_id ?? null} name={owner} size="xs" />
-        <span className="min-w-0 truncate text-xs text-ink-muted">{owner}</span>
-        <span className={`ml-auto shrink-0 text-2xs ${state === "overdue" ? "text-amber-700" : state === "soon" ? "text-ink-body" : "text-ink-muted"}`}>
-          {dueLabel(c.due_date)}
-        </span>
-      </div>
-      {open && (
-        <div className="mt-3 rounded-md bg-sunken px-3 py-2.5 text-xs">
-          <p className="text-ink-muted">
-            {source.href ? (
-              <Link href={source.href} className="text-brand hover:text-brand-hover">{source.label} →</Link>
-            ) : (
-              source.label
-            )}
-            {" · "}added {instantDate(c.created_at)}
-          </p>
-          <div className="mt-2 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={markDone}
-              disabled={saving}
-              className="rounded-md border border-control px-2.5 py-1 text-xs font-medium text-ink-body hover:bg-surface disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Mark done"}
-            </button>
-            {c.direct_report_id && (
-              <Link href={`/app/reports/${c.direct_report_id}`} className="text-brand hover:text-brand-hover">
-                {owner}&apos;s Relationship Desk →
-              </Link>
-            )}
-          </div>
-          {error && <p className="mt-1.5 text-amber-700" role="alert">{error}</p>}
-        </div>
-      )}
-    </li>
-  );
-}
-
-function AddCommitment({
+export function AddCommitment({
   members,
   selectedTeamId,
   onCreated,

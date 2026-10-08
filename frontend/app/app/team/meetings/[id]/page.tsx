@@ -797,7 +797,7 @@ function CommitmentRow({
     if (saving) return;
     setSaving(true);
     try {
-      onResolved(await updateCommitment(commitment.id, "done"));
+      onResolved(await updateCommitment(commitment.id, "done", "team"));
     } finally {
       setSaving(false);
     }

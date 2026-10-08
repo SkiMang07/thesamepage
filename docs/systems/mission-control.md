@@ -15,6 +15,9 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
 2. **Three counts**, each a button that opens its records in the right-hand
    column: conversations completed (of those dated this week), commitments
    completed this week, and overdue commitments (with the number of owners).
+   On the current week, the overdue count filters the commitments table to
+   everyone's overdue and scrolls to it; on another week it lists that week's
+   records in the right-hand column.
 3. **Conversation week.** Monday–Friday columns, plus Saturday/Sunday only when
    something is dated there. ‹ › arrows step a week at a time, with "Back to
    this week" when another week is shown; today is marked by a teal top rule.
@@ -34,24 +37,20 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
    (the shared control in `one-on-ones.md` → Moving a 1:1); the week payload
    carries `recurrence_weeks` on 1:1s so it can ask "Just this 1:1" or "This
    and every one after". Moving a 1:1 out of the week shown closes its details.
-4. **Follow-through.** "Mine" and "My team" bars split into Completed / Due
-   this week / Overdue. Each bar shows proportions within its own group.
-   Segments are toned at rest and solid when selected (`METER_SEGMENT`, see
-   `brand.md` → Meters). Selecting a segment lists exactly those records;
-   overdue lists run oldest first and show each item's age.
-   Open commitments with no due date are not in a bar. Each group says so under
-   its bar ("4 open commitments with no due date, not shown in the bar."), and a
-   group with no dated commitments reads "4 open, no due date", never
-   "0 commitments" (`lib/followThrough.ts`).
-5. **Right-hand column.** By default it shows "Your next move" (the brief's
+4. **Right-hand column.** By default it shows "Your next move" (the brief's
    primary candidate) and up to two "Keep in view" items (the secondaries),
    each with the quiet variant of the unchanged CTA / Why this? / Addressed /
-   Snooze / Not relevant controls. Selecting a conversation, count or
-   segment replaces the column with details. In two-column mode the column
+   Snooze / Not relevant controls. Selecting a conversation or a count
+   replaces the column with details. In two-column mode the column
    is sticky under the top bar, so details open beside whatever was clicked
    and focus moves to them without scrolling the page. Each swap fades in
    over 120ms (none under reduced motion). × or Esc returns
    focus to whatever opened it.
+5. **Commitments**, full width: the commitments table
+   (`docs/systems/commitments.md`), defaulting to open commitments you owe,
+   closable in place. It replaced the Follow-through bars (2026-10-08), which
+   showed only this week's states and listed records that had to be closed on
+   another page. Hidden in early use with nothing recorded, like the counts.
 6. **Goals & progress**, full width. Company / Team / Individual tabs, plus
    Department only when department goals exist. Individual adds a person
    picker. Default is the first tier that has goals. Up to six cards,
@@ -63,7 +62,7 @@ Selected design: `docs/design-proposals/2026-09-24-week-in-focus/`
 Layout is measured, not viewport-based: the page switches to one column below
 ~860px of content width and the week to stacked days below ~92px per day, so
 the Scribe drawer reflows it the same way a narrow window does. In one column
-the next move comes straight after the counts, not after Follow-through.
+the next move comes straight after the counts, not after the week.
 Sections sit 32px apart, headings 16px above their content, related items 8px.
 The loading skeleton is measured the same way and mirrors this layout.
 

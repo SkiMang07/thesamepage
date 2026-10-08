@@ -305,6 +305,11 @@ create index one_on_ones_upcoming_idx
 -- direct_report_id, unchanged) also surfaces on Team Mission Control's
 -- team-wide commitments list — purely additive, doesn't change how a
 -- commitment behaves anywhere else (dashboard, DR detail, prep).
+-- -------------------------
+-- committed_by is who owes it, on every source (2026-10-08). A team-meeting
+-- or team-page row naming a person is 'direct_report'; one owed by the
+-- manager has a null direct_report_id. Before 2026-10-08 team-meeting rows
+-- were all saved as 'manager' (migration 2026-10-08_team_commitment_owner).
 create table commitments (
   id                  uuid primary key default uuid_generate_v4(),
   org_id              uuid references organizations(id),  -- nullable for MVP

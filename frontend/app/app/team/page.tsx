@@ -57,7 +57,10 @@ import { createSectionLoader } from "@/lib/sectionLoader";
 import PersonAvatar from "@/components/team/PersonAvatar";
 import TeamMeetingsSection from "@/components/team/TeamMeetingsSection";
 import TeamContext from "@/components/team/TeamContext";
-import { SharedWork, TeamCommitments } from "@/components/team/TeamWork";
+import { AddCommitment, SharedWork } from "@/components/team/TeamWork";
+import CommitmentsTable from "@/components/commitments/CommitmentsTable";
+import { inTeamTable } from "@/lib/commitmentsTable";
+import type { BoardCommitment } from "@/lib/api";
 import TeamPeople from "@/components/team/TeamPeople";
 import {
   inScopeCommitment,
@@ -114,6 +117,12 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [refreshFailed, setRefreshFailed] = useState(false);
+  // The commitments table: re-read when records change elsewhere on the page.
+  const [boardKey, setBoardKey] = useState(0);
+  const [addingCommitment, setAddingCommitment] = useState(false);
+  // Manager-only: also show 1:1 commitments with this team's people. Off by
+  // default because the team itself will see this page (docs/systems/commitments.md).
+  const [includeOneOnOnes, setIncludeOneOnOnes] = useState(false);
 
   const [rootRef, width] = useMeasuredWidth<HTMLDivElement>();
   const tier = tierFor(width);
@@ -163,10 +172,17 @@ export default function TeamPage() {
       const [n, c] = await Promise.all([getTeamMeetings(), getTeamCommitments()]);
       setMeetings(n);
       setCommitments(c);
+      setBoardKey((k) => k + 1);
       setRefreshFailed(false);
     } catch {
       setRefreshFailed(true);
     }
+  }, []);
+
+  // A change made in the commitments table: meeting prep reads the team list,
+  // so re-read it. The table already shows its own change.
+  const refreshTeamCommitments = useCallback(() => {
+    getTeamCommitments().then(setCommitments).catch(() => undefined);
   }, []);
 
   const scope = makeScope(selectedTeamId, orgUnits, directReports);
@@ -175,6 +191,14 @@ export default function TeamPage() {
   const visibleProjects = projects.filter((p) => inScopeProject(scope, p));
   const visibleCommitments = commitments.filter((c) => inScopeCommitment(scope, c));
   const visibleMeetings = meetings.filter((m) => inScopeMeeting(scope, m));
+  const memberIds = new Set(visibleMembers.map((m) => m.id));
+  const memberKey = visibleMembers.map((m) => m.id).join(",");
+  // Stable per scope so the table doesn't re-filter on every render.
+  const includeInTable = useCallback(
+    (c: BoardCommitment) => inTeamTable(c, { teamId: selectedTeamId, memberIds, includeOneOnOnes }),
+    // memberIds is rebuilt each render; memberKey is its identity.
+    [selectedTeamId, memberKey, includeOneOnOnes] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const blank = (id: string | null) => ({ message: "", updated_at: null, org_unit_id: id });
   const activeCallout: TeamCallout = callouts.find((c) => c.org_unit_id === selectedTeamId) ?? blank(selectedTeamId);
@@ -196,8 +220,6 @@ export default function TeamPage() {
 
   const upperCols =
     tier === "wide" ? "grid-cols-[minmax(0,1fr)_280px] gap-8" : tier === "stack" ? "grid-cols-1 gap-8" : tier === "medium" ? "grid-cols-[minmax(0,1fr)_230px] gap-6" : "grid-cols-[minmax(0,1fr)_220px] gap-6";
-  const workCols =
-    tier === "wide" ? "grid-cols-[minmax(0,1fr)_340px] gap-8" : tier === "medium" ? "grid-cols-[minmax(0,1fr)_285px] gap-6" : "grid-cols-1 gap-8";
 
   return (
     <PageShell maxWidth="8xl">
@@ -307,7 +329,7 @@ export default function TeamPage() {
               </aside>
             </div>
 
-            <div className={`mt-10 grid border-t border-hairline pt-8 ${workCols}`}>
+            <div className="mt-10 border-t border-hairline pt-8">
               <SharedWork
                 goals={visibleGoals}
                 projects={visibleProjects}
@@ -315,18 +337,58 @@ export default function TeamPage() {
                 scope={scope}
                 unitName={unitName}
               />
-              <div className={tier === "wide" || tier === "medium" ? "" : "border-t border-hairline pt-8"}>
-                <TeamCommitments
-                  commitments={visibleCommitments}
-                  setCommitments={setCommitments}
-                  members={visibleMembers}
-                  selectedTeamId={selectedTeamId}
-                  meetings={meetings}
-                  goals={goals}
-                  projects={projects}
-                  twoColumn={tier === "split"}
-                />
-              </div>
+            </div>
+
+            <div className="mt-10 border-t border-hairline pt-8">
+              <CommitmentsTable
+                id="team-commitments"
+                surface="team_table"
+                defaultOwner="everyone"
+                include={includeInTable}
+                people={visibleMembers.map((m) => ({ id: m.id, name: m.name }))}
+                reloadKey={boardKey}
+                onChanged={refreshTeamCommitments}
+                intro={
+                  includeOneOnOnes
+                    ? `From ${selectedTeamId === null ? "your team meetings" : `${selectedTeamName} meetings`} and added here, plus your 1:1 commitments with these people.`
+                    : `From ${selectedTeamId === null ? "your team meetings" : `${selectedTeamName} meetings`} and added here.`
+                }
+                emptyText="No open team commitments. They come from team meeting write-ups, or add one here."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setAddingCommitment((v) => !v)}
+                    aria-expanded={addingCommitment}
+                    className="text-sm text-brand hover:text-brand-hover"
+                  >
+                    {addingCommitment ? "Cancel" : "+ Add"}
+                  </button>
+                }
+                above={
+                  addingCommitment && (
+                    <AddCommitment
+                      members={visibleMembers}
+                      selectedTeamId={selectedTeamId}
+                      onCreated={(c) => {
+                        setCommitments((rows) => [c, ...rows]);
+                        setBoardKey((k) => k + 1);
+                        setAddingCommitment(false);
+                      }}
+                    />
+                  )
+                }
+                toolbarExtra={
+                  <label className="flex items-center gap-2 text-xs text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={includeOneOnOnes}
+                      onChange={(e) => setIncludeOneOnOnes(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-control accent-brand"
+                    />
+                    Include 1:1 commitments with these people
+                  </label>
+                }
+              />
             </div>
 
             <div className="mt-10 border-t border-hairline pt-8">

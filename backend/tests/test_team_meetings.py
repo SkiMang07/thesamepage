@@ -298,6 +298,8 @@ def test_log_returns_the_saved_records():
     assert saved == ["Draft the handoff doc", "Open the CSM req"]   # blank row not written
     names = [c["direct_report_name"] for c in result["commitments"]]
     assert names == ["Maya Patel", None]                           # None = the manager's own
+    # committed_by says who owes it, the same as a 1:1 row (2026-10-08).
+    assert [c["committed_by"] for c in result["commitments"]] == ["direct_report", "manager"]
     for c in result["commitments"]:
         assert c["source_type"] == "team_meeting"
         assert c["source_id"] == "m-held"

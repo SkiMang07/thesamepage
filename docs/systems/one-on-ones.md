@@ -104,7 +104,10 @@ Relationship reads top to bottom:
 - **Follow-through** beside it: open commitments grouped by owner (You, then the
   person), three rows each with a count-accurate expansion, ordered earliest due
   first with undated last. Each row opens its source (see below), done / drop,
-  and a resolved list with reopen.
+  and a resolved list with reopen. Every open commitment across people is also
+  in the commitments table on Mission Control (`commitments.md`).
+- `?conversation=<one_on_one id>` opens that logged conversation once history
+  loads; the commitments table links a 1:1 commitment to the 1:1 it was made in.
 - **Current work / Growth direction** previews: the most relevant live goal or
   project with its latest check-in, and the saved plan's opening sentence.
   With no saved plan, Growth direction offers "Draft one from <name>'s 1:1s
