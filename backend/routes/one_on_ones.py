@@ -48,6 +48,7 @@ import context_engine
 from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from prep_guard import GuardContext, commitment_ref, expectation_ref, guard_item, manager_owed_refs, normalize_refs, unsupported_words
+from routes import career
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
@@ -1921,6 +1922,10 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
             detail="The meeting couldn't be saved, so nothing was recorded. Your review is still here — try again.",
         )
 
+    # A planned career conversation on this 1:1 is now held. Never fails
+    # the log (routes/career.py).
+    career.on_session_logged(supabase, user_id, body.direct_report_id, meeting)
+
     # Everything the receipt shows comes from what the database returned for
     # this request: the completed meeting, the commitments actually inserted
     # (not every row the client submitted), the confirmed carry-forward
@@ -2048,6 +2053,8 @@ def update_session_schedule(
         body.timezone,
         scope=body.scope,
     )
+    # A career conversation planned on this 1:1 moves with it.
+    career.on_session_moved(supabase, user_id, session, saved)
     saved["one_on_one_series"] = {
         "interval_weeks": saved.get("recurrence_weeks"),
         "timezone": saved.get("recurrence_timezone"),

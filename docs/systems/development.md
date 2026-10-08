@@ -52,3 +52,59 @@ with AI" for a first pass, "Revise with AI" for existing text). Nothing in this
 flow is AI-gated. "Draft with AI" can also be started from the Relationship
 view's Growth direction preview when no plan is saved; it runs the same draft
 on the Growth tab (see one-on-ones.md → Relationship Desk).
+
+## Career conversations
+
+Growth runs as a recurring conversation inside the 1:1 rhythm rather than a
+form the manager visits. On a timer, one of a person's ordinary 1:1s becomes
+their **career conversation**: chosen ahead of time, titled differently, never a
+separate meeting. Rules: `backend/career_rhythm.py` (pure, clock-injected).
+Routes: `backend/routes/career.py` (`/api/career`).
+
+**Data.** `organizations.career_conversation_interval_days` (default 90; null =
+off), set in Settings → Operating defaults → Conversation rhythm (Off / 60 / 90
+/ 120 / 180). `career_conversations`: one row per planned, held or skipped
+conversation, at most one `planned` per person (partial unique index);
+`planned_for` is the 1:1's date, `one_on_one_id` links the occurrence once it
+exists, `heads_up_sent_at` records the manager marking the heads-up sent.
+
+**Timing.**
+- Due: the latest held or skipped conversation + the interval; with none,
+  the day the person was added + 30. Never stored.
+- The prompt opens 14 days before the due date (at once when past).
+- Suggested 1:1: the first known occurrence (the open one, then its series
+  steps) on or after max(due − 7, today + 7), so there is at least a week to
+  book a longer slot and send a heads-up. The manager may pick any of the next
+  four. No dated occurrence → no choices; the card says to set the 1:1 date.
+- A planned conversation more than 7 days past with no log is **missed**:
+  "It happened" (held), pick a new date, or "Not this time".
+- "Not this time" records a skipped row dated today; the clock restarts from it.
+
+**Staying on its 1:1.** `one_on_ones.py` calls `career.on_session_moved` after a
+schedule change (the plan follows the occurrence's new date) and
+`career.on_session_logged` after a log (the plan becomes held). Both match by
+linked id, or by date when not yet linked, and never fail the 1:1 write.
+Re-planning or moving the date clears `heads_up_sent_at`: the note named the
+old date.
+
+**Surfaces.**
+- Person page, Relationship view: the career card under the next conversation
+  (proposed → pick a 1:1; planned → book 45–60 minutes, a calendar title to
+  copy, the heads-up message to copy and "Mark sent", Change date / Not this
+  time / Undo the choice; missed → It happened / new date). Not due → one line
+  with the due date and the last one. The next-conversation eyebrow reads
+  "Next conversation · Career conversation" when it is that 1:1.
+- Mission Control: the planned 1:1's row in the week carries "Career"; on the
+  current week one line under the week lists what each person needs (a missed
+  one to confirm, a 1:1 to pick, a heads-up to send), each linking to the
+  person page. Helpers in `frontend/lib/career.ts`.
+- `/app/1-1s` marks the next 1:1 "Career conversation"; the prep page titles
+  it "Review the career conversation" / "Career conversation with …".
+
+**The product never contacts the report.** The heads-up is deterministic text
+(`career_rhythm.heads_up_text`) the manager copies and sends; the calendar is
+not written (the title is copied).
+
+Not built yet (docs/CAREER_CONVERSATIONS_SCOPING.md, gitignored): a career prep
+sheet and wrap-up that feeds the plan; "last career conversation" on the Team
+roster; the cold-start draft without assessments; the HubSpot email.

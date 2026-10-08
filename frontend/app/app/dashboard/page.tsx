@@ -63,7 +63,9 @@ import {
   getTeamAssessments,
   getTeamOverview,
   getWeekInFocus,
+  getCareerOverview,
   WeekInFocus as WeekInFocusData,
+  type CareerPerson,
 } from "@/lib/api";
 import { SECTION_GAP, useZoneData, ZoneMap } from "@/components/ZoneMap";
 import PageShell from "@/components/PageShell";
@@ -226,6 +228,9 @@ export default function DashboardPage() {
   const [failed, setFailed] = useState(false);
   const [week, setWeek] = useState<WeekInFocusData | null>(null);
   const [weekFailed, setWeekFailed] = useState(false);
+  // Career conversations to pick or prepare (2026-10-08). Optional: a failed
+  // load only hides that one line.
+  const [career, setCareer] = useState<CareerPerson[] | null>(null);
   const [legacyOverride, setLegacyOverride] = useState(false);
   const [reload, setReload] = useState(0);
   const [weekReload, setWeekReload] = useState(0);
@@ -264,6 +269,9 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
     setWeekLoading(true);
+    getCareerOverview()
+      .then((result) => { if (!cancelled) setCareer(result.people); })
+      .catch(() => { if (!cancelled) setCareer(null); });
     getWeekInFocus(weekOf)
       .then((result) => {
         if (cancelled) return;
@@ -316,6 +324,7 @@ export default function DashboardPage() {
       week={week}
       weekFailed={weekFailed}
       weekLoading={weekLoading}
+      career={career}
       updatedAt={updatedAt}
       onRefresh={refreshBrief}
       onRetryBrief={() => setReload((value) => value + 1)}

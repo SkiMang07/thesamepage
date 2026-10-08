@@ -48,6 +48,7 @@ export default function ConversationPanel({
   onReadLastSummary,
   onShowCommitments,
   onNextMoved,
+  careerOn = null,
 }: {
   personId: string;
   personFirstName: string;
@@ -68,6 +69,8 @@ export default function ConversationPanel({
   onReadLastSummary: () => void;
   onShowCommitments: () => void;
   onNextMoved: (saved: OneOnOne) => void;
+  /** The planned career conversation's date (2026-10-08); titles the next 1:1 when it matches. */
+  careerOn?: string | null;
 }) {
   const [open, setOpen] = useState<Disclosure>(null);
   const toggle = (d: Exclude<Disclosure, null>) => setOpen((cur) => (cur === d ? null : d));
@@ -75,6 +78,7 @@ export default function ConversationPanel({
   const prepared = next?.status === "planned" ? next : null;
   const guide = prepared?.prep_guide ?? null;
   const nextDate = sessionDate(next && next.scheduled_at ? next : null);
+  const isCareer = Boolean(careerOn && nextDate && nextDate.slice(0, 10) === careerOn);
   const datePassed = nextDate != null && nextDate < localDateStr();
   const repeat = recurrenceLabel(next?.recurrence_weeks);
   const carried = next?.carry_forward_items ?? [];
@@ -133,7 +137,9 @@ export default function ConversationPanel({
       {/* Next conversation */}
       <div className="bg-feature px-5 py-6 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-2xs font-medium uppercase tracking-[0.16em] text-ink-muted">Next conversation</p>
+          <p className="text-2xs font-medium uppercase tracking-[0.16em] text-ink-muted">
+            {isCareer ? "Next conversation · Career conversation" : "Next conversation"}
+          </p>
           {next && (
             <span className={`rounded-full px-2.5 py-1 text-2xs font-medium ${prepared ? "bg-brand-tint text-brand" : "bg-sunken text-ink-secondary"}`}>
               {prepared ? (overnight ? "Prepared overnight" : "Prep ready") : "Prep not started"}

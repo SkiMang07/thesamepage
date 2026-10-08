@@ -294,6 +294,7 @@ def _reset_demo_rows(client: Any, manager_ids: dict[str, str]) -> None:
         ("team_meeting_series", "manager_id"),
         ("team_callouts", "manager_id"),
         ("team_dev_focus", "manager_id"),
+        ("career_conversations", "manager_id"),
         ("team_messages", "manager_id"),
         ("dr_capture_notes", "manager_id"),
         ("development_plans", "manager_id"),

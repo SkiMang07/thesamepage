@@ -105,6 +105,7 @@ begin
   delete from outside_suggestions where owner_id = v_uid;
   delete from outside_suggestion_runs where owner_id = v_uid;
   delete from ai_jobs where manager_id = v_uid;
+  delete from career_conversations where manager_id = v_uid;
   delete from one_on_ones where manager_id = v_uid;
   delete from commitments where owner_id = v_uid;
   delete from away_periods where manager_id = v_uid;

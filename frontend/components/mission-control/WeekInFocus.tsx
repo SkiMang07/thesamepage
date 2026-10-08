@@ -28,6 +28,7 @@ import Link from "next/link";
 import { useQuickAdd } from "@/lib/quick-add-context";
 import CommitmentsTable, { type TableRequest } from "@/components/commitments/CommitmentsTable";
 import {
+  CareerPerson,
   GoalLevel,
   GoalStatus,
   MissionControlBrief,
@@ -64,6 +65,7 @@ import {
   startOfNextLocalDay,
 } from "@/components/mission-control/ActionBrief";
 import MoveOneOnOne from "@/components/MoveOneOnOne";
+import { careerAsks, isCareerDay } from "@/lib/career";
 
 // ---------------------------------------------------------------------------
 // Dates. The payload's dates are plain YYYY-MM-DD in the manager's week.
@@ -255,6 +257,7 @@ export function WeekInFocus({
   week,
   weekFailed,
   weekLoading = false,
+  career = null,
   updatedAt = null,
   onRefresh,
   onRetryBrief,
@@ -267,6 +270,8 @@ export function WeekInFocus({
   week: WeekData | null;
   weekFailed: boolean;
   weekLoading?: boolean;
+  /** Career conversations (2026-10-08); null when they couldn't load. */
+  career?: CareerPerson[] | null;
   updatedAt?: Date | null;
   onRefresh: () => void;
   onRetryBrief: () => void;
@@ -545,6 +550,7 @@ export function WeekInFocus({
                   onSelect={select}
                   onStepWeek={onWeekOf ? stepWeek : undefined}
                   stepping={weekLoading}
+                  career={career}
                 />
               </div>
             )}
@@ -720,6 +726,7 @@ function ConversationWeek({
   onSelect,
   onStepWeek,
   stepping,
+  career = null,
 }: {
   week: WeekData;
   ok: boolean;
@@ -730,8 +737,13 @@ function ConversationWeek({
   onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
   onStepWeek?: (by: number) => void;
   stepping: boolean;
+  career?: CareerPerson[] | null;
 }) {
   const [gridRef, gridWidth] = useWidth<HTMLDivElement>();
+  const careerById = useMemo(() => new Map((career ?? []).map((p) => [p.direct_report_id, p])), [career]);
+  const isCareer = (c: WeekConversation) =>
+    c.kind === "one_on_one" && !!c.direct_report_id && isCareerDay(careerById.get(c.direct_report_id), c.date);
+  const asks = useMemo(() => careerAsks(career ?? []), [career]);
   const current = isCurrentWeek(week.week);
   const start = parseDay(week.week.start);
   const byDay = useMemo(() => {
@@ -838,7 +850,7 @@ function ConversationWeek({
                   </div>
                   {items.length === 0 && <p className="px-1 py-2 text-2xs text-ink-muted">Nothing dated</p>}
                   {items.slice(0, VISIBLE_PER_DAY).map((c) => (
-                    <ConversationRow key={c.id} c={c} color={colorFor(c)} name={rowName(c, dupFirstNames)} pressed={selection.type === "conversation" && selection.id === c.id} onSelect={onSelect} />
+                    <ConversationRow key={c.id} c={c} color={colorFor(c)} name={rowName(c, dupFirstNames)} career={isCareer(c)} pressed={selection.type === "conversation" && selection.id === c.id} onSelect={onSelect} />
                   ))}
                   {hidden > 0 && (
                     <button
@@ -883,7 +895,7 @@ function ConversationWeek({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-ink">{c.title}</span>
                     <span className="block text-2xs text-ink-muted">
-                      {KIND_LABEL[c.kind]} · <span className={STATE_TONE[c.state]}>{STATE_GLYPH[c.state]}</span> {stateLong(c)}
+                      {KIND_LABEL[c.kind]}{isCareer(c) ? " · Career conversation" : ""} · <span className={STATE_TONE[c.state]}>{STATE_GLYPH[c.state]}</span> {stateLong(c)}
                     </span>
                   </span>
                   <span aria-hidden="true" className="text-ink-muted">→</span>
@@ -915,6 +927,22 @@ function ConversationWeek({
               ))}
             </p>
           )}
+
+          {current && asks.length > 0 && (
+            // Career conversations ask ahead of the day: pick the 1:1, send
+            // the heads-up. Each name opens that person's page, where the
+            // career card does the rest.
+            <p className="mt-2 text-xs leading-relaxed text-ink-muted" data-testid="career-asks">
+              <span className="text-ink-body">Career conversations</span>
+              {": "}
+              {asks.map((a, i) => (
+                <span key={a.personId}>
+                  {i > 0 && " · "}
+                  <Link href={`/app/reports/${a.personId}`} className="text-brand hover:text-brand-hover">{a.text}</Link>
+                </span>
+              ))}
+            </p>
+          )}
         </>
       )}
     </section>
@@ -925,12 +953,14 @@ function ConversationRow({
   c,
   color,
   name,
+  career = false,
   pressed,
   onSelect,
 }: {
   c: WeekConversation;
   color: string | null;
   name: string;
+  career?: boolean;
   pressed: boolean;
   onSelect: (s: Selection, trigger?: HTMLElement | null) => void;
 }) {
@@ -938,7 +968,7 @@ function ConversationRow({
     <button
       type="button"
       aria-pressed={pressed}
-      aria-label={`${c.title}, ${KIND_LABEL[c.kind]}, ${longDate(c.date)}, ${stateLong(c)}`}
+      aria-label={`${c.title}, ${KIND_LABEL[c.kind]}${career ? ", career conversation" : ""}, ${longDate(c.date)}, ${stateLong(c)}`}
       onClick={(e) => onSelect({ type: "conversation", id: c.id }, e.currentTarget)}
       className={`grid min-h-[50px] w-full grid-cols-[22px_minmax(0,1fr)] items-start gap-1.5 rounded-md px-0.5 py-2 text-left transition ${
         pressed ? "bg-brand-tint ring-1 ring-inset ring-brand/50" : "hover:bg-carbon-300/60"
@@ -950,6 +980,7 @@ function ConversationRow({
         <span className={`mt-0.5 block whitespace-nowrap text-2xs ${STATE_TONE[c.state]}`}>
           {STATE_GLYPH[c.state]} {stateShort(c)}
         </span>
+        {career && <span className="mt-0.5 block text-2xs font-medium text-brand">Career</span>}
       </span>
     </button>
   );

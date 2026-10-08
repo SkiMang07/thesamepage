@@ -46,6 +46,7 @@ import {
   getRoleLevels,
   getOrgUnits,
   getDevelopmentPlan,
+  getCareerPerson,
   getCaptureNotes,
   createCaptureNote,
   deleteCaptureNote,
@@ -63,6 +64,7 @@ import {
   RoleLevel,
   OrgUnit,
   DevelopmentBundle,
+  CareerPersonDetail,
   CaptureNote,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
@@ -76,6 +78,7 @@ import PersonAvatar from "@/components/team/PersonAvatar";
 import { addDaysStr, localDateStr } from "@/components/team/dates";
 import { takeOneOnOneReceipt, type OneOnOneReceiptStash } from "@/lib/one-on-one-receipt";
 import ConversationPanel from "@/components/relationship/ConversationPanel";
+import CareerConversation from "@/components/relationship/CareerConversation";
 import CaptureBox from "@/components/relationship/CaptureBox";
 import PersonIntake from "@/components/PersonIntake";
 import FollowThrough from "@/components/relationship/FollowThrough";
@@ -117,6 +120,7 @@ const S = {
   teams: "teams",
   development: "development plan",
   captures: "capture notes",
+  career: "career conversation",
 } as const;
 
 export default function ReportDetailPage() {
@@ -169,6 +173,8 @@ function RelationshipDesk() {
   // expectations with inline role assignment.
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [devBundle, setDevBundle] = useState<DevelopmentBundle | null>(null);
+  // The career conversation (2026-10-08): one of this person's 1:1s, chosen ahead.
+  const [career, setCareer] = useState<CareerPersonDetail | null>(null);
   // Bumped by the Relationship view's "Draft one…" link; Growth runs its draft.
   const [draftRequest, setDraftRequest] = useState(0);
   const [roleLevels, setRoleLevels] = useState<RoleLevel[]>([]);
@@ -210,7 +216,7 @@ function RelationshipDesk() {
     const today = localDateStr();
     const weekEnd = addDaysStr(today, 6);
     const { optional, failed } = createSectionLoader();
-    const [dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps] = await Promise.all([
+    const [dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps, car] = await Promise.all([
       getDirectReport(id),
       optional(S.history, getOneOnOneHistory(id), []),
       optional(S.commitments, getCommitments({ directReportId: id }), []),
@@ -227,15 +233,17 @@ function RelationshipDesk() {
       optional(S.teams, getOrgUnits(), []),
       optional(S.development, getDevelopmentPlan(id), null),
       optional(S.captures, getCaptureNotes(id), []),
+      optional(S.career, getCareerPerson(id), null),
     ]);
-    return { dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps, failures: failed() };
+    return { dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps, car, failures: failed() };
   }, [id]);
 
   type Loaded = Awaited<ReturnType<typeof loadAll>>;
 
   const applyLoaded = useCallback(
     (data: Loaded) => {
-      const { dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps, failures } = data;
+      const { dr, h, c, g, p, cp, cs, cov, to, sc, prof, rls, rfs, ous, dev, caps, car, failures } = data;
+      setCareer(car);
       setReport(dr);
       setPageContext({
         label: `${dr.name}'s direct report page`,
@@ -664,10 +672,14 @@ function RelationshipDesk() {
               commitmentsFailed={failed(S.commitments)}
               onReadLastSummary={() => lastCompleted && openConversation(lastCompleted.id)}
               onShowCommitments={showCommitments}
-              onNextMoved={(saved) =>
-                setHistory((rows) => rows.map((row) => (row.id === saved.id ? { ...row, ...saved } : row)))
-              }
+              careerOn={career?.state === "planned" ? career.planned?.planned_for ?? null : null}
+              onNextMoved={(saved) => {
+                setHistory((rows) => rows.map((row) => (row.id === saved.id ? { ...row, ...saved } : row)));
+                // A career conversation planned on that 1:1 moved with it.
+                getCareerPerson(id).then(setCareer).catch(() => {});
+              }}
             />
+            <CareerConversation career={career} failed={failed(S.career)} onChanged={setCareer} />
             <CaptureBox personFirstName={first} onSave={saveCapture} />
             {!intakeOpen && (
               <button type="button" onClick={() => setIntakeOpen(true)} className="mt-4 text-sm font-medium text-brand hover:text-brand-hover">

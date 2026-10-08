@@ -15,6 +15,8 @@ import {
   getCommitments,
   getGoals,
   getDevelopmentPlan,
+  getCareerPerson,
+  type CareerPersonDetail,
   getOneOnOneHistory,
   PrepResponse,
   AgendaItem,
@@ -29,6 +31,7 @@ import WrapUpReview from "../wrap-up-review";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { deriveOneOnOneSuggestions, OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
+import { isCareerDay } from "@/lib/career";
 
 import NoteField from "@/components/NoteField";
 import NotePromises, { useNotePromises } from "@/components/NotePromises";
@@ -204,6 +207,8 @@ function PrepFlow() {
   // for this person; until we know, treat it as not first (the safer rule).
   const [hasCompletedOneOnOne, setHasCompletedOneOnOne] = useState<boolean | null>(null);
   const [scheduleDate, setScheduleDate] = useState("");
+  const [career, setCareer] = useState<CareerPersonDetail | null>(null);
+  const isCareer = isCareerDay(career, scheduleDate);
   const [recurrenceWeeks, setRecurrenceWeeks] = useState<RecurrenceWeeks | null>(null);
   // The series' usual day, when this one 1:1 was moved off it by itself.
   const [usualDate, setUsualDate] = useState<string | null>(null);
@@ -254,6 +259,8 @@ function PrepFlow() {
     getOneOnOneHistory(id)
       .then((rows) => setHasCompletedOneOnOne(rows.some((row) => row.status === "completed")))
       .catch(() => {});
+    // Titles this 1:1 when it is the planned career conversation (2026-10-08).
+    getCareerPerson(id).then(setCareer).catch(() => setCareer(null));
   }, [id]);
 
   useEffect(() => {
@@ -389,6 +396,8 @@ function PrepFlow() {
   // never touches the prep sheet, so only the schedule fields follow it.
   function applySchedule(saved: { scheduled_at: string | null; recurrence_weeks?: number | null; series_slot_at?: string | null }) {
     setScheduleDate(scheduledAtToDate(saved.scheduled_at));
+    // A career conversation planned on this 1:1 moved with it.
+    getCareerPerson(id).then(setCareer).catch(() => {});
     setRecurrenceWeeks((saved.recurrence_weeks ?? null) as RecurrenceWeeks | null);
     setUsualDate(scheduledAtToDate(saved.series_slot_at) || null);
     setScheduleSaved(false);
@@ -474,7 +483,7 @@ function PrepFlow() {
           ← Back
         </Link>
         {firstRun && <p className="mt-4 text-xs text-ink-muted">Step 3 of {PATH_STEPS}</p>}
-        <h1 className={`${firstRun ? "mt-1" : "mt-4"} text-2xl font-semibold`}>Review next 1:1</h1>
+        <h1 className={`${firstRun ? "mt-1" : "mt-4"} text-2xl font-semibold`}>{isCareer ? "Review the career conversation" : "Review next 1:1"}</h1>
         <p className="mt-2 text-ink-secondary">
           {nothingGathered
             ? `No earlier 1:1s with ${firstName} are recorded.`
@@ -722,7 +731,9 @@ function PrepFlow() {
               <div>
                 <h1 className="text-2xl font-semibold">Your prep sheet</h1>
                 <p className="mt-1 text-sm text-ink-muted">
-                  {reportName ? `1:1 with ${reportName}` : "Upcoming 1:1"}
+                  {isCareer
+                    ? `Career conversation with ${reportName || "your report"}`
+                    : reportName ? `1:1 with ${reportName}` : "Upcoming 1:1"}
                 </p>
                 {/* Name the author and its sources on every sheet. Sheets
                     saved before drew_on existed show the author line only. */}

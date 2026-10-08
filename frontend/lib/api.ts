@@ -1870,6 +1870,8 @@ export type Profile = {
   // precedence over this; this in turn falls back to 21 for a manager with
   // no organization row yet. See resolve_cadence_days() in backend/utils.py.
   one_on_one_cadence_days: number;
+  // Career conversation interval in days; null = off (backend/career_rhythm.py).
+  career_conversation_interval_days: number | null;
 };
 
 // Role families (Session 40, Plan S2): group role_levels rows into ladders.
@@ -1937,7 +1939,75 @@ export const updateProfile = (body: {
   full_name: string;
   company_name: string;
   one_on_one_cadence_days: number;
+  // Omit to leave it as it is; null turns career conversations off.
+  career_conversation_interval_days?: number | null;
 }): Promise<Profile> => authedFetch("/api/settings/profile", { method: "PUT", body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------------------
+// Career conversations (2026-10-08) — one of a person's ordinary 1:1s, chosen
+// ahead of time as the quarterly career conversation. Rules in
+// backend/career_rhythm.py; routes in backend/routes/career.py.
+// ---------------------------------------------------------------------------
+
+export type CareerState = "off" | "not_due" | "proposed" | "planned" | "missed";
+
+export type CareerPerson = {
+  direct_report_id: string;
+  name: string;
+  state: CareerState;
+  last_held_on: string | null;
+  due_on: string | null;
+  // Upcoming 1:1 dates the manager may pick (proposed / missed).
+  choices: string[];
+  // The suggested 1:1 — at least a week out. Null when none is far enough.
+  suggested: string | null;
+  planned: {
+    id: string;
+    planned_for: string | null;
+    heads_up_sent_at: string | null;
+    one_on_one_id: string | null;
+    days_until: number | null;
+  } | null;
+  calendar_title: string;
+  heads_up: string | null;
+};
+
+export type CareerOverview = {
+  interval_days: number | null;
+  interval_options: number[];
+  suggested_length: string;
+  people: CareerPerson[];
+};
+
+export type CareerPersonDetail = CareerPerson & { interval_days: number | null; suggested_length: string };
+
+const careerDate = () => new URLSearchParams({ local_date: browserLocalDate() }).toString();
+
+export const getCareerOverview = (): Promise<CareerOverview> => authedFetch(`/api/career/overview?${careerDate()}`);
+
+export const getCareerPerson = (directReportId: string): Promise<CareerPersonDetail> =>
+  authedFetch(`/api/career/person/${directReportId}?${careerDate()}`);
+
+export const planCareerConversation = (directReportId: string, plannedFor: string): Promise<CareerPersonDetail> =>
+  authedFetch(`/api/career/person/${directReportId}/plan?${careerDate()}`, {
+    method: "POST",
+    body: JSON.stringify({ planned_for: plannedFor }),
+  });
+
+export const updateCareerPlan = (
+  planId: string,
+  body: { planned_for?: string; heads_up_sent?: boolean }
+): Promise<CareerPersonDetail> =>
+  authedFetch(`/api/career/plans/${planId}?${careerDate()}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const markCareerHeld = (planId: string): Promise<CareerPersonDetail> =>
+  authedFetch(`/api/career/plans/${planId}/held?${careerDate()}`, { method: "POST" });
+
+export const unplanCareerConversation = (planId: string): Promise<CareerPersonDetail> =>
+  authedFetch(`/api/career/plans/${planId}?${careerDate()}`, { method: "DELETE" });
+
+export const skipCareerConversation = (directReportId: string): Promise<CareerPersonDetail> =>
+  authedFetch(`/api/career/person/${directReportId}/skip?${careerDate()}`, { method: "POST" });
 
 export const getRoleLevels = (): Promise<RoleLevel[]> => authedFetch("/api/settings/role-levels");
 

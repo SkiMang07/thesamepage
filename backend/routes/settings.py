@@ -26,6 +26,8 @@ on RoleLevelIn, validated by `_validate_role_family()` below.
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
+from career_rhythm import INTERVAL_OPTIONS
+from routes.career import interval_for as career_interval_for
 from utils import ensure_org, get_authenticated_client, get_email_from_token
 
 router = APIRouter()
@@ -70,6 +72,10 @@ class ProfileIn(BaseModel):
     # section: one scalar on organizations doesn't earn a dedicated tab the
     # way Capacity's cluster of related defaults does.
     one_on_one_cadence_days: int = _DEFAULT_CADENCE_DAYS
+    # Career conversation interval (2026-10-08, career_rhythm.py). None = off.
+    # Only written when the caller sends it, so a profile save from a client
+    # that doesn't know the field never turns it back on.
+    career_conversation_interval_days: int | None = None
 
 
 @router.get("/profile")
@@ -86,6 +92,7 @@ def get_profile(auth=Depends(get_authenticated_client), authorization: str = Hea
         "company_name": (org or {}).get("name") or "",
         "org_ready": org is not None,
         "one_on_one_cadence_days": (org or {}).get("one_on_one_cadence_days", _DEFAULT_CADENCE_DAYS),
+        "career_conversation_interval_days": career_interval_for(org),
     }
 
 
@@ -96,6 +103,11 @@ def update_profile(body: ProfileIn, auth=Depends(get_authenticated_client), auth
     org_id = _ensure_org(user_id, supabase, email, company_name=body.company_name.strip() or None)
     supabase.table("users").update({"full_name": body.full_name.strip()}).eq("id", user_id).execute()
     org_update: dict = {"one_on_one_cadence_days": body.one_on_one_cadence_days}
+    if "career_conversation_interval_days" in body.model_fields_set:
+        interval = body.career_conversation_interval_days
+        if interval is not None and interval not in INTERVAL_OPTIONS:
+            raise HTTPException(status_code=422, detail="Career conversation interval must be 60, 90, 120 or 180 days, or off")
+        org_update["career_conversation_interval_days"] = interval
     if body.company_name.strip():
         org_update["name"] = body.company_name.strip()
     supabase.table("organizations").update(org_update).eq("id", org_id).execute()

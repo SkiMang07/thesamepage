@@ -13,7 +13,8 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import AddDirectReportButton from "@/components/AddDirectReportButton";
 import Link from "next/link";
-import { OneOnOneOverviewItem, getOneOnOnesOverview } from "@/lib/api";
+import { CareerPerson, OneOnOneOverviewItem, getCareerOverview, getOneOnOnesOverview } from "@/lib/api";
+import { isCareerDay } from "@/lib/career";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import {
@@ -203,8 +204,13 @@ export default function OneOnOnesPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which next 1:1s are career conversations (2026-10-08). Optional.
+  const [career, setCareer] = useState<Map<string, CareerPerson>>(new Map());
 
   useEffect(() => {
+    getCareerOverview()
+      .then((o) => setCareer(new Map(o.people.map((p) => [p.direct_report_id, p]))))
+      .catch(() => {});
     getOneOnOnesOverview()
       .then(setItems)
       .catch((caught) =>
@@ -363,6 +369,9 @@ export default function OneOnOnesPage() {
                         <span className={`mt-0.5 block text-[11px] ${state.rowClass}`}>
                           {state.rowMeta}
                         </span>
+                        {isCareerDay(career.get(item.direct_report_id), item.planned_session?.scheduled_at) && (
+                          <span className="mt-0.5 block text-[11px] font-medium text-brand">Career conversation</span>
+                        )}
                       </span>
                     </button>
                   );

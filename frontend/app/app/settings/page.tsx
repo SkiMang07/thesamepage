@@ -1584,13 +1584,24 @@ function CadenceDefaults({
   onError: (m: string | null) => void;
 }) {
   const [cadenceDays, setCadenceDays] = useState(profile.one_on_one_cadence_days);
+  // "off" in the select; null on the wire.
+  const savedCareer = profile.career_conversation_interval_days == null ? "off" : String(profile.career_conversation_interval_days);
+  const [careerInterval, setCareerInterval] = useState(savedCareer);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const cadenceOptions = Array.from(new Set([7, 14, 21, 30, profile.one_on_one_cadence_days])).sort((a, b) => a - b);
+  const careerOptions = Array.from(
+    new Set([60, 90, 120, 180, ...(profile.career_conversation_interval_days ? [profile.career_conversation_interval_days] : [])])
+  ).sort((a, b) => a - b);
+  const dirty = cadenceDays !== profile.one_on_one_cadence_days || careerInterval !== savedCareer;
 
   useEffect(() => {
     setCadenceDays(profile.one_on_one_cadence_days);
   }, [profile.one_on_one_cadence_days]);
+
+  useEffect(() => {
+    setCareerInterval(savedCareer);
+  }, [savedCareer]);
 
   async function saveCadence(e: React.FormEvent) {
     e.preventDefault();
@@ -1601,6 +1612,7 @@ function CadenceDefaults({
         full_name: profile.full_name,
         company_name: profile.company_name,
         one_on_one_cadence_days: cadenceDays,
+        career_conversation_interval_days: careerInterval === "off" ? null : Number(careerInterval),
       });
       onSaved(updated);
       onError(null);
@@ -1626,8 +1638,18 @@ function CadenceDefaults({
           ))}
         </select>
         <p className="mt-1 text-xs text-ink-muted">Weekly is common for a new hire; every two to four weeks is common for established relationships.</p>
+        <label className={`${labelCls} mt-5`}>Career conversation</label>
+        <select value={careerInterval} onChange={(e) => setCareerInterval(e.target.value)} className={`${inputCls} max-w-xs`}>
+          {careerOptions.map((days) => (
+            <option key={days} value={String(days)}>Every {days} days</option>
+          ))}
+          <option value="off">Off</option>
+        </select>
+        <p className="mt-1 text-xs text-ink-muted">
+          One 1:1 with each person becomes a career conversation, counted from the last one. The first comes about a month after someone is added. You choose which 1:1, two weeks ahead.
+        </p>
         <div className="mt-4 flex items-center gap-3">
-          <button type="submit" disabled={saving || cadenceDays === profile.one_on_one_cadence_days} className={primaryBtnCls}>
+          <button type="submit" disabled={saving || !dirty} className={primaryBtnCls}>
             {saving ? "Saving…" : "Save rhythm"}
           </button>
           {saved && <span className="text-sm text-brand">Saved</span>}

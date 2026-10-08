@@ -17,7 +17,8 @@
     "test:role-draft-cap": "node --experimental-strip-types --test lib/roleDraftCap.test.mjs",
     "test:member-label": "node --experimental-strip-types --test lib/memberLabel.test.mjs",
     "test:wait-message": "node --experimental-strip-types --test lib/waitMessage.test.mjs",
-    "test:notes-dump-placement": "node --experimental-strip-types --test lib/notesDumpPlacement.test.mjs"
+    "test:notes-dump-placement": "node --experimental-strip-types --test lib/notesDumpPlacement.test.mjs",
+    "test:career": "node --experimental-strip-types --test lib/career.test.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.3",

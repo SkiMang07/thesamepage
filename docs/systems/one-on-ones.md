@@ -215,6 +215,11 @@ rollover advances to the next future date instead of creating stale shells.
 Removing repeat deactivates the series; dismissing its unfinished occurrence
 also stops it.
 
+Every quarter or so (Settings), one occurrence is chosen ahead of time as the
+person's career conversation. It stays on its occurrence when that 1:1 is moved
+and is marked held when it is logged. See `development.md` → Career
+conversations.
+
 ## Cadence
 
 `resolve_cadence_days()` in `utils.py` is the **single canonical resolver**:

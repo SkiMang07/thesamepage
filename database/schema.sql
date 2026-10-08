@@ -29,6 +29,11 @@ create table organizations (
   id                       uuid primary key default uuid_generate_v4(),
   name                     text not null,
   one_on_one_cadence_days  integer not null default 21,
+  -- Rolling interval for career conversations (backend/career_rhythm.py),
+  -- set in Settings beside the 1:1 rhythm. Null = off.
+  career_conversation_interval_days integer default 90
+    check (career_conversation_interval_days is null
+           or career_conversation_interval_days between 30 and 365),
   created_at               timestamptz not null default now()
 );
 
@@ -1316,6 +1321,36 @@ create table work_unit_configs (
 
 alter table work_unit_configs enable row level security;
 
+-- -------------------------
+-- CAREER CONVERSATIONS (2026-10-08)
+-- One of a person's ordinary 1:1s, chosen ahead of time as the quarterly
+-- career conversation. Timing rules: backend/career_rhythm.py. One row per
+-- planned, held or skipped conversation; at most one planned per person.
+-- one_on_one_id links the occurrence once it exists; planned_for is its date.
+-- -------------------------
+create table career_conversations (
+  id                uuid primary key default uuid_generate_v4(),
+  manager_id        uuid not null references auth.users(id),
+  direct_report_id  uuid not null references direct_reports(id) on delete cascade,
+  status            text not null default 'planned'
+                    check (status in ('planned', 'held', 'skipped')),
+  planned_for       date not null,
+  one_on_one_id     uuid references one_on_ones(id) on delete set null,
+  heads_up_sent_at  timestamptz,
+  held_on           date,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+alter table career_conversations enable row level security;
+
+create unique index career_conversations_one_planned_idx
+  on career_conversations (manager_id, direct_report_id)
+  where status = 'planned';
+
+create index career_conversations_report_idx
+  on career_conversations (manager_id, direct_report_id, status);
+
 -- ============================================================
 -- DEVELOPMENT PLANS
 -- Activated Session 47 (2026-08-20) — see database/migrations/
@@ -2152,6 +2187,9 @@ create policy "dev_plan_manager_notes_all_own" on dev_plan_manager_notes
 
 -- team_dev_focus — manager-scoped, same pattern as team_callouts
 create policy "team_dev_focus_all_own" on team_dev_focus
+  for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+
+create policy "career_conversations_all_own" on career_conversations
   for all using (manager_id = auth.uid()) with check (manager_id = auth.uid());
 
 -- subscriptions — read-only for the user; backend service-role handles writes

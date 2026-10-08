@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from observability import RequestContextMiddleware, configure_logging, init_sentry
-from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, file_text, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, person_intake, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
+from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, career, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, file_text, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, person_intake, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
 configure_logging()
@@ -152,6 +152,7 @@ app.include_router(expectations_ai.router, prefix="/api/expectations", tags=["ex
 app.include_router(assessment_reviews.router, prefix="/api/assessments/reviews", tags=["assessments"])
 app.include_router(assessments.router, prefix="/api/assessments", tags=["assessments"])
 app.include_router(development.router, prefix="/api/development", tags=["development"])
+app.include_router(career.router, prefix="/api/career", tags=["career"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(team.router, prefix="/api/team", tags=["team"])
 # Beyond the team — meetings outside the manager's own team. Its outputs
