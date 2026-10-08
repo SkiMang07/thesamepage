@@ -4,8 +4,8 @@ The one persona that matters for v1. Everything here traces to a verbatim quote 
 `gtm/research/audience-2026-08.md`; nothing is invented. Read before writing copy for
 any surface, and before a product decision about who this is for.
 
-**The current site copy is scaffolding, not a fixed point.** It was written to get a
-site standing pre-launch, it is unpublished, and no line in it constrains this work.
+**The published site copy is scaffolding, not a fixed point.** It established the
+first live site, but no line in it constrains this work.
 
 Full evidence with sources: https://claude.ai/code/artifact/df48f4b6-744d-4484-b257-a61f480ae406
 
@@ -38,18 +38,22 @@ the manager's memory, which is the part that breaks.
 - **Retrieval fails.** "The hard part is of course finding the links to things."
 - **The annual conversion is brutal.** "For each person I'm basically trying to reconstruct six months from half-memory."
 
-### The creepy dossier problem — the emotional core
+### The creepy dossier problem - a real tension, not the whole positioning
 
 Two managers, independently, in different threads, called their own private notes
-a "creepy dossier." The manager wants the record and feels like a bad person for
-keeping it. **That ambivalence is why the habit decays**, not only busyness.
+a "creepy dossier." The manager wants the record and feels uneasy about keeping it.
+That ambivalence may contribute to why the habit decays alongside ordinary time and
+discipline problems. Its causal importance has not been established.
 
-The resolution is stated by a manager, unprompted: *"Its not 'surveillance' if
-you tell them they own the doc as well."*
+One possible resolution is stated by a manager, unprompted: *"Its not 'surveillance'
+if you tell them they own the doc as well."*
 
-Sharing the record is not a privacy concession. It is the mechanism that makes
-the manager willing to keep the record at all. It is the product, and it is
-already the name.
+This is evidence of a meaningful tension and a promising principle. It does not
+establish that guilt is the primary reason the habit decays, that sharing reliably
+fixes it, or that the shared record should carry the whole product promise. The
+employee-facing view is also not built. Current messaging therefore leads with
+coherent management context and treats shared ownership as an aspiration and future
+proof point.
 
 The same post asks the product's question in one sentence: *"How do those of you
 with more than a handful of reports actually do this? without it turning into

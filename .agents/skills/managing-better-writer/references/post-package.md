@@ -51,6 +51,8 @@ This is the human review surface. Include:
 - featured and inline image previews, roles and alt text;
 - claims to confirm, if any;
 - completed review checks;
+- the result of the final human-authorship pass performed after the latest post or
+  summary edit;
 - after remote work: HubSpot ID, preview/live URL, state and last verification time.
 
 Never mark a check complete unless it was actually performed.

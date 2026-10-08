@@ -7,8 +7,15 @@ any blog post, or any message pillar in `messaging.md`.
 Written cold, before reading a line of the current site copy, per the contamination
 audit in `gtm/research/audience-2026-08.md`.
 
-**The current site copy is scaffolding, not a fixed point.** No shipped line
-constrains this.
+**Current role, 2026-09-26.** This remains an arguable product belief about dignity,
+records and manager judgment. It is no longer the sole spine of positioning or the
+homepage. The causal claim that secrecy is why the record rots is an assertion from a
+small corpus, and the employee-facing experience is not built. Current messaging
+leads with coherent context for better management decisions; see `messaging.md` and
+`gtm/site/homepage.md`.
+
+**The published site copy is scaffolding, not a fixed point.** No live line
+constrains this work.
 
 ---
 

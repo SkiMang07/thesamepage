@@ -1,217 +1,407 @@
 # Homepage argument
 
-The case the homepage makes, in order, before any pixels exist. Edit this, then
-the HTML prototype gets built from it.
+The case the homepage makes, in order, before any pixels exist. Settle this argument,
+then build and review a new standalone prototype before changing the HubSpot theme.
 
-Sources: `gtm/research/miro-board-source.md` (the board), `gtm/business-model.md`, `PRODUCT_VISION.md`.
-
----
-
-## The decisions this rests on
-
-**Audience.** The individual manager, not the department head and not HR. The
-board has a good department-head value prop; it belongs on a secondary page. A
-homepage that talks to two buyers convinces neither.
-
-**Lead with pain, not with the name.** "Everyone on the same page" is the right
-*ending*, not the right opening. `gtm/business-model.md`'s own rule is lead with the manager's
-pain. The name's meaning is the emotional payoff after the argument is won — it
-lands as a conclusion and falls flat as an introduction.
-
-**The pain, stated precisely.** Not "managing is hard." It is: **you are
-guessing.** You cannot say with confidence how each person on your team is
-actually doing, because the evidence is scattered across 1:1 notes, a
-spreadsheet, three dashboards and your memory — and you have to reconstruct it
-from scratch every time someone asks.
-
-**CTA.** Start free. **The first 20 members get 3 months free** — a founding
-cohort, shown with a **live counter** rather than a footnote. One CTA, the same
-one everywhere on the page.
-
-**No price on the homepage yet.** Pricing and packaging is a separate
-conversation. The offer on the page is the 3 months, not the $20.
-
-**Andrew is named and pictured.** A short honest founder line, not a story. This
-is a $20/mo self-serve buyer; a face makes the founding-cohort ask credible.
+Current direction agreed 2026-09-26 after review of the published homepage, current
+product, audience research and a six-seat synthetic manager council. The council is a
+pressure test, not customer evidence. Andrew's clarification in this document takes
+precedence over older positioning assumptions where they conflict.
 
 ---
 
-## Section 1 — Hero
+## The decision
 
-**Job:** name the pain in one line, promise the specific relief, ask for the click.
+The Same Page exists to help someone become a better, more confident,
+evidence-informed manager. It keeps them organised and brings context across goals,
+projects, expectations, meetings and team relationships into a coherent approach to
+managing their team.
 
-### Copy system — LOCKED 2026-08-25
+The homepage must make that ambition credible without reducing the product to 1:1
+preparation, follow-up reminders or performance reviews. Those are useful examples,
+not the promise.
 
-| Slot | Line |
-|---|---|
-| Tagline (logo lockup, footer) | Space to manage better. |
-| **H1** | **Define the bar. Then see who clears it.** |
-| Section 5 header (competitive) | Manage with evidence, not instinct. |
-| Close | Get on the same page. Stay there. |
+The central promise is:
 
-**Why this H1.** It renders an image rather than a concept — a reader sees a bar at
-a height; "good" has to be decoded first. Its second verb *is* the product: "see
-who clears it" is Mission Control. It hands the whole site a reusable metaphor
-(where the bar sits, who's above it, nobody moves the bar mid-quarter) without
-spending "what good looks like," which is load-bearing elsewhere. And "clears it"
-implies a published standard applied evenly — the fairness the board asks for in
-"an objective and fair approach to performance evaluations."
+> The Same Page helps a manager understand what is happening across their team, see
+> where to look more closely and decide how to respond with a sound basis.
 
-It sits next to the *raise the bar* cliché deliberately: it inverts it. Everyone
-says raise the bar; nobody says define it. The wit is the correction.
+Becoming a better, more confident manager is the aspiration. The credible mechanism
+is connected, traceable context that supports the manager's judgment. Confidence is
+earned through the story; it is not asserted as a demonstrated product outcome.
 
-**Runner-up, rejected:** "Define good. Then go find it." Punchier, but "go find it"
-describes an activity the product doesn't perform — you don't search for good, you
-observe your team against it.
+## The audience
 
-**Standing copy rule — the surveillance line.** Use **see**. Never *watch*,
-*track*, or *monitor*. This product is one bad verb away from reading as employee
-surveillance, which loses the manager who wants their team's trust. Applies to
-every page, every module, every blog post.
+The page speaks to the individual manager. The sharpest current buyer is managing
+roughly 4-11 people, has been through at least one review cycle, and has felt their
+home-made system stop keeping up. Department heads, HR and the C-suite are not
+co-audiences for this page.
 
-Draft subhead:
+The manager is the hero of the story. The product helps them notice, question,
+connect and decide. It does not judge their team for them.
 
-> One place where expectations, metrics, skills and behaviours live for every
-> person you manage — so you always know where someone stands, and what to say
-> next.
+## The opening direction
 
-Primary CTA: **Start free** · under it, quietly: *First 20 members get an
-extended trial.*
+Two directions remain worth taking into copy and prototype work:
 
-Visual: the Mission Control view. The product is the hero image; it is the most
-convincing thing available.
+### Recommended: lead with the mechanism
 
-## Section 2 — Recognition
+> **See the context behind what's happening across your team.**
+>
+> The Same Page keeps the goals, projects, expectations and conversations you record
+> close at hand, helping you see where to look more closely, ask better questions and
+> decide how to respond.
 
-**Job:** four lines the reader recognises as their own week. No product yet.
-Nothing sold. Just "someone has been watching me work."
+This is the more credible opening. It explains the product's contribution without
+claiming that it automatically understands the team, discovers every problem or
+knows the right response.
 
-Drawn from the board's problem list, roughly as written there:
+### Alternative: lead with the aspiration
 
-- Three dashboards, a spreadsheet and a notes doc — and still no answer to "how is
-  she doing?"
-- Review season arrives and you spend a weekend painting a full story from memory
-- You know who your top performer is. You could not prove it.
-- Every manager on the floor does this differently, so none of it compares
-- You are spending your energy on the bottom 20% and calling it management
+> **Manage with a clearer picture of your team.**
+>
+> The Same Page brings together the context you record across goals, projects,
+> expectations and conversations. It helps you understand how things connect and
+> make more considered decisions about what to do next.
 
-Keep these short and concrete. This section works only if it is embarrassingly
-specific.
+This is closer to the emotional ambition and may sound more inviting. It is also
+more generic and needs the product example immediately beneath it to become
+distinctive.
 
-## Section 3 — It isn't you
+Neither is approved final copy. The next prototype should make the comparison
+concrete without multiplying headline options.
 
-**Job:** relieve the shame, then raise the stakes. This is the trust section, and
-it runs on third-party evidence rather than claims.
+## The story, in order
 
-The argument: the role changed, the support didn't, and the data says almost
-everyone is in the same position.
+### 1. The desired capability
 
-- **83% of founders are first-time founders** — the management culture you
-  inherited was built by someone learning too
-- **68% of managers report being overwhelmed** — and only **14%** of their
-  companies did anything about it
-- **69% of managers are uncomfortable** having performance conversations
-- Two-thirds of managers are confident in their ability to lead. **One-third of
-  employees agree.**
+Open with a clearer understanding of the team and a sounder basis for management
+decisions. Do not open with sorting people, setting a performance bar, review season
+or a list of product capabilities.
 
-Then the stakes:
+The first screen should answer:
 
-- **Managers account for at least 70% of the variance in employee engagement**
-- **50% of employees leave a company because of their manager**
+- Who is this for? An individual manager.
+- What becomes possible? Understanding the team well enough to decide where to look
+  and how to respond.
+- Why this product? It keeps relevant management context close enough to consider
+  together.
 
-Read together: this is the highest-leverage job in the company, and nobody is
-resourcing it.
+### 2. One first-week situation
 
-> **Every statistic on this page must be re-verified against a live source before
-> publish.** These were collected around 2024 and several cite older studies.
-> Sources are listed in `positioning-source.md`. An unverifiable stat gets cut,
-> not softened.
+Move directly into one readable example built from a small amount of context the
+manager deliberately recorded:
 
-## Section 4 — What it does
+1. A current project is marked at risk.
+2. An agreed commitment connected to the work remains open.
+3. A recent conversation records uncertainty about ownership or scope.
+4. The Same Page presents those sources together and shows why they are relevant.
 
-**Job:** make the mechanism legible in three moves. Not a feature list.
+The product has not diagnosed an employee or discovered a root cause. It has helped
+the manager form a better question. The manager can now investigate whether the
+scope needs clarifying, an obstacle needs removing, priorities have changed or an
+expectation needs restating.
 
-1. **Define what good looks like.** Metrics, skills and values, per role and
-   level. The thing nobody writes down, written down once.
-2. **Capture evidence as you go.** 1:1s, check-ins, notes and commitments land
-   against the person and the expectation — so the record builds itself instead of
-   being reconstructed.
-3. **See where everyone stands, always.** One surface. Zoom out for the team, click
-   in for the person, and know the facts behind the rating.
+The example must show source labels and the manager's judgment. It must also make the
+input visible. Do not imply automatic CRM, chat, calendar or project-system ingestion
+unless that specific integration exists.
 
-Real product screenshots, one per move. Link out to the product walkthrough page
-for anyone who wants the full tour.
+### 3. A positive or developmental situation
 
-## Section 5 — Why nothing else does this
+Use one shorter example to show that managing is more than correcting problems. A
+successful handoff or repeated strength across projects and conversations might lead
+the manager to recognise progress, offer more responsibility or support a development
+goal.
 
-**Job:** the underserved beat. Short and confident.
+This example is load-bearing. Without it, the product reads as a risk detector or a
+system for documenting underperformance.
 
-Every serious tool in this category is sold to HR. Lattice, 15Five, Culture Amp,
-Workday — bought by People teams, used by managers as an obligation, designed
-around the review cycle rather than around Tuesday.
+### 4. The broader management context
 
-Three claims:
+Only after the examples should the page widen to the product's breadth. Goals,
+projects, expectations, meetings, commitments and relationship history are inputs to
+a coherent management practice. Show how a few of them contribute to decisions;
+do not turn the section into a feature inventory.
 
-- **Built for the manager as the buyer**, not as the person HR makes comply
-- **One surface instead of four stitched tools** — metrics, skills and behaviours
-  in the same place
-- **Judgment, not dashboards** — it tells you what to do about what it shows you
+Examples such as 1:1 preparation, remembering a follow-up and writing a review can
+appear here as consequences of keeping context over time. None should redefine the
+product's larger value.
 
-Avoid HR vocabulary throughout. Not "performance management" or "engagement
-scores." Say "how's my team doing" and "what do I say in this conversation."
+### 5. The judgment boundary
 
-## Section 6 — The mechanism works
+Explain the boundary briefly and concretely:
 
-**Job:** one statistic, standing alone, as the bridge to the close.
+- The manager can see what a suggestion or draft is based on.
+- Missing evidence remains visible rather than being filled with certainty.
+- AI-assisted work stays a proposal until the manager reviews it.
+- The manager decides what the record means and what to do.
 
-> **Over 71% of employees who have weekly performance conversations are highly
-> engaged.**
+This belongs beside a demonstration rather than in a long AI ethics section.
 
-The thing already works. What managers lack is the infrastructure to do it
-consistently. That is the whole product in two sentences.
+### 6. Why it belongs to the manager
 
-## Section 7 — Close
+The competitive alternative is still the manager's scattered notes, memory and
+general-purpose tools. The distinction is a working context designed around the
+manager's week and judgment, rather than a process the manager completes for HR.
 
-**Job:** land the name, then ask once more.
+Avoid categorical claims that every competing product is bought by HR, that all
+other systems fail, or that The Same Page literally replaces every existing tool.
 
-> Everyone on the same page — the employee and the manager, the manager and the
-> director, the director and the C-suite.
+### 7. Founder and close
 
-Then the CTA, with the founding-cohort framing stated plainly: the first 20
-members get an extended free trial, and their feedback shapes what gets built.
-Being early is the honest position. Say it out loud rather than dressing the
-product up as more finished than it is.
+Andrew's presence and reason for building the product should remain. The close can
+return to the aspiration of managing with more confidence because the page has now
+shown the basis for it.
 
----
+Keep the ending at the scale of the manager and their team. Do not expand into the
+manager, director and C-suite unless a future page is explicitly selling an
+organisation-level product.
+
+## What the page can claim today
+
+### Supported
+
+- The product holds context across goals, projects, conversations, commitments and
+  role expectations.
+- Explicit connections and relevant recorded context appear across workflows.
+- Mission Control surfaces dated, overdue, at-risk and stale records and shows the
+  reason behind its recommendation.
+- AI assists with preparation, expectations, meeting wrap-up and assessments, with
+  manager review before anything AI-generated enters the record.
+
+### Requires qualification
+
+- **Helps you see where to look more closely.** It surfaces attention reasons from
+  recorded facts. It does not identify every issue or diagnose team relationships.
+- **Helps you make connections.** Some records are explicitly linked and some
+  relevant context is presented together. It does not automatically connect
+  everything happening around the team.
+- **Brings context together.** This means context maintained in The Same Page. It
+  must not imply integrations or invisible collection that do not exist.
+- **Supports better judgment.** It gives the manager a stronger basis and leaves the
+  decision with them. Better, fairer or more confident management is an aspiration,
+  not a measured result.
+
+### Unsupported in present tense
+
+- Employees can access, contribute to, comment on or collaborate on their record.
+  The employee page is still a placeholder and employee invites are disabled.
+- The product knows what is really happening, finds root causes or understands the
+  team better than the manager.
+- The product tells the manager what to do, makes objective judgments or guarantees
+  fair decisions.
+- Context arrives automatically from CRM, chat, calendar or project systems.
+- The product has demonstrated improvements in confidence, management quality,
+  employee performance, engagement, retention or conversion.
+
+## The product promise
+
+Written 2026-09-27 from Andrew's ask to articulate what a complete The Same Page gets
+a manager. It is the fuller picture the page argues from. Only the **today** items
+may be claimed in present tense on the page; **ahead** items are direction, not copy.
+
+**The idea underneath it: everything you keep adds up.** A doc per person gets
+longer. Here each note, 1:1, goal update and expectation makes the next prep sheet,
+summary, answer and review better. A quarter in, the manager is working with
+something that knows their team nearly as well as they do, and can read all of it at
+once when they can't.
+
+### What it helps a manager understand
+
+- **Each person in the round** (today). Where they stand against their role's
+  expectations, what they've said they want next, what they're working on, what each
+  of you owes the other, and how the relationship has run. One person's page instead
+  of five docs and a spreadsheet.
+- **What needs attention, and why** (today). Due, overdue, at risk or gone quiet,
+  across the team, each with its reason from the dates and statuses the manager
+  entered.
+- **What's going well** (today). Goals that land, contributions worth naming, and the
+  steady people whose notes would otherwise stop getting written. Ask "what's gone
+  well for James this quarter?" and get a sourced answer.
+- **What keeps coming up across the team** (today on request; proactive is ahead).
+  Topics recurring across 1:1s and notes, asked for in Scribe. The ahead version
+  notices unprompted ("this came up on the 12th and again on the 26th").
+- **Where the work stands** (today). Goals, the projects behind them, and what's at
+  risk, for the team or rolled up by department.
+- **Who has room** (today). Capacity and time off; Away shifts the manager's own dates.
+- **Up and across** (today). Meetings with their boss, skip-levels and peers, and
+  what they've promised each.
+- **The company's context** (today). Confirmed strategy, values and role documents
+  ground answers and drafts.
+
+### What it helps a manager do
+
+- Walk into every 1:1 with a drafted prep sheet that names its sources (today;
+  overnight prep is built but parked).
+- Capture in seconds: dictation anywhere; rough notes become a drafted summary and
+  commitments to approve (today).
+- Close the loop on commitments both ways, linked to where they came from (today).
+- Recognise people for something specific (today).
+- Build development plans from what people said they want; set a team training focus
+  (today).
+- Set a clear bar with role expectations drafted from a job description (today).
+- Draft reviews that cite the months kept, leave gaps open and leave every rating to
+  the manager (today).
+- Run team meetings that carry forward (today).
+- Think a hard conversation through with a partner that knows the team: plan it,
+  rehearse it, draft the message (today, Scribe).
+
+### Ahead, not for the page yet
+
+Prepared state before the manager asks (overnight prep, a weekly brief); pattern
+recall without being asked; notes pulled in from a meeting notetaker; a "how I
+manage" profile; a page the team can see. See `AI_OPPORTUNITIES.md`.
+
+### How the prototype carries it
+
+`website/prototype/homepage-context-r6.html`: the one-week Maya story with the
+drafted prep sheet; "Know where everyone stands", the whole team in three views
+(what needs you, what went well, what each person needs next) with one decision from
+each; "Ask anything about your team", eight questions Scribe can
+answer today; and "Everything you keep, working for you", six things to see and six
+to do.
+
+## What to keep, remove and rethink
+
+### Keep
+
+- The existing visual foundation, typography and confidence of the design.
+- The individual manager as buyer and protagonist.
+- The recognisable problem of context scattered across notes, work and memory.
+- Andrew's founder presence and an honest account of why he built the product.
+- The founding offer if its terms and availability remain true.
+- Product-led proof through real, readable examples.
+
+### Remove
+
+- "Define the bar. Then see who clears it."
+- "Your energy goes to the bottom of the team, and you call that managing."
+- "Three moves, and the guessing stops."
+- "Let the evidence build itself."
+- "Always know where they stand."
+- "It tells you what to do."
+- The wall of management statistics.
+- The closing move from employee to manager to director to C-suite.
+
+### Rethink
+
+- **"Manage with evidence, not instinct."** Evidence supports judgment; it does not
+  replace experience, conversation or uncertainty. Prefer a sound basis for a
+  decision over a binary between evidence and instinct.
+- **"One surface, not four."** The product has several purposeful surfaces. The
+  claim is coherent context, not a single literal screen or the replacement of every
+  work system.
+- **Abstract illustrations.** Keep the visual language, but make at least one example
+  readable enough to show recorded context, the connection and the manager's next
+  question.
+- **Cold two-beat copy.** Plain, concrete and even remain right. A compulsory rhythm
+  produces manufactured aphorisms and is no longer part of the homepage register.
+- **Shared-record positioning.** Keep it as product aspiration and design principle.
+  Do not use employee access or collaboration as current proof until the IC
+  experience ships.
+
+## Synthetic manager council
+
+Six composites pressure-tested the direction: a new CS manager at a 90-person SaaS
+company; an owner-manager at a 22-person agency; an engineering manager at a
+450-person technology company; a sales manager at a 1,200-person SaaS company; an
+experienced support manager with 18 reports; and an operations director managing
+managers.
+
+The exercise used public manager-language research and recognisable situations. It
+did not involve real participants, named companies or observed buying behaviour. It
+does not establish demand, willingness to pay or likely conversion.
+
+The consistent findings were:
+
+- The worked situation made the broad promise credible.
+- A positive example was necessary to prevent a problem-detection reading.
+- "Brings together" raised immediate questions about integrations and duplicate
+  entry.
+- "What needs attention" could mean work and unresolved questions or could mean
+  employees being ranked for intervention.
+- The main adoption objection was another place to maintain.
+- A small, traceable first-week example was more persuasive than claims of broad
+  intelligence or eventual review value.
+- The director case confirmed that an organisational roll-up story would pull the
+  homepage away from its primary buyer.
+
+Use this council again to challenge future drafts, with the same caveat: it is a
+consistency and ambiguity test, not customer validation.
+
+### Council round 2, 2026-09-27
+
+**Hero chosen the same day.** Andrew then wrote the hero from the council's
+recommendation:
+
+> **Move your team forward.**
+>
+> Manage with a clearer picture of your team. Bring goals, projects and
+> conversations together to see where your attention can help, then decide what to
+> do next.
+
+It was chosen over "Help your team move forward." and over both earlier openings.
+The note beneath the CTAs ("You add or confirm the information; nothing is pulled
+automatically from your other tools") stays, because "bring together" is the phrase
+the first council read as integrations or duplicate entry. The eyebrow "For people
+who manage a team" is removed.
+
+The council session itself compared two messages under a provisional H1, "Manage
+with a clearer picture of your team." Message 1 led with
+attention (an open commitment, a changed project, progress toward a goal each shaping
+what needs attention next). Message 2 led with development (understanding someone's
+work to help them move forward).
+
+The call, carried into `website/prototype/homepage-context.html`:
+
+- **Message 1 opens the page.** It gives a clearer reason to use the software now.
+- **Message 2 is the standard the examples must meet.** Maya shows where attention
+  could help. James shows attention supporting progress and a conversation about
+  development.
+- **"What needs a closer look" must be shown through recorded reasons** (an open
+  commitment, an at-risk project) and never imply that the software infers career
+  readiness or sets the manager's priorities.
+- **Growth stays exploratory and involves the employee.** Readiness for more is a
+  conversation with the person, grounded in something they said, never the
+  manager's reading of the record alone.
+- **Reconsider Message 1** if target managers read the examples and still describe
+  the product mainly as a reminder system.
 
 ## Proof strategy
 
-No customers yet, so proof is assembled from three sources:
+There are no customer outcomes to cite. Proof comes from:
 
-1. **Research** — the sourced statistics above. Verified, dated, attributed.
-2. **The product itself** — real screenshots, not illustrations. A working product
-   is the strongest available evidence and it costs nothing to show.
-3. **The founder position** — built by a manager who needed it. Not a long story;
-   a short honest line and a face.
+1. **The product.** Real screens and readable examples showing the source, connection
+   and manager decision.
+2. **The founder.** A specific, honest reason for building the product.
+3. **Audience language.** Verified descriptions of scattered context, failing memory
+   and the difficulty of keeping a useful record.
+4. **External research, selectively.** Use at most one statistic when it advances the
+   argument and has been reverified. Do not use a wall of management statistics as a
+   substitute for demonstrating the product.
 
-No fake logos, no invented testimonials, no "trusted by teams at" over a strip of
-grey rectangles. Once there are 20 members, this section gets rewritten with their
-words.
+No invented testimonials, customer outcomes, logos or conversion claims.
 
-## Open questions
+## CTA and offer
 
-**Resolved 2026-08-25:**
+The current CTA remains **Start free** unless the acquisition model changes. The
+first-20-managers offer may remain only while the count and terms are true. A static
+scarcity counter is unacceptable.
 
-- **Founding offer** — first 20 members get **3 months free**, shown with a live
-  counter, not a footnote.
-- **Founder presence** — Andrew named and pictured.
-- **Price on the homepage** — not yet. The offer is the 3 months.
+Price stays off the homepage until pricing and packaging are revisited.
 
-**Still open:**
+## Open decisions for copy and prototype work
 
-- **Headline.** Pick an angle above, not just a line.
-- **Counter mechanics.** A live counter has to be truthful, which means it needs a
-  real number behind it and a decided behaviour at zero — does the offer close, or
-  does the page switch to a waitlist? Decide before it ships; a counter stuck at
-  "3 spots left" for six months costs more trust than it buys.
-- **Founder line.** One or two sentences, in Andrew's voice, on why he built it.
+- Write the exact first-week example using truthful product interactions and
+  fictional data clearly presented as illustration.
+- Choose the positive or developmental example.
+- Decide how much input to show so the habit feels honest without turning the story
+  into setup documentation.
+- Rewrite the founder line in Andrew's natural voice.
+- Confirm the founding offer and current count before carrying either into the next
+  prototype.
+
+## Next artifact
+
+Build a new standalone homepage prototype from this argument. Do not revise the
+HubSpot theme or published page until that prototype and its copy are approved.

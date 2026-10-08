@@ -1,188 +1,208 @@
 # Message hierarchy
 
-Layer 4. One value proposition, three pillars, proof under each, and which pillar
-leads on which surface. This is the document that turns page-writing from invention
-into assignment: every line on every surface should be traceable to a pillar, and any
-line that isn't is either a new pillar or it's cut.
+Layer 4. The durable value proposition, three supporting pillars and the proof each
+can use. This is not homepage copy. `gtm/site/homepage.md` decides how the homepage
+turns the hierarchy into a story.
 
-Built on `point-of-view.md` (layer 3). The rules in `brand/voice-rules.md` bind every
-sentence here. The reader is `personas/new-manager.md`.
-
-**This does not settle the H1.** The value proposition below is the thing every page
-must be consistent with. It isn't a headline and shouldn't be used as one.
+Built on `point-of-view.md`, `gtm/personas/new-manager.md`, current product truth and
+Andrew's 2026-09-26 clarification of the product's ambition. The rules in
+`brand/voice-rules.md` bind every public expression of it.
 
 ---
 
 ## The value proposition
 
-> The Same Page keeps the record of your team where both of you can see it, ready
-> before every conversation, measured against what you said good looked like when you
-> were thinking clearly.
+> The Same Page keeps the context of managing a team coherent, so a manager can see
+> where to look more closely, ask better questions and decide how to respond with a
+> sound basis.
 
-Three clauses, three pillars, in that order. If a page contradicts any clause, the
-page is wrong. If a page can't be traced to a clause, it's off-message.
+The aspiration is to help someone become a better, more confident,
+evidence-informed manager. Confidence is an outcome the story earns, not a product
+result we can claim to have demonstrated.
+
+The product's breadth is part of the value. Goals, projects, expectations, meetings,
+commitments and team relationships belong together because managers make decisions
+across them. No single workflow, including 1:1 preparation or reviews, should become
+the whole promise.
 
 ---
 
-## Pillar 1: kept with them, rather than about them
+## Pillar 1: the context stays coherent
 
-**The claim.** The record of someone's work is written to be read by the person it's
-about. That's what makes it worth keeping and what makes it honest.
+**The claim.** The facts a manager needs do not stay inside one meeting or one work
+system. The Same Page keeps the management context they record close enough to
+consider together and useful over time.
 
-**Carries beliefs 1, 2 and 3.** This is the positioning pillar and the one no
-competitor can sign while People Ops is the buyer.
-
-**In the reader's grammar:** *there's nothing in here they haven't seen.*
+**In the reader's grammar:** *I need somewhere that helps me put the pieces together.*
 
 | Proof | Status |
 |---|---|
-| Manager-owned by construction. No HR tier, no upward visibility into 1:1 notes | **Shipped.** Structural, and the strongest single proof point we have |
-| The report has a real account: invite, magic link, claim | **Shipped** (`direct_report_invites`, `accept_direct_report_invite()`) |
-| The report-facing view of their own record | **Not built.** `frontend/app/app/ic/page.tsx` is a 56-line stub |
-| Manager-only notes, kept out of the shared record | **Partly.** `dev_plan_manager_notes` is an append-only log on a development plan. There is no per-person comp and no HR-risk object in the schema |
+| The Relationship Desk holds current work, goals, open commitments, conversations and history for one report | **Shipped** |
+| Goals and projects carry current state and explicit links; commitments retain their source | **Shipped** |
+| Team workspace brings meetings, shared work, commitments and people into the manager's current scope | **Shipped** |
+| Role expectations provide a stated basis for preparation and assessment | **Shipped** |
+| Context Engine retrieves confirmed company documents and cites them when used | **Shipped** |
+| Automatic ingestion from CRM, chat, calendar and external project systems | **Not built as a general capability** |
 
-**Do not claim "your report can see it" as a present-tense feature until the IC view
-ships.** Until then this pillar argues the principle and the ownership model, which
-are both true today, and the shared view is roadmap. Overclaiming here would poison
-the one pillar that has to be unimpeachable.
+This pillar does not promise a universal source of truth. Some records are
+intentionally private or isolated, and some relationships exist only when the
+manager explicitly records them. Say which context the product holds and show where
+it came from.
 
-**Say:** kept with them, they've seen it, nothing here is a surprise, my notes, my
-record. **Never say:** transparency, visibility, sharing settings, permissions,
-who-can-see-what. Granular permission controls are the category's argument and using
-that vocabulary concedes ours.
+**Say:** context, what happened, what we agreed, current work, the history, put the
+pieces together. **Never say:** everything automatically connected, complete picture,
+single source of truth, seamless integrations.
 
 ---
 
-## Pillar 2: ready before the conversation
+## Pillar 2: see where to look more closely
 
-**The claim.** The thing I wanted to raise on Tuesday is in front of me on Thursday,
-and what we agreed doesn't quietly fall off.
+**The claim.** The product helps the manager notice work, commitments, expectations
+or questions that may deserve a closer look, and shows the recorded reason.
 
-**Carries belief 4** on the weekly clock. This is the highest-frequency value, the
-most complete part of the product, and the reason the record survives the week
-nothing else does.
-
-**In the reader's grammar:** *I keep meaning to bring this up and I keep forgetting.*
+**In the reader's grammar:** *show me what I may have missed.*
 
 | Proof | Status |
 |---|---|
-| Capture a thought about one person between sessions, from anywhere | **Shipped** (`/{report}/captures`) |
-| Who's due, per person, with the cadence resolved rather than assumed | **Shipped** (`/one-on-ones/overview`, the single canonical computation) |
-| Prep built from what's already there, attached to the actual occurrence | **Shipped** (`POST /prep`) |
-| Wrap-up that produces the summary, the commitments and the carry-forward in one pass | **Shipped** (`POST /wrapup`) |
-| The running log per person, so November reads rather than reconstructs | **Shipped** |
+| Mission Control ranks explicit due, overdue, at-risk and stale records | **Shipped** |
+| Every Mission Control recommendation exposes a factual "Why this?" basis | **Shipped** |
+| One-to-one preparation carries forward open commitments and relevant recorded history | **Shipped** |
+| Team meeting preparation shows recorded changes, carried items and gaps without inventing decisions or blockers | **Shipped** |
+| Goals and projects show current state, measures, updates and explicit connections | **Shipped** |
+| Automatic diagnosis of team relationships, employee risk or root cause | **Not built and not a permissible claim** |
 
-**This is the pillar that beats a free model, and the argument has to be precise.** A
-model pointed at Jira and Slack can tell you what happened last quarter, and it'll do
-it fast. What it can't do is hold the thing you decided to say next time, carry an
-open commitment across three conversations, or know that this is the second time
-you've let the same thing slide. Continuity is the claim. Speed is not.
+"What needs attention" is usable only when the object is clear. Name the open
+commitment, project risk, unclear expectation or unanswered question. A visual that
+ranks people or places risk labels beside names turns this pillar into employee
+scoring and changes the meaning of the product.
 
-**Say:** the thing I wanted to raise, what we agreed, prep, before the 1:1, carried
-forward. **Never say:** action items, meeting cadence, touchpoint, check-in, never a
-time-saved lead.
+Positive and developmental examples belong here alongside problems. The product can
+help a manager notice progress, a repeated strength or an opportunity for more
+responsibility. A problem-only story makes management look like correction.
+
+**Say:** look more closely, what may have been missed, what changed, worth a
+conversation, why this appeared. **Never say:** who needs intervention, problem
+employee, the product knows what matters, guessing stops, always know.
 
 ---
 
-## Pillar 3: grounded in what you said matters
+## Pillar 3: the manager makes the call
 
-**The claim.** The prep, the coaching and the assessment come from your expectations,
-your documents and your own notes. Generic management advice is generic because it
-can't know any of that.
+**The claim.** The Same Page gives the manager relevant context and a traceable
+proposal, then leaves meaning and action with the manager.
 
-**Carries beliefs 4 and 5.** This is where the coach lives, and the whole AI line
-resolves here: the model isn't supplying judgment, it's handing back judgment the
-manager already made, at the moment they can't reach it.
-
-**In the reader's grammar:** *I need someone who knows my team, not another book.*
+**In the reader's grammar:** *give me the context, but I'll decide what the
+conversation is.*
 
 | Proof | Status |
 |---|---|
-| What a role is expected to deliver, know and embody, set in advance, per level | **Shipped** (`role_families` / `role_levels`, metric + skill + value configs, each with its own scale) |
-| Assessment against your own scale rather than a vendor's | **Shipped** (period assessments — quarterly, biannual or off-cycle — against each item's own configured scale; `assessment_levels` seeded per org and editable) |
-| Your company's real documents, extracted, confirmed by a human, then cited when used | **Shipped** (Context Engine: Space, Librarian, Brain, `document_citations`) |
-| Coaching that reads person history against your stated leadership principles | **Partly.** It works when principles are uploaded as a document. There's no object called *how I manage* |
-| AI that drafts against your scale and never saves a value you didn't set | **Shipped.** The assessment flow's draft, discussion and summary calls write only to the draft; ratings are recorded only when the manager reviews the whole assessment and completes it (`docs/systems/assessments.md`) |
-| A draft that leaves the box empty when the evidence is thin, rather than filling it | **Shipped.** The demoable proof and the one a competitor won't build. Lead pillar 3's AI story here. Each drafted judgment shows its cited records and what they don't establish; unassessed items are listed with a reason, and metrics are never inferred |
+| AI-generated preparation and wrap-up content remains a draft until manager confirmation | **Shipped** |
+| Assessments draft against the manager's scale, cite the record and leave unsupported items blank | **Shipped** |
+| Ratings enter the record only when the manager reviews and completes the assessment | **Shipped** |
+| Mission Control ranking is deterministic and source-based; AI may paraphrase but does not choose the priority | **Shipped** |
+| Coaching against leadership principles works when those principles arrive as a document | **Partly**; there is no first-class principles object |
+| Demonstrated improvement in management quality, confidence, fairness or team performance | **No evidence yet** |
 
-**The gap to close.** Beliefs 4 and 5 both assume the manager has said how they want
-to manage. Today that arrives as a file upload. Until there's a first-class place for
-it, this pillar's coaching proof is thinner than its assessment proof, and the copy
-should lean on expectations and documents rather than on principles.
+The product can help a manager form a better question. It cannot know from the record
+alone whether a slipping project reflects unclear scope, an obstacle, changed
+priorities or unmet expectations. Copy and examples must preserve more than one
+plausible explanation until the manager investigates.
 
-**Say:** what I expect, what the role asks for, what we agreed, what I already
-decided mattered. **Never say:** competency framework, leveling, career architecture,
-best practices, insights, coach you (the product doesn't coach the manager, it hands
-them their own thinking back). **Never claim the product won't draft a rating.** It
-drafts one, against your scale, from evidence you wrote. The claim is that nothing
-saves until you set it and that it leaves blanks rather than inventing. Restraint is
-the differentiator. Abstinence would be a lie.
+**Say:** ask a better question, see what it is based on, decide how to respond, a
+sound basis, proposal, draft. **Never say:** tells you what to do, objective judgment,
+fair by default, understands your team, finds the root cause, AI manager.
 
 ---
 
-## Naming the standard, decided
+## Confidence, properly framed
 
-Belief 4 needs one noun for the thing set in advance, used consistently across
-product and copy. Options considered and the call:
+Confidence is the emotional payoff across all three pillars:
 
-| Candidate | Verdict |
+1. The relevant context has not disappeared into separate notes and systems.
+2. The manager can see why something may deserve a closer look.
+3. The manager remains responsible for interpreting it and deciding what happens.
+
+That can support confidence. It does not prove that the manager has become better,
+that a decision is fair, or that the team will perform better. Use the aspiration in
+the opening or close only when the page also demonstrates the mechanism.
+
+---
+
+## Shared record: aspiration and claim boundary
+
+The principle that a record should be written in language the employee could read
+remains valuable. It protects dignity and disciplines the manager's language. It is
+not current homepage proof of employee collaboration.
+
+| Capability | Status |
 |---|---|
-| **what I expect** / **expectations** | **Picked for manager-facing use.** Plain, first person, already the product's own noun (`expectations`, `role_levels`), collides with nothing on the never-say list |
-| **what we agreed** | **Picked for anything involving the report.** Carries the co-ownership without a word about sharing |
-| the bar | **Retired as a device.** Ours, one instance in ~120 quotes and in the opposite direction. Allowed only inside a manager's own quoted sentence |
-| what good looks like | **Kept out of copy.** Zero corpus instances. Fine in `PRODUCT_VISION.md`, where it's Andrew's own framing |
-| the standard, the benchmark | Cold and slightly institutional. Available for body prose, never for a headline |
+| Manager-owned product with no HR tier or upward access to private 1:1 notes | **Shipped** |
+| Invite and account-claim primitives for direct reports | **Shipped underneath the UI** |
+| Employee invite controls | **Disabled** |
+| Employee-facing view of their record | **Not built**; `/app/ic` is a placeholder |
+| Employee contribution, comments or collaboration on the record | **Not built** |
 
-Overturnable, and worth overturning if the bar earns it in a headline test. It has to
-win on merit rather than on incumbency.
+Do not claim in present tense that a report can see, own, contribute to or collaborate
+on the record. Revisit this boundary when the employee experience ships.
 
 ---
 
-## Which pillar leads, by surface
-
-Carried forward from `positioning.md`, now with pillars attached.
+## Which message leads, by surface
 
 | Surface | Lead | Support | Why |
 |---|---|---|---|
-| **Acquisition** (blog, SEO) | Pillar 2, into the review | 3, then 1 | The guilt has no search query. They arrive behind on something with a date on it |
-| **Homepage** | Pillar 1 | 2, then 3 | The one claim a competitor selling to HR structurally can't make |
-| **Product tour / walkthrough** | Pillar 2 | 3, then 1 | It's the most complete thing we've built and it demos in thirty seconds |
-| **Retention / lifecycle** | Pillar 3, into the review | 2, then 1 | Where the record visibly pays off, in front of the report |
-
-**The bridge, so the site doesn't read as two products:**
-
-> The reason the review is agony in November is that the record you needed in March
-> felt creepy to keep.
+| **Acquisition** | A dated trigger such as review season or a conversation the manager is preparing for | Coherent context, then judgment | Search demand begins with a recognizable job; the landing story can widen from it |
+| **Homepage** | Coherent context for better management decisions | Where to look, then manager judgment | Carries the full aspiration without becoming a feature tour |
+| **Product tour** | One first-week situation from recorded context to a manager's next question | Breadth and continuity | Makes the mechanism legible before showing every surface |
+| **Retention** | Continuity and accumulated context | Reviews and preparation as payoff | The record becomes more useful as decisions and conversations connect over time |
 
 ---
 
 ## Message tests
 
-Before any line ships, four questions:
+Before a line ships, ask:
 
-1. **Which pillar?** If the answer is "all three" or "none," rewrite it.
-2. **Is the grammar first person and observational?** Second-person imperatives
-   accuse a reader who's already indicting himself.
-3. **Could Lattice say this?** If yes on pillar 1, it isn't pillar 1.
-4. **Is the proof shipped?** Present tense requires present-tense truth. The IC view
-   and the principles object are the two places this bites today.
+1. **Does it describe the manager's capability or merely name product storage?**
+2. **Can the page show the mechanism with a truthful, readable example?**
+3. **Is the object of attention work, a commitment, an expectation or a question,
+   rather than a person being scored?**
+4. **Does it say where the context comes from without implying unavailable
+   integrations or invisible collection?**
+5. **Does it preserve the manager's judgment and more than one plausible
+   explanation?**
+6. **Is every present-tense claim shipped?**
+7. **Would the line still sound acceptable if the employee read it?**
+
+---
+
+## The adoption objection
+
+The strongest objection is not whether connected context would be useful. It is:
+
+> Why won't this become one more place I have to update?
+
+Copy cannot remove the upkeep honestly. Product proof must show a small intentional
+habit producing useful first-week value: one current goal or project, one short note
+from a conversation and one agreed next step returning together when the manager
+needs to decide what to do.
+
+Do not promise effortless setup, a record that builds itself or replacement of every
+existing system.
 
 ---
 
-## What this doesn't settle
+## What this does not settle
 
-- **The H1.** Still open, deliberately. The value proposition is scaffolding for the
-  writer, not a candidate line.
-- **The week-three problem.** *"The tool really doesn't matter; but proper discipline
-  to use it does."* No pillar answers it and copy can't. It's the product's.
-- **Willingness to pay.** No evidence at all for $20/mo from a manager's own pocket.
-- **Pillar 1's proof.** Argues a principle today, ships a view later. Everything in
-  this document assumes that gap closes.
-
----
+- The final homepage H1. `gtm/site/homepage.md` carries the two directions to the
+  next prototype.
+- The exact first-week and positive examples.
+- Willingness to pay. There is still no evidence for $20 per month from a manager's
+  own pocket.
+- Whether the maintenance habit survives week three. That remains a product question.
+- Which integrations, if any, would materially change the input burden.
 
 ## Related
-`point-of-view.md` for the beliefs each pillar carries · `gtm/positioning.md` for the
-competitive alternative and the surface split · `gtm/brand/voice-rules.md` for the
-binding grammar and the full say/never-say lists · `gtm/personas/new-manager.md` for
-the reader · layer 5, the voice system, is still to write.
+
+`point-of-view.md` for the beliefs · `gtm/site/homepage.md` for the page argument ·
+`brand/voice-rules.md` for expression · `gtm/personas/new-manager.md` for the reader ·
+`gtm/research/audience-2026-08.md` for evidence and sampling gaps.

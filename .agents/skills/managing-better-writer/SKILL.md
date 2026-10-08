@@ -63,6 +63,18 @@ against the source. The script flags cadence patterns; it neither detects AI nor
 replaces the source comparison. Record the voice-fidelity result in the publishing
 card.
 
+After every other copy edit, run a separate final human-authorship pass immediately
+before presenting the package as approved-ready or handing it to the publisher. Read
+the post and summary aloud and challenge polished contrasts, synthetic emphasis,
+tidy recap endings, aphorisms, overly symmetrical sections and connective prose that
+is cleaner or more certain than Andrew's source. Compare each suspect passage with
+the original material, preserve his qualifications, examples, self-implication and
+order of thought, and make any source-supported fixes without waiting for a separate
+request. Do not use an AI-detector score as evidence. Rerun voice lint after the
+human review and record a completed `Final human-authorship pass` in the publishing
+card. Any later change to the post or summary makes that check stale and requires it
+again.
+
 ## Approval and handoff
 
 Keep the post in `in review` until Andrew explicitly approves it. Approval means the

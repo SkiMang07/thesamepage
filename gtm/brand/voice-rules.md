@@ -23,8 +23,14 @@ clustered on clarity, evidence, and what good looks like.
 
 **How to apply:** the reader is a manager who wants to be good at this and expects to
 be addressed as a professional. No hand-holding, no "we know it's hard," no
-empathy-first framing. **Craft and rigor, not comfort.** Cold and accusatory phrasing
-is rejected just as firmly. Confident and even, aimed at neither pity nor blame.
+empathy-first framing. Use plain, concrete, natural language without blame,
+manufactured aphorisms or inflated certainty. The voice is thoughtful and even,
+aimed at neither pity nor judgment.
+
+The earlier homepage rule prescribed cold, clipped two-beat declarations. It is
+retired. Repetition of that rhythm produced polished binaries and corrective second
+beats that sounded generated rather than like Andrew. A short sentence is welcome
+when the thought is short. It is not the house rhythm.
 
 The four traits below are how that register gets applied sentence by sentence.
 
@@ -122,7 +128,7 @@ The traits hold everywhere. How tight, how warm and how much personality changes
 
 | Surface | Register | Why |
 |---|---|---|
-| **Homepage** | Clipped two-beat declaratives. Structural claims. Coldest register we use | Brand, direct and second-visit traffic. It carries the argument, so it can't also be chatty |
+| **Homepage** | Plain, concrete and naturally paced. Concise headlines; explanatory prose that can carry connection, qualification and cause | It must make a broad promise credible without turning it into an aphorism or a feature list |
 | **Blog / Field Guide** | First person, longer, looser, warmer. One manager talking | Arrives from search with no relationship. It has to earn the argument before it makes it |
 | **Product UI labels** | Literal and neutral. No voice at all | A label with personality is a label you read twice. Voice in a field name is a bug |
 | **Empty states** | One observational line. Never encouraging | "Nothing logged for Priya since the 4th." The state is information, not a prompt |
@@ -130,8 +136,10 @@ The traits hold everywhere. How tight, how warm and how much personality changes
 | **Lifecycle email** | First person, from Andrew, short | Solo founder pre-launch. Sounding like a company is worse than sounding like a person |
 | **Errors** | What happened, what to do. No apology theatre | "Couldn't reach the file. Try again or upload it directly." |
 
-**Body prose is warmer, longer and looser than headlines.** That gap is deliberate and
-it's Andrew's own register. Headlines stay clipped; the paragraph underneath breathes.
+**Body prose can be warmer, longer and looser than headlines.** The difference is one
+of space and purpose, not a mandated contrast in personality. Headlines should sound
+complete when spoken aloud. The paragraph underneath can carry the example,
+qualification and connection that make the claim true.
 
 ---
 
@@ -224,14 +232,14 @@ Apply to any long-form copy written in his voice, and to this folder's own docum
 - No em-dashes. Spaced hyphens or ellipses, sparingly.
 - Never begin a sentence or clause with "not," and never begin a sentence with "But."
 - Use contractions.
-- Headlines stay clipped. Body prose is warmer, longer and looser.
+- Headlines are concise when the thought permits it. Do not compress a natural
+  sentence into a slogan or binary to make it feel like a headline.
 
-The homepage language audit found the em-dash rule does most of the work on its own:
-12 em-dashes in body copy were all doing the same job, appending a corrective or
-portentous clause. Deleting every one **and refusing to replace it with a comma** takes
-out most of the correctives and most of the metered balance at once, because the dash
-is what sets up the second beat. Watch also for "not X but Y" constructions,
-rule-of-three lists, "actually," and anaphora runs.
+The homepage language audit found that em dashes, "not X but Y" constructions,
+rule-of-three lists, "actually," anaphora and repeated short declarations often did
+the same job: they manufactured a corrective second beat. Removing the punctuation
+alone is not enough if the metered thought remains. Read the copy aloud and restore
+the connective language Andrew would naturally use.
 
 ### Long-form source fidelity
 
@@ -274,16 +282,21 @@ facts can still fail if the connective voice belongs to a generic essayist.
 
 ## What an H1 has to satisfy
 
-**The H1 is still open on purpose.** This is the test it has to pass, not the line.
+**The H1 is still open on purpose.** `gtm/site/homepage.md` carries two directions to
+the next prototype. This is the test the final line has to pass:
 
-1. It carries **one** pillar. On the homepage that's pillar 1.
-2. First person or structural. Never a second-person imperative.
-3. A competitor selling to People Ops couldn't sign it.
-4. It's true of what's shipped, or it argues the principle rather than describing a
-   feature. The IC view isn't built.
-5. **It survives being said out loud to a report.** This one falls straight out of
-   belief 3 and it's the fastest disqualifier we have.
-6. No *track*, *watch*, *monitor*, *transparency*, no time saved, no *the bar*.
+1. It speaks to the individual manager and the broader work of managing, rather than
+   reducing the product to 1:1s, follow-ups, reviews or ratings.
+2. It promises a capability the page can demonstrate through recorded context,
+   traceable connections and a manager's decision.
+3. It does not imply automatic ingestion, complete knowledge, employee scoring or
+   software authority over what matters.
+4. It is true of what is shipped. Employee access and collaboration cannot appear as
+   present-tense proof while the IC view remains a placeholder.
+5. It survives being said aloud to a report.
+6. It sounds like a complete thought when spoken, not a polished binary assembled for
+   effect.
+7. No *track*, *watch*, *monitor*, *transparency*, no time-saved lead and no *the bar*.
 
 ---
 
@@ -291,9 +304,12 @@ facts can still fail if the connective voice belongs to a generic essayist.
 
 From the Miro board, and all three still hold.
 
-- Lead with the manager's pain, not the product's features.
-- "Mission control for your team" is the right metaphor, single surface, everything
-  you need to be a confident manager. *(Ours and untested. See the table above.)*
+- Lead with the management capability the reader wants, then make it credible through
+  a recognisable situation. Pain can create recognition, but blame and deficiency do
+  not create trust.
+- "Mission control for your team" is an internal product metaphor, not an approved
+  marketing claim. The product has several purposeful surfaces and does not replace
+  every system a manager uses.
 - Avoid HR-speak. Use manager-speak: "how's my team doing," "what do I say in this
   conversation." *(The research turned this into the specific lists above.)*
 

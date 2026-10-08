@@ -28,6 +28,29 @@ body. A remote draft is not verified until that image has been checked below the
 byline, on the main listing card and, when the surface is populated, on a related-post
 card.
 
+## Final human-authorship gate
+
+Treat a source-fidelity review as part of publishing, even when Andrew does not ask
+for it separately. Before the first HubSpot draft push, and again immediately before
+publishing or scheduling, confirm that `publishing-card.md` records a completed
+`Final human-authorship pass` performed after the latest post or summary edit. If the
+timing is unclear, the check is missing or copy changed after it, use
+`$managing-better-writer` and read its
+[editorial review](../managing-better-writer/references/editorial-review.md) and
+[voice-fidelity review](../managing-better-writer/references/voice-fidelity.md).
+
+The pass must compare the final prose with Andrew's original material and challenge
+polished binaries, repeated claim-and-correction cadence, synthetic emphasis, tidy
+recap endings, aphorisms, symmetrical sections and generic connective prose. A clean
+voice-lint result is not enough, and an AI-detector score is not evidence. Make any
+source-supported revisions through the writer workflow, update every affected
+package file, rerun voice lint and local validation, then sync the same HubSpot draft
+and repeat semantic and visual verification. Any copy change invalidates the prior
+remote verification. Do not publish or schedule a stale version.
+
+This automatic review does not authorize a draft write, publication or scheduling;
+the authorization gates below still apply.
+
 ## Authorization gates
 
 Read-only discovery, local validation and remote GET verification are allowed when

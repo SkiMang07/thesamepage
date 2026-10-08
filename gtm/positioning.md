@@ -7,8 +7,17 @@ Who the reader is lives in `gtm/personas/new-manager.md`. How we sound lives in
 `gtm/brand/voice-rules.md`. How we make money lives in `gtm/business-model.md`. The
 evidence behind all of it is in `gtm/research/audience-2026-08.md`.
 
-**The current site copy is scaffolding, not a fixed point.** It was written to get a
-site standing pre-launch, it is unpublished, and no line in it constrains this work.
+**The published site copy is scaffolding, not a fixed point.** It established the
+first live site, but no line in it constrains this work.
+
+**Current interpretation, 2026-09-26.** Andrew clarified that the product's larger
+value is helping someone become a better, more confident, evidence-informed manager
+by keeping management context coherent across goals, projects, expectations,
+meetings and team relationships. The shared-record thesis below remains useful
+research and a product principle. It is no longer the sole positioning spine or the
+homepage lead, and it cannot be present-tense product proof while the employee view
+is unbuilt. `gtm/brand/messaging.md` holds the current value proposition;
+`gtm/site/homepage.md` holds the current page argument.
 
 ---
 
@@ -65,7 +74,31 @@ claim we have. Points 2 and 3 have never been tested against the audience.
 
 ---
 
-## Positioning (Dunford)
+## Current positioning
+
+- **Competitive alternative** *(finding)* - a doc per person plus the manager's
+  memory, increasingly with a general-purpose LLM used for recall.
+- **Unique attributes** *(assertion)* - management context across work,
+  expectations and conversations; continuity between moments; traceable reasons for
+  where to look more closely; AI assistance that stops before the manager's decision.
+- **Value** *(assertion)* - a manager can put the pieces together, ask a better
+  question and decide how to respond with a sound basis.
+- **Who cares a lot** *(finding)* - the manager whose own system has stopped keeping
+  up, typically after the team grows beyond what memory can reliably hold.
+- **Market category** *(assertion, still open)* - a management context system for the
+  individual manager. This needs plain language before it becomes public copy.
+### The current statement
+
+> For a manager whose home-made system has stopped keeping up, The Same Page keeps
+> the context across their team's work, expectations and conversations coherent, so
+> they can see where to look more closely and decide how to respond.
+
+This statement is deliberately broader than any one workflow. Preparation,
+follow-ups and reviews demonstrate the value without defining the category.
+
+---
+
+## Earlier positioning frame, preserved
 
 Read this layer differently from the one above it. Layer 1 is evidence and can
 contradict us. **Layer 2 cannot be free, because the product is already built.**
@@ -95,15 +128,19 @@ and Scribe are not in that sentence. Positioning is what you lead with.
 
 ---
 
-## What this settles, and what it does not
+## What the earlier research settles, and what it does not
 
-### The mechanism is validated. The headline is not.
+### The shared-record mechanism is evidenced. Its causal importance is not validated.
 
-**Supported:** a record co-owned with the report is what resolves the manager's guilt
-about keeping one, and that guilt is why the habit decays. Evidence: two independent
-"creepy dossier" uses, a manager stating the resolution unprompted, a second
-describing the shared doc working, a third naming "no surprises at review time" as
-the goal.
+**Supported:** managers described private notes as a "creepy dossier," and one
+manager named co-ownership as a way to resolve the surveillance feeling. A second
+described a shared document working, and a third named "no surprises at review time"
+as the goal.
+
+**Not established:** that dossier guilt is the primary cause of habit decay, that a
+shared record resolves it reliably, or that this mechanism should lead the homepage.
+The corpus is small and engineering-heavy, and the employee-facing product is not
+built.
 
 **Does not follow:** that "You and the person you manage should be looking at the
 same page" is therefore the right hero line. The evidence backs a mechanism. It says
@@ -111,7 +148,7 @@ nothing about which sentence carries it or whether the hero is where it belongs.
 **The H1 is open.** An earlier draft of this doc declared it closed; that was a
 synthesis error, not a finding.
 
-### The lead — DECIDED 2026-08-27
+### Earlier surface lead, superseded 2026-09-26
 
 Posed as a choice between review season and the dossier guilt. It was never one slot.
 They do different jobs, and the channel forces the split rather than taste deciding it.
@@ -119,8 +156,8 @@ They do different jobs, and the channel forces the split rather than taste decid
 | Job | Which one, and why |
 |---|---|
 | **Acquisition** (blog, SEO, why they arrive) | **Review season.** Forced, not preferred: *the guilt has no search query.* Nobody googles "I feel weird keeping notes on my team." They google things about a review they're behind on. Content is the entire GTM for v1, so top of funnel sits where demand exists. |
-| **Positioning** (homepage, why they choose us) | **The dossier guilt and the shared record.** Nobody in the category names it, it is chronic rather than annual, and it is the one claim a competitor structurally cannot make while selling to HR. |
-| **Retention** (why they renew) | **The review, again.** Where the shared record visibly pays off, in front of the report. The guilt resolves weekly and privately; the payoff is annual and witnessed. |
+| **Positioning** (homepage, why they choose us) | **Superseded:** the homepage now leads with coherent context for better management decisions. See `gtm/site/homepage.md`. |
+| **Retention** (why they renew) | Continuity and accumulated context, with preparation and reviews as visible payoffs rather than the whole value. |
 
 **The bridge, so the site does not read as two products.** The founding post already
 contains the causal chain, in this order: the review felt off *because* he is
@@ -157,15 +194,16 @@ sentence about himself; as an imperative aimed at the reader it becomes an accus
 
 ## Open items
 
-- The H1 is still open. The *lead* is decided (see above); the sentence carrying it is not.
-- The bar metaphor is ours rather than theirs. It may still be right; decide it deliberately in layer 3.
-- The category line is nine words and needs to get shorter without becoming "performance management lite."
+- The H1 is still open between the two directions in `gtm/site/homepage.md`.
+- "Management context system" is an internal category description and needs plain
+  language before it can become public copy.
 - "The tool doesn't matter, discipline does" is a product question, not a copy question. What happens in week three when they haven't opened the app?
 - Narrowing to 4+ reports and one survived review cycle shrinks the market. Conscious trade.
 - No willingness-to-pay evidence exists for $20/mo from a manager's own pocket.
 - GTM-manager voice is thin (three first-person accounts). The corpus is engineering-heavy. Fund interviews here first.
 
-## Still to build
+## Current downstream sources
 
-Layer 3 (point of view), Layer 4 (message hierarchy: one value prop, three
-pillars, proof), Layer 5 (voice system: traits, register per surface). Then copy.
+Layer 3 remains `gtm/brand/point-of-view.md`. The current message hierarchy is
+`gtm/brand/messaging.md`; the voice system is `gtm/brand/voice-rules.md`; the homepage
+argument is `gtm/site/homepage.md`.
