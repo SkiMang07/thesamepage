@@ -1,5 +1,7 @@
 # First-Run Onboarding — Scoping Doc
 
+> **Archived 2026-10-08.** Current behaviour is `docs/systems/onboarding.md`. This is the scoping record, kept for the reasoning; section numbers cited in older commits and design briefs refer to it.
+
 **Scoped:** 2026-09-24 with Andrew · **Status:** approved 2026-09-29; session 1 (front door) built, session 2 not started
 **Design:** `docs/design-proposals/2026-09-29-first-run/prototype.html`, in the app's own dark theme (onboarding matches the product, not the website; decided 2026-09-29)
 **Direction:** A (straight to the first 1:1) plus B's one-line roster as the second screen.

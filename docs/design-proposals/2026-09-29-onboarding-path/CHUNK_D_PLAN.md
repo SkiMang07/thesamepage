@@ -1,6 +1,6 @@
 # Setup mode, chunk D: modals, fading, receipt, ranker, "Built without" (plan)
 
-Written 2026-09-29. Status: BUILT (see `docs/ONBOARDING_SCOPING.md` section 11). Where this plan and the code differ, the code and section 11 win: "Built without" uses four labels (`org goals` and `team goals` separately), and the goals step's candidate links to `/app/dashboard?setup=goals`. Chunks A to C are pushed (`origin/main` = `322d7f3`). Read `SETUP_MODE_BRIEF.md` (design rules) and `docs/ONBOARDING_SCOPING.md` section 11 first. Open questions are at the bottom; the build starts once Andrew answers them.
+Written 2026-09-29. Status: BUILT (see `docs/archive/scoping/ONBOARDING_SCOPING.md` section 11). Where this plan and the code differ, the code and section 11 win: "Built without" uses four labels (`org goals` and `team goals` separately), and the goals step's candidate links to `/app/dashboard?setup=goals`. Chunks A to C are pushed (`origin/main` = `322d7f3`). Read `SETUP_MODE_BRIEF.md` (design rules) and `docs/archive/scoping/ONBOARDING_SCOPING.md` section 11 first. Open questions are at the bottom; the build starts once Andrew answers them.
 
 ## What chunk D is
 

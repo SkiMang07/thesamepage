@@ -2,7 +2,7 @@
 
 ## Status
 
-**Partly superseded (2026-09-29).** "Onboarded" no longer means the five below. Setup is three steps (org, expectations, goals), knowledge folds into the notes dump, and the first 1:1 and a second sheet define onboarded. Current truth: `docs/ONBOARDING_SCOPING.md` §11 and `SETUP_MODE_BRIEF.md`. Read the rest of this file as the earlier proposal.
+**Partly superseded (2026-09-29).** "Onboarded" no longer means the five below. Setup is three steps (org, expectations, goals), knowledge folds into the notes dump, and the first 1:1 and a second sheet define onboarded. Current truth: `docs/archive/scoping/ONBOARDING_SCOPING.md` §11 and `SETUP_MODE_BRIEF.md`. Read the rest of this file as the earlier proposal.
 
 Design proposal from 2026-09-29, not built and not approved. `prototype.html` is a clickable
 preview (open in a browser; "Jump to" buttons in the top bar skip between states). All names,
@@ -68,7 +68,7 @@ The product never says "The Same Page" about itself. Completion copy is a statem
 - No AI call unless one is needed. Context lines on the sheet are assembled from saved records.
 - The fifth step is called "Log".
 
-Pass 1 is built (status, nav, chip, path card); see `docs/ONBOARDING_SCOPING.md` §11 for what remains.
+Pass 1 is built (status, nav, chip, path card); see `docs/archive/scoping/ONBOARDING_SCOPING.md` §11 for what remains.
 
 ## Build notes (original list, kept for the record)
 

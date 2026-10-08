@@ -1,6 +1,6 @@
 # Setup mode, chunk C: role-expectation on-ramps and org-goal ingestion (plan)
 
-Written 2026-09-29. Status: BUILT (see `docs/ONBOARDING_SCOPING.md` section 11). Where this plan and the code differ, the code and section 11 win: the org-goals step opens `OrgGoalsModal` (parse-and-review is a modal, rule 3), and the expectations link carries no `?from=setup` param. Read `SETUP_MODE_BRIEF.md` (Content on-ramps) first. Chunk B is pushed (`origin/main` = `1ea8295`). Open questions are at the bottom; the build starts once Andrew answers them. Not in scope: chunk D (entry and completion modals, prompt fading, receipt, split view).
+Written 2026-09-29. Status: BUILT (see `docs/archive/scoping/ONBOARDING_SCOPING.md` section 11). Where this plan and the code differ, the code and section 11 win: the org-goals step opens `OrgGoalsModal` (parse-and-review is a modal, rule 3), and the expectations link carries no `?from=setup` param. Read `SETUP_MODE_BRIEF.md` (Content on-ramps) first. Chunk B is pushed (`origin/main` = `1ea8295`). Open questions are at the bottom; the build starts once Andrew answers them. Not in scope: chunk D (entry and completion modals, prompt fading, receipt, split view).
 
 ## What chunk C is
 

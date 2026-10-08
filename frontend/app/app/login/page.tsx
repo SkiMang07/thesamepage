@@ -30,7 +30,7 @@ function LoginForm() {
 
   // The password option is only offered to someone who already signs in with
   // one: a new manager has no password, and trying one only earns Supabase's
-  // "Invalid login credentials" (docs/ONBOARDING_SCOPING.md, §4.1). It shows
+  // "Invalid login credentials" (docs/systems/onboarding.md → Front door). It shows
   // after a password sign-in on this browser, or with /app/login?password.
   const [passwordOffered, setPasswordOffered] = useState(false);
   useEffect(() => {

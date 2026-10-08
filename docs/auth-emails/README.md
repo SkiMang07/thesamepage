@@ -28,7 +28,7 @@ from `frontend/tailwind.config.js`: carbon `#222B32`, teal `#087E78`.
 Template variables are Supabase's own: `{{ .SiteURL }}`, `{{ .TokenHash }}`, `{{ .Email }}`.
 
 **The link goes to `/auth/confirm`, not `{{ .ConfirmationURL }}`** (2026-09-29,
-`docs/ONBOARDING_SCOPING.md` §4.1). `{{ .ConfirmationURL }}` runs the PKCE code
+`docs/systems/onboarding.md` → Front door). `{{ .ConfirmationURL }}` runs the PKCE code
 flow, which only completes in the browser that asked for the link, so a link
 requested on a laptop and tapped on a phone failed. `/auth/confirm` verifies the
 token hash instead and works on any device. Both templates use

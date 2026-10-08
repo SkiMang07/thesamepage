@@ -22,7 +22,7 @@ Validation: clicked through at 1440 and 390 in headless Chromium with no page er
 
 ## Round 1 (superseded): The Page styling
 
-Andrew's brief (2026-09-28): the onboarding should be memorable, succinct, clear and engaging. The flow he chose on 2026-09-24 stays: Direction A (straight to the first 1:1) plus B's one-line roster as the second screen (`docs/ONBOARDING_SCOPING.md`). This package covers only how that flow looks and feels.
+Andrew's brief (2026-09-28): the onboarding should be memorable, succinct, clear and engaging. The flow he chose on 2026-09-24 stays: Direction A (straight to the first 1:1) plus B's one-line roster as the second screen (`docs/archive/scoping/ONBOARDING_SCOPING.md`). This package covers only how that flow looks and feels.
 
 ## What changed from the scoping doc
 

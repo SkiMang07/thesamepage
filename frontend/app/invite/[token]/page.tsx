@@ -15,7 +15,7 @@
 // 2026-09-29: sign-in and sign-up emails now link to /auth/confirm with
 // {{ .SiteURL }}, which drops emailRedirectTo and so this `next`. Invites are
 // hidden (IC_INVITES_ENABLED = false); before turning them back on, carry the
-// invite token another way (docs/ONBOARDING_SCOPING.md, §4.1).
+// invite token another way (docs/systems/onboarding.md → Front door).
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";

@@ -247,7 +247,7 @@ export default function DashboardPage() {
       .then((result) => {
         if (cancelled) return;
         // No direct reports yet: first run asks who the next 1:1 is with
-        // instead of showing an empty Mission Control (ONBOARDING_SCOPING §4.2).
+        // instead of showing an empty Mission Control (docs/systems/onboarding.md → Front door).
         if (result.variant === "action_first" && result.mode === "empty") {
           router.replace("/app/start");
           return;

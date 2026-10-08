@@ -1,0 +1,1955 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Prototype Source</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe id="codex-visualization" sandbox="allow-scripts" referrerpolicy="no-referrer" title="Prototype Source" data-srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Prototype Source&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 10px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+.cursor-interaction {
+  cursor: var(--cursor-interaction, pointer);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: var(--cursor-interaction, pointer);
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: var(--cursor-interaction, pointer);
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover,
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;script type=&quot;application/json&quot; id=&quot;codex-visualization-widget-state&quot;&gt;__CODEX_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
+&lt;script&gt;(() =&gt; {
+  const root = document.documentElement;
+  const mediaQuery = globalThis.matchMedia(&quot;(prefers-color-scheme: dark)&quot;);
+  const apply = Reflect.apply;
+  const isArray = Array.isArray;
+  const hasOwn = Object.hasOwn;
+  const parentWindow = globalThis.parent;
+  const stringify = JSON.stringify;
+  const parse = JSON.parse;
+  const encode = TextEncoder.prototype.encode.bind(new TextEncoder());
+  const initialStateElement = document.getElementById(
+    &quot;codex-visualization-widget-state&quot;,
+  );
+  const initialGlobals = parse(initialStateElement?.textContent ?? &quot;{}&quot;);
+  initialStateElement?.remove();
+  /** @type {Record&lt;string, unknown&gt; | null} */
+  let state = initialGlobals.widgetState ?? null;
+  const statePersistence = initialGlobals.statePersistence ?? &quot;none&quot;;
+  let nextStateRequestId = 0;
+  /** @type {Map&lt;number, { resolve: () =&gt; void; reject: (error: Error) =&gt; void; timeout: ReturnType&lt;typeof globalThis.setTimeout&gt;; serializedState: string }&gt;} */
+  const pendingStateWrites = new Map();
+  const persistenceError = () =&gt;
+    Object.assign(
+      new Error(&quot;The host could not persist the widget state update&quot;),
+      {
+        code: -32000,
+        data: { code: &quot;widget_state_persistence_failed&quot;, retryable: false },
+      },
+    );
+  /**
+   * @param {object} prototype
+   * @param {string} property
+   */
+  const getPrototypeGetter = (prototype, property) =&gt; {
+    // oxlint-disable-next-line typescript/unbound-method -- invoked through captured Reflect.apply
+    const getter = Object.getOwnPropertyDescriptor(prototype, property)?.get;
+    if (getter == null) {
+      throw new Error(`Missing ${property} getter`);
+    }
+    return getter;
+  };
+  const getMessageData = getPrototypeGetter(MessageEvent.prototype, &quot;data&quot;);
+  const getMessagePorts = getPrototypeGetter(MessageEvent.prototype, &quot;ports&quot;);
+  const getMessageSource = getPrototypeGetter(MessageEvent.prototype, &quot;source&quot;);
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const addHostMessageListener = MessagePort.prototype.addEventListener;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const postHostMessage = MessagePort.prototype.postMessage;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const startHostPort = MessagePort.prototype.start;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const stopMessagePropagation = Event.prototype.stopImmediatePropagation;
+  /** @type {MessagePort | null} */
+  let hostPort = null;
+  const postToHost = (type, payload) =&gt; {
+    if (hostPort != null) {
+      apply(postHostMessage, hostPort, [{ type, ...payload }]);
+    }
+  };
+  const openExternal = ({ href }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;open-external&quot;, { href });
+    }
+  };
+  const sendFollowUpMessage = ({ context, prompt, title }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;follow-up&quot;, { context, prompt, title });
+    }
+    return Promise.resolve();
+  };
+  /**
+   * @param {Record&lt;string, unknown&gt; | ((previous: Record&lt;string, unknown&gt; | null) =&gt; Record&lt;string, unknown&gt;)} next
+   * @returns {Promise&lt;void&gt;}
+   */
+  const setWidgetState = async (next) =&gt; {
+    const nextState = typeof next === &quot;function&quot; ? next(state) : next;
+    if (
+      nextState == null ||
+      typeof nextState !== &quot;object&quot; ||
+      isArray(nextState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const inputState = stringify(
+      nextState,
+      (_key, /** @type {unknown} */ value) =&gt; {
+        if (
+          typeof value === &quot;undefined&quot; ||
+          typeof value === &quot;function&quot; ||
+          typeof value === &quot;symbol&quot; ||
+          (typeof value === &quot;number&quot; &amp;&amp; !Number.isFinite(value))
+        ) {
+          throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+        }
+        return value;
+      },
+    );
+    const parsedState = parse(inputState);
+    if (
+      parsedState == null ||
+      typeof parsedState !== &quot;object&quot; ||
+      isArray(parsedState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const storedState = {
+      modelContent: null,
+      privateContent: null,
+      ...parsedState,
+    };
+    const serializedState = stringify(storedState);
+    if (encode(serializedState).length &gt; 16 * 1024) {
+      throw new TypeError(
+        &quot;Widget state must be a JSON object of at most 16 KiB&quot;,
+      );
+    }
+    if (
+      hasOwn(storedState, &quot;imageIds&quot;) &amp;&amp;
+      (!isArray(storedState.imageIds) ||
+        storedState.imageIds.some(
+          (/** @type {unknown} */ id) =&gt; typeof id !== &quot;string&quot;,
+        ))
+    ) {
+      throw new TypeError(&quot;Widget state imageIds must be an array of strings&quot;);
+    }
+    if (storedState.imageIds?.length &gt; 0) {
+      throw Object.assign(
+        new TypeError(&quot;Visualization state does not support image attachments&quot;),
+        { code: -32602, data: { code: &quot;images_unsupported&quot; } },
+      );
+    }
+    state = storedState;
+    globalThis.openai.widgetState = state;
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: { widgetState: state } },
+      }),
+    );
+    if (statePersistence === &quot;none&quot;) {
+      throw persistenceError();
+    }
+    const id = ++nextStateRequestId;
+    return new Promise((resolve, reject) =&gt; {
+      const timeout = globalThis.setTimeout(() =&gt; {
+        pendingStateWrites.delete(id);
+        reject(persistenceError());
+      }, 30_000);
+      pendingStateWrites.set(id, { resolve, reject, timeout, serializedState });
+      postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+    });
+  };
+  const syncTheme = () =&gt; {
+    const theme = mediaQuery.matches ? &quot;dark&quot; : &quot;light&quot;;
+    root.dataset.theme = theme;
+    globalThis.openai = {
+      ...globalThis.openai,
+      openExternal,
+      sendFollowUpMessage,
+      setWidgetState,
+      theme,
+      visualizationStyleVariables: {},
+      visualizationTheme: theme,
+      widgetState: state,
+      statePersistence,
+      stateModelContext: &quot;none&quot;,
+    };
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: globalThis.openai },
+      }),
+    );
+  };
+  const sendHeight = () =&gt; {
+    postToHost(&quot;height&quot;, {
+      height: Math.ceil(
+        Math.max(
+          document.body.scrollHeight,
+          document.body.getBoundingClientRect().height,
+        ),
+      ),
+    });
+  };
+
+  globalThis.addEventListener(
+    &quot;message&quot;,
+    (event) =&gt; {
+      const data = apply(getMessageData, event, []);
+      const ports = apply(getMessagePorts, event, []);
+      const source = apply(getMessageSource, event, []);
+      if (
+        hostPort != null ||
+        source !== parentWindow ||
+        typeof data !== &quot;object&quot; ||
+        data?.type !== &quot;codex-visualization-initialize&quot; ||
+        !isArray(ports) ||
+        ports.length !== 1
+      ) {
+        return;
+      }
+      apply(stopMessagePropagation, event, []);
+      const nextHostPort = ports[0];
+      try {
+        apply(addHostMessageListener, nextHostPort, [
+          &quot;message&quot;,
+          (event) =&gt; {
+            const data = apply(getMessageData, event, []);
+            if (typeof data === &quot;object&quot; &amp;&amp; data?.type === &quot;measure&quot;) {
+              sendHeight();
+            } else if (
+              typeof data === &quot;object&quot; &amp;&amp;
+              data?.type === &quot;widget-state-result&quot;
+            ) {
+              /** @type {unknown} */
+              const id = data.id;
+              if (typeof id !== &quot;number&quot;) {
+                return;
+              }
+              const pending = pendingStateWrites.get(id);
+              if (pending != null) {
+                pendingStateWrites.delete(id);
+                globalThis.clearTimeout(pending.timeout);
+                if (data.ok === true) {
+                  pending.resolve();
+                } else {
+                  pending.reject(persistenceError());
+                }
+              }
+            }
+          },
+        ]);
+        apply(startHostPort, nextHostPort, []);
+      } catch {
+        return;
+      }
+      hostPort = nextHostPort;
+      for (const [id, { serializedState }] of pendingStateWrites) {
+        postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+      }
+      sendHeight();
+    },
+    { capture: true },
+  );
+  document.currentScript?.remove();
+  mediaQuery.addEventListener(&quot;change&quot;, syncTheme);
+  globalThis.addEventListener(&quot;click&quot;, (event) =&gt; {
+    if (event.defaultPrevented) {
+      return;
+    }
+    let element = null;
+    if (event.target instanceof globalThis.Element) {
+      element = event.target;
+    } else if (event.target instanceof globalThis.Node) {
+      element = event.target.parentElement;
+    }
+    const link = element?.closest(&quot;a[href]&quot;);
+    const href = link?.getAttribute(&quot;href&quot;);
+    if (href == null) {
+      return;
+    }
+    if (href.startsWith(&quot;#&quot;)) {
+      let id;
+      try {
+        id = decodeURIComponent(href.slice(1));
+      } catch {
+        return;
+      }
+      const target = id.length === 0 ? root : document.getElementById(id);
+      if (
+        target == null ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      event.preventDefault();
+      postToHost(&quot;scroll-to&quot;, {
+        top: target.getBoundingClientRect().top + globalThis.scrollY,
+      });
+      return;
+    }
+    event.preventDefault();
+    openExternal({ href });
+  });
+  new ResizeObserver(sendHeight).observe(document.body);
+  syncTheme();
+})();
+&lt;/script&gt;
+&lt;div id=&quot;role-studio&quot; aria-label=&quot;Roles and expectations design walkthrough&quot;&gt;
+&lt;style&gt;
+#role-studio{--rs-bg:light-dark(#F5F8FA,#182026);--rs-surface:light-dark(#fff,#222B32);--rs-raised:light-dark(#ECEFF2,#2D373E);--rs-ink:light-dark(#222B32,#F2F5F6);--rs-muted:light-dark(#686E74,#B6C0C5);--rs-line:light-dark(#DDE0E3,#3D4950);--rs-control:light-dark(#89949a,#77848C);--rs-brand:light-dark(#087E78,#50B7B0);--rs-on:light-dark(#fff,#08191B);--rs-tint:light-dark(#EEF5F4,#173D3B);--rs-amber:light-dark(#895410,#EDBE7A);--rs-attention:light-dark(#FFF5E5,#3B3020);--rs-blue:light-dark(#2367AE,#8DBFF3);--rs-blue-bg:light-dark(#EDF5FD,#203444);color:var(--rs-ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,&#x27;Segoe UI&#x27;,sans-serif;background:var(--rs-bg);border:1px solid var(--rs-line);border-radius:12px;overflow:hidden}
+#role-studio *{box-sizing:border-box}#role-studio button,#role-studio input,#role-studio textarea,#role-studio select{font:inherit}#role-studio button{color:inherit}#role-studio button:focus-visible,#role-studio summary:focus-visible,#role-studio input:focus-visible,#role-studio textarea:focus-visible,#role-studio select:focus-visible{outline:2px solid var(--rs-blue);outline-offset:3px}#role-studio .rs-demo{padding:10px 18px;border-bottom:1px solid var(--rs-line);display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--rs-surface)}#role-studio .rs-demo small{color:var(--rs-muted);margin-right:auto}#role-studio button{border:1px solid var(--rs-control);background:transparent;border-radius:6px;padding:8px 12px;cursor:var(--cursor-interaction,pointer)}#role-studio button:hover{background:var(--rs-raised)}#role-studio button.rs-primary{background:var(--rs-brand);color:var(--rs-on);border-color:var(--rs-brand);font-weight:600}#role-studio .rs-quiet{border-color:transparent;padding-left:0;padding-right:0;color:var(--rs-muted)}#role-studio .rs-step{border:0;padding:6px 9px;font-size:12px}#role-studio .rs-step[aria-current=step]{background:var(--rs-tint);color:var(--rs-brand)}#role-studio .rs-layout{display:grid;grid-template-columns:160px minmax(0,1fr)}#role-studio .rs-rail{padding:22px 12px;border-right:1px solid var(--rs-line)}#role-studio .rs-wordmark{font-weight:600;padding:0 8px 28px}#role-studio .rs-navlabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--rs-muted);padding:20px 8px 7px}#role-studio .rs-navitem{padding:9px 8px;color:var(--rs-muted);border-radius:6px;font-size:13px}#role-studio .rs-navitem.rs-selected{color:var(--rs-brand);background:var(--rs-tint);font-weight:600}#role-studio .rs-main{min-width:0;padding:26px 28px 0}#role-studio h1{font:400 30px/1.16 Georgia,serif;letter-spacing:-.5px;margin:6px 0 10px}#role-studio h2{font-size:17px;font-weight:600;margin:0 0 8px}#role-studio h3{font-size:15px;font-weight:600;margin:0 0 8px}#role-studio p{margin:0 0 12px}#role-studio .rs-muted{color:var(--rs-muted)}#role-studio .rs-eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--rs-muted)}#role-studio .rs-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}#role-studio .rs-heading p{margin:0;color:var(--rs-muted)}#role-studio .rs-panel{background:var(--rs-surface);border-radius:8px;padding:20px;margin-bottom:18px}#role-studio .rs-attention{background:var(--rs-attention);color:var(--rs-amber)}#role-studio .rs-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:14px 0;border-top:1px solid var(--rs-line)}#role-studio .rs-row:first-of-type{border-top:0}#role-studio .rs-row p{margin:3px 0 0;font-size:12px;color:var(--rs-muted)}#role-studio .rs-badge{font-size:11px;padding:3px 7px;border-radius:4px;background:var(--rs-raised);white-space:nowrap}#role-studio .rs-badge.rs-warn{color:var(--rs-amber);background:var(--rs-attention)}#role-studio .rs-badge.rs-good{color:var(--rs-brand);background:var(--rs-tint)}#role-studio details{border-top:1px solid var(--rs-line)}#role-studio summary{padding:15px 0;cursor:var(--cursor-interaction,pointer);font-weight:600}#role-studio .rs-level{padding:14px 0 14px 18px;border-top:1px solid var(--rs-line);display:flex;justify-content:space-between;align-items:center;gap:12px}#role-studio .rs-level small{display:block;color:var(--rs-muted);margin-top:3px}#role-studio .rs-columns{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(220px,1fr);gap:18px;align-items:start}#role-studio .rs-source{margin-bottom:18px;border:1px solid var(--rs-line);padding:0 14px;border-radius:7px;background:var(--rs-surface)}#role-studio .rs-source p{font-size:13px;color:var(--rs-muted)}#role-studio .rs-source summary{font-size:13px}#role-studio label{display:block;font-size:12px;color:var(--rs-muted);margin-top:12px}#role-studio textarea,#role-studio input,#role-studio select{width:100%;color:var(--rs-ink);background:var(--rs-raised);border:1px solid var(--rs-control);padding:9px 10px;border-radius:5px;margin-top:5px;min-width:0}#role-studio textarea{resize:vertical;min-height:78px}#role-studio .rs-item{padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid var(--rs-line)}#role-studio .rs-item:last-child{border:0;padding:0;margin:0}#role-studio .rs-itemhead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px}#role-studio .rs-itemhead h3{margin:0}#role-studio .rs-coach{background:var(--rs-blue-bg);border-top:3px solid var(--rs-blue)}#role-studio .rs-coach .rs-eyebrow{color:var(--rs-blue);margin-bottom:12px}#role-studio .rs-coach p{font-size:13px}#role-studio .rs-coach button{margin-top:10px}#role-studio .rs-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0;border-top:1px solid var(--rs-line);margin-top:12px;flex-wrap:wrap}#role-studio .rs-actions{display:flex;gap:10px;flex-wrap:wrap}#role-studio .rs-message{padding:10px 14px;margin-bottom:16px;background:var(--rs-tint);color:var(--rs-brand);border-radius:6px;font-size:13px}#role-studio .rs-review-item{padding:17px 0;border-top:1px solid var(--rs-line)}#role-studio .rs-review-item:first-child{border:0;padding-top:0}#role-studio .rs-review-item p{margin-bottom:8px}#role-studio .rs-review-item small{display:block;color:var(--rs-muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}#role-studio .rs-review-item .rs-description{color:var(--rs-muted)}#role-studio .rs-check{display:flex;align-items:flex-start;gap:9px;color:var(--rs-ink);font-size:13px;margin:15px 0}#role-studio .rs-check input{width:auto;margin-top:4px}#role-studio .rs-check label{margin:0;color:inherit;font-size:inherit}#role-studio.rs-compact .rs-panel{padding:14px}#role-studio.rs-compact .rs-row,#role-studio.rs-compact .rs-level{padding-top:10px;padding-bottom:10px}#role-studio.rs-inline-coach .rs-columns{grid-template-columns:1fr}#role-studio.rs-inline-coach .rs-coach{grid-row:1}#role-studio [hidden]{display:none!important}
+@media(max-width:850px){#role-studio .rs-layout{grid-template-columns:1fr}#role-studio .rs-rail{display:none}#role-studio .rs-main{padding:22px 20px 0}}
+@media(max-width:620px){#role-studio .rs-columns{grid-template-columns:1fr}#role-studio .rs-heading{align-items:flex-start;flex-direction:column}#role-studio .rs-row,#role-studio .rs-level{align-items:flex-start;flex-wrap:wrap}#role-studio .rs-main{padding:18px 14px 0}#role-studio .rs-demo{gap:4px;padding:9px}#role-studio .rs-demo small{width:100%}#role-studio input,#role-studio textarea,#role-studio select{font-size:16px}#role-studio h1{font-size:27px}#role-studio .rs-panel{padding:16px}}
+&lt;/style&gt;
+&lt;div class=&quot;rs-demo&quot;&gt;&lt;small&gt;DESIGN WALKTHROUGH · Fictional team · Simulated AI&lt;/small&gt;&lt;button class=&quot;rs-step&quot; data-screen=&quot;overview&quot;&gt;1 · Overview&lt;/button&gt;&lt;button class=&quot;rs-step&quot; data-screen=&quot;draft&quot;&gt;2 · Draft &amp; coach&lt;/button&gt;&lt;button class=&quot;rs-step&quot; data-screen=&quot;review&quot;&gt;3 · Review&lt;/button&gt;&lt;/div&gt;
+&lt;div class=&quot;rs-layout&quot;&gt;&lt;aside class=&quot;rs-rail&quot;&gt;&lt;div class=&quot;rs-wordmark&quot;&gt;the same page&lt;span style=&quot;color:var(--rs-brand)&quot;&gt;.&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;Mission Control&lt;/div&gt;&lt;div class=&quot;rs-navlabel&quot;&gt;Your people&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;Team&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;1:1s&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;Assessments&lt;/div&gt;&lt;div class=&quot;rs-navlabel&quot;&gt;The work&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;Goals&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;Projects&lt;/div&gt;&lt;div class=&quot;rs-navlabel&quot;&gt;Foundation&lt;/div&gt;&lt;div class=&quot;rs-navitem rs-selected&quot;&gt;Roles &amp; expectations&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;Knowledge&lt;/div&gt;&lt;div class=&quot;rs-navitem&quot;&gt;Settings&lt;/div&gt;&lt;/aside&gt;&lt;main class=&quot;rs-main&quot;&gt;&lt;div id=&quot;rs-view&quot;&gt;&lt;/div&gt;&lt;/main&gt;&lt;/div&gt;
+&lt;script&gt;
+(()=&gt;{
+const root=document.getElementById(&#x27;role-studio&#x27;),view=root.querySelector(&#x27;#rs-view&#x27;);
+const initial={screen:&#x27;overview&#x27;,target:&#x27;&#x27;,followup:&#x27;&#x27;,approved:false,saved:false,analyzed:false,ack:false,sourceOpen:false,notice:&#x27;&#x27;,items:[{title:&#x27;Own customer renewals&#x27;,kind:&#x27;Results&#x27;,responsibility:&#x27;Manage renewals for an assigned customer portfolio, identifying risks early and coordinating a response.&#x27;,meets:&#x27;Maintains a current renewal forecast, flags risks with a next step, and follows through on agreed renewal actions.&#x27;,exceeds:&#x27;Improves how the team identifies and responds to recurring renewal risks.&#x27;},{title:&#x27;Diagnose customer needs&#x27;,kind:&#x27;Skills&#x27;,responsibility:&#x27;Understand the customer’s goals and translate them into a practical success plan.&#x27;,meets:&#x27;Leads discovery independently and agrees a success plan with clear outcomes and owners.&#x27;,exceeds:&#x27;Recognizes patterns across accounts and helps teammates handle more complex customer needs.&#x27;},{title:&#x27;Close the loop&#x27;,kind:&#x27;Company value&#x27;,responsibility:&#x27;Make commitments clear and keep others informed.&#x27;,meets:&#x27;Follows through on commitments or communicates a change before others have to ask.&#x27;,exceeds:&#x27;&#x27;}]};
+let s=structuredClone(initial);const design={density:&#x27;Comfortable&#x27;,coaching:&#x27;Alongside the draft&#x27;};
+function restore(saved){const p=saved?.privateContent;if(p&amp;&amp;Array.isArray(p.items)&amp;&amp;p.items.length===3){s={...structuredClone(initial),...p};if(![&#x27;overview&#x27;,&#x27;draft&#x27;,&#x27;review&#x27;].includes(s.screen))s.screen=&#x27;overview&#x27;;}}
+restore(window.openai?.widgetState);
+const e=v=&gt;String(v??&#x27;&#x27;).replace(/[&amp;&lt;&gt;&quot;&#x27;]/g,c=&gt;({&#x27;&amp;&#x27;:&#x27;&amp;amp;&#x27;,&#x27;&lt;&#x27;:&#x27;&amp;lt;&#x27;,&#x27;&gt;&#x27;:&#x27;&amp;gt;&#x27;,&#x27;&quot;&#x27;:&#x27;&amp;quot;&#x27;,&quot;&#x27;&quot;:&#x27;&amp;#39;&#x27;}[c]));
+function persist(){window.openai?.setWidgetState?.({modelContent:{screen:s.screen,approved:s.approved,retentionTarget:s.target||&#x27;Not set&#x27;,followup:s.followup||&#x27;Not scheduled&#x27;,coachingPlacement:design.coaching},privateContent:{...s,notice:&#x27;&#x27;}})?.catch(()=&gt;{});}
+function message(){return s.notice?`&lt;div class=&quot;rs-message&quot; role=&quot;status&quot;&gt;${e(s.notice)}&lt;/div&gt;`:&#x27;&#x27;;}
+function field(i,key,label,rows=3){return `&lt;label&gt;${label}&lt;textarea data-item=&quot;${i}&quot; data-key=&quot;${key}&quot; rows=&quot;${rows}&quot;&gt;${e(s.items[i][key])}&lt;/textarea&gt;&lt;/label&gt;`;}
+function overview(){return `${message()}&lt;div class=&quot;rs-heading&quot;&gt;&lt;div&gt;&lt;div class=&quot;rs-eyebrow&quot;&gt;Your team’s foundation&lt;/div&gt;&lt;h1&gt;What good looks like.&lt;/h1&gt;&lt;p&gt;Clear expectations for every role, at every level.&lt;/p&gt;&lt;/div&gt;&lt;button class=&quot;rs-primary&quot; data-action=&quot;new&quot;&gt;+ Define a role&lt;/button&gt;&lt;/div&gt;&lt;section class=&quot;rs-panel rs-attention&quot;&gt;&lt;h2&gt;${s.approved&amp;&amp;s.target?&#x27;All expectations reviewed&#x27;:&#x27;Needs review&#x27;}&lt;/h2&gt;&lt;div class=&quot;rs-row&quot;&gt;&lt;div&gt;&lt;strong&gt;Customer Success Manager · Level 2&lt;/strong&gt;&lt;p&gt;${s.approved?(s.target?&#x27;Expectations approved. No open decisions.&#x27;:`Retention target still needs to be set · ${e(s.followup)}`):s.saved?&#x27;Working draft saved · ready to continue&#x27;:&#x27;First draft ready · retention target needs your input&#x27;}&lt;/p&gt;&lt;/div&gt;&lt;button data-screen=&quot;draft&quot;&gt;${s.approved?&#x27;Review role&#x27;:&#x27;Continue draft&#x27;} →&lt;/button&gt;&lt;/div&gt;&lt;/section&gt;&lt;section class=&quot;rs-panel&quot;&gt;&lt;div class=&quot;rs-heading&quot; style=&quot;margin-bottom:8px&quot;&gt;&lt;h2&gt;Roles &amp; ladders&lt;/h2&gt;&lt;span class=&quot;rs-muted&quot; style=&quot;font-size:12px&quot;&gt;3 ladders · 5 levels&lt;/span&gt;&lt;/div&gt;&lt;details open&gt;&lt;summary&gt;Customer Success&lt;/summary&gt;&lt;div class=&quot;rs-level&quot;&gt;&lt;div&gt;&lt;strong&gt;Level 1 · Customer Success Associate&lt;/strong&gt;&lt;small&gt;Maya Chen · Approved expectations&lt;/small&gt;&lt;/div&gt;&lt;span class=&quot;rs-badge rs-good&quot;&gt;✓ In use&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;rs-level&quot;&gt;&lt;div&gt;&lt;strong&gt;Level 2 · Customer Success Manager&lt;/strong&gt;&lt;small&gt;Alex Rivera, Jordan Lee · ${s.approved?&#x27;Approved expectations&#x27;:&#x27;Job description added&#x27;}&lt;/small&gt;&lt;/div&gt;&lt;button data-screen=&quot;draft&quot;&gt;${s.approved?&#x27;View &amp; refine&#x27;:&#x27;Review draft&#x27;} →&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;rs-level&quot;&gt;&lt;div&gt;&lt;strong&gt;Level 3 · Senior Customer Success Manager&lt;/strong&gt;&lt;small&gt;No one assigned · Approved expectations&lt;/small&gt;&lt;/div&gt;&lt;span class=&quot;rs-badge rs-good&quot;&gt;✓ In use&lt;/span&gt;&lt;/div&gt;&lt;/details&gt;&lt;details&gt;&lt;summary&gt;Implementation · 1 level&lt;/summary&gt;&lt;div class=&quot;rs-level&quot;&gt;&lt;div&gt;Level 1 · Implementation Specialist&lt;small&gt;Sam Patel · Approved expectations&lt;/small&gt;&lt;/div&gt;&lt;span class=&quot;rs-badge rs-good&quot;&gt;✓ In use&lt;/span&gt;&lt;/div&gt;&lt;/details&gt;&lt;details&gt;&lt;summary&gt;Revenue Operations · 1 level&lt;/summary&gt;&lt;div class=&quot;rs-level&quot;&gt;&lt;div&gt;Level 2 · Revenue Operations Analyst&lt;small&gt;Taylor Reed · Approved expectations&lt;/small&gt;&lt;/div&gt;&lt;span class=&quot;rs-badge rs-good&quot;&gt;✓ In use&lt;/span&gt;&lt;/div&gt;&lt;/details&gt;&lt;/section&gt;&lt;section class=&quot;rs-panel&quot;&gt;&lt;h3&gt;Shared across your company&lt;/h3&gt;&lt;p class=&quot;rs-muted&quot;&gt;Company values are defined once and included in each role.&lt;/p&gt;&lt;span class=&quot;rs-badge&quot;&gt;Close the loop&lt;/span&gt;&lt;/section&gt;&lt;div class=&quot;rs-foot&quot;&gt;&lt;span class=&quot;rs-muted&quot;&gt;Expectations stay connected to 1:1s, development, and assessments.&lt;/span&gt;&lt;/div&gt;`;}
+function draft(){return `${message()}&lt;button class=&quot;rs-quiet&quot; data-screen=&quot;overview&quot;&gt;← All roles &amp; expectations&lt;/button&gt;&lt;div class=&quot;rs-heading&quot;&gt;&lt;div&gt;&lt;div class=&quot;rs-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;Customer Success ladder · Level 2&lt;/div&gt;&lt;h1&gt;Customer Success Manager&lt;/h1&gt;&lt;p&gt;Alex Rivera &amp; Jordan Lee &lt;span class=&quot;rs-badge&quot;&gt;${s.approved?&#x27;Working revision&#x27;:&#x27;Working draft&#x27;}&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;${s.approved?&#x27;&lt;div class=&quot;rs-message&quot;&gt;Approved expectations remain in use while you refine this revision.&lt;/div&gt;&#x27;:&#x27;&#x27;}&lt;details class=&quot;rs-source&quot; ${s.sourceOpen?&#x27;open&#x27;:&#x27;&#x27;}&gt;&lt;summary&gt;Source job description &lt;span class=&quot;rs-muted&quot;&gt;· Customer Success Manager&lt;/span&gt;&lt;/summary&gt;&lt;p&gt;Own customer relationships from adoption through renewal. Maintain accurate renewal forecasts, identify churn risks, and coordinate action across teams. Lead discovery conversations and develop success plans aligned with customer goals. Work independently on an assigned portfolio and contribute improvements to team processes.&lt;/p&gt;&lt;p&gt;Company value supplied separately: “Close the loop. Make commitments clear and keep others informed.”&lt;/p&gt;&lt;/details&gt;&lt;div class=&quot;rs-columns&quot;&gt;&lt;section class=&quot;rs-panel&quot;&gt;&lt;div class=&quot;rs-itemhead&quot;&gt;&lt;h2&gt;Role expectations&lt;/h2&gt;&lt;span class=&quot;rs-muted&quot; style=&quot;font-size:11px&quot;&gt;All fields editable&lt;/span&gt;&lt;/div&gt;${s.items.map((it,i)=&gt;`&lt;div class=&quot;rs-item&quot;&gt;&lt;div class=&quot;rs-itemhead&quot;&gt;&lt;h3&gt;${e(it.title)}&lt;/h3&gt;&lt;span class=&quot;rs-badge&quot;&gt;${e(it.kind)}&lt;/span&gt;&lt;/div&gt;&lt;label&gt;Expectation&lt;input data-item=&quot;${i}&quot; data-key=&quot;title&quot; value=&quot;${e(it.title)}&quot;&gt;&lt;/label&gt;${field(i,&#x27;responsibility&#x27;,&#x27;Responsibility&#x27;,2)}${field(i,&#x27;meets&#x27;,&#x27;Meets expectations&#x27;)}${i===0?`&lt;label&gt;Retention target&lt;input id=&quot;rs-target&quot; value=&quot;${e(s.target)}&quot; placeholder=&quot;Not set — add the agreed target&quot;&gt;&lt;/label&gt;&lt;div class=&quot;rs-muted&quot; style=&quot;font-size:11px;margin-top:6px&quot;&gt;No target was included in the source job description.&lt;/div&gt;`:&#x27;&#x27;}${field(i,&#x27;exceeds&#x27;,&#x27;Exceeds expectations · optional&#x27;,2)}&lt;div class=&quot;rs-muted&quot; style=&quot;font-size:11px;margin-top:9px&quot;&gt;${i===2?&#x27;Shared company value · role-level wording proposed for review&#x27;:&#x27;AI draft from your job description · review the wording&#x27;}&lt;/div&gt;&lt;/div&gt;`).join(&#x27;&#x27;)}&lt;/section&gt;&lt;aside class=&quot;rs-panel rs-coach&quot;&gt;&lt;div class=&quot;rs-eyebrow&quot;&gt;AI thought partner&lt;/div&gt;&lt;h2&gt;${s.analyzed?&#x27;Your updated draft&#x27;:&#x27;One decision to make&#x27;}&lt;/h2&gt;&lt;p&gt;${s.target?&#x27;You’ve supplied a retention target. Check that its measurement period and the accounts it applies to are clear.&#x27;:&#x27;The job description asks this role to own renewals, but doesn’t define a retention target.&#x27;}&lt;/p&gt;&lt;h3&gt;${s.target?&#x27;Is the target ready to use?&#x27;:&#x27;Is there an agreed retention target?&#x27;}&lt;/h3&gt;&lt;p&gt;${s.target?&#x27;Your wording has been preserved. Review the full expectations before approving.&#x27;:&#x27;Add it to the draft, or set a time to come back. The role can still be put into use.&#x27;}&lt;/p&gt;&lt;label&gt;Revisit this decision&lt;select id=&quot;rs-followup&quot;&gt;&lt;option value=&quot;&quot;&gt;Choose a follow-up…&lt;/option&gt;&lt;option ${s.followup===&#x27;In one week&#x27;?&#x27;selected&#x27;:&#x27;&#x27;}&gt;In one week&lt;/option&gt;&lt;option ${s.followup===&#x27;Before the next 1:1&#x27;?&#x27;selected&#x27;:&#x27;&#x27;}&gt;Before the next 1:1&lt;/option&gt;&lt;option ${s.followup===&#x27;Before assessment preparation&#x27;?&#x27;selected&#x27;:&#x27;&#x27;}&gt;Before assessment preparation&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;p style=&quot;margin-top:12px;color:var(--rs-muted)&quot;&gt;${s.followup?&#x27;This decision will stay in Needs review until the target is set.&#x27;:&#x27;An unset target is never treated as a performance standard.&#x27;}&lt;/p&gt;${s.analyzed?&#x27;&lt;div class=&quot;rs-message&quot;&gt;Draft saved. Your edits are preserved.&lt;/div&gt;&#x27;:&#x27;&#x27;}&lt;details&gt;&lt;summary&gt;Why these questions?&lt;/summary&gt;&lt;p&gt;Responsibilities came from the JD. “Meets” and “exceeds” wording is proposed for your review. No numeric targets were supplied or generated.&lt;/p&gt;&lt;/details&gt;&lt;/aside&gt;&lt;/div&gt;&lt;div class=&quot;rs-foot&quot;&gt;&lt;button class=&quot;rs-quiet&quot; data-action=&quot;later&quot;&gt;Save &amp; finish later&lt;/button&gt;&lt;div class=&quot;rs-actions&quot;&gt;&lt;button data-action=&quot;analyze&quot;&gt;Save &amp; reanalyze&lt;/button&gt;&lt;button class=&quot;rs-primary&quot; data-action=&quot;to-review&quot;&gt;Review for approval →&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;`;}
+function review(){return `${message()}&lt;button class=&quot;rs-quiet&quot; data-screen=&quot;draft&quot;&gt;← Back to editing&lt;/button&gt;&lt;div class=&quot;rs-heading&quot;&gt;&lt;div&gt;&lt;div class=&quot;rs-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;Customer Success Manager · Level 2&lt;/div&gt;&lt;h1&gt;Ready to put into practice?&lt;/h1&gt;&lt;p&gt;Review the expectations your coaching and assessments will use.&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;rs-columns&quot;&gt;&lt;section class=&quot;rs-panel&quot;&gt;${s.items.map((it,i)=&gt;`&lt;article class=&quot;rs-review-item&quot;&gt;&lt;div class=&quot;rs-itemhead&quot;&gt;&lt;h3&gt;${e(it.title)}&lt;/h3&gt;&lt;button class=&quot;rs-quiet&quot; data-edit=&quot;${i}&quot;&gt;Edit&lt;/button&gt;&lt;/div&gt;&lt;p class=&quot;rs-description&quot;&gt;${e(it.responsibility)}&lt;/p&gt;&lt;small&gt;Meets expectations&lt;/small&gt;&lt;p&gt;${e(it.meets)}&lt;/p&gt;${i===0?`&lt;small&gt;Retention target&lt;/small&gt;&lt;p&gt;${s.target?e(s.target):&#x27;&lt;span class=&quot;rs-badge rs-warn&quot;&gt;Not set · excluded from evaluation&lt;/span&gt;&#x27;}&lt;/p&gt;`:&#x27;&#x27;}${it.exceeds?`&lt;small&gt;Exceeds expectations&lt;/small&gt;&lt;p&gt;${e(it.exceeds)}&lt;/p&gt;`:&#x27;&lt;p class=&quot;rs-muted&quot;&gt;Exceeds expectations: not defined.&lt;/p&gt;&#x27;}&lt;/article&gt;`).join(&#x27;&#x27;)}&lt;/section&gt;&lt;aside&gt;&lt;section class=&quot;rs-panel ${s.target?&#x27;&#x27;:&#x27;rs-attention&#x27;}&quot;&gt;&lt;h2&gt;${s.target?&#x27;Target supplied&#x27;:&#x27;One detail remains open&#x27;}&lt;/h2&gt;&lt;p&gt;${s.target?e(s.target):&#x27;Retention target&#x27;}&lt;/p&gt;${s.target?&#x27;&lt;p class=&quot;rs-muted&quot;&gt;Included in the expectations you approve.&lt;/p&gt;&#x27;:`&lt;p&gt;The responsibility can be used now. A numerical retention result will not be evaluated until a target is defined and approved.&lt;/p&gt;&lt;label&gt;Bring this back&lt;select id=&quot;rs-followup&quot;&gt;&lt;option value=&quot;&quot;&gt;Choose a follow-up…&lt;/option&gt;${[&#x27;In one week&#x27;,&#x27;Before the next 1:1&#x27;,&#x27;Before assessment preparation&#x27;].map(x=&gt;`&lt;option ${s.followup===x?&#x27;selected&#x27;:&#x27;&#x27;}&gt;${x}&lt;/option&gt;`).join(&#x27;&#x27;)}&lt;/select&gt;&lt;/label&gt;`}&lt;/section&gt;&lt;section class=&quot;rs-panel&quot;&gt;&lt;h3&gt;After approval&lt;/h3&gt;&lt;p class=&quot;rs-muted&quot;&gt;Used in 1:1 preparation, development, and assessments for this role and level.&lt;/p&gt;&lt;p class=&quot;rs-muted&quot;&gt;Future changes go through review before replacing these expectations.&lt;/p&gt;&lt;/section&gt;&lt;/aside&gt;&lt;/div&gt;&lt;div class=&quot;rs-check&quot;&gt;&lt;input type=&quot;checkbox&quot; id=&quot;rs-ack&quot; ${s.ack?&#x27;checked&#x27;:&#x27;&#x27;}&gt;&lt;label for=&quot;rs-ack&quot;&gt;I’ve reviewed these expectations${s.target?&#x27;&#x27;:&#x27;, including the unresolved retention target&#x27;}.&lt;/label&gt;&lt;/div&gt;&lt;div id=&quot;rs-error&quot; role=&quot;alert&quot; style=&quot;color:var(--rs-amber)&quot;&gt;&lt;/div&gt;&lt;div class=&quot;rs-foot&quot;&gt;&lt;button class=&quot;rs-quiet&quot; data-action=&quot;later&quot;&gt;Save &amp; finish later&lt;/button&gt;&lt;button class=&quot;rs-primary&quot; data-action=&quot;approve&quot;&gt;Approve expectations&lt;/button&gt;&lt;/div&gt;`;}
+function render(){root.classList.toggle(&#x27;rs-compact&#x27;,design.density===&#x27;Compact&#x27;);root.classList.toggle(&#x27;rs-inline-coach&#x27;,design.coaching===&#x27;Above the draft&#x27;);root.querySelectorAll(&#x27;[data-screen].rs-step&#x27;).forEach(b=&gt;{if(b.dataset.screen===s.screen)b.setAttribute(&#x27;aria-current&#x27;,&#x27;step&#x27;);else b.removeAttribute(&#x27;aria-current&#x27;);});view.innerHTML=s.screen===&#x27;overview&#x27;?overview():s.screen===&#x27;draft&#x27;?draft():review();}
+root.addEventListener(&#x27;input&#x27;,ev=&gt;{const t=ev.target;if(t.id===&#x27;rs-ack&#x27;||t.id===&#x27;rs-followup&#x27;)return;if(t.dataset.item!==undefined){s.items[+t.dataset.item][t.dataset.key]=t.value;s.ack=false;}if(t.id===&#x27;rs-target&#x27;){s.target=t.value;s.ack=false;}persist();});
+root.addEventListener(&#x27;change&#x27;,ev=&gt;{const t=ev.target;if(t.id===&#x27;rs-followup&#x27;){s.followup=t.value;s.ack=false;render();}if(t.id===&#x27;rs-ack&#x27;)s.ack=t.checked;persist();});
+root.addEventListener(&#x27;toggle&#x27;,ev=&gt;{if(ev.target.classList?.contains(&#x27;rs-source&#x27;))s.sourceOpen=ev.target.open;},true);
+root.addEventListener(&#x27;click&#x27;,ev=&gt;{const b=ev.target.closest(&#x27;button&#x27;);if(!b)return;if(b.dataset.screen){s.screen=b.dataset.screen;s.notice=&#x27;&#x27;;render();persist();return;}if(b.dataset.edit!==undefined){s.screen=&#x27;draft&#x27;;s.notice=&#x27;&#x27;;render();view.querySelector(`[data-item=&quot;${b.dataset.edit}&quot;]`)?.focus();persist();return;}switch(b.dataset.action){case&#x27;new&#x27;:s.screen=&#x27;draft&#x27;;s.notice=&#x27;Sample new-role draft, after importing a job description. Edit the example below.&#x27;;break;case&#x27;later&#x27;:s.saved=true;s.screen=&#x27;overview&#x27;;s.notice=&#x27;Draft saved. You can continue from Needs review.&#x27;;break;case&#x27;analyze&#x27;:s.saved=true;s.analyzed=true;s.notice=&#x27;Simulated reanalysis complete. Your edits are saved; the coaching question reflects the target you supplied or left open.&#x27;;break;case&#x27;to-review&#x27;:s.screen=&#x27;review&#x27;;s.notice=&#x27;&#x27;;break;case&#x27;approve&#x27;:if(!s.ack||(!s.target&amp;&amp;!s.followup)){root.querySelector(&#x27;#rs-error&#x27;).textContent=!s.target&amp;&amp;!s.followup?&#x27;Choose when to revisit the missing target, then confirm your review.&#x27;:&#x27;Confirm that you’ve reviewed the expectations.&#x27;;return;}s.approved=true;s.saved=true;s.screen=&#x27;overview&#x27;;s.notice=s.target?&#x27;Expectations approved in this walkthrough. The role is ready to use.&#x27;:`Expectations approved in this walkthrough. Retention target remains in Needs review · ${s.followup}.`;break;default:return;}render();persist();});
+window.addEventListener(&#x27;openai:set_globals&#x27;,ev=&gt;{if(ev.detail?.globals?.widgetState){restore(ev.detail.globals.widgetState);render();}});
+render();if(globalThis.Tweak){const t=new Tweak({container:root,onChange:()=&gt;{render();persist();}});t.addSelect(design,&#x27;coaching&#x27;,{label:&#x27;Coaching placement&#x27;,options:[&#x27;Alongside the draft&#x27;,&#x27;Above the draft&#x27;]});t.addSelect(design,&#x27;density&#x27;,{label:&#x27;Spacing&#x27;,options:[&#x27;Comfortable&#x27;,&#x27;Compact&#x27;]});}
+})();
+&lt;/script&gt;
+&lt;/div&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (event) =&gt; {
+    for (const target of event.composedPath()) {
+      if (target?.nodeType === Node.ELEMENT_NODE) {
+        const trigger = target.closest(&quot;[data-tooltip]&quot;);
+        if (trigger) return trigger;
+      }
+    }
+    return null;
+  };
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handlers = {
+    pointerover: handlePointerOpen,
+    pointerdown: handlePointer,
+    pointercancel: handlePointer,
+    click: handleTouchClick,
+    pointerout: handleLeave,
+    focusin: handleFocusIn,
+    focusout: handleLeave,
+    keydown: handleKeyDown,
+    contextmenu: handleContextMenu,
+  };
+  const roots = new Map();
+  const handledEvents = new WeakSet();
+  const handleEvent = (event) =&gt; {
+    if (handledEvents.has(event)) return;
+    handledEvents.add(event);
+    handlers[event.type](event);
+  };
+  const discoverRoots = (node) =&gt; {
+    if (node.shadowRoot) listen(node.shadowRoot);
+    for (const element of node.querySelectorAll(&quot;*&quot;)) {
+      if (element.shadowRoot) listen(element.shadowRoot);
+    }
+  };
+  const listen = (root) =&gt; {
+    if (roots.has(root)) return;
+    for (const type of Object.keys(handlers)) root.addEventListener(type, handleEvent);
+    const observer = new window.MutationObserver((records) =&gt; {
+      for (const { addedNodes } of records) {
+        for (const node of addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) discoverRoots(node);
+        }
+      }
+      for (const [root, cleanup] of roots) {
+        if (root.host &amp;&amp; !root.host.isConnected) {
+          cleanup();
+          roots.delete(root);
+        }
+      }
+      if (activeTrigger &amp;&amp; !activeTrigger.isConnected) closeTooltip(false);
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    roots.set(root, () =&gt; {
+      observer.disconnect();
+      for (const type of Object.keys(handlers)) root.removeEventListener(type, handleEvent);
+    });
+    discoverRoots(root);
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    for (const cleanup of roots.values()) cleanup();
+    roots.clear();
+    tooltip = null;
+  };
+
+  // Events between children of one shadow root never reach the document.
+  listen(document);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+<script>(() => {
+  const frame = document.getElementById("codex-visualization");
+  if (!(frame instanceof HTMLIFrameElement)) {
+    return;
+  }
+  let viewportHeight = globalThis.innerHeight;
+  const storageKey = `codex:visualization-widget-state-v2:${JSON.stringify([
+    globalThis.location.pathname,
+    globalThis.location.search,
+  ])}`;
+  const parseState = (serializedState) => {
+    if (
+      typeof serializedState !== "string" ||
+      new TextEncoder().encode(serializedState).length > 16 * 1024
+    ) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    /** @type {unknown} */
+    const state = JSON.parse(serializedState);
+    if (
+      state == null ||
+      typeof state !== "object" ||
+      Array.isArray(state) ||
+      ("imageIds" in state &&
+        (!Array.isArray(state.imageIds) || state.imageIds.length > 0))
+    ) {
+      throw new TypeError("Widget state must be a JSON object");
+    }
+    const storedState = { modelContent: null, privateContent: null, ...state };
+    const canonicalState = JSON.stringify(
+      storedState,
+      (_key, /** @type {unknown} */ value) => {
+        if (typeof value === "number" && !Number.isFinite(value)) {
+          throw new TypeError("Widget state must contain finite numbers");
+        }
+        return value;
+      },
+    );
+    if (new TextEncoder().encode(canonicalState).length > 16 * 1024) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    return storedState;
+  };
+  let storage = null;
+  let state = null;
+  try {
+    const localStorage = globalThis.localStorage;
+    const probeKey = `${storageKey}:probe`;
+    localStorage.setItem(probeKey, "1");
+    localStorage.removeItem(probeKey);
+    storage = localStorage;
+    const savedState = storage.getItem(storageKey);
+    if (savedState != null) {
+      try {
+        state = parseState(savedState);
+      } catch {
+        // Invalid saved state does not disable future writes.
+      }
+    }
+  } catch {
+    storage = null;
+  }
+  const initialGlobals = {
+    widgetState: state,
+    statePersistence: storage == null ? "none" : "local",
+  };
+
+  const channel = new MessageChannel();
+  channel.port1.addEventListener("message", (event) => {
+    const data = event.data;
+    if (typeof data !== "object" || data == null) {
+      return;
+    }
+    if (data.type === "widget-state-write") {
+      if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+        return;
+      }
+      let ok = false;
+      try {
+        if (storage != null) {
+          const state = parseState(data.state);
+          storage.setItem(storageKey, JSON.stringify(state));
+          ok = true;
+        }
+      } catch {
+        // Storage denial, quota limits, and invalid state return a failed receipt.
+      }
+      channel.port1.postMessage({
+        type: "widget-state-result",
+        id: data.id,
+        ok,
+      });
+      return;
+    }
+    if (data.type === "height") {
+      const height = data.height;
+      if (
+        typeof height === "number" &&
+        Number.isFinite(height) &&
+        height >= 0 &&
+        height <= 10_000
+      ) {
+        frame.style.height = Math.ceil(height) + "px";
+      }
+      return;
+    }
+    if (data.type === "scroll-to") {
+      const top = data.top;
+      if (
+        typeof top === "number" &&
+        Number.isFinite(top) &&
+        top >= 0 &&
+        globalThis.navigator.userActivation?.isActive === true
+      ) {
+        globalThis.scrollTo({
+          top: Math.ceil(
+            globalThis.scrollY + frame.getBoundingClientRect().top + top,
+          ),
+        });
+      }
+      return;
+    }
+    if (data.type === "open-external") {
+      const rawHref = data.href;
+      if (typeof rawHref !== "string") {
+        return;
+      }
+      let href;
+      try {
+        const url = new URL(rawHref, document.baseURI);
+        if (url.protocol !== "https:") {
+          return;
+        }
+        href = url.href;
+      } catch {
+        return;
+      }
+      if (globalThis.navigator.userActivation?.isActive === true) {
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.rel = "noopener noreferrer";
+        anchor.target = "_blank";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+      return;
+    }
+    if (data.type === "follow-up") {
+      const prompt = data.prompt;
+      if (
+        typeof prompt !== "string" ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      const title = data.title;
+      globalThis.prompt(typeof title === "string" ? title : prompt, prompt);
+    }
+  });
+  channel.port1.start();
+  const srcdoc = frame.dataset.srcdoc;
+  if (srcdoc == null) {
+    return;
+  }
+  globalThis.addEventListener("resize", () => {
+    const height = Number.parseFloat(frame.style.height);
+    if (!Number.isFinite(height) || height <= viewportHeight) {
+      frame.style.removeProperty("height");
+    }
+    viewportHeight = globalThis.innerHeight;
+    channel.port1.postMessage({ type: "measure" });
+  });
+  frame.addEventListener(
+    "load",
+    () => {
+      frame.contentWindow?.postMessage(
+        { type: "codex-visualization-initialize" },
+        "*",
+        [channel.port2],
+      );
+    },
+    { once: true },
+  );
+  // Match the trusted bootstrap element, not the same text in an authored title.
+  frame.srcdoc = srcdoc.replace(
+    '<script type="application/json" id="codex-visualization-widget-state">__CODEX_VISUALIZATION_WIDGET_STATE__<\/script>',
+    () =>
+      '<script type="application/json" id="codex-visualization-widget-state">' +
+      JSON.stringify(initialGlobals).replaceAll("<", "\\u003c") +
+      "<\/script>",
+  );
+  delete frame.dataset.srcdoc;
+})();
+</script>
+</body>
+</html>

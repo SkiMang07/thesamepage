@@ -43,6 +43,7 @@ never all at once:
 ```
 one-on-ones.md      scheduling, recurrence, prep, the call, wrap-up, carry-forward
 commitments.md      who owes what, editing, the commitments table (Mission Control, Team)
+onboarding.md       first run, /app/start, setup steps 4–6, states, setup prompts, wrap-up reminder
 team.md             /app/team — roster, goals, meetings, callouts, IC invites
 mission-control.md  /app/dashboard — action brief, ranking, dispositions, rollback
 context-engine.md   document ingest, extraction, retrieval, the Brain

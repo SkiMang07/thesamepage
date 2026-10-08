@@ -393,7 +393,7 @@ is not built (`/app/ic` is a static placeholder).
 Manager login at `/app/login` is the magic link. Sign-in and sign-up emails link
 to `/auth/confirm`, which verifies the token hash so the link works on any
 device; a manager with no direct reports lands on `/app/start` (first run,
-`docs/ONBOARDING_SCOPING.md`), everyone else on Mission Control. **Use a
+`docs/systems/onboarding.md`), everyone else on Mission Control. **Use a
 password instead** (`supabase.auth.signInWithPassword()`, for demo and training
 accounts) only shows on a browser that has signed in with a password before, or
 at `/app/login?password`, so a new manager never meets a password field.

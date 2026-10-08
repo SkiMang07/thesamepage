@@ -1,6 +1,6 @@
 "use client";
 
-// First run — docs/ONBOARDING_SCOPING.md, design in
+// First run — docs/systems/onboarding.md, design in
 // docs/design-proposals/2026-09-29-first-run/prototype.html.
 //
 // A manager with no direct reports lands here instead of on an empty Mission

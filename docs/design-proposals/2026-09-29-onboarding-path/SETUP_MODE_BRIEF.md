@@ -2,9 +2,9 @@
 
 ## Status
 
-Direction agreed with Andrew on 2026-09-29 after a review by the VP of Customer Success seat. Chunks A and B are built (2026-09-29; see `docs/ONBOARDING_SCOPING.md` §11 and `CHUNK_B_PLAN.md`); C and D are not. Andrew said nothing is locked and it will iterate. Where a point is marked PROPOSED, confirm it with Andrew before building; everything else is his stated decision.
+Direction agreed with Andrew on 2026-09-29 after a review by the VP of Customer Success seat. Chunks A and B are built (2026-09-29; see `docs/archive/scoping/ONBOARDING_SCOPING.md` §11 and `CHUNK_B_PLAN.md`); C and D are not. Andrew said nothing is locked and it will iterate. Where a point is marked PROPOSED, confirm it with Andrew before building; everything else is his stated decision.
 
-Full reasoning: `~/Desktop/Obsidian/main/02 Areas/Digital Team/vp-customer-success/reviews/2026-09-29-onboarding-soup-to-nuts.md` (read the review and both addenda) and the seat's log `decisions.md` in the same folder. Current built state: `docs/ONBOARDING_SCOPING.md` section 11 and this folder's `BUILD_BRIEF.md`.
+Full reasoning: `~/Desktop/Obsidian/main/02 Areas/Digital Team/vp-customer-success/reviews/2026-09-29-onboarding-soup-to-nuts.md` (read the review and both addenda) and the seat's log `decisions.md` in the same folder. Current built state: `docs/archive/scoping/ONBOARDING_SCOPING.md` section 11 and this folder's `BUILD_BRIEF.md`.
 
 ## Definitions
 

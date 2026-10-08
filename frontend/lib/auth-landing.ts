@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Where a manager lands after signing in, when the link didn't ask for a
 // specific page. Zero direct reports means first run: /app/start asks who the
 // next 1:1 is with instead of opening an empty Mission Control
-// (docs/ONBOARDING_SCOPING.md). Counted through the manager's own session, so
+// (docs/systems/onboarding.md). Counted through the manager's own session, so
 // RLS applies and no service role is involved. Any failure falls back to the
 // dashboard, which redirects to /app/start itself when its brief is empty.
 export async function landingPath(supabase: SupabaseClient): Promise<string> {
