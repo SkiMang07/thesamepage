@@ -78,6 +78,7 @@ AI_DRAFT_CLIENT_SURFACES = (
     "development_plan",
     "development_note",
     "scribe_proposal",
+    "team_goal_suggestions",
 )
 AI_DRAFT_SERVER_SURFACES = ("assessment_item", "role_suggestion", "document_extraction", "notes_dump", "org_goals")
 AI_DRAFT_OUTCOMES = ("accepted", "discarded", "abandoned")

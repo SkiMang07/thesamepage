@@ -20,8 +20,18 @@
 // format and unit are locked here (and in the API and database) so a stored
 // number never silently changes meaning; the wording and target stay
 // editable, and every surface calls the target the "current" one.
+//
+// A new goal can start from a suggestion (the team-goals step in setup,
+// lib/goalDraft.ts): the form opens filled in, says where it came from, and
+// leaves the target for the manager to set beside the role's bar. Saving is
+// still "Add goal" here.
+//
+// "This reads like an expectation": a team or individual goal with no due date
+// that reads as ongoing, or repeats a role's expectation, is stopped once on
+// save. The manager adds a date, opens the role instead, or saves it anyway.
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import NoteField from "@/components/NoteField";
 import { OTHER_UNITS_HEADING, type RelativeUnit, type UnitRelation } from "@/lib/unitRelation";
 import type {
@@ -35,7 +45,8 @@ import type {
   GoalStatus,
   OrgUnit,
 } from "@/lib/api";
-import { BTN_PRIMARY, INPUT, LABEL } from "@/lib/tokens";
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL } from "@/lib/tokens";
+import { readsLikeExpectation, type ExpectationOverlap, type ExpectationRef, type GoalDraft } from "@/lib/goalDraft";
 import {
   DIRECTION_LABEL,
   FORMAT_LABEL,
@@ -67,7 +78,14 @@ type Values = {
   measure: MeasureDraft;
 };
 
-export type GoalFormDefaults = { level: GoalLevel; orgUnitId?: string; directReportId?: string; parentGoalId?: string };
+export type GoalFormDefaults = {
+  level: GoalLevel;
+  orgUnitId?: string;
+  directReportId?: string;
+  parentGoalId?: string;
+  // A suggestion to start from (lib/goalDraft.ts). Nothing is saved until "Add goal".
+  draft?: GoalDraft;
+};
 
 const LEVEL_RANK: Record<GoalLevel, number> = { individual: 0, team: 1, department: 2, company: 3 };
 
@@ -101,7 +119,7 @@ function initialValues(goal: Goal | null | undefined, defaults: GoalFormDefaults
     return of.length === 1 ? of[0].id : "";
   };
   return {
-    title: goal?.title ?? "",
+    title: goal?.title ?? defaults.draft?.title ?? "",
     description: goal?.description ?? "",
     successMetrics: goal?.success_metrics ?? "",
     level: goal?.level ?? defaults.level,
@@ -111,15 +129,25 @@ function initialValues(goal: Goal | null | undefined, defaults: GoalFormDefaults
       : defaults.orgUnitId ?? (defaults.level === "team" || defaults.level === "department" ? onlyUnit(defaults.level) : ""),
     parentGoalId: goal ? goal.parent_goal_id ?? "" : defaults.parentGoalId ?? "",
     status: goal?.status ?? "active",
-    dueDate: goal?.due_date ?? "",
-    measure: {
-      on: !!m,
-      label: m?.label ?? "",
-      format: m?.format ?? "count",
-      unit: m?.format === "percent" ? "" : m?.unit ?? "",
-      target: m ? String(m.target) : "",
-      direction: m?.direction ?? "at_least",
-    },
+    dueDate: goal?.due_date ?? (goal ? "" : defaults.draft?.dueDate ?? ""),
+    measure: m || goal || !defaults.draft?.measure
+      ? {
+          on: !!m,
+          label: m?.label ?? "",
+          format: m?.format ?? "count",
+          unit: m?.format === "percent" ? "" : m?.unit ?? "",
+          target: m ? String(m.target) : "",
+          direction: m?.direction ?? "at_least",
+        }
+      : {
+          // From a suggestion: what is counted and how, with the target left blank.
+          on: true,
+          label: defaults.draft.measure.label,
+          format: defaults.draft.measure.format,
+          unit: "",
+          target: "",
+          direction: defaults.draft.measure.direction,
+        },
   };
 }
 
@@ -149,6 +177,7 @@ export default function GoalForm({
   onCancel,
   onDirtyChange,
   vocabulary,
+  expectations = [],
 }: {
   goal?: Goal | null;
   defaults: GoalFormDefaults;
@@ -161,11 +190,18 @@ export default function GoalForm({
   onCancel: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   vocabulary?: string;
+  /** The roles' expectations, for the "reads like an expectation" check. */
+  expectations?: ExpectationRef[];
 }) {
   const start = useMemo(() => initialValues(goal, defaults, orgUnits), [goal?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [v, setV] = useState<Values>(start);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The overlap check asks once per form; "Save without a date" answers it.
+  const [overlap, setOverlap] = useState<ExpectationOverlap | null>(null);
+  const answered = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const draft = goal ? undefined : defaults.draft;
   const isEdit = !!goal;
   const locked = isEdit && !!goal?.measure && (goal?.reading_count ?? 0) > 0;
   const dirty = JSON.stringify(v) !== JSON.stringify(start);
@@ -253,6 +289,14 @@ export default function GoalForm({
     if (v.level === "department" && !v.orgUnitId && departments.length) return setError("Pick the department this goal is for.");
     const measure = buildMeasure();
     if (!measure.ok) return setError(measure.error);
+    if (!answered.current && (v.level === "team" || v.level === "individual")) {
+      const hit = readsLikeExpectation(v.title, v.dueDate, expectations);
+      if (hit) {
+        setError(null);
+        return setOverlap(hit);
+      }
+    }
+    setOverlap(null);
     const body: GoalIn = {
       title: v.title.trim(),
       description: v.description.trim() || null,
@@ -284,7 +328,16 @@ export default function GoalForm({
   const targetChanged = isEdit && goal?.measure && md.on && md.target.trim() !== String(goal.measure.target);
 
   return (
-    <form noValidate onSubmit={handleSubmit} className="space-y-5" aria-label={isEdit ? "Edit goal" : "New goal"}>
+    <form ref={formRef} noValidate onSubmit={handleSubmit} className="space-y-5" aria-label={isEdit ? "Edit goal" : "New goal"}>
+      {draft && (
+        <p className="rounded-md bg-sunken px-3 py-2 text-xs text-ink-secondary">
+          Started from{" "}
+          {draft.source.kind === "goal"
+            ? `a goal above you${draft.source.where ? ` (${draft.source.where})` : ""}`
+            : `${draft.source.role ? `the ${draft.source.role} role’s` : "an"} expectation`}
+          : <span className="text-ink">{draft.source.label}</span>. Edit anything. Nothing is saved until you add it.
+        </p>
+      )}
       <div>
         <label htmlFor="goal-title" className={LABEL}>Title</label>
         <input id="goal-title" value={v.title} onChange={(e) => set({ title: e.target.value })} className={INPUT} placeholder="e.g. Make customer handoffs consistent" />
@@ -448,6 +501,9 @@ export default function GoalForm({
                 onChange={(e) => setMeasure({ target: e.target.value })}
                 className={INPUT}
               />
+              {draft?.targetHint && !isEdit && (
+                <p className="mt-1 text-xs text-ink-muted">The role’s bar is {draft.targetHint}. Set the target this goal pushes to.</p>
+              )}
             </div>
             {locked && (
               <p className="text-xs text-ink-muted sm:col-span-2">
@@ -464,6 +520,46 @@ export default function GoalForm({
       </fieldset>
 
       <div role="alert">{error && <p className="text-sm text-red-700">{error}</p>}</div>
+
+      {overlap && (
+        <div aria-live="polite" className="space-y-2 rounded-lg border border-amber-500 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-semibold text-ink">This reads like an expectation</p>
+          <p className="text-[13px] text-ink-body">
+            {overlap.match
+              ? `It has no due date and repeats what ${overlap.match.role ? `the ${overlap.match.role} role` : "a role"} already expects: ${overlap.match.name}.`
+              : "It has no due date and reads as ongoing."}{" "}
+            Expectations are the standard every period. A goal changes something by a date.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              onClick={() => {
+                setOverlap(null);
+                document.getElementById("goal-due")?.focus();
+              }}
+            >
+              Add a due date
+            </button>
+            <button
+              type="button"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-sunken hover:text-ink"
+              onClick={() => {
+                answered.current = true;
+                formRef.current?.requestSubmit();
+              }}
+            >
+              Save it as a goal anyway
+            </button>
+            <Link
+              href={overlap.match?.roleLevelId ? `/app/expectations/${overlap.match.roleLevelId}` : "/app/expectations"}
+              className="text-sm font-medium text-brand hover:text-brand-hover"
+            >
+              It’s the role’s standard: open the role instead
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <button type="submit" disabled={saving} className={BTN_PRIMARY}>

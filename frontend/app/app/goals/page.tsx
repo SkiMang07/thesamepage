@@ -34,7 +34,11 @@ import {
   createGoal,
   createGoalCheckIn,
   deleteGoal,
+  expectationName,
   getDirectReports,
+  getExpectations,
+  getRoleLevels,
+  reportAiDraft,
   getGoalUpdates,
   getGoals,
   getLedOrgUnits,
@@ -65,6 +69,8 @@ import { relativeUnits } from "@/lib/unitRelation";
 import GoalUpdateForm, { UpdateDraft, isDraftDirty } from "@/components/goals/GoalUpdateForm";
 import GoalDetail from "@/components/goals/GoalDetail";
 import GoalForm, { type GoalFormDefaults } from "@/components/goals/GoalForm";
+import { takeGoalDraft, type ExpectationRef, type GoalDraft } from "@/lib/goalDraft";
+import { editBucket } from "@/lib/aiDraftTelemetry";
 import UpdatesFeed from "@/components/goals/UpdatesFeed";
 import StillCurrent from "@/components/goals/StillCurrent";
 import Dialog from "@/components/goals/Dialog";
@@ -91,7 +97,7 @@ function errorText(e: unknown, fallback: string) {
 }
 
 function readUrl() {
-  if (typeof window === "undefined") return { level: null, scope: null, goal: null, isNew: false, supports: null };
+  if (typeof window === "undefined") return { level: null, scope: null, goal: null, isNew: false, supports: null, draft: false };
   const q = new URLSearchParams(window.location.search);
   const level = q.get("level");
   return {
@@ -102,6 +108,8 @@ function readUrl() {
     // so every "Add a goal" link elsewhere lands on the right form.
     isNew: q.get("new") === "1",
     supports: q.get("supports"),
+    // A suggestion from the team-goals step waits in sessionStorage (lib/goalDraft.ts).
+    draft: q.get("draft") === "1",
   };
 }
 
@@ -160,6 +168,10 @@ export default function GoalsPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editor, setEditor] = useState<Editor>(null);
   const [goalFormDirty, setGoalFormDirty] = useState(false);
+  // The suggestion the New goal form started from, until it is saved or left.
+  const startedFrom = useRef<GoalDraft | null>(null);
+  // Every role's expectations, for the form's "reads like an expectation" check.
+  const [expectationRefs, setExpectationRefs] = useState<ExpectationRef[]>([]);
 
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, UpdateDraft>>({});
@@ -219,13 +231,17 @@ export default function GoalsPage() {
     else if (url.isNew) {
       const lvl = url.level ?? "individual";
       const id = url.scope && url.scope !== "all" && url.scope !== "none" ? url.scope : undefined;
+      const draft = url.draft ? takeGoalDraft() : null;
+      startedFrom.current = draft;
+      const parent = draft?.parentGoalId ?? url.supports;
       setEditor({
         kind: "new",
         defaults: {
           level: lvl,
           directReportId: lvl === "individual" ? id : undefined,
           orgUnitId: lvl === "team" || lvl === "department" ? id : undefined,
-          parentGoalId: url.supports && g.value.some((x) => x.id === url.supports) ? url.supports : undefined,
+          parentGoalId: parent && g.value.some((x) => x.id === parent) ? parent : undefined,
+          draft: draft ?? undefined,
         },
       });
     }
@@ -234,6 +250,7 @@ export default function GoalsPage() {
       const q = new URLSearchParams(window.location.search);
       q.delete("new");
       q.delete("supports");
+      q.delete("draft");
       window.history.replaceState(null, "", `${window.location.pathname}${q.toString() ? `?${q}` : ""}`);
     }
     setLoading(false);
@@ -242,6 +259,35 @@ export default function GoalsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Soft: without them the check still catches undated, ongoing wording.
+  useEffect(() => {
+    Promise.all([getExpectations("metrics"), getExpectations("skills"), getRoleLevels()])
+      .then(([metrics, skills, roles]) => {
+        const label = new Map(roles.map((r) => [r.id, r.job_role]));
+        setExpectationRefs(
+          [...metrics, ...skills]
+            .map((e) => ({ name: expectationName(e), roleLevelId: e.role_level_id, role: e.role_level_id ? label.get(e.role_level_id) ?? null : null }))
+            .filter((e) => e.name),
+        );
+      })
+      .catch(() => setExpectationRefs([]));
+  }, []);
+
+  // A suggestion from the team-goals step was saved or left (AI-draft telemetry).
+  function resolveStartedFrom(outcome: "accepted" | "abandoned", savedTitle?: string) {
+    const d = startedFrom.current;
+    if (!d) return;
+    startedFrom.current = null;
+    void reportAiDraft({
+      surface: "team_goal_suggestions",
+      outcome,
+      edit_bucket: outcome === "accepted" ? editBucket(d.title, savedTitle) : "none",
+      seconds_to_confirm: Math.max(0, Math.min(86_400, Math.round((Date.now() - d.shownAt) / 1000))),
+      items_drafted: d.drafted,
+      items_kept: outcome === "accepted" ? 1 : 0,
+    });
+  }
 
   // --- unsaved edits ------------------------------------------------------
   const dirtyDraftIds = useMemo(
@@ -544,6 +590,7 @@ export default function GoalsPage() {
       cur.some((g) => g.id === saved.id) ? cur.map((g) => (g.id === saved.id ? { ...g, ...saved } : g)) : [saved, ...cur],
     );
     const wasNew = editor?.kind !== "edit";
+    if (wasNew) resolveStartedFrom("accepted", body.title);
     setGoalFormDirty(false);
     setEditor(null);
     const nextScope = saved.level !== level ? "all" : effectiveScope;
@@ -591,7 +638,10 @@ export default function GoalsPage() {
 
   function leaveEditor() {
     const back = editor?.kind === "edit" ? editor.id : null;
-    guard(() => setDetailId(back));
+    guard(() => {
+      resolveStartedFrom("abandoned");
+      setDetailId(back);
+    });
   }
 
   const renderUpdateForm = (goal: Goal) =>
@@ -707,6 +757,7 @@ export default function GoalsPage() {
                     onCancel={leaveEditor}
                     onDirtyChange={setGoalFormDirty}
                     vocabulary={vocabulary}
+                    expectations={expectationRefs}
                   />
                 )}
               </section>

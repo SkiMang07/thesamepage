@@ -32,10 +32,21 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
 - **Links in.** `goalsHref()` (`lib/goals.ts`) builds every link into the page:
   `?level=&scope=` to land on someone, plus `new=1` to open the New goal form
   prefilled for them and `supports=<goal id>` to set what it supports. `new`
-  and `supports` are one-shot and stripped from the URL after load. The person
+  and `supports` are one-shot and stripped from the URL after load. `draft=1`
+  (from the team-goals step in setup) fills the form from a suggestion held
+  for one read in sessionStorage (`lib/goalDraft.ts`): title, due date,
+  Supports and the measure with its target left blank. The form says where
+  it started from and shows the role's bar beside the target. The person
   page, Team page, setup card, org-goals receipt, prep "Built without" and the
   Mission Control empty state all use it; nothing links to a bare
   `/app/goals` to add a goal.
+- **"This reads like an expectation."** Saving a team or individual goal with
+  no due date that reads as ongoing ("maintain", "every week", "or above") or
+  repeats a role's expectation (two shared words, or all of a short one's)
+  stops once with a notice: add a due date, save it as a goal anyway, or open
+  the role instead. The page reads every role's measured items and skills for
+  the match; without them the wording check still runs (`readsLikeExpectation`,
+  `npm run test:goal-draft`).
 - **Filters and search.** All (open), Needs review, No check-ins, Closed, and a
   search over title, scope, success criterion and measure label.
 - **Updates.** The same check-in rows, newest first, for the level and scope

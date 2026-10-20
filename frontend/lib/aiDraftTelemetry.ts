@@ -15,7 +15,8 @@ export type AiDraftSurface =
   | "beyond_wrapup"
   | "development_plan"
   | "development_note"
-  | "scribe_proposal";
+  | "scribe_proposal"
+  | "team_goal_suggestions";
 
 export type AiDraftOutcome = "accepted" | "discarded" | "abandoned";
 export type EditBucket = "none" | "light" | "moderate" | "heavy";

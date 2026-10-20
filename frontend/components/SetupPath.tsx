@@ -43,6 +43,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OrgGoalsModal from "@/components/OrgGoalsModal";
+import TeamGoalsModal from "@/components/TeamGoalsModal";
 import SetupCompleteModal from "@/components/SetupCompleteModal";
 import SetupIntroModal from "@/components/SetupIntroModal";
 import { formatDay } from "@/components/expectations/shared";
@@ -70,9 +71,10 @@ type StepView = {
   time: string;
   action: string;
   href: string;
-  // The action opens a modal instead of a page: the org-goals modal, or the
-  // notes box aimed at role expectations.
-  modal?: "goals" | "notes";
+  // The action opens a modal instead of a page: the org-goals modal, the
+  // team-goals step (expectations beside goals, suggestions to start from), or
+  // the notes box aimed at role expectations.
+  modal?: "goals" | "team" | "notes";
   // Quieter ways in, shown under the highlighted step's action. One may open
   // a modal instead of a page.
   secondary?: { action: string; href: string; modal?: "notes" }[];
@@ -142,7 +144,9 @@ export function ownGoal(goals: OnboardingSteps["goals"]) {
     level: level as "team" | "department",
     scope: goals.mine?.id ?? null,
     label: `Write your ${word}’s goal`,
-    href: goals.mine ? `/app/goals?level=${level}&scope=${goals.mine.id}&new=1` : "/app/goals?new=1&level=team",
+    // The team-goals step on Mission Control, which then opens the New goal form
+    // set to that unit (TeamGoalsModal). Same link as the server's own_goal_target.
+    href: TEAM_GOAL_HREF,
   };
 }
 
@@ -268,7 +272,7 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
       time: "About 3 minutes",
       action: goals.has_org_goal || goals.parked ? own.label : "Add company or department goals",
       href: own.href,
-      modal: goals.has_org_goal || goals.parked ? undefined : "goals",
+      modal: goals.has_org_goal || goals.parked ? "team" : "goals",
       secondary: !goals.has_org_goal && !goals.has_team_goal && !goals.parked ? [{ action: `Or write your ${own.word}’s goal first`, href: own.href }] : undefined,
       parts: goalParts(goals),
       done: goals.done,
@@ -298,13 +302,16 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
 // Opens the org-goals modal when Mission Control is reached with ?setup=goals,
 // then clears the param. Its own component because useSearchParams needs a
 // Suspense boundary.
-function SetupParamOpener({ onGoals }: { onGoals: () => void }) {
+const TEAM_GOAL_HREF = "/app/dashboard?setup=team-goal";
+
+function SetupParamOpener({ onGoals, onTeam }: { onGoals: () => void; onTeam: () => void }) {
   const params = useSearchParams();
   const router = useRouter();
   const wanted = params.get("setup");
   useEffect(() => {
-    if (wanted === "goals") {
-      onGoals();
+    if (wanted === "goals" || wanted === "team-goal") {
+      if (wanted === "goals") onGoals();
+      else onTeam();
       router.replace("/app/dashboard", { scroll: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -316,6 +323,8 @@ export default function SetupPath() {
   const { onboarding } = useZoneData();
   const router = useRouter();
   const [goalsOpen, setGoalsOpen] = useState(false);
+  // The team-goals step, and the goal above to support (from the org-goals receipt).
+  const [teamGoals, setTeamGoals] = useState<{ supports: string | null } | null>(null);
   const [introClosed, setIntroClosed] = useState(false);
   const [receiptClosed, setReceiptClosed] = useState(false);
   // The header chip or "All steps" brings the full card back for this visit.
@@ -375,7 +384,8 @@ export default function SetupPath() {
   }
 
   function openModal(step: StepView) {
-    setGoalsOpen(true);
+    if (step.modal === "team") setTeamGoals({ supports: null });
+    else setGoalsOpen(true);
   }
 
   function openStep(step: StepView) {
@@ -404,7 +414,7 @@ export default function SetupPath() {
   const overlays = (
     <>
       <Suspense fallback={null}>
-        <SetupParamOpener onGoals={() => setGoalsOpen(true)} />
+        <SetupParamOpener onGoals={() => setGoalsOpen(true)} onTeam={() => setTeamGoals({ supports: null })} />
       </Suspense>
       {introOpen && (
         <SetupIntroModal
@@ -428,8 +438,13 @@ export default function SetupPath() {
           ownGoal={ownGoal(onboarding.steps.goals)}
           groupAboveKnown={!!onboarding.steps.goals.above}
           leadsUnit={!!onboarding.steps.goals.mine}
+          onWriteOwnGoal={(supports) => {
+            setGoalsOpen(false);
+            setTeamGoals({ supports });
+          }}
         />
       )}
+      {teamGoals && <TeamGoalsModal supportsGoalId={teamGoals.supports} onClose={() => setTeamGoals(null)} />}
     </>
   );
 

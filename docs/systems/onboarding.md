@@ -171,8 +171,30 @@ fires once.
   **"Your boss's group (name it)"**: one name, saved as a department above
   your unit (`POST /api/org-units/setup/above`) before the goals apply. The
   receipt's primary action is "Write your team's goal" (or department's),
-  opening the New goal form on your unit with Supports set to a department
-  goal just saved. Your own unit's goals are never drafted.
+  which opens the team-goals step with Supports set to a department goal
+  just saved.
+  **Team-goals step** (`TeamGoalsModal`, `routes/team_goals.py`): your own
+  unit's goal is the second half of step 6, and every way in opens this step
+  on Mission Control (`?setup=team-goal`, also the server's
+  `own_goal_target`): the card's action once goals above you exist (or the
+  step is parked), "Or write your team's goal first", and the org-goals
+  receipt. It sets the job beside this period from your own records
+  (`GET /api/onboarding/team-goals/context`, no AI): up to four expectation
+  lines from the roles your people hold, against your unit's open goals,
+  each side with what it gets you. A quick test line follows ("If hitting it
+  just means everyone doing their job well, it's already an expectation").
+  Then up to three goals to start from (`POST .../team-goals/suggest`, the
+  one AI call, cached per unit for the visit), each from one expectation
+  (raise the bar for a period, close a gap) or one goal above you (your
+  unit's part of it). The server drops a suggestion with a number its source
+  doesn't contain, a date in the title, or a title that repeats an
+  expectation or an existing goal; due dates come only from the end of this
+  or next quarter or a goal above's due date; targets are left blank for the
+  manager, with the role's bar shown beside them. "Use this" opens the New
+  goal form filled in (`lib/goalDraft.ts`, one sessionStorage read); only
+  "Add goal" there saves. With no expectations and no goals above, there is
+  nothing to draft from and the step says so. The footer says individual
+  goals aren't set here and can be added from each person's page.
   **"Don't know yet"** stamps `users.org_goals_unknown_at`: with a team goal
   the step reads "Waiting on your boss" and `next_step` skips it, and an ask
   goes on the next meeting with a boss in Beyond. Adding an org goal clears it.

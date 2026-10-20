@@ -64,6 +64,54 @@ STEP_COLUMN = {step: f"setup_{step}_at" for step in STEP_ORDER}
 ORG_LEVELS = {"company", "department"}
 
 
+def led_scope(units: list[dict], user_id: str) -> dict | None:
+    """The unit you lead and the units above it. Pure.
+
+    "Mine" is the unit you lead (the top one, when you lead a chain; a
+    department you lead wins over a team); "above" is every unit over the
+    top units you lead. None when you lead no unit. Shared by step 6's count
+    (goal_relationship) and the team-goals step (routes/team_goals.py), so
+    the two can never disagree about what is yours and what is above you.
+    """
+    by_id = {u["id"]: u for u in units}
+    led = [u for u in units if u.get("leader_user_id") == user_id]
+    led_ids = {u["id"] for u in led}
+    top = [u for u in led if u.get("parent_unit_id") not in led_ids]
+    if not top:
+        return None
+    mine = next((u for u in top if u["unit_type"] == "department"), None) or sorted(top, key=lambda u: u["name"].lower())[0]
+    above: list[dict] = []
+    seen: set = set()
+    for u in top:
+        current = by_id.get(u.get("parent_unit_id"))
+        while current and current["id"] not in seen and current["id"] not in led_ids:
+            seen.add(current["id"])
+            above.append(current)
+            current = by_id.get(current.get("parent_unit_id"))
+    return {
+        "mine": mine,
+        "path": mine["unit_type"],
+        "top_ids": {u["id"] for u in top},
+        "led_ids": led_ids,
+        "above": above,
+        "above_ids": {u["id"] for u in above},
+        "parent": by_id.get(mine.get("parent_unit_id")),
+    }
+
+
+def counts_as_mine(g: dict, scope: dict) -> bool:
+    if g.get("org_unit_id") in scope["top_ids"]:
+        return True
+    # An older goal saved before it had to name its unit, on the same kind of unit.
+    return not g.get("org_unit_id") and g.get("level") == scope["path"]
+
+
+def counts_as_above(g: dict, scope: dict) -> bool:
+    if g.get("level") == "company" or g.get("org_unit_id") in scope["above_ids"]:
+        return True
+    return scope["path"] == "team" and not g.get("org_unit_id") and g.get("level") == "department"
+
+
 def goal_relationship(units: list[dict], goals: list[dict], user_id: str) -> dict | None:
     """Step 6 counted by relationship, not by unit type. Pure.
 
@@ -75,47 +123,20 @@ def goal_relationship(units: list[dict], goals: list[dict], user_id: str) -> dic
     `units` are org_units (id, name, unit_type, parent_unit_id, leader_user_id);
     `goals` are the org's goals that aren't cancelled (level, org_unit_id).
     """
-    by_id = {u["id"]: u for u in units}
-    led = [u for u in units if u.get("leader_user_id") == user_id]
-    led_ids = {u["id"] for u in led}
-    top = [u for u in led if u.get("parent_unit_id") not in led_ids]
-    if not top:
+    scope = led_scope(units, user_id)
+    if not scope:
         return None
-    # A department you lead decides the path; otherwise your first team.
-    mine = next((u for u in top if u["unit_type"] == "department"), None) or sorted(top, key=lambda u: u["name"].lower())[0]
-    path = mine["unit_type"]
-    mine_ids = {u["id"] for u in top}
-
-    above: list[dict] = []
-    seen: set = set()
-    for u in top:
-        current = by_id.get(u.get("parent_unit_id"))
-        while current and current["id"] not in seen and current["id"] not in led_ids:
-            seen.add(current["id"])
-            above.append(current)
-            current = by_id.get(current.get("parent_unit_id"))
-    above_ids = {u["id"] for u in above}
-
-    def counts_as_mine(g: dict) -> bool:
-        if g.get("org_unit_id") in mine_ids:
-            return True
-        # An older goal saved before it had to name its unit, on the same kind of unit.
-        return not g.get("org_unit_id") and g.get("level") == path
-
-    def counts_as_above(g: dict) -> bool:
-        if g.get("level") == "company" or g.get("org_unit_id") in above_ids:
-            return True
-        return path == "team" and not g.get("org_unit_id") and g.get("level") == "department"
-
+    mine, path = scope["mine"], scope["path"]
+    led_ids = scope["led_ids"]
     under = [u for u in units if u.get("parent_unit_id") == mine["id"] and u["id"] not in led_ids] if path == "department" else []
     under_with_goal = {g.get("org_unit_id") for g in goals} & {u["id"] for u in under}
-    parent = by_id.get(mine.get("parent_unit_id"))
+    parent = scope["parent"]
     return {
         "path": path,
         "mine": {"id": mine["id"], "name": mine["name"]},
-        "above": {"id": parent["id"], "name": parent["name"]} if parent and parent["id"] in above_ids else None,
-        "has_mine": any(counts_as_mine(g) for g in goals),
-        "has_above": any(counts_as_above(g) for g in goals),
+        "above": {"id": parent["id"], "name": parent["name"]} if parent and parent["id"] in scope["above_ids"] else None,
+        "has_mine": any(counts_as_mine(g, scope) for g in goals),
+        "has_above": any(counts_as_above(g, scope) for g in goals),
         "under": {"total": len(under), "with_goal": len(under_with_goal)} if under else None,
     }
 
@@ -325,16 +346,15 @@ def step_target(steps: dict, key: str) -> dict:
 
 
 def own_goal_target(goals: dict) -> dict:
-    """"Write your team's goal" or "Write your department's goal", and the New
-    goal form already set to that unit. Mirrors the setup card."""
-    if goals.get("path") == "department" and goals.get("mine"):
-        return {
-            "label": "Write your department\u2019s goal",
-            "href": f"/app/goals?level=department&scope={goals['mine']['id']}&new=1",
-        }
-    if goals.get("mine"):
-        return {"label": "Write your team\u2019s goal", "href": f"/app/goals?level=team&scope={goals['mine']['id']}&new=1"}
-    return {"label": "Write your team\u2019s goal", "href": "/app/goals?new=1&level=team"}
+    """"Write your team's goal" or "Write your department's goal". Opens the
+    team-goals step on Mission Control (side-by-side with the role's
+    expectations, and suggestions to start from; routes/team_goals.py), which
+    then hands off to the New goal form set to that unit. Mirrors the setup card."""
+    word = "department" if goals.get("path") == "department" and goals.get("mine") else "team"
+    return {"label": f"Write your {word}\u2019s goal", "href": TEAM_GOAL_HREF}
+
+
+TEAM_GOAL_HREF = "/app/dashboard?setup=team-goal"
 
 
 def expectation_queue(

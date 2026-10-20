@@ -1,0 +1,282 @@
+<title>Team Goals Step</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a setup-step modal over a dimmed Mission Control, with a prototype bar to switch states.
+   App dark theme tokens, same vocabulary as 2026-09-29-onboarding-path/prototype.html. Fictional example data throughout. */
+:root{color-scheme:dark;--bg:#182026;--surface:#222b32;--raised:#29333a;--input:#2d373e;--line:#3d4950;--ink:#f2f5f6;--body:#d4dadd;--muted:#aab7be;--faint:#6e7b83;--teal:#72c7bf;--teal-hi:#8fd6cf;--on-teal:#08191b;--tint:#173d3b;--amber:#efc281;--amber-tint:#3a3022;--blue:#93c1f3;--control:#77848c;--scrim:rgba(8,13,16,.72);--bar:#0f161b;
+  --serif:Georgia,"Times New Roman",serif;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;border-radius:6px;padding:9px 12px}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+p{margin:0;color:var(--body)}
+h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}
+h2{font:25px/1.25 var(--serif)}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.6px;color:var(--muted)}
+.eyebrow.teal{color:var(--teal)}
+.meta{font-size:12px;color:var(--muted)}
+.primary{background:var(--teal);color:var(--on-teal);font-weight:600;padding:10px 15px}
+.primary:hover{background:var(--teal-hi)}
+.secondary{border:1px solid var(--control);color:var(--body);padding:9px 13px}
+.secondary:hover{border-color:var(--teal);color:var(--teal)}
+.quiet{color:var(--teal);padding:8px 2px;font-size:13px}
+.quiet:hover{color:var(--teal-hi)}
+
+.pbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:60;padding-block:9px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--bar);border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:70;background:var(--bar)}
+.pbar b{letter-spacing:1.4px;text-transform:uppercase;color:var(--amber);font-weight:600;margin-right:4px}
+.pbar button{font-size:11px;padding:4px 9px;border:1px solid var(--line);color:var(--muted)}
+.pbar button[aria-pressed="true"]{color:var(--teal);border-color:var(--teal)}
+
+/* the dimmed page behind */
+.behind{padding-block:32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));filter:blur(1px);opacity:.35;pointer-events:none;max-width:1100px;margin:0 auto}
+.behind .ghost{height:90px;border-radius:9px;background:var(--surface);margin-bottom:14px}
+.stage{position:fixed;inset:0;background:var(--scrim);z-index:40;overflow-y:auto;padding-top:calc(64px + env(safe-area-inset-top,0px));padding-bottom:40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.modal{max-width:880px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:28px 30px 26px;display:grid;gap:24px}
+@media (max-width:560px){.modal{padding:22px 18px}}
+.mhead{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.mhead .x{color:var(--muted);font-size:18px;padding:2px 8px;line-height:1}
+.mhead .sub{font:16px/1.5 var(--serif);color:var(--body);max-width:62ch;margin-top:8px}
+
+/* contrast: the job vs this period */
+.contrast{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+@media (max-width:680px){.contrast{grid-template-columns:1fr}}
+.side{background:var(--raised);padding:18px 20px;display:grid;gap:10px;align-content:start;min-width:0}
+.side h3{font:19px/1.3 var(--serif);color:var(--ink)}
+.side .from{font-size:12px;color:var(--muted)}
+.side ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.side li{font-size:13px;color:var(--body);display:flex;gap:8px;align-items:baseline}
+.side li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--control);flex-shrink:0;transform:translateY(-1px)}
+.side.period li::before{background:var(--teal)}
+.side .num{font-variant-numeric:tabular-nums;color:var(--ink)}
+.gets{border-top:1px solid var(--line);padding-top:10px;font-size:13px;color:var(--body)}
+.gets b{color:var(--ink);font-weight:600}
+.test{display:flex;gap:12px;align-items:flex-start;background:var(--amber-tint);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--body)}
+.test .tag{font-size:10px;letter-spacing:1.3px;text-transform:uppercase;color:var(--amber);font-weight:600;padding-top:2px;white-space:nowrap}
+
+/* suggestions */
+.sugg-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.sugg-head h3{font:19px/1.3 var(--serif)}
+.cards{display:grid;gap:12px}
+.card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 18px;border:1px solid var(--line);border-radius:8px;padding:16px 18px;background:var(--bg)}
+.card.dismissed{display:none}
+.card .src{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{font-size:11px;border-radius:20px;padding:3px 10px;background:var(--input);color:var(--body);white-space:nowrap}
+.chip.exp{background:var(--input)}
+.chip.org{background:var(--tint);color:var(--teal)}
+.card .t{font-size:15px;font-weight:600;color:var(--ink)}
+.card .facts{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.card .why{font-size:13px;color:var(--body);grid-column:1}
+.card .acts{grid-column:2;grid-row:2/5;display:flex;flex-direction:column;gap:6px;align-items:stretch;justify-content:center}
+@media (max-width:560px){.card{grid-template-columns:1fr}.card .acts{grid-column:1;grid-row:auto;flex-direction:row;flex-wrap:wrap}}
+.notsugg{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:12px}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:18px}
+.indiv{font-size:13px;color:var(--muted);max-width:52ch}
+
+/* form */
+.form{display:grid;gap:16px}
+.field{display:grid;gap:6px;min-width:0}
+.field label{font-size:12px;color:var(--muted)}
+.input{background:var(--input);border:1px solid var(--control);border-radius:5px;padding:10px 12px;width:100%}
+.input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--tint)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:560px){.grid2{grid-template-columns:1fr}}
+.started{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.nudge{border:1px solid var(--amber);background:var(--amber-tint);border-radius:8px;padding:14px 16px;display:grid;gap:10px}
+.nudge .h{font-weight:600;color:var(--ink);font-size:14px}
+.nudge p{font-size:13px}
+.nudge .row{display:flex;gap:10px;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--faint)}
+.toast{font-size:13px;color:var(--teal)}
+
+.empty{border:1px dashed var(--line);border-radius:8px;padding:18px 20px;display:grid;gap:10px}
+.notes{max-width:880px;margin:18px auto 0;font-size:12px;color:var(--muted);display:grid;gap:6px}
+.notes b{color:var(--amber);font-weight:600;letter-spacing:1px;text-transform:uppercase;font-size:10px}
+@media (prefers-reduced-motion:no-preference){.fade{animation:appear .25s ease-out both}@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
+</style>
+
+<div class="pbar" role="toolbar" aria-label="Prototype states">
+  <b>Prototype</b>
+  <button type="button" data-view="step" aria-pressed="true">1 · Goals step</button>
+  <button type="button" data-view="form" aria-pressed="false">2 · Writing the goal</button>
+  <button type="button" data-view="thin" aria-pressed="false">3 · Nothing to draft from</button>
+  <span>Fictional data. Try typing "Maintain CSAT above 92%" in state 2.</span>
+</div>
+
+<div class="behind" aria-hidden="true"><div class="ghost"></div><div class="ghost"></div><div class="ghost" style="height:220px"></div></div>
+
+<div class="stage">
+  <!-- STATE 1: the step -->
+  <section class="modal fade" id="v-step" role="dialog" aria-labelledby="t-step">
+    <div class="mhead">
+      <div>
+        <div class="eyebrow teal">Step 6 of 6 · Goals</div>
+        <h2 id="t-step">Your team's goals for this period</h2>
+        <p class="sub">You've set what the Support Specialist job asks for. Goals are a different thing: what Support · East is pushing to change, by a date.</p>
+      </div>
+      <button type="button" class="x" aria-label="Close">×</button>
+    </div>
+
+    <div class="contrast">
+      <div class="side">
+        <div class="eyebrow">The job · Role expectations</div>
+        <h3>Holds every period</h3>
+        <div class="from">What you set for Support Specialist in step 5</div>
+        <ul>
+          <li><span>CSAT on cases they own: <span class="num">92% or above</span></span></li>
+          <li><span>Median resolution time: <span class="num">8 hours or less</span></span></li>
+          <li><span>Help-centre articles: <span class="num">2 a month</span></span></li>
+        </ul>
+        <div class="gets"><b>What you get:</b> each person is rated against these in assessments, and prep sheets flag when someone slips below the bar.</div>
+      </div>
+      <div class="side period">
+        <div class="eyebrow teal">This period · Team goals</div>
+        <h3>Has an end date</h3>
+        <div class="from">What the whole team pushes on together. You own the result.</div>
+        <ul>
+          <li><span>Get team CSAT to <span class="num">95%</span> by <span class="num">Mar 31</span></span></li>
+          <li><span>Cover the top 20 contact reasons in the help centre by <span class="num">Feb 28</span></span></li>
+        </ul>
+        <div class="gets"><b>What you get:</b> Mission Control shows what's off track, and each 1:1 prep ties that person's work to what the team is pushing on.</div>
+      </div>
+    </div>
+
+    <div class="test"><span class="tag">Quick test</span><span>If hitting it just means everyone doing their job well, it's already an expectation. A goal changes something and has a date.</span></div>
+
+    <div style="display:grid;gap:14px">
+      <div class="sugg-head">
+        <h3>Three goals to start from</h3>
+        <span class="meta">Drafted from your expectations and the department goal you added. Nothing is saved until you use one.</span>
+      </div>
+      <div class="cards" id="cards">
+        <article class="card">
+          <div class="src"><span class="chip exp">From an expectation · CSAT on cases they own · 92%</span></div>
+          <div class="t">Get team CSAT to 95% by Mar 31</div>
+          <div class="facts">Team · Support · East · target 95% · due Mar 31</div>
+          <p class="why">Raises the bar for one period. The 92% stays the role's standard.</p>
+          <div class="acts"><button type="button" class="primary" data-use="0">Use this</button><button type="button" class="quiet" data-dismiss>Not this one</button></div>
+        </article>
+        <article class="card">
+          <div class="src"><span class="chip org">From a department goal · Customer Experience · renewals at 90% by Jun 30</span></div>
+          <div class="t">Cut repeat contacts from renewing customers to under 10% by Jun 30</div>
+          <div class="facts">Team · Support · East · target under 10% · due Jun 30 · supports the renewal goal</div>
+          <p class="why">Your team's part of the department's number.</p>
+          <div class="acts"><button type="button" class="primary" data-use="1">Use this</button><button type="button" class="quiet" data-dismiss>Not this one</button></div>
+        </article>
+        <article class="card">
+          <div class="src"><span class="chip exp">From an expectation · Help-centre articles · 2 a month</span></div>
+          <div class="t">Cover the top 20 contact reasons in the help centre by Feb 28</div>
+          <div class="facts">Team · Support · East · target 20 of 20 · due Feb 28</div>
+          <p class="why">A one-time push the team finishes together. Writing articles stays part of the job.</p>
+          <div class="acts"><button type="button" class="primary" data-use="2">Use this</button><button type="button" class="quiet" data-dismiss>Not this one</button></div>
+        </article>
+      </div>
+      <p class="notsugg">We won't suggest adding up everyone's expectations, like "the team resolves 56 cases a day". That's the job already, and it's tracked per person.</p>
+    </div>
+
+    <div class="foot">
+      <p class="indiv">You won't set individual goals here. Each person's starting goals come from their role's expectations, and you can add more from their page later.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="secondary" data-blank>Write my own</button></div>
+    </div>
+  </section>
+
+  <!-- STATE 2: the form -->
+  <section class="modal fade" id="v-form" role="dialog" aria-labelledby="t-form" hidden>
+    <div class="mhead">
+      <div>
+        <div class="eyebrow teal">Step 6 of 6 · Goals</div>
+        <h2 id="t-form">New team goal</h2>
+      </div>
+      <button type="button" class="x" data-back aria-label="Back to suggestions">×</button>
+    </div>
+    <div class="started" id="started"><span class="chip exp" id="started-chip">Started from · CSAT on cases they own · 92%</span><button type="button" class="quiet" id="clear-src">Remove link</button></div>
+    <form class="form" id="goal-form" novalidate>
+      <div class="field"><label for="f-title">Title</label><input id="f-title" class="input" value="Get team CSAT to 95% by Mar 31"></div>
+      <div class="grid2">
+        <div class="field"><label for="f-owner">Whose goal?</label><select id="f-owner" class="input"><option>Support · East (your team)</option><option>Customer Experience (your boss's group)</option></select></div>
+        <div class="field"><label for="f-due">Due date</label><input id="f-due" class="input" type="date" value="2027-03-31"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="f-target">Target</label><input id="f-target" class="input" value="95%"></div>
+        <div class="field"><label for="f-supports">Supports (optional)</label><select id="f-supports" class="input"><option>Nothing above it</option><option>Customer Experience · renewals at 90% by Jun 30</option></select></div>
+      </div>
+      <div class="nudge" id="nudge" hidden aria-live="polite">
+        <div class="h">This reads like an expectation</div>
+        <p id="nudge-why">It has no end date and matches what Support Specialist already expects: CSAT on cases they own, 92% or above.</p>
+        <div class="row">
+          <button type="button" class="secondary" id="n-date">Keep it as a goal and add a date</button>
+          <button type="button" class="quiet" id="n-role">It's the role's standard. Open Support Specialist instead</button>
+        </div>
+      </div>
+      <div class="foot" style="border-top:0;padding-top:0">
+        <span class="hint" id="f-hint">Saved to Support · East. Shows on Mission Control and in each 1:1 prep for this team.</span>
+        <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="quiet" data-back>Back to suggestions</button><button type="submit" class="primary">Save goal</button></div>
+      </div>
+      <p class="toast" id="toast" hidden>Goal saved. Step 6 done: setup is complete.</p>
+    </form>
+  </section>
+
+  <!-- STATE 3: thin -->
+  <section class="modal fade" id="v-thin" role="dialog" aria-labelledby="t-thin" hidden>
+    <div class="mhead">
+      <div>
+        <div class="eyebrow teal">Step 6 of 6 · Goals</div>
+        <h2 id="t-thin">Your team's goals for this period</h2>
+        <p class="sub">Goals are what Support · East is pushing to change, by a date. Expectations are the job itself, and they hold every period.</p>
+      </div>
+      <button type="button" class="x" aria-label="Close">×</button>
+    </div>
+    <div class="test"><span class="tag">Quick test</span><span>If hitting it just means everyone doing their job well, it's already an expectation. A goal changes something and has a date.</span></div>
+    <div class="empty">
+      <h3 style="font:19px/1.3 var(--serif)">Nothing to draft from yet</h3>
+      <p style="font-size:13px">You skipped role expectations and haven't added a company or department goal, so there's nothing to suggest goals from. Add either one and suggestions show up here. Or write your own now.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="primary" data-blank>Write my own</button><button type="button" class="secondary">Add department goals</button><button type="button" class="quiet">Set role expectations</button></div>
+    </div>
+  </section>
+
+  <div class="notes">
+    <div><b>What's real</b> Steps, counting and the goal form exist today. New here: the side-by-side built from the manager's own step-5 entries, the test line, the drafted suggestions (one AI call, nothing saved until "Save goal"), and the overlap check on the form.</div>
+    <div><b>Open</b> Whether the check runs on save only or as they type. Whether suggestions also appear on the Goals page after setup.</div>
+  </div>
+</div>
+
+<script>
+const SUGG=[
+  {title:"Get team CSAT to 95% by Mar 31",due:"2027-03-31",target:"95%",chip:"Started from · CSAT on cases they own · 92%",sup:0},
+  {title:"Cut repeat contacts from renewing customers to under 10% by Jun 30",due:"2027-06-30",target:"under 10%",chip:"Started from · Customer Experience · renewals at 90% by Jun 30",sup:1,org:true},
+  {title:"Cover the top 20 contact reasons in the help centre by Feb 28",due:"2027-02-28",target:"20 of 20",chip:"Started from · Help-centre articles · 2 a month",sup:0}
+];
+const EXP=[{k:/csat/i,name:"CSAT on cases they own, 92% or above"},{k:/resolution|resolve/i,name:"median resolution time, 8 hours or less"},{k:/article|help.?cent/i,name:"help-centre articles, 2 a month"}];
+const $=s=>document.querySelector(s);
+const views={step:$("#v-step"),form:$("#v-form"),thin:$("#v-thin")};
+function show(v){for(const k in views)views[k].hidden=k!==v;document.querySelectorAll(".pbar button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.view===v));$(".stage").scrollTop=0;}
+document.querySelectorAll(".pbar button").forEach(b=>b.onclick=()=>show(b.dataset.view));
+function fill(s){
+  $("#f-title").value=s?s.title:"";$("#f-due").value=s?s.due:"";$("#f-target").value=s?s.target:"";
+  $("#f-supports").selectedIndex=s?s.sup:0;$("#started").hidden=!s;if(s){$("#started-chip").textContent=s.chip;$("#started-chip").className="chip "+(s.org?"org":"exp");}
+  $("#toast").hidden=true;check();show("form");
+}
+document.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>fill(SUGG[+b.dataset.use]));
+document.querySelectorAll("[data-blank]").forEach(b=>b.onclick=()=>fill(null));
+document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>show("step"));
+document.querySelectorAll("[data-dismiss]").forEach(b=>b.onclick=()=>b.closest(".card").classList.add("dismissed"));
+$("#clear-src").onclick=()=>{$("#started").hidden=true};
+const ONGOING=/\b(maintain|keep|always|stay|consistently|every|each|per (day|week|month)|a (day|week|month)|at or above|or above|or better|or less)\b/i;
+function check(){
+  const t=$("#f-title").value.trim(),due=$("#f-due").value;
+  const match=EXP.find(e=>e.k.test(t));
+  const ongoing=ONGOING.test(t);
+  const show=t.length>0&&!due&&(ongoing||match)||(t.length>0&&ongoing&&!!match);
+  $("#nudge").hidden=!show;
+  if(show){
+    const parts=[];
+    if(!due)parts.push("It has no end date");else if(ongoing)parts.push("It reads as ongoing");
+    $("#nudge-why").textContent=parts.join("")+(match?` and matches what Support Specialist already expects: ${match.name}.`:", so it describes a standard rather than a change.");
+  }
+}
+["#f-title","#f-due"].forEach(s=>$(s).addEventListener("input",check));
+$("#n-date").onclick=()=>{$("#f-due").focus();try{$("#f-due").showPicker&&$("#f-due").showPicker()}catch(e){}};
+$("#n-role").onclick=()=>{$("#f-hint").textContent="In the app this opens Support Specialist's expectations with your text ready to add.";};
+$("#goal-form").addEventListener("submit",e=>{e.preventDefault();if(!$("#f-title").value.trim()){$("#f-title").focus();return;}$("#toast").hidden=false;});
+</script>

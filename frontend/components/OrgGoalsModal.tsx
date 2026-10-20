@@ -76,6 +76,7 @@ export default function OrgGoalsModal({
   ownGoal,
   groupAboveKnown = false,
   leadsUnit = false,
+  onWriteOwnGoal,
 }: {
   onClose: () => void;
   teamGoalNeeded?: boolean;
@@ -84,6 +85,9 @@ export default function OrgGoalsModal({
   // A unit already sits above the one the manager leads.
   groupAboveKnown?: boolean;
   leadsUnit?: boolean;
+  // Opens the team-goals step (expectations beside goals, suggestions) with
+  // what was just saved as the goal to support. Without it, the Goals page.
+  onWriteOwnGoal?: (supportsGoalId: string | null) => void;
 }) {
   const [phase, setPhase] = useState<Phase>("input");
   const [text, setText] = useState("");
@@ -485,9 +489,15 @@ export default function OrgGoalsModal({
                   <button type="button" onClick={onClose} className={BTN_GHOST}>
                     Later
                   </button>
-                  <Link href={goalsHref({ level: own.level, scope: own.scope, create: true, supports: supportsId(result) })} className={BTN_PRIMARY}>
-                    {own.label}
-                  </Link>
+                  {onWriteOwnGoal ? (
+                    <button type="button" onClick={() => onWriteOwnGoal(supportsId(result))} className={BTN_PRIMARY}>
+                      {own.label}
+                    </button>
+                  ) : (
+                    <Link href={goalsHref({ level: own.level, scope: own.scope, create: true, supports: supportsId(result) })} className={BTN_PRIMARY}>
+                      {own.label}
+                    </Link>
+                  )}
                 </div>
               </>
             ) : (

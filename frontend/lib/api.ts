@@ -2518,6 +2518,35 @@ export const markOrgGoalsUnknown = (): Promise<{ recorded: boolean; added_to_mee
 export const confirmOrgGoal = (goalId: string): Promise<{ id: string; confirmed_on: string }> =>
   authedFetch(`/api/onboarding/org-goals/${goalId}/confirm`, { method: "POST" });
 
+// Team goals in setup (backend/routes/team_goals.py). Context is read without
+// AI; suggest is the one AI call and writes nothing.
+export type TeamGoalsContext = {
+  unit: { id: string; name: string; level: "team" | "department" } | null;
+  word: "team" | "department";
+  roles: { id: string; label: string; people: number; items: { id: string; kind: "measured" | "responsibility"; line: string }[] }[];
+  above_goals: { id: string; title: string; due_date: string | null; where: string }[];
+  own_goals: { id: string; title: string; due_date: string | null }[];
+  can_suggest: boolean;
+};
+export type TeamGoalSuggestion = {
+  key: string;
+  title: string;
+  why: string | null;
+  source: { kind: "expectation" | "goal"; id: string; label: string; role: string | null; measured: boolean; where?: string };
+  due_date: string | null;
+  supports_goal_id: string | null;
+  measure: { label: string; format: "count" | "number" | "percent"; direction: "at_least" | "at_most" | "below" } | null;
+  target_hint: string | null;
+};
+
+export const getTeamGoalsContext = (): Promise<TeamGoalsContext> => authedFetch("/api/onboarding/team-goals/context");
+
+export const suggestTeamGoals = (supportsGoalId?: string | null): Promise<{ suggestions: TeamGoalSuggestion[]; nothing_found: boolean }> =>
+  authedFetch("/api/onboarding/team-goals/suggest", {
+    method: "POST",
+    body: JSON.stringify(supportsGoalId ? { supports_goal_id: supportsGoalId } : {}),
+  });
+
 export type DraftMetricItem = {
   name: string;
   order_type: "primary" | "secondary" | "tertiary" | null;
