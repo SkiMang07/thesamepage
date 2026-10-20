@@ -90,7 +90,9 @@ team commitment owned by a person or by you.
 ## Team scope
 
 The scope menu lists `org_units` where `leader_user_id` is the caller (`GET
-/api/org-units/led`) plus **All teams**, the default. There is no separate
+/api/org-units/led`) plus **All teams**, the default. Each is named relative
+to you in the menu ("Member Support (your team)"); the button and heading keep
+the plain name. There is no separate
 "which team am I a member of" concept. Switching filters data already on the
 page. The rules live in one module, `frontend/components/team/scope.ts`,
 shared by the page and the meeting screen (whose scope is the meeting's own

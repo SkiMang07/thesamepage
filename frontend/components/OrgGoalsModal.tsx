@@ -41,6 +41,7 @@ import {
   parseOrgGoals,
   setupGroupAbove,
 } from "@/lib/api";
+import { relativeUnits } from "@/lib/unitRelation";
 import { goalsHref } from "@/lib/goals";
 import WaitNote from "@/components/WaitNote";
 import NoteField from "@/components/NoteField";
@@ -94,6 +95,9 @@ export default function OrgGoalsModal({
   const [result, setResult] = useState<OrgGoalsApplyResult | null>(null);
   const [unknownAdded, setUnknownAdded] = useState(false);
   const [departments, setDepartments] = useState<OrgUnit[]>([]);
+  // Each department named relative to the manager ("Member Experience (your
+  // boss's group)"); empty when they lead nothing, which keeps the plain name.
+  const [unitLabels, setUnitLabels] = useState<Map<string, string>>(new Map());
   const [bossGroup, setBossGroup] = useState("");
   const shownAt = useRef<number>(0);
 
@@ -103,7 +107,14 @@ export default function OrgGoalsModal({
     Promise.all([getOrgUnits(), getLedOrgUnits().catch(() => [] as OrgUnit[])])
       .then(([units, led]) => {
         const mine = new Set(led.map((u) => u.id));
-        setDepartments(units.filter((u) => u.unit_type === "department" && !mine.has(u.id)));
+        const relative = relativeUnits(units, led);
+        const order = new Map((relative ?? []).map((r, i) => [r.unit.id, i]));
+        setDepartments(
+          units
+            .filter((u) => u.unit_type === "department" && !mine.has(u.id))
+            .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)),
+        );
+        setUnitLabels(new Map((relative ?? []).map((r) => [r.unit.id, r.label])));
       })
       .catch(() => setDepartments([]));
   }, []);
@@ -358,12 +369,12 @@ export default function OrgGoalsModal({
                           onChange={(e) => setEdits({ ...edits, [g.key]: { ...edits[g.key], owner: e.target.value } })}
                           className="rounded border border-hairline bg-surface px-2 py-1 text-xs font-medium text-ink-secondary"
                         >
-                          <option value="company:">Company goal</option>
+                          <option value="company:">The company</option>
                           {departments.map((d) => (
-                            <option key={d.id} value={`department:${d.id}`}>Department goal · {d.name}</option>
+                            <option key={d.id} value={`department:${d.id}`}>{unitLabels.get(d.id) ?? `Department goal · ${d.name}`}</option>
                           ))}
                           {offerBoss && <option value="boss:">Your boss’s group (name it)</option>}
-                          {ownerOf(g) === "department:" && <option value="department:">Department goal · pick a department</option>}
+                          {ownerOf(g) === "department:" && <option value="department:">{unitLabels.size ? "Pick a department" : "Department goal · pick a department"}</option>}
                         </select>
                         {g.due_date && <span className="text-ink-muted">ends {g.due_date}</span>}
                         {g.low && <span className="text-ink-muted">· not stated plainly</span>}

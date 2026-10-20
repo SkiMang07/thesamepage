@@ -22,7 +22,10 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
   never by name (a repeated name gets a counter in the picker). Every person,
   team or department is in the picker, not only those with goals, so a link to
   someone with none lands on them and their empty state. "No person / team /
-  department linked" is its own scope, distinct from All. The page opens on
+  department linked" is its own scope, distinct from All. At Team and
+  Department, when you lead a unit, the picker names units relative to you and
+  lists yours first (the same labels as "Whose goal?"); the heading keeps the
+  plain name. The page opens on
   the first level that has goals unless the URL says otherwise. An empty
   Individual scope says role expectations aren't goals and links to Roles &
   expectations.
@@ -45,8 +48,15 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
   every recorded value as a table, latest update with source, full history,
   parent / child / project connections, description, Edit and Delete.
 - **Create / edit** use one form (`GoalForm`) in the focused view, with the
-  optional measure section. **"Whose goal?"** is one picker (the company, then
-  departments, teams and people by name); the level is derived from the pick.
+  optional measure section. **"Whose goal?"** is one picker; the level is
+  derived from the pick. When you lead a unit, units are named by how they
+  relate to you (`frontend/lib/unitRelation.ts`): your units ("Member Support
+  (your team)"), the group above ("Member Experience (your boss's group)",
+  higher ones "(above your boss's group)"), the company, units under you
+  ("Platform (Ines's team)", or "(a team under you)" when its leader has no
+  account), then "Your people" by name and "Other teams and departments".
+  Leading nothing keeps the company, then Departments / Teams / People groups.
+  "Yours" follows `goal_relationship()` in `onboarding.py`.
   A team or department goal must name its unit when any exist; with exactly
   one, it is preselected. Unlinked is offered only when none of that kind
   exist yet, or to show an older unlinked goal, which must be linked on its

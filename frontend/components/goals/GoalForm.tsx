@@ -4,7 +4,10 @@
 // what it supports, status, due date, description, the written success
 // criterion, and an optional numeric measure.
 //
-// "Whose goal?" is one picker: Company, a department, a team or a person. The
+// "Whose goal?" is one picker: Company, a department, a team or a person.
+// Units are named by how they relate to the viewer ("Member Support (your
+// team)", "Member Experience (your boss's group)") when they lead one; someone
+// who leads nothing keeps the Departments / Teams / People groups. The
 // level is derived from the pick, so level and link can no longer disagree or
 // be left half-answered. A goal is unlinked only when nothing of that kind
 // exists yet (no teams set up), or when an older goal was saved that way.
@@ -20,6 +23,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import NoteField from "@/components/NoteField";
+import { OTHER_UNITS_HEADING, type RelativeUnit, type UnitRelation } from "@/lib/unitRelation";
 import type {
   DirectReport,
   Goal,
@@ -139,6 +143,7 @@ export default function GoalForm({
   defaults,
   reports,
   orgUnits,
+  relative = null,
   allGoals,
   onSubmit,
   onCancel,
@@ -149,6 +154,8 @@ export default function GoalForm({
   defaults: GoalFormDefaults;
   reports: DirectReport[];
   orgUnits: OrgUnit[];
+  /** Units relative to the viewer (lib/unitRelation.ts); null keeps the type groups. */
+  relative?: RelativeUnit[] | null;
   allGoals: Goal[];
   onSubmit: (body: GoalIn) => Promise<void>;
   onCancel: () => void;
@@ -173,6 +180,12 @@ export default function GoalForm({
   const departments = orgUnits.filter((ou) => ou.unit_type === "department");
   const teams = orgUnits.filter((ou) => ou.unit_type === "team");
   const owner = ownerKey(v.level, v.directReportId, v.orgUnitId);
+  const relativeOptions = (relations: UnitRelation[]) =>
+    (relative ?? [])
+      .filter((r) => relations.includes(r.relation))
+      .map((r) => (
+        <option key={r.unit.id} value={`${r.unit.unit_type}:${r.unit.id}`}>{r.label}</option>
+      ));
   // A level picked with no link: only offered when nothing of that kind exists
   // yet, or to keep an older unlinked goal representable.
   const unlinked = (level: GoalLevel) => {
@@ -282,33 +295,56 @@ export default function GoalForm({
           <label htmlFor="goal-owner" className={LABEL}>Whose goal?</label>
           <select id="goal-owner" value={owner} onChange={(e) => changeOwner(e.target.value)} className={INPUT}>
             {v.level === "individual" && !v.directReportId && <option value="individual:">Pick a person</option>}
-            <option value="company:">The company</option>
-            {(departments.length > 0 || unlinked("department")) && (
-              <optgroup label="Departments">
-                {departments.map((ou) => (
-                  <option key={ou.id} value={`department:${ou.id}`}>{ou.name}</option>
-                ))}
-                {unlinked("department") && (
-                  <option value="department:">{departments.length ? (isEdit ? "Not linked to a department" : "Pick a department") : "A department (none set up yet)"}</option>
+            {relative ? (
+              <>
+                {relativeOptions(["yours", "above"])}
+                <option value="company:">The company</option>
+                {relativeOptions(["under"])}
+                {/* Only an older unlinked goal, or a level picked from a scope with no unit, lands here. */}
+                {owner === "department:" && <option value="department:">{isEdit ? "Not linked to a department" : "Pick a department"}</option>}
+                {owner === "team:" && <option value="team:">{isEdit ? "Not linked to a team" : "Pick a team"}</option>}
+                {reports.length > 0 && (
+                  <optgroup label="Your people">
+                    {reports.map((r) => (
+                      <option key={r.id} value={`individual:${r.id}`}>{r.name}</option>
+                    ))}
+                  </optgroup>
                 )}
-              </optgroup>
-            )}
-            {(teams.length > 0 || unlinked("team")) && (
-              <optgroup label="Teams">
-                {teams.map((ou) => (
-                  <option key={ou.id} value={`team:${ou.id}`}>{ou.name}</option>
-                ))}
-                {unlinked("team") && (
-                  <option value="team:">{teams.length ? (isEdit ? "Not linked to a team" : "Pick a team") : "A team (none set up yet)"}</option>
+                {relative.some((r) => r.relation === "other") && (
+                  <optgroup label={OTHER_UNITS_HEADING}>{relativeOptions(["other"])}</optgroup>
                 )}
-              </optgroup>
-            )}
-            {reports.length > 0 && (
-              <optgroup label="People">
-                {reports.map((r) => (
-                  <option key={r.id} value={`individual:${r.id}`}>{r.name}</option>
-                ))}
-              </optgroup>
+              </>
+            ) : (
+              <>
+                <option value="company:">The company</option>
+                {(departments.length > 0 || unlinked("department")) && (
+                  <optgroup label="Departments">
+                    {departments.map((ou) => (
+                      <option key={ou.id} value={`department:${ou.id}`}>{ou.name}</option>
+                    ))}
+                    {unlinked("department") && (
+                      <option value="department:">{departments.length ? (isEdit ? "Not linked to a department" : "Pick a department") : "A department (none set up yet)"}</option>
+                    )}
+                  </optgroup>
+                )}
+                {(teams.length > 0 || unlinked("team")) && (
+                  <optgroup label="Teams">
+                    {teams.map((ou) => (
+                      <option key={ou.id} value={`team:${ou.id}`}>{ou.name}</option>
+                    ))}
+                    {unlinked("team") && (
+                      <option value="team:">{teams.length ? (isEdit ? "Not linked to a team" : "Pick a team") : "A team (none set up yet)"}</option>
+                    )}
+                  </optgroup>
+                )}
+                {reports.length > 0 && (
+                  <optgroup label="People">
+                    {reports.map((r) => (
+                      <option key={r.id} value={`individual:${r.id}`}>{r.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </>
             )}
           </select>
           {owner === "team:" && teams.length > 0 && <p className="mt-1 text-xs text-amber-700">Pick the team. Without one, it won&apos;t show on the Team page.</p>}

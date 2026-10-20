@@ -28,6 +28,7 @@ import {
   GoalIn,
   GoalLevel,
   GoalStatus,
+  OrgMember,
   OrgUnit,
   Project,
   createGoal,
@@ -36,6 +37,8 @@ import {
   getDirectReports,
   getGoalUpdates,
   getGoals,
+  getLedOrgUnits,
+  getOrgMembers,
   getOrgUnits,
   getProjects,
   updateGoal,
@@ -58,6 +61,7 @@ import {
   scopeOptions,
 } from "@/lib/goals";
 import GoalSheet from "@/components/goals/GoalSheet";
+import { relativeUnits } from "@/lib/unitRelation";
 import GoalUpdateForm, { UpdateDraft, isDraftDirty } from "@/components/goals/GoalUpdateForm";
 import GoalDetail from "@/components/goals/GoalDetail";
 import GoalForm, { type GoalFormDefaults } from "@/components/goals/GoalForm";
@@ -138,6 +142,10 @@ export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [reports, setReports] = useState<DirectReport[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnit[]>([]);
+  // Units the viewer leads and the org's members: units are named relative to
+  // the viewer (lib/unitRelation.ts). Either failing keeps today's labels.
+  const [ledUnits, setLedUnits] = useState<OrgUnit[]>([]);
+  const [members, setMembers] = useState<OrgMember[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -175,7 +183,14 @@ export default function GoalsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const [g, r, ou, p] = await Promise.allSettled([getGoals(), getDirectReports(), getOrgUnits(), getProjects()]);
+    const [g, r, ou, p, led, mem] = await Promise.allSettled([
+      getGoals(),
+      getDirectReports(),
+      getOrgUnits(),
+      getProjects(),
+      getLedOrgUnits(),
+      getOrgMembers(),
+    ]);
     if (g.status === "rejected") {
       setLoadError(errorText(g.reason, "Goals couldn't be loaded."));
       setLoading(false);
@@ -189,6 +204,8 @@ export default function GoalsPage() {
     else failed.push("teams and departments");
     if (p.status === "fulfilled") setProjects(p.value);
     else failed.push("linked projects");
+    setLedUnits(led.status === "fulfilled" ? led.value : []);
+    setMembers(mem.status === "fulfilled" ? mem.value : []);
     setPartial(failed);
     const url = readUrl();
     const deep = url.goal ? g.value.find((x) => x.id === url.goal) : undefined;
@@ -295,7 +312,8 @@ export default function GoalsPage() {
 
   // --- derived --------------------------------------------------------------
   const goalsById = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
-  const options = useMemo(() => scopeOptions(level, goals, reports, orgUnits), [level, goals, reports, orgUnits]);
+  const relative = useMemo(() => relativeUnits(orgUnits, ledUnits, members), [orgUnits, ledUnits, members]);
+  const options = useMemo(() => scopeOptions(level, goals, reports, orgUnits, relative), [level, goals, reports, orgUnits, relative]);
   // A scope id that no longer has goals (deleted, or a stale link) falls back to All.
   const effectiveScope: Scope = level === "company" || options.some((o) => o.id === scope) ? scope : "all";
   const scopeName = options.find((o) => o.id === effectiveScope)?.label ?? allLabel(level);
@@ -683,6 +701,7 @@ export default function GoalsPage() {
                     }
                     reports={reports}
                     orgUnits={orgUnits}
+                    relative={relative}
                     allGoals={goals}
                     onSubmit={submitGoal}
                     onCancel={leaveEditor}
@@ -743,7 +762,7 @@ export default function GoalsPage() {
                 >
                   {options.map((o) => (
                     <option key={o.id} value={o.id}>
-                      {o.label}
+                      {o.menuLabel ?? o.label}
                     </option>
                   ))}
                 </select>

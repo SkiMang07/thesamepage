@@ -18,6 +18,7 @@ import type {
   GoalStatus,
   OrgUnit,
 } from "@/lib/api";
+import type { RelativeUnit } from "@/lib/unitRelation";
 
 export const LEVELS: { id: GoalLevel; label: string }[] = [
   { id: "individual", label: "Individual" },
@@ -218,12 +219,20 @@ export function allLabel(level: GoalLevel) {
   return level === "individual" ? "All people" : level === "team" ? "All teams" : level === "department" ? "All departments" : "Company";
 }
 
-export type ScopeOption = { id: Scope; label: string };
+// `label` is the plain name (page headings); `menuLabel`, when set, is how the
+// scope menu names a unit relative to the viewer (lib/unitRelation.ts).
+export type ScopeOption = { id: Scope; label: string; menuLabel?: string };
 
 /** Scope choices for a level, keyed by id. Labels come from the people and
  *  org units lists; a repeated name gets a counter so two people named Sam
  *  never read as one. */
-export function scopeOptions(level: GoalLevel, goals: Goal[], reports: DirectReport[], units: OrgUnit[]): ScopeOption[] {
+export function scopeOptions(
+  level: GoalLevel,
+  goals: Goal[],
+  reports: DirectReport[],
+  units: OrgUnit[],
+  relative: RelativeUnit[] | null = null,
+): ScopeOption[] {
   if (level === "company") return [];
   const levelGoals = goals.filter((g) => g.level === level);
   // Every person, team or department of this level is a scope, not only the
@@ -248,6 +257,15 @@ export function scopeOptions(level: GoalLevel, goals: Goal[], reports: DirectRep
     seen.set(n.label, count);
     return { id: n.id, label: count > 1 ? `${n.label} (${count})` : n.label };
   });
+  // Relative to the viewer: their own unit first, then above, under, other.
+  if (relative && level !== "individual") {
+    const rank = new Map(relative.map((r, i) => [r.unit.id, i]));
+    for (const o of options) {
+      const r = relative.find((x) => x.unit.id === o.id);
+      if (r) o.menuLabel = r.label;
+    }
+    options.sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9));
+  }
   const out: ScopeOption[] = [{ id: "all", label: allLabel(level) }, ...options];
   if (levelGoals.some((g) => associationId(g) == null)) out.push({ id: "none", label: unlinkedLabel(level) });
   return out;

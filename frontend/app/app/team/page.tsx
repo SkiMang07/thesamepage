@@ -48,6 +48,7 @@ import {
   getTeamGoals,
   getTeamMeetings,
 } from "@/lib/api";
+import { relativeUnits } from "@/lib/unitRelation";
 import PageShell from "@/components/PageShell";
 import { Icon } from "@/components/ZoneMap";
 import { ELEVATED } from "@/lib/tokens";
@@ -233,6 +234,7 @@ export default function TeamPage() {
             {ledOrgUnits.length > 0 && (
               <ScopePicker
                 led={ledOrgUnits}
+                orgUnits={orgUnits}
                 selectedTeamId={selectedTeamId}
                 selectedName={selectedTeamName}
                 onSelect={setSelectedTeamId}
@@ -409,14 +411,18 @@ export default function TeamPage() {
   );
 }
 
-// The scope menu: All teams (the default) plus the teams the caller leads.
+// The scope menu: All teams (the default) plus the teams the caller leads,
+// each named relative to them ("Member Support (your team)"). The button and
+// the page heading keep the plain name.
 function ScopePicker({
   led,
+  orgUnits,
   selectedTeamId,
   selectedName,
   onSelect,
 }: {
   led: OrgUnit[];
+  orgUnits: OrgUnit[];
   selectedTeamId: string | null;
   selectedName: string;
   onSelect: (id: string | null) => void;
@@ -457,7 +463,13 @@ function ScopePicker({
       </button>
       {open && (
         <div id="team-scope-menu" role="menu" aria-label="Switch team" className={`absolute right-0 top-11 z-30 w-64 p-1.5 ${ELEVATED}`}>
-          {[{ id: null as string | null, name: "All teams" }, ...led.map((u) => ({ id: u.id as string | null, name: u.name }))].map((team) => {
+          {[
+            { id: null as string | null, name: "All teams" },
+            ...(relativeUnits(orgUnits.length ? orgUnits : led, led)?.filter((r) => r.relation === "yours") ?? []).map((r) => ({
+              id: r.unit.id as string | null,
+              name: r.label,
+            })),
+          ].map((team) => {
             const selected = team.id === selectedTeamId;
             return (
               <button
