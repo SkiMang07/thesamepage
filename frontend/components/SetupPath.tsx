@@ -80,7 +80,8 @@ type StepView = {
   detail?: string;
   // A step with two halves (goals: org + team) lists both, each with its own
   // check, so finishing one half visibly counts.
-  parts?: { label: string; done: boolean; note?: string }[];
+  // `counts` says which goals tick the line, so a tick is never a mystery.
+  parts?: { label: string; done: boolean; note?: string; counts?: string }[];
   done: boolean;
   // "Skip for now": counts toward ending setup, is not done, and can be undone.
   skipped: boolean;
@@ -197,7 +198,7 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
     {
       key: "expectations",
       title: "Role expectations",
-      changes: "Gives the sheet a standard to hold each person’s work against.",
+      changes: "Gives the sheet the standard each role is held to. Goals are separate: what the team works toward this period.",
       time: "About 2 minutes per role",
       action: expAction.action,
       href: expAction.href,
@@ -222,7 +223,7 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
     {
       key: "goals",
       title: "Org and team goals",
-      changes: "Links each person’s work to the goals it serves.",
+      changes: "Records what your team is working toward this period, and the company or department goals above it.",
       time: "About 3 minutes",
       action: goals.has_org_goal || goals.parked ? "Write your team’s goal" : "Add company or department goals",
       href: TEAM_GOAL_HREF,
@@ -232,9 +233,10 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
         {
           label: "Company or department goals",
           done: goals.has_org_goal,
+          counts: "Counts: any goal for the company or a department",
           note: !goals.has_org_goal && goals.unknown ? "asked your boss" : undefined,
         },
-        { label: "Your team’s goal", done: goals.has_team_goal },
+        { label: "Your team’s goal", done: goals.has_team_goal, counts: "Counts: any goal for a team" },
       ],
       done: goals.done,
       skipped: goals.skipped,
@@ -459,6 +461,7 @@ export default function SetupPath() {
                               {part.label}
                               <span className="sr-only">{part.done ? ", done" : ", not done"}</span>
                               {part.note && <span className="ml-1 text-ink-muted">· {part.note}</span>}
+                              {part.counts && <span className="block pl-5 text-xs text-ink-muted">{part.counts}</span>}
                             </li>
                           ))}
                         </ul>

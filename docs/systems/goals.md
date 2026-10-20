@@ -23,7 +23,9 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
   team or department is in the picker, not only those with goals, so a link to
   someone with none lands on them and their empty state. "No person / team /
   department linked" is its own scope, distinct from All. The page opens on
-  the first level that has goals unless the URL says otherwise.
+  the first level that has goals unless the URL says otherwise. An empty
+  Individual scope says role expectations aren't goals and links to Roles &
+  expectations.
 - **Links in.** `goalsHref()` (`lib/goals.ts`) builds every link into the page:
   `?level=&scope=` to land on someone, plus `new=1` to open the New goal form
   prefilled for them and `supports=<goal id>` to set what it supports. `new`

@@ -15,7 +15,8 @@
 // Team/Department — never by display name, and "Not linked" is its own
 // choice, distinct from All.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import PageShell from "@/components/PageShell";
 import PartialLoadNotice from "@/components/PartialLoadNotice";
 import { SkeletonSection } from "@/components/Skeleton";
@@ -963,9 +964,22 @@ function EmptyBoard({
 }) {
   const levelName = LEVELS.find((l) => l.id === level)?.label.toLowerCase();
   let title: string;
-  let body: string;
+  let body: ReactNode;
   let action: "new" | "clear" = "new";
-  if (!anyGoals) {
+  // Individual comes first: it is the level a new account opens on, and where
+  // people look for a role's expectations. Say where those are, once.
+  if (level === "individual" && scopedCount === 0) {
+    title = anyGoals ? "No individual goals here yet." : "No goals yet.";
+    body = (
+      <>
+        Role expectations aren’t goals. They’re on{" "}
+        <Link href="/app/expectations" className="underline underline-offset-2 hover:text-ink">
+          Roles &amp; expectations
+        </Link>
+        .
+      </>
+    );
+  } else if (!anyGoals) {
     title = "No goals yet.";
     body = "Write down what your team is working toward and how you'll know it worked.";
   } else if (scopedCount === 0) {

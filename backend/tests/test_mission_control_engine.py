@@ -162,7 +162,7 @@ def _setup(**over):
         "done_count": 2,
         "total": 3,
         "card_level": "quiet",
-        "changes": "Links each person’s work to the goals it serves.",
+        "changes": "Records what your team is working toward this period, and the company or department goals above it.",
         "label": "Add company or department goals",
         "href": "/app/dashboard?setup=goals",
     }

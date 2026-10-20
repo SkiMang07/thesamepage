@@ -12,6 +12,9 @@ type LevelLike = {
 
 const USED_IN = "They’re now used in 1:1 preparation, development and assessments.";
 const OPEN_DETAIL = "The open detail stays listed here until it’s resolved.";
+// Expectations belong to the role; goals belong to a period. Said once, here,
+// because the Goals page doesn't list them and people look for them there.
+const NOT_GOALS = "They belong to the role, so they aren’t listed on Goals.";
 
 function first(name: string): string {
   return name.trim().split(/\s+/)[0] ?? "";
@@ -44,6 +47,7 @@ export function approvedPayoff(level: LevelLike | null | undefined): string | nu
 
 export function approvedNotice(kind: "approved" | "approved-open", level: LevelLike | null | undefined): string {
   const payoff = approvedPayoff(level);
-  const tail = kind === "approved-open" ? OPEN_DETAIL : USED_IN;
-  return ["Expectations approved.", payoff, tail].filter(Boolean).join(" ");
+  // "They" must still mean the expectations, so the open-detail sentence goes last.
+  const rest = kind === "approved-open" ? [NOT_GOALS, OPEN_DETAIL] : [USED_IN, NOT_GOALS];
+  return ["Expectations approved.", payoff, ...rest].filter(Boolean).join(" ");
 }

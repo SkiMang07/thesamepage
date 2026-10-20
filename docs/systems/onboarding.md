@@ -135,8 +135,9 @@ fires once.
   (`expectations.md`).
 - **6 · Goals:** an org-level goal (company or department) and a team goal;
   cancelled goals don't count. The card checks the two halves separately
-  ("Company or department goals", "Your team's goal") and reads "1 of 2 done
-  · … next". Org goals open `OrgGoalsModal` (paste, talk or up to 3 files →
+  ("Company or department goals", "Your team's goal"), each with a "Counts:"
+  hint naming what ticks it (any company or department goal; any team goal),
+  and reads "1 of 2 done · … next". Org goals open `OrgGoalsModal` (paste, talk or up to 3 files →
   `POST /api/onboarding/org-goals/parse`, nothing saved → `apply`), where each
   row's level and department can be changed; its receipt's primary action is
   "Write your team's goal", opening `/app/goals?new=1&level=team` with Supports
