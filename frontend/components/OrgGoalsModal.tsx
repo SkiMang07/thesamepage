@@ -14,6 +14,12 @@
 // the receipt offers the other half of the setup step: a team goal, opened on
 // the Goals page already set to the team and supporting what was just saved.
 //
+// When no unit sits above the manager's own, a row can be "Your boss's group
+// (name it)": one name for the modal, saved as a department above the unit they
+// lead (POST /api/org-units/setup/above) just before the goals are applied. It
+// replaces the empty department picker both personas filed their boss's goals
+// around.
+//
 // "Don't know yet" is a recorded answer, not a skip: it parks the goals step and
 // puts one question on the next meeting with their boss.
 //
@@ -29,9 +35,11 @@ import {
   OrgGoalsParsed,
   OrgUnit,
   applyOrgGoals,
+  getLedOrgUnits,
   getOrgUnits,
   markOrgGoalsUnknown,
   parseOrgGoals,
+  setupGroupAbove,
 } from "@/lib/api";
 import { goalsHref } from "@/lib/goals";
 import WaitNote from "@/components/WaitNote";
@@ -44,7 +52,8 @@ const MAX_FILES = 3;
 type Phase = "input" | "reading" | "review" | "saving" | "receipt" | "unknown";
 
 // What the manager can change in a row, keyed by the server's row key.
-// owner is "company:" or "department:<unit id>" ("department:" = no department linked).
+// owner is "company:", "department:<unit id>" ("department:" = no department
+// linked) or "boss:" (the boss's group, named once below the list).
 type RowEdit = { title?: string; period?: string; setBy?: string; owner?: string };
 
 // What a new team goal should support: a department goal just saved (closest
@@ -58,7 +67,23 @@ function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-export default function OrgGoalsModal({ onClose, teamGoalNeeded = true }: { onClose: () => void; teamGoalNeeded?: boolean }) {
+type OwnGoal = { word: string; label: string; level: "team" | "department"; scope: string | null };
+
+export default function OrgGoalsModal({
+  onClose,
+  teamGoalNeeded = true,
+  ownGoal,
+  groupAboveKnown = false,
+  leadsUnit = false,
+}: {
+  onClose: () => void;
+  teamGoalNeeded?: boolean;
+  // The other half of the step: the goal for the unit the manager leads.
+  ownGoal?: OwnGoal;
+  // A unit already sits above the one the manager leads.
+  groupAboveKnown?: boolean;
+  leadsUnit?: boolean;
+}) {
   const [phase, setPhase] = useState<Phase>("input");
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -69,21 +94,33 @@ export default function OrgGoalsModal({ onClose, teamGoalNeeded = true }: { onCl
   const [result, setResult] = useState<OrgGoalsApplyResult | null>(null);
   const [unknownAdded, setUnknownAdded] = useState(false);
   const [departments, setDepartments] = useState<OrgUnit[]>([]);
+  const [bossGroup, setBossGroup] = useState("");
   const shownAt = useRef<number>(0);
 
   useEffect(() => {
-    getOrgUnits()
-      .then((units) => setDepartments(units.filter((u) => u.unit_type === "department")))
+    // The manager's own units aren't above them: their goal is the other half
+    // of the step, written on the Goals page.
+    Promise.all([getOrgUnits(), getLedOrgUnits().catch(() => [] as OrgUnit[])])
+      .then(([units, led]) => {
+        const mine = new Set(led.map((u) => u.id));
+        setDepartments(units.filter((u) => u.unit_type === "department" && !mine.has(u.id)));
+      })
       .catch(() => setDepartments([]));
   }, []);
 
+  // Offered when nothing sits above the manager's unit (or, leading none, when
+  // there is no department at all to pick).
+  const offerBoss = leadsUnit ? !groupAboveKnown : departments.length === 0;
   // The model's read as an owner key: a named department that exists, else unlinked.
   const draftOwner = (g: OrgGoalDraft) => {
     if (g.level === "company") return "company:";
     const match = departments.find((d) => d.name.trim().toLowerCase() === (g.org_unit_name ?? "").trim().toLowerCase());
-    return `department:${match?.id ?? (departments.length === 1 ? departments[0].id : "")}`;
+    if (match) return `department:${match.id}`;
+    if (offerBoss) return "boss:";
+    return `department:${departments.length === 1 ? departments[0].id : ""}`;
   };
   const ownerOf = (g: OrgGoalDraft) => edits[g.key]?.owner ?? draftOwner(g);
+  const own: OwnGoal = ownGoal ?? { word: "team", label: "Write your team’s goal", level: "team", scope: null };
   const fileInput = useRef<HTMLInputElement>(null);
   const busy = phase === "reading" || phase === "saving";
 
@@ -142,18 +179,21 @@ export default function OrgGoalsModal({ onClose, teamGoalNeeded = true }: { onCl
     );
   };
   const editedCount = goals.filter((g) => kept[g.key] && isEdited(g)).length;
+  const needsBossName = goals.some((g) => kept[g.key] && ownerOf(g) === "boss:");
 
   async function save() {
     if (!draft) return;
     setError(null);
     setPhase("saving");
     try {
+      // The boss's group is created first, so its goals can name it.
+      const bossId = needsBossName ? (await setupGroupAbove(bossGroup.trim())).id : null;
       const r = await applyOrgGoals({
         goals: goals
           .filter((g) => kept[g.key])
           .map((g) => {
             const e = edits[g.key] ?? {};
-            const owner = ownerOf(g);
+            const owner = ownerOf(g) === "boss:" ? `department:${bossId}` : ownerOf(g);
             const level = owner.startsWith("company") ? "company" : "department";
             const unitId = level === "department" ? owner.slice("department:".length) || null : null;
             return {
@@ -319,11 +359,8 @@ export default function OrgGoalsModal({ onClose, teamGoalNeeded = true }: { onCl
                           {departments.map((d) => (
                             <option key={d.id} value={`department:${d.id}`}>Department goal · {d.name}</option>
                           ))}
-                          {(departments.length === 0 || ownerOf(g) === "department:") && (
-                            <option value="department:">
-                              {departments.length ? "Department goal · pick a department" : "Department goal (no departments set up)"}
-                            </option>
-                          )}
+                          {offerBoss && <option value="boss:">Your boss’s group (name it)</option>}
+                          {ownerOf(g) === "department:" && <option value="department:">Department goal · pick a department</option>}
                         </select>
                         {g.due_date && <span className="text-ink-muted">ends {g.due_date}</span>}
                         {g.low && <span className="text-ink-muted">· not stated plainly</span>}
@@ -360,6 +397,23 @@ export default function OrgGoalsModal({ onClose, teamGoalNeeded = true }: { onCl
               </ul>
             )}
 
+            {needsBossName && (
+              <div className="mt-3">
+                <label htmlFor="org-goals-boss" className="text-sm font-medium text-ink">
+                  What’s your boss’s group called?
+                </label>
+                <input
+                  id="org-goals-boss"
+                  className={`${INPUT} mt-1`}
+                  maxLength={120}
+                  placeholder="e.g. Customer Success"
+                  value={bossGroup}
+                  onChange={(e) => setBossGroup(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-ink-muted">Saved as a department above yours. You can change it on the Org page.</p>
+              </div>
+            )}
+
             {draft.overflow > 0 && (
               <p className="mt-3 text-[13px] text-ink-secondary">
                 {plural(draft.overflow, "more goal was", "more goals were")} found and not shown, and will not be saved. Run it again with a shorter text to see them.
@@ -379,7 +433,7 @@ export default function OrgGoalsModal({ onClose, teamGoalNeeded = true }: { onCl
                 <button type="button" disabled={phase === "saving"} onClick={onClose} className={BTN_SECONDARY}>
                   Close without saving
                 </button>
-                <button type="button" onClick={save} disabled={phase === "saving" || keptCount === 0} className={BTN_PRIMARY}>
+                <button type="button" onClick={save} disabled={phase === "saving" || keptCount === 0 || (needsBossName && !bossGroup.trim())} className={BTN_PRIMARY}>
                   {phase === "saving" ? "Saving…" : `Save ${keptCount} selected`}
                 </button>
               </div>
@@ -411,14 +465,14 @@ export default function OrgGoalsModal({ onClose, teamGoalNeeded = true }: { onCl
             {teamGoalNeeded ? (
               <>
                 <p className="mt-4 text-sm text-ink-secondary">
-                  The other half of this step is your team&apos;s own goal: what your team will do toward these.
+                  The other half of this step is your {own.word}&apos;s own goal: what your {own.word} will do toward these.
                 </p>
                 <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
                   <button type="button" onClick={onClose} className={BTN_GHOST}>
                     Later
                   </button>
-                  <Link href={goalsHref({ level: "team", create: true, supports: supportsId(result) })} className={BTN_PRIMARY}>
-                    Write your team&apos;s goal
+                  <Link href={goalsHref({ level: own.level, scope: own.scope, create: true, supports: supportsId(result) })} className={BTN_PRIMARY}>
+                    {own.label}
                   </Link>
                 </div>
               </>

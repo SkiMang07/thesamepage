@@ -45,6 +45,10 @@ Chosen over two alternatives:
 Any org member can assign any org member as a leader — same permissiveness
 `org_units` CRUD already had. No admin/owner concept exists to gate it.
 
+Setup makes whoever creates a unit there its leader (`onboarding.md`, step 4);
+it never takes a unit someone else already leads. A unit's leader must still be
+an app user.
+
 ## Visibility depth: aggregate-only, no exceptions
 
 Every rollup returns counts and sums per org unit, never a named individual. Four
@@ -71,6 +75,11 @@ full descendant scope `led_org_unit_ids()` computes. Backs the team dropdown.
 
 `GET /api/org-units/members` — the org member list for the leader picker, via the
 existing `users_select_own_org` policy; no new policy needed.
+
+`POST /api/org-units/setup` — setup's "My team / My department": creates or
+claims the caller's unit with them as leader, plus an optional department above
+it (reused by name). `POST /api/org-units/setup/above` — the org-goals review's
+"Your boss's group": a department placed over the top unit the caller leads.
 
 Plus `GET /api/goals/rollup`, `/api/projects/rollup`,
 `/api/direct-reports/rollup`, all declared before their `/{id}` siblings.

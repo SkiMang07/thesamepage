@@ -125,6 +125,17 @@ fires once.
   says how many people have a team and a role and names who is left, turns to
   "Team and roles: done", and offers "Back to setup" (`#setup`). The area list
   with its green checks, the status badge and the Scope line are hidden there.
+  Setup mode opens with **"What are you setting up?" My team / My department**
+  (`SetupUnitPanel`): the answer creates the team or department you lead
+  (`leader_user_id` = you), or claims one already made with no leader (its type
+  follows the answer; a department with teams under it can't become a team),
+  optionally under your boss's group (team path) or the group above yours
+  (department path), a department reused by name. `POST /api/org-units/setup`;
+  then everyone without a team goes in. Once you lead a unit it collapses to
+  one line with a link to Org. The path is not stored: it is read from the top
+  unit you lead. The free-standing "Create a new team" dialog (Team/Department
+  dropdown) is not offered in setup mode; it stays outside it. Sub-teams led by
+  your own people are not in setup yet.
 - **5 · Expectations:** every role in use has expectations. Locked ("Needs team
   and roles") until step 4 is done or skipped. The card names the next person
   and role, ordered by soonest 1:1 (`steps.expectations.next_role`, `queue`),
@@ -133,15 +144,26 @@ fires once.
   description" or "typical for this role, not from you" (typical lines capped
   at 3, offered as suggestions). Approval is the normal path
   (`expectations.md`).
-- **6 · Goals:** an org-level goal (company or department) and a team goal;
-  cancelled goals don't count. The card checks the two halves separately
-  ("Company or department goals", "Your team's goal"), each with a "Counts:"
-  hint naming what ticks it (any company or department goal; any team goal),
-  and reads "1 of 2 done · … next". Org goals open `OrgGoalsModal` (paste, talk or up to 3 files →
+- **6 · Goals:** a goal above your unit and a goal on it, counted by
+  relationship (`goal_relationship()` in `onboarding.py`), not by unit type;
+  cancelled goals don't count. "Above" is the company or any unit over the
+  top unit you lead; "yours" is that unit. An older goal with no unit counts
+  on the line of its level. The card checks the halves separately — "Goals
+  above your team / department" and "Your team's / department's goal" — each
+  with a "Counts:" hint naming the units, and reads "1 of 2 done · … next".
+  On the department path a third line, "Teams under you: N of M have a goal",
+  is shown and never required. When you lead no unit (older accounts, or step
+  4 skipped) it counts by level as before: "Company or department goals" (any
+  company or department goal) and "Your team's goal" (any team goal). Org
+  goals open `OrgGoalsModal` (paste, talk or up to 3 files →
   `POST /api/onboarding/org-goals/parse`, nothing saved → `apply`), where each
-  row's level and department can be changed; its receipt's primary action is
-  "Write your team's goal", opening `/app/goals?new=1&level=team` with Supports
-  set to a department goal just saved. Team goals are never drafted.
+  row's owner can be changed; your own units are not offered there. When no
+  unit sits above yours (or, leading none, no department exists), a row can be
+  **"Your boss's group (name it)"**: one name, saved as a department above
+  your unit (`POST /api/org-units/setup/above`) before the goals apply. The
+  receipt's primary action is "Write your team's goal" (or department's),
+  opening the New goal form on your unit with Supports set to a department
+  goal just saved. Your own unit's goals are never drafted.
   **"Don't know yet"** stamps `users.org_goals_unknown_at`: with a team goal
   the step reads "Waiting on your boss" and `next_step` skips it, and an ask
   goes on the next meeting with a boss in Beyond. Adding an org goal clears it.

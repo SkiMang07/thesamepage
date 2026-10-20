@@ -897,6 +897,22 @@ export const getOrgMembers = (): Promise<OrgMember[]> => authedFetch("/api/org-u
 // rollup for, and to show an empty state when the caller leads nothing yet.
 export const getLedOrgUnits = (): Promise<OrgUnit[]> => authedFetch("/api/org-units/led");
 
+// Setup step 4: create or claim your own team or department, led by you, and
+// optionally the group above it ("My team" / "My department").
+export type SetupUnitIn = {
+  path: OrgUnitType;
+  name?: string;
+  existing_unit_id?: string;
+  parent_name?: string;
+};
+
+export const setupOwnUnit = (body: SetupUnitIn): Promise<{ unit: OrgUnit; parent: OrgUnit | null }> =>
+  authedFetch("/api/org-units/setup", { method: "POST", body: JSON.stringify(body) });
+
+// "Your boss's group (name it)": a department above the unit you lead.
+export const setupGroupAbove = (name: string): Promise<OrgUnit> =>
+  authedFetch("/api/org-units/setup/above", { method: "POST", body: JSON.stringify({ name }) });
+
 export type GoalsRollupItem = {
   org_unit_id: string;
   org_unit_name: string | null;
@@ -2154,7 +2170,22 @@ export type OnboardingSteps = {
   };
   // unknown: "Don't know yet" is the recorded answer. parked: it is the only
   // thing missing, so the step waits on the boss instead of being highlighted.
-  goals: { done: boolean; skipped: boolean; has_org_goal: boolean; has_team_goal: boolean; unknown: boolean; parked: boolean };
+  // Counted by relationship to the unit you lead: has_org_goal is a goal on
+  // the company or a unit above yours, has_team_goal one on yours. `path` is
+  // the kind of unit you lead, or null when you lead none (counted by level).
+  // `under` is the department path's teams: shown, never required.
+  goals: {
+    done: boolean;
+    skipped: boolean;
+    has_org_goal: boolean;
+    has_team_goal: boolean;
+    unknown: boolean;
+    parked: boolean;
+    path?: OrgUnitType | null;
+    mine?: { id: string; name: string } | null;
+    above?: { id: string; name: string } | null;
+    under?: { total: number; with_goal: number } | null;
+  };
 };
 
 export type OnboardingStatus = {

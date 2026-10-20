@@ -11,6 +11,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ApiError,
   AwayPeriod,
   AwaySweepItem,
   AwaySweepResult,
@@ -39,6 +40,7 @@ import {
   getAwayPeriods,
   getCapacitySettings,
   getDirectReports,
+  getLedOrgUnits,
   getOrgUnits,
   getProfile,
   getRoleFamilies,
@@ -46,6 +48,7 @@ import {
   getSetupStatus,
   getWorkUnitConfigs,
   previewAwayPeriod,
+  setupOwnUnit,
   unarchiveDirectReport,
   updateCapacitySettings,
   updateDirectReportProfile,
@@ -266,6 +269,7 @@ function SettingsFlow() {
                 initialSetupStatus={setupStatus}
                 onSetupStatusChange={setSetupStatus}
                 onError={setError}
+                setupMode={fromSetup}
               />
             )}
             {section === "capacity" && profile && (
@@ -883,6 +887,182 @@ function CreateTeamModal({
   );
 }
 
+// Setup step 4's first question (goal attribution, Part A1): "What are you
+// setting up?" Your answer creates, or claims, the team or department you lead,
+// optionally under your boss's group, and puts your people in it. The path is
+// read back from the top unit you lead, so there is nothing else to keep in
+// step. Sub-teams led by your people come later (Part A4).
+function SetupUnitPanel({
+  orgUnits,
+  unplacedCount,
+  onSaved,
+}: {
+  orgUnits: OrgUnit[];
+  unplacedCount: number;
+  onSaved: (unitId: string) => Promise<void>;
+}) {
+  const [led, setLed] = useState<OrgUnit[] | null>(null);
+  const [path, setPath] = useState<OrgUnitType | null>(null);
+  const [existingId, setExistingId] = useState("");
+  const [name, setName] = useState("");
+  const [parentName, setParentName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getLedOrgUnits()
+      .then(setLed)
+      .catch(() => setLed([]));
+  }, [orgUnits]);
+
+  if (led === null) return null;
+  const ledIds = new Set(led.map((u) => u.id));
+  const mine = led.find((u) => u.unit_type === "department" && !ledIds.has(u.parent_unit_id ?? "")) ?? led.find((u) => !ledIds.has(u.parent_unit_id ?? ""));
+  const byId = new Map(orgUnits.map((u) => [u.id, u]));
+
+  if (mine) {
+    const above = mine.parent_unit_id ? byId.get(mine.parent_unit_id) : undefined;
+    const word = mine.unit_type === "department" ? "department" : "team";
+    return (
+      <div id="setup-unit" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-canvas px-4 py-3 text-sm">
+        <p className="text-ink-body">
+          Your {word}: <span className="font-medium text-ink">{mine.name}</span>
+          {above && <span className="text-ink-secondary"> · under {above.name}</span>}. You lead it.
+        </p>
+        <div className="flex items-center gap-3">
+          {unplacedCount > 0 && (
+            <button type="button" onClick={() => void onSaved(mine.id)} className="font-medium text-brand hover:text-brand-hover">
+              Put the {unplacedCount} {unplacedCount === 1 ? "person" : "people"} without a team in it
+            </button>
+          )}
+          <Link href="/app/org" className="text-ink-secondary underline hover:text-ink-body">
+            Change on Org
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const unclaimed = orgUnits.filter((u) => !u.leader_user_id);
+  const existing = existingId ? byId.get(existingId) : undefined;
+  const word = path === "department" ? "department" : "team";
+  const askParent = !existing?.parent_unit_id;
+  const ready = !!path && (!!existing || !!name.trim());
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!path || !ready || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { unit } = await setupOwnUnit({
+        path,
+        name: existing ? undefined : name.trim(),
+        existing_unit_id: existing?.id,
+        parent_name: askParent && parentName.trim() ? parentName.trim() : undefined,
+      });
+      await onSaved(unit.id);
+      setLed(await getLedOrgUnits());
+    } catch (err) {
+      setError(err instanceof ApiError ? readableDetail(err) : "That didn’t save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const choice = (value: OrgUnitType, label: string, hint: string) => (
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 ${path === value ? "border-brand bg-brand/5" : "border-hairline hover:bg-canvas"}`}
+    >
+      <input type="radio" name="setup-path" value={value} checked={path === value} onChange={() => setPath(value)} className="mt-1" />
+      <span>
+        <span className="block text-sm font-medium text-ink">{label}</span>
+        <span className="block text-xs text-ink-secondary">{hint}</span>
+      </span>
+    </label>
+  );
+
+  return (
+    <form id="setup-unit" onSubmit={save} className="mt-4 rounded-lg border border-hairline p-4">
+      <fieldset>
+        <legend className="text-sm font-medium text-ink">What are you setting up?</legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {choice("team", "My team", "The people I manage directly.")}
+          {choice("department", "My department", "I manage managers, or a group with teams in it.")}
+        </div>
+      </fieldset>
+
+      {path && (
+        <div className="mt-4 space-y-3">
+          {unclaimed.length > 0 && (
+            <div>
+              <label htmlFor="setup-existing" className={labelCls}>
+                Already made it?
+              </label>
+              <select id="setup-existing" value={existingId} onChange={(e) => setExistingId(e.target.value)} className={`${inputCls} sm:w-72`}>
+                <option value="">No, name it below</option>
+                {unclaimed.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {!existing && (
+            <div>
+              <label htmlFor="setup-name" className={labelCls}>
+                What’s your {word} called?
+              </label>
+              <input
+                id="setup-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={120}
+                placeholder={path === "department" ? "e.g. Customer Success" : "e.g. Enterprise Support"}
+                className={`${inputCls} sm:w-72`}
+              />
+            </div>
+          )}
+          {askParent && (
+            <div>
+              <label htmlFor="setup-parent" className={labelCls}>
+                {path === "department" ? "Is there a group above yours? (optional)" : "What’s your boss’s group called? (optional)"}
+              </label>
+              <input
+                id="setup-parent"
+                value={parentName}
+                onChange={(e) => setParentName(e.target.value)}
+                maxLength={120}
+                placeholder={path === "department" ? "e.g. Operations" : "e.g. Customer Success"}
+                className={`${inputCls} sm:w-72`}
+              />
+              <p className="mt-1 text-xs text-ink-muted">Their goals are what yours supports.</p>
+            </div>
+          )}
+          {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="submit" disabled={!ready || saving} className={primaryBtnCls}>
+              {saving ? "Saving..." : unplacedCount > 0 ? `Save and put your ${unplacedCount === 1 ? "person" : `${unplacedCount} people`} in it` : "Save"}
+            </button>
+            <p className="text-xs text-ink-muted">You become its leader. You can change that on the Org page.</p>
+          </div>
+        </div>
+      )}
+    </form>
+  );
+}
+
+function readableDetail(e: ApiError) {
+  try {
+    const d = JSON.parse(e.detail)?.detail;
+    if (typeof d === "string") return d;
+  } catch {
+    /* not JSON */
+  }
+  return e.status < 500 ? e.detail : "That didn’t save. Try again.";
+}
+
 // The expectations chip — ✓ when the assigned role has configured
 // expectations, amber "no role" when nothing's assigned yet, amber
 // "Add expectations" (deep-links into the Expectations section's AI draft
@@ -1111,6 +1291,7 @@ function PeopleSection({
   initialSetupStatus,
   onSetupStatusChange,
   onError,
+  setupMode = false,
 }: {
   reports: DirectReport[];
   setReports: React.Dispatch<React.SetStateAction<DirectReport[]>>;
@@ -1130,6 +1311,9 @@ function PeopleSection({
   initialSetupStatus: SetupStatus | null;
   onSetupStatusChange: (status: SetupStatus) => void;
   onError: (m: string | null) => void;
+  // Opened from the setup card: your own unit comes from SetupUnitPanel, and
+  // the free-standing "Create a new team" dialog stays out of it.
+  setupMode?: boolean;
 }) {
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(initialSetupStatus);
   // Which report row a role/team create-modal was opened from — null when
@@ -1287,7 +1471,8 @@ function PeopleSection({
     if (id === "people") {
       document.getElementById("people-add-name")?.focus();
     } else if (id === "teams") {
-      setCreatingTeamFor("header");
+      if (setupMode) document.getElementById("setup-unit")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      else setCreatingTeamFor("header");
     } else if (id === "roles") {
       const firstUnassigned = reports.find((r) => !r.role_level_id);
       if (firstUnassigned) {
@@ -1323,6 +1508,17 @@ function PeopleSection({
       </p>
 
       <SetupProgressHeader status={setupStatus} onStep={handleStep} />
+
+      {setupMode && (
+        <SetupUnitPanel
+          orgUnits={orgUnits}
+          unplacedCount={unplacedCount}
+          onSaved={async (unitId) => {
+            setOrgUnits(await getOrgUnits());
+            await placeUnplaced(unitId);
+          }}
+        />
+      )}
 
       {filterUnitId && (
         <div className="mt-4 flex items-center justify-between rounded-lg border border-hairline bg-canvas px-4 py-2 text-sm">
@@ -1401,7 +1597,7 @@ function PeopleSection({
                   orgUnits={orgUnits}
                   value={r.org_unit_id ?? ""}
                   onChange={(id) => assignOrgUnit(r, id)}
-                  onCreateNew={() => setCreatingTeamFor(r)}
+                  onCreateNew={setupMode ? undefined : () => setCreatingTeamFor(r)}
                   className="w-44 truncate rounded-md border border-control px-2 py-1.5 text-sm"
                 />
               </div>

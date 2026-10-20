@@ -26,8 +26,10 @@ existed before this either); revisit if that ever needs tightening.
 GET /led and GET /members below exist to support the leader picker and the
 "which units can I see rollups for" UI on the Org and Capacity pages.
 """
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from utils import ensure_org, get_authenticated_client, get_email_from_token
 
@@ -172,6 +174,138 @@ def create_org_unit(
         .execute()
     )
     return result.data[0]
+
+
+# ---- setup (step 4): your own unit, led by you ------------------------------
+#
+# Setup asks "What are you setting up? My team / My department" and creates (or
+# claims) that unit with the caller as its leader, optionally under their boss's
+# group. The path is never stored: it is read back from the top unit you lead.
+# Leaders can still be changed on the Org page.
+
+
+class SetupUnitIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: Literal["team", "department"]
+    name: str | None = Field(default=None, max_length=120)
+    # Claim a unit that already exists (made before setup asked) instead of
+    # creating one. Its type follows the answer.
+    existing_unit_id: str | None = Field(default=None, max_length=64)
+    # Your boss's group (team path) or the group above yours (department path).
+    parent_name: str | None = Field(default=None, max_length=120)
+
+
+class AboveUnitIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(max_length=120)
+
+
+def setup_plan(units: list[dict], user_id: str, body: SetupUnitIn) -> dict:
+    """What setup will write, as plain data. Pure, so it is tested without a
+    database. Raises HTTPException for a request it can't honour.
+
+    Returns {"unit": {"id"|None, "name", "unit_type"}, "parent": {"id"|None,
+    "name"} | None}. An id of None means "create it".
+    """
+    by_id = {u["id"]: u for u in units}
+    if body.existing_unit_id:
+        unit = by_id.get(body.existing_unit_id)
+        if not unit:
+            raise HTTPException(status_code=422, detail="That team or department wasn't found")
+        if unit.get("leader_user_id") and unit["leader_user_id"] != user_id:
+            raise HTTPException(status_code=409, detail=f"{unit['name']} already has a leader. Change it on the Org page.")
+        if unit["unit_type"] != body.path and any(u.get("parent_unit_id") == unit["id"] for u in units):
+            raise HTTPException(
+                status_code=409,
+                detail=f"{unit['name']} has teams under it, so it stays a department. Choose My department.",
+            )
+        planned = {"id": unit["id"], "name": unit["name"], "unit_type": body.path}
+        has_parent = bool(unit.get("parent_unit_id"))
+    else:
+        planned = {"id": None, "name": _clean_name(body.name or ""), "unit_type": body.path}
+        has_parent = False
+
+    parent = None
+    parent_name = (body.parent_name or "").strip()
+    if parent_name and not has_parent:
+        if parent_name.lower() == planned["name"].lower():
+            raise HTTPException(status_code=422, detail="The group above yours needs a different name from yours")
+        # Reuse a department of that name rather than making a second one.
+        match = next(
+            (u for u in units if u["unit_type"] == "department" and u["name"].strip().lower() == parent_name.lower()
+             and u["id"] != planned["id"]),
+            None,
+        )
+        parent = {"id": match["id"] if match else None, "name": match["name"] if match else parent_name}
+    return {"unit": planned, "parent": parent}
+
+
+def _all_units(supabase) -> list[dict]:
+    return supabase.table("org_units").select("id,name,unit_type,parent_unit_id,leader_user_id").execute().data
+
+
+@router.post("/setup")
+def setup_own_unit(
+    body: SetupUnitIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)
+):
+    """Create or claim the caller's own team or department, led by them, and
+    optionally the group above it. Returns {unit, parent}."""
+    user_id, supabase = auth
+    org_id = ensure_org(user_id, supabase, get_email_from_token(authorization))
+    plan = setup_plan(_all_units(supabase), user_id, body)
+
+    parent_row = None
+    if plan["parent"]:
+        if plan["parent"]["id"]:
+            parent_row = next(u for u in _all_units(supabase) if u["id"] == plan["parent"]["id"])
+        else:
+            parent_row = (
+                supabase.table("org_units")
+                .insert({"name": plan["parent"]["name"], "unit_type": "department", "org_id": org_id})
+                .execute()
+                .data[0]
+            )
+
+    fields = {"unit_type": plan["unit"]["unit_type"], "leader_user_id": user_id}
+    if parent_row:
+        fields["parent_unit_id"] = parent_row["id"]
+    if plan["unit"]["id"]:
+        unit_row = supabase.table("org_units").update(fields).eq("id", plan["unit"]["id"]).execute().data
+        if not unit_row:
+            raise HTTPException(status_code=404, detail="Org unit not found")
+        unit_row = unit_row[0]
+    else:
+        unit_row = (
+            supabase.table("org_units")
+            .insert({**fields, "name": plan["unit"]["name"], "org_id": org_id})
+            .execute()
+            .data[0]
+        )
+    return {"unit": unit_row, "parent": parent_row}
+
+
+@router.post("/setup/above")
+def setup_group_above(
+    body: AboveUnitIn, auth=Depends(get_authenticated_client), authorization: str = Header(None)
+):
+    """"Your boss's group (name it)" from the org-goals review: a department
+    above the caller's own unit. Placed over the top unit they lead when it has
+    no parent; reused when a department of that name exists."""
+    user_id, supabase = auth
+    name = _clean_name(body.name)
+    org_id = ensure_org(user_id, supabase, get_email_from_token(authorization))
+    units = _all_units(supabase)
+    led_ids = {u["id"] for u in units if u.get("leader_user_id") == user_id}
+    top = [u for u in units if u["id"] in led_ids and u.get("parent_unit_id") not in led_ids]
+    match = next((u for u in units if u["unit_type"] == "department" and u["name"].strip().lower() == name.lower()
+                  and u["id"] not in led_ids), None)
+    group = match or (
+        supabase.table("org_units").insert({"name": name, "unit_type": "department", "org_id": org_id}).execute().data[0]
+    )
+    for u in top:
+        if not u.get("parent_unit_id") and u["id"] != group["id"]:
+            supabase.table("org_units").update({"parent_unit_id": group["id"]}).eq("id", u["id"]).execute()
+    return group
 
 
 @router.put("/{unit_id}")

@@ -147,20 +147,22 @@ export function OrgUnitSelect({
   orgUnits: OrgUnit[];
   value: string;
   onChange: (id: string) => void;
-  onCreateNew: () => void;
+  // Omitted in setup, where your own unit comes from the "What are you
+  // setting up?" question instead of a free-standing create dialog.
+  onCreateNew?: () => void;
   className?: string;
 }) {
   return (
     <select
       value={value}
       onChange={(e) => {
-        if (e.target.value === CREATE_NEW_VALUE) onCreateNew();
+        if (e.target.value === CREATE_NEW_VALUE) onCreateNew?.();
         else onChange(e.target.value);
       }}
       className={className}
     >
       <option value="">No team assigned</option>
-      <option value={CREATE_NEW_VALUE}>+ Create new team…</option>
+      {onCreateNew && <option value={CREATE_NEW_VALUE}>+ Create new team…</option>}
       {orgUnits.map((ou) => (
         <option key={ou.id} value={ou.id}>
           {orgUnitLabel(ou)}

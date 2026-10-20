@@ -883,3 +883,81 @@ def test_the_receipt_names_what_was_skipped():
     assert not any("Skipped" in line for line in _receipt()["lines"])
     lines = _receipt(skipped_steps=["goals", "org"])["lines"]
     assert any(line.startswith("Skipped for now: team and roles, org and team goals.") for line in lines)
+
+
+# ---- step 6 by relationship (goal attribution, Part A3) ----------------------
+
+from routes.onboarding import goal_relationship, own_goal_target
+
+
+def _unit(uid, kind, parent=None, leader=None, name=None):
+    return {"id": uid, "name": name or uid, "unit_type": kind, "parent_unit_id": parent, "leader_user_id": leader}
+
+
+def test_leading_no_unit_falls_back_to_counting_by_level():
+    units = [_unit("t", "team")]
+    assert goal_relationship(units, [{"level": "team", "org_unit_id": "t"}], "m") is None
+    assert _all_true(goal_scope=None)["goals"]["path"] is None
+
+
+def test_a_department_you_lead_counts_as_your_goal_not_an_org_goal():
+    # Susie's case: her own group is a department. Its goal is hers, and the
+    # org line still waits for something above it.
+    units = [_unit("d", "department", leader="m", name="Support")]
+    scope = goal_relationship(units, [{"level": "department", "org_unit_id": "d"}], "m")
+    assert scope["path"] == "department" and scope["has_mine"] and not scope["has_above"]
+    goals = _all_true(goal_scope=scope)["goals"]
+    assert goals["has_team_goal"] and not goals["has_org_goal"] and not goals["done"]
+    assert own_goal_target(goals) == {
+        "label": "Write your department’s goal",
+        "href": "/app/goals?level=department&scope=d&new=1",
+    }
+
+
+def test_team_path_counts_the_bosss_group_and_the_company_as_above():
+    units = [_unit("boss", "department", name="Customer Success"), _unit("t", "team", "boss", "m", "Enterprise")]
+    on_boss = goal_relationship(units, [{"level": "department", "org_unit_id": "boss"}], "m")
+    assert on_boss["has_above"] and not on_boss["has_mine"]
+    assert on_boss["above"] == {"id": "boss", "name": "Customer Success"}
+    assert goal_relationship(units, [{"level": "company", "org_unit_id": None}], "m")["has_above"]
+    both = goal_relationship(units, [{"level": "company", "org_unit_id": None}, {"level": "team", "org_unit_id": "t"}], "m")
+    assert _all_true(goal_scope=both)["goals"]["done"]
+
+
+def test_a_goal_on_someone_elses_team_or_a_sibling_department_counts_for_neither_line():
+    units = [
+        _unit("boss", "department"),
+        _unit("other", "department"),
+        _unit("t", "team", "boss", "m"),
+        _unit("t2", "team", "boss"),
+    ]
+    scope = goal_relationship(units, [{"level": "team", "org_unit_id": "t2"}, {"level": "department", "org_unit_id": "other"}], "m")
+    assert not scope["has_mine"] and not scope["has_above"]
+
+
+def test_department_path_shows_teams_under_it_without_requiring_them():
+    units = [
+        _unit("d", "department", leader="m"),
+        _unit("a", "team", "d"),
+        _unit("b", "team", "d"),
+        _unit("c", "team", "d"),
+    ]
+    goals = [{"level": "company", "org_unit_id": None}, {"level": "department", "org_unit_id": "d"}, {"level": "team", "org_unit_id": "a"}]
+    scope = goal_relationship(units, goals, "m")
+    assert scope["under"] == {"total": 3, "with_goal": 1}
+    assert _all_true(goal_scope=scope)["goals"]["done"]
+
+
+def test_an_old_unlinked_goal_counts_on_the_matching_line():
+    units = [_unit("t", "team", leader="m")]
+    scope = goal_relationship(units, [{"level": "team", "org_unit_id": None}, {"level": "department", "org_unit_id": None}], "m")
+    assert scope["has_mine"] and scope["has_above"]
+
+
+def test_status_counts_by_relationship_once_you_lead_a_unit():
+    tables = _tables(
+        org_units=[{"id": "u1", "name": "Support", "unit_type": "department", "parent_unit_id": None, "leader_user_id": "m"}],
+        goals=[{"level": "department", "org_unit_id": "u1", "status": "active"}],
+    )
+    goals = build_status("m", _Client(tables))["steps"]["goals"]
+    assert goals["path"] == "department" and goals["has_team_goal"] and not goals["has_org_goal"]

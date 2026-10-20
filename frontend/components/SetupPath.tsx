@@ -81,7 +81,8 @@ type StepView = {
   // A step with two halves (goals: org + team) lists both, each with its own
   // check, so finishing one half visibly counts.
   // `counts` says which goals tick the line, so a tick is never a mystery.
-  parts?: { label: string; done: boolean; note?: string; counts?: string }[];
+  // `info` is shown without a check: it is never required (sub-team goals, D6).
+  parts?: { label: string; done: boolean; note?: string; counts?: string; info?: boolean }[];
   done: boolean;
   // "Skip for now": counts toward ending setup, is not done, and can be undone.
   skipped: boolean;
@@ -129,13 +130,53 @@ function expectationsAction(next: ExpectationQueueEntry | null | undefined, rest
   };
 }
 
-// The New goal form, set to a team goal (the only team is picked for you).
-const TEAM_GOAL_HREF = "/app/goals?new=1&level=team";
+// The goal the manager writes for their own unit: the New goal form set to the
+// team or department they lead, or to a team goal when they lead none (the
+// only team is then picked for them). Mirrors own_goal_target() in onboarding.py.
+export function ownGoal(goals: OnboardingSteps["goals"]) {
+  const department = goals.path === "department" && !!goals.mine;
+  const level = department ? "department" : "team";
+  const word = department ? "department" : "team";
+  return {
+    word,
+    level: level as "team" | "department",
+    scope: goals.mine?.id ?? null,
+    label: `Write your ${word}’s goal`,
+    href: goals.mine ? `/app/goals?level=${level}&scope=${goals.mine.id}&new=1` : "/app/goals?new=1&level=team",
+  };
+}
+
+// The two lines of step 6, and what ticks each. With a unit you lead they are
+// counted by relationship to it; without one, by level (the older wording).
+function goalParts(goals: OnboardingSteps["goals"]): NonNullable<StepView["parts"]> {
+  const asked = !goals.has_org_goal && goals.unknown ? "asked your boss" : undefined;
+  if (!goals.path || !goals.mine) {
+    return [
+      { label: "Company or department goals", done: goals.has_org_goal, note: asked, counts: "Counts: any goal for the company or a department" },
+      { label: "Your team’s goal", done: goals.has_team_goal, counts: "Counts: any goal for a team" },
+    ];
+  }
+  const word = goals.path === "department" ? "department" : "team";
+  const above = goals.above
+    ? `Counts: any company goal, or one for ${goals.above.name}`
+    : word === "team"
+      ? "Counts: any company goal, or one for your boss’s group"
+      : "Counts: any company goal, or one for the group above yours";
+  const parts: NonNullable<StepView["parts"]> = [
+    { label: `Goals above your ${word}`, done: goals.has_org_goal, note: asked, counts: above },
+    { label: `Your ${word}’s goal`, done: goals.has_team_goal, counts: `Counts: any goal for ${goals.mine.name}` },
+  ];
+  if (goals.under) {
+    parts.push({ label: `Teams under you: ${goals.under.with_goal} of ${goals.under.total} have a goal`, done: false, info: true });
+  }
+  return parts;
+}
 
 export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | null): StepView[] {
   const org = s.org;
   const exp = s.expectations;
   const goals = s.goals;
+  const own = ownGoal(goals);
   const queue = exp.queue ?? [];
   const nextRole = exp.next_role ?? queue[0] ?? null;
   const perRole = expectationsAction(nextRole, queue.filter((q) => q !== nextRole && q.report_id !== nextRole?.report_id));
@@ -222,22 +263,14 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
     },
     {
       key: "goals",
-      title: "Org and team goals",
+      title: own.word === "department" ? "Org and department goals" : "Org and team goals",
       changes: "Records what your team is working toward this period, and the company or department goals above it.",
       time: "About 3 minutes",
-      action: goals.has_org_goal || goals.parked ? "Write your team’s goal" : "Add company or department goals",
-      href: TEAM_GOAL_HREF,
+      action: goals.has_org_goal || goals.parked ? own.label : "Add company or department goals",
+      href: own.href,
       modal: goals.has_org_goal || goals.parked ? undefined : "goals",
-      secondary: !goals.has_org_goal && !goals.has_team_goal && !goals.parked ? [{ action: "Or write your team’s goal first", href: TEAM_GOAL_HREF }] : undefined,
-      parts: [
-        {
-          label: "Company or department goals",
-          done: goals.has_org_goal,
-          counts: "Counts: any goal for the company or a department",
-          note: !goals.has_org_goal && goals.unknown ? "asked your boss" : undefined,
-        },
-        { label: "Your team’s goal", done: goals.has_team_goal, counts: "Counts: any goal for a team" },
-      ],
+      secondary: !goals.has_org_goal && !goals.has_team_goal && !goals.parked ? [{ action: `Or write your ${own.word}’s goal first`, href: own.href }] : undefined,
+      parts: goalParts(goals),
       done: goals.done,
       skipped: goals.skipped,
       blocked: false,
@@ -249,11 +282,15 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
           ? "Waiting on your boss"
           : !goals.has_org_goal && !goals.has_team_goal
             ? goals.unknown
-              ? "Company goals not known yet · no team goal"
-              : "No org or team goal"
+              ? `Company goals not known yet · no ${own.word} goal`
+              : goals.path
+                ? "0 of 2 done"
+                : "No org or team goal"
             : !goals.has_org_goal
-              ? "1 of 2 done · company or department goals next"
-              : "1 of 2 done · your team’s goal next",
+              ? goals.path
+                ? `1 of 2 done · goals above your ${own.word} next`
+                : "1 of 2 done · company or department goals next"
+              : `1 of 2 done · your ${own.word}’s goal next`,
     },
   ];
 }
@@ -366,7 +403,15 @@ export default function SetupPath() {
           }}
         />
       )}
-      {goalsOpen && <OrgGoalsModal onClose={() => setGoalsOpen(false)} teamGoalNeeded={!onboarding.steps.goals.has_team_goal} />}
+      {goalsOpen && (
+        <OrgGoalsModal
+          onClose={() => setGoalsOpen(false)}
+          teamGoalNeeded={!onboarding.steps.goals.has_team_goal}
+          ownGoal={ownGoal(onboarding.steps.goals)}
+          groupAboveKnown={!!onboarding.steps.goals.above}
+          leadsUnit={!!onboarding.steps.goals.mine}
+        />
+      )}
     </>
   );
 
@@ -454,12 +499,12 @@ export default function SetupPath() {
                       {step.parts && (
                         <ul className="mt-2 space-y-1 text-[13px]">
                           {step.parts.map((part) => (
-                            <li key={part.label} className={part.done ? "text-ink-secondary" : "text-ink"}>
+                            <li key={part.label} className={part.done || part.info ? "text-ink-secondary" : "text-ink"}>
                               <span aria-hidden className={`mr-2 inline-block w-3 ${part.done ? "text-brand" : "text-ink-muted"}`}>
-                                {part.done ? "✓" : "○"}
+                                {part.info ? "·" : part.done ? "✓" : "○"}
                               </span>
                               {part.label}
-                              <span className="sr-only">{part.done ? ", done" : ", not done"}</span>
+                              {!part.info && <span className="sr-only">{part.done ? ", done" : ", not done"}</span>}
                               {part.note && <span className="ml-1 text-ink-muted">· {part.note}</span>}
                               {part.counts && <span className="block pl-5 text-xs text-ink-muted">{part.counts}</span>}
                             </li>

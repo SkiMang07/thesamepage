@@ -63,6 +63,62 @@ STEP_ORDER = ("org", "expectations", "goals")
 STEP_COLUMN = {step: f"setup_{step}_at" for step in STEP_ORDER}
 ORG_LEVELS = {"company", "department"}
 
+
+def goal_relationship(units: list[dict], goals: list[dict], user_id: str) -> dict | None:
+    """Step 6 counted by relationship, not by unit type. Pure.
+
+    "Yours" is the unit you lead (the top one, when you lead a chain); "above"
+    is every unit over it; the company is always above. None when you lead no
+    unit (an account set up before setup made you a leader, or one that
+    skipped it): the step then falls back to counting by level.
+
+    `units` are org_units (id, name, unit_type, parent_unit_id, leader_user_id);
+    `goals` are the org's goals that aren't cancelled (level, org_unit_id).
+    """
+    by_id = {u["id"]: u for u in units}
+    led = [u for u in units if u.get("leader_user_id") == user_id]
+    led_ids = {u["id"] for u in led}
+    top = [u for u in led if u.get("parent_unit_id") not in led_ids]
+    if not top:
+        return None
+    # A department you lead decides the path; otherwise your first team.
+    mine = next((u for u in top if u["unit_type"] == "department"), None) or sorted(top, key=lambda u: u["name"].lower())[0]
+    path = mine["unit_type"]
+    mine_ids = {u["id"] for u in top}
+
+    above: list[dict] = []
+    seen: set = set()
+    for u in top:
+        current = by_id.get(u.get("parent_unit_id"))
+        while current and current["id"] not in seen and current["id"] not in led_ids:
+            seen.add(current["id"])
+            above.append(current)
+            current = by_id.get(current.get("parent_unit_id"))
+    above_ids = {u["id"] for u in above}
+
+    def counts_as_mine(g: dict) -> bool:
+        if g.get("org_unit_id") in mine_ids:
+            return True
+        # An older goal saved before it had to name its unit, on the same kind of unit.
+        return not g.get("org_unit_id") and g.get("level") == path
+
+    def counts_as_above(g: dict) -> bool:
+        if g.get("level") == "company" or g.get("org_unit_id") in above_ids:
+            return True
+        return path == "team" and not g.get("org_unit_id") and g.get("level") == "department"
+
+    under = [u for u in units if u.get("parent_unit_id") == mine["id"] and u["id"] not in led_ids] if path == "department" else []
+    under_with_goal = {g.get("org_unit_id") for g in goals} & {u["id"] for u in under}
+    parent = by_id.get(mine.get("parent_unit_id"))
+    return {
+        "path": path,
+        "mine": {"id": mine["id"], "name": mine["name"]},
+        "above": {"id": parent["id"], "name": parent["name"]} if parent and parent["id"] in above_ids else None,
+        "has_mine": any(counts_as_mine(g) for g in goals),
+        "has_above": any(counts_as_above(g) for g in goals),
+        "under": {"total": len(under), "with_goal": len(under_with_goal)} if under else None,
+    }
+
 # The setup card's volume (chunk D). "Not now" snoozes it: 1 day, then 3, 7 and
 # 14 (capped). After the first dismissal, or QUIET_AFTER_DAYS without progress,
 # it is one quiet line instead of the full card. Completing a step resets both.
@@ -88,6 +144,7 @@ def evaluate(
     unit_count: int,
     covered_role_ids: set,
     goal_levels: set,
+    goal_scope: dict | None = None,
     org_goals_unknown: bool = False,
     queue: list[dict] | None = None,
     open_drafts: dict | None = None,
@@ -102,6 +159,8 @@ def evaluate(
     `open_drafts` is role level id -> "review" (an unapproved draft the manager
     can review now) or "writing" (a batch draft still being written).
     `skipped` is the steps the manager chose to skip for now.
+    `goal_scope` is goal_relationship(): when the manager leads a unit, the
+    goals step counts by relationship to it; when None, by level.
     """
     skipped = set(skipped or ())
     people = len(reports)
@@ -121,8 +180,12 @@ def evaluate(
 
     org_done = people > 0 and unit_count > 0 and without_team == 0 and without_role == 0
     exp_done = people > 0 and without_role == 0 and roles_covered == len(roles_in_use)
-    has_org_goal = bool(goal_levels & ORG_LEVELS)
-    has_team_goal = "team" in goal_levels
+    if goal_scope:
+        has_org_goal = goal_scope["has_above"]
+        has_team_goal = goal_scope["has_mine"]
+    else:
+        has_org_goal = bool(goal_levels & ORG_LEVELS)
+        has_team_goal = "team" in goal_levels
 
     return {
         "org": {
@@ -159,6 +222,14 @@ def evaluate(
             "skipped": "goals" in skipped and not (has_org_goal and has_team_goal),
             "has_org_goal": has_org_goal,
             "has_team_goal": has_team_goal,
+            # How the two lines read: "team" or "department" (the unit you
+            # lead), or None (you lead no unit; counted by level). `mine` and
+            # `above` name the units; `under` is the department path's teams,
+            # shown and never required (D6).
+            "path": goal_scope["path"] if goal_scope else None,
+            "mine": goal_scope["mine"] if goal_scope else None,
+            "above": goal_scope["above"] if goal_scope else None,
+            "under": goal_scope["under"] if goal_scope else None,
             # "Don't know yet" (chunk C): recorded, and it does not complete the
             # step. `parked` when the org goal is the only thing missing, so the
             # step stops being the highlighted one and reads "Waiting on your boss".
@@ -245,10 +316,24 @@ def step_target(steps: dict, key: str) -> dict:
             "label": f"Set expectations for {nxt.get('role_label') or 'this role'}",
             "href": f"/app/expectations/{nxt['role_level_id']}",
         }
-    if not steps["goals"]["has_org_goal"]:
+    goals = steps["goals"]
+    if not goals["has_org_goal"]:
         # The goals modal lives on Mission Control; the param opens it there.
         return {"label": "Add company or department goals", "href": "/app/dashboard?setup=goals"}
-    # The New goal form, set to a team goal (the only team is picked for you).
+    # The New goal form, set to the unit you lead (or a team goal, when you lead none).
+    return own_goal_target(goals)
+
+
+def own_goal_target(goals: dict) -> dict:
+    """"Write your team's goal" or "Write your department's goal", and the New
+    goal form already set to that unit. Mirrors the setup card."""
+    if goals.get("path") == "department" and goals.get("mine"):
+        return {
+            "label": "Write your department\u2019s goal",
+            "href": f"/app/goals?level=department&scope={goals['mine']['id']}&new=1",
+        }
+    if goals.get("mine"):
+        return {"label": "Write your team\u2019s goal", "href": f"/app/goals?level=team&scope={goals['mine']['id']}&new=1"}
     return {"label": "Write your team\u2019s goal", "href": "/app/goals?new=1&level=team"}
 
 
@@ -529,24 +614,24 @@ def build_status(user_id: str, supabase) -> dict:
             .execute()
             .data
         )
-        unit_count = len(supabase.table("org_units").select("id").execute().data)
+        units = supabase.table("org_units").select("id,name,unit_type,parent_unit_id,leader_user_id").execute().data
+        unit_count = len(units)
         coverage = _compute_coverage(supabase)
         covered_role_ids = {
             r["role_level_id"]
             for r in coverage["roles"]
             if r["metrics_count"] + r["skills_count"] + r["values_count"] > 0
         }
-        goal_levels = {
-            g["level"]
-            for g in supabase.table("goals").select("level").neq("status", "cancelled").execute().data
-        }
+        goal_rows = supabase.table("goals").select("level,org_unit_id").neq("status", "cancelled").execute().data
+        goal_levels = {g["level"] for g in goal_rows}
+        goal_scope = goal_relationship(units, goal_rows, user_id)
         role_labels = {
             r["id"]: f"{r['job_role']} L{r['job_level']}" if r.get("job_level") else str(r["job_role"])
             for r in supabase.table("role_levels").select("id,job_role,job_level").execute().data
         }
         open_drafts = _open_drafts(supabase)
         unknown = read_unknown(supabase, user_id)
-        if unknown and goal_levels & ORG_LEVELS:
+        if unknown and (goal_scope["has_above"] if goal_scope else goal_levels & ORG_LEVELS):
             clear_unknown(supabase, user_id)
             unknown = False
         steps = evaluate(
@@ -554,6 +639,7 @@ def build_status(user_id: str, supabase) -> dict:
             unit_count=unit_count,
             covered_role_ids=covered_role_ids,
             goal_levels=goal_levels,
+            goal_scope=goal_scope,
             org_goals_unknown=unknown,
             queue=expectation_queue(reports, role_labels, covered_role_ids, _next_1on1_dates(supabase, user_id),
                                     drafted_role_ids=set(open_drafts)),
