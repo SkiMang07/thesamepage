@@ -64,23 +64,30 @@ ASK_BOSS_TEXT = "Ask for this period's company or department goals."
 # ---------------------------------------------------------------------------
 
 def build_context(supabase, user_id: str) -> dict:
-    units = supabase.table("org_units").select("id,name,unit_type").order("name").execute().data
+    units = supabase.table("org_units").select("id,name,unit_type,leader_user_id").order("name").execute().data
     goals = (
         supabase.table("goals").select("title,level").eq("owner_id", user_id).neq("status", "cancelled")
         .limit(200).execute().data
     )
-    return {"units": units, "goals": goals}
+    # The manager's own units: goals about the same work as these can still be
+    # their boss's, and the model has to be told which group is theirs.
+    mine = [u for u in units if u.get("leader_user_id") == user_id]
+    return {"units": units, "goals": goals, "mine": mine}
 
 
 def build_prompt(ctx: dict, text: str) -> str:
     units = "\n".join(f"{u['name']} ({u['unit_type']})" for u in ctx["units"]) or "(none yet)"
+    mine = ", ".join(f"{u['name']} ({u['unit_type']})" for u in ctx.get("mine") or []) or "not set up yet"
     goals = "\n".join(
         f"{g['level']}: {g['title']}" for g in ctx["goals"][:_CONTEXT_GOALS] if g.get("level") in ORG_LEVELS
     ) or "(none yet)"
     return f"""You are helping a manager copy the goals their company or department has set into their workspace. Read the text and propose drafts. The manager will review every draft before anything is saved.
 
 Rules:
-- Company-level and department-level goals only. A goal that belongs to one team, or to one person, is the manager's own to write: leave it out.
+- Company-level and department-level goals only. A goal the manager's own group sets for itself, or one for a single person, is the manager's own to write: leave it out.
+- The manager leads: {mine}. A goal the text says comes from above them (their boss, a director, a VP, leadership, a planning or forecast deck, a group above theirs) is a department goal even when it is about the same customers, products, segment or numbers as the manager's own group. Sharing a word with the manager's group name does not make a goal theirs.
+- When you cannot tell whether a goal was set above the manager or by their own group, include it with confidence "low". Leaving a goal out is worse than showing it unsure: the manager checks every row.
+- org_unit_name is the group the text says set a department goal ("Customer Success"), even if it is not in the list below. Never the manager's own group.
 - Use only what the text says. Do not invent goals, numbers, dates, periods or owners. If the text does not support something, leave that field null. An empty list is a good answer.
 - Copy numbers exactly as written in the text. Never round, convert or add one.
 - title is a short plain statement of the goal, under 160 characters. success_metrics is how the text says it will be measured, if it says so.
@@ -115,6 +122,7 @@ def validate_parse(parsed: dict, ctx: dict, source_text: str) -> list[dict]:
     """Keep only well-formed drafts whose numbers come from the manager's text."""
     existing = {(g["level"], g["title"].strip().lower()) for g in ctx["goals"] if g.get("title")}
     department_names = {u["name"].lower() for u in ctx["units"] if u.get("unit_type") == "department"}
+    mine_names = {u["name"].lower() for u in ctx.get("mine") or []}
     allowed = numbers_in(source_text)
     out: list[dict] = []
     seen: set = set()
@@ -137,7 +145,10 @@ def validate_parse(parsed: dict, ctx: dict, source_text: str) -> list[dict]:
             "level": level,
             "title": title,
             "success_metrics": metrics,
-            "org_unit_name": unit if unit and unit.lower() in department_names else None,
+            "org_unit_name": unit if unit and unit.lower() in department_names and unit.lower() not in mine_names else None,
+            # A group the text names that isn't set up yet: the review offers it
+            # as the boss's group to create. Never the manager's own unit.
+            "suggested_unit_name": unit if unit and unit.lower() not in department_names and unit.lower() not in mine_names else None,
             "period_label": _s(it.get("period_label"), 80),
             "due_date": _iso_date(it.get("period_end")),
             "set_by": _s(it.get("set_by"), 80),

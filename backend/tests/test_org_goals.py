@@ -393,3 +393,31 @@ def test_apply_takes_the_department_picked_on_review_and_returns_what_it_saved(c
         "id": rows["Answer every ticket within a day"]["id"], "level": "department",
         "title": "Answer every ticket within a day", "org_unit_id": "ou1",
     }
+
+
+# -- the manager's own unit and the boss's group (goal attribution) ------------
+
+def _ctx_mine():
+    db = DB()
+    db.rows["org_units"] = [{"id": "t1", "name": "Enterprise & Strategic", "unit_type": "team", "parent_unit_id": None, "leader_user_id": "u1"}]
+    return og.build_context(db, "u1")
+
+
+def test_prompt_names_the_managers_own_group_and_keeps_goals_from_above():
+    prompt = og.build_prompt(_ctx_mine(), "x")
+    assert "The manager leads: Enterprise & Strategic (team)." in prompt
+    assert "comes from above them" in prompt and 'confidence "low"' in prompt
+
+
+def test_a_group_the_text_names_but_isnt_set_up_is_suggested_not_dropped():
+    text = "From my director's deck (Customer Success): protect enterprise NRR at 110% or better."
+    draft = _draft(level="department", title="Protect enterprise NRR at 110% or better", success_metrics=None,
+                   org_unit_name="Customer Success", excerpt="protect enterprise NRR at 110% or better")
+    (g,) = og.validate_parse({"goals": [draft]}, _ctx_mine(), text)
+    assert g["org_unit_name"] is None and g["suggested_unit_name"] == "Customer Success"
+
+
+def test_the_managers_own_unit_is_never_suggested_as_the_group_above():
+    draft = _draft(level="department", org_unit_name="Enterprise & Strategic")
+    (g,) = og.validate_parse({"goals": [draft]}, _ctx_mine(), TEXT)
+    assert g["org_unit_name"] is None and g["suggested_unit_name"] is None

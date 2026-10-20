@@ -157,7 +157,13 @@ fires once.
   company or department goal) and "Your team's goal" (any team goal). Org
   goals open `OrgGoalsModal` (paste, talk or up to 3 files →
   `POST /api/onboarding/org-goals/parse`, nothing saved → `apply`), where each
-  row's owner can be changed; your own units are not offered there. When no
+  row's owner can be changed; your own units are not offered there. The read
+  is told which unit you lead: a goal the text says comes from above you (a
+  boss, director, VP or their deck) is a department goal even when it shares
+  your team's customers, segment or numbers, and a goal it can't place starts
+  unchecked rather than being dropped. A group the text names that isn't set
+  up yet comes back as `suggested_unit_name` and prefills the boss's-group
+  name. When no
   unit sits above yours (or, leading none, no department exists), a row can be
   **"Your boss's group (name it)"**: one name, saved as a department above
   your unit (`POST /api/org-units/setup/above`) before the goals apply. The

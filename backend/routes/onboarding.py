@@ -822,12 +822,15 @@ def compose_receipt(
         names = [STEP_NAME[k] for k in STEP_ORDER if k in skipped_steps]
         lines.append(f"Skipped for now: {', '.join(names)}. Each can still be done from its own page.")
     unprepped = [p for p in people if p["id"] not in prepped_report_ids]
+    # Name only what is on record: a skipped step adds nothing to a sheet.
+    drawn = [w for w, has in (("expectations", bool(ready)), ("goals", org_goals + team_goals > 0)) if has]
     nxt = []
     if unprepped:
         nxt.append({
             "key": "prep_others",
             "label": f"Prepare sheets for {_plural(len(unprepped), 'more person', 'more people')}.",
-            "detail": "Each sheet now draws on the expectations and goals you set.",
+            "detail": f"Each sheet now draws on the {' and '.join(drawn)} you set."
+            if drawn else "Each sheet draws on your notes and the team you set up.",
             "href": "/app/1-1s",
         })
     if (org_goals + team_goals) > 0 and check_in_count == 0:

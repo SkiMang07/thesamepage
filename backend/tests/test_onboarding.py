@@ -961,3 +961,14 @@ def test_status_counts_by_relationship_once_you_lead_a_unit():
     )
     goals = build_status("m", _Client(tables))["steps"]["goals"]
     assert goals["path"] == "department" and goals["has_team_goal"] and not goals["has_org_goal"]
+
+
+def test_the_receipt_names_only_what_a_sheet_can_draw_on():
+    def detail(**over):
+        return _receipt(prepped_report_ids=set(), **over)["next"][0]["detail"]
+
+    assert detail() == "Each sheet now draws on the expectations and goals you set."
+    # Renata skipped expectations: the line must not claim them.
+    assert detail(covered_role_ids=set()) == "Each sheet now draws on the goals you set."
+    assert detail(org_goals=0, team_goals=0) == "Each sheet now draws on the expectations you set."
+    assert detail(covered_role_ids=set(), org_goals=0, team_goals=0) == "Each sheet draws on your notes and the team you set up."

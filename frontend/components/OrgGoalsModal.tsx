@@ -144,6 +144,9 @@ export default function OrgGoalsModal({
       const d = await parseOrgGoals({ text, files });
       setDraft(d);
       setKept(Object.fromEntries(d.goals.map((g) => [g.key, !g.low])));
+      // The text named the group above (e.g. "Customer Success"): start the name there.
+      const named = d.goals.find((g) => g.level === "department" && g.suggested_unit_name)?.suggested_unit_name;
+      if (offerBoss && named && !bossGroup.trim()) setBossGroup(named);
       setEdits({});
       shownAt.current = Date.now();
       setPhase("review");

@@ -323,6 +323,16 @@ export default function SetupPath() {
   // "Not now" hides the card at once; the server's snooze takes over on refresh.
   const [hiddenNow, setHiddenNow] = useState(false);
   const dismissals = onboarding?.card?.dismissals ?? 0;
+  // "Skip for now" / "Undo" show at once; the server's answer replaces them
+  // when the status reloads (it took about 5 seconds live, and people clicked twice).
+  const [localSkip, setLocalSkip] = useState<Partial<Record<OnboardingStepKey, boolean>>>({});
+  useEffect(() => {
+    setLocalSkip({});
+  }, [onboarding]);
+  function skip(key: OnboardingStepKey, skipped = true) {
+    setLocalSkip((cur) => ({ ...cur, [key]: skipped }));
+    void skipSetupStep(key, skipped);
+  }
 
   useEffect(() => {
     setHiddenNow(false);
@@ -346,8 +356,16 @@ export default function SetupPath() {
   }
   if (!onboarding.steps) return null;
 
-  const nextKey = onboarding.next_step;
-  const steps = setupSteps(onboarding.steps, nextKey);
+  const steps = setupSteps(onboarding.steps, onboarding.next_step).map((st) =>
+    st.key in localSkip
+      ? { ...st, skipped: !!localSkip[st.key], status: localSkip[st.key] ? "Skipped for now" : st.status }
+      : st,
+  );
+  // The step to point at, moved on at once when it was just skipped.
+  const nextKey =
+    onboarding.next_step && !localSkip[onboarding.next_step]
+      ? onboarding.next_step
+      : (steps.find((st) => !st.done && !st.skipped && !st.blocked)?.key ?? null);
   const level = revealed ? "full" : hiddenNow ? "hidden" : (onboarding.card?.level ?? "full");
   const introOpen = !!onboarding.intro_pending && !introClosed;
   const startStep = steps.find((st) => st.key === nextKey) ?? steps.find((st) => !st.done && !st.skipped && !st.blocked) ?? steps[0];
@@ -536,7 +554,7 @@ export default function SetupPath() {
                         </p>
                       ))}
                       <p className="mt-2 text-[13px]">
-                        <button type="button" onClick={() => void skipSetupStep(step.key)} className="text-ink-secondary hover:text-ink">
+                        <button type="button" onClick={() => skip(step.key)} className="text-ink-secondary hover:text-ink">
                           Skip for now
                         </button>
                       </p>
@@ -563,7 +581,7 @@ export default function SetupPath() {
                     {row}
                     <button
                       type="button"
-                      onClick={() => void skipSetupStep(step.key, false)}
+                      onClick={() => skip(step.key, false)}
                       className="shrink-0 pl-1 text-xs font-medium text-brand hover:text-brand-hover"
                     >
                       Undo
@@ -593,7 +611,7 @@ export default function SetupPath() {
                 )}
                 {!step.done && !step.skipped && (
                   <p className="mt-1 pl-9 text-xs">
-                    <button type="button" onClick={() => void skipSetupStep(step.key)} className="text-ink-secondary hover:text-ink">
+                    <button type="button" onClick={() => skip(step.key)} className="text-ink-secondary hover:text-ink">
                       Skip for now
                     </button>
                   </p>

@@ -2471,6 +2471,8 @@ export type OrgGoalDraft = {
   title: string;
   success_metrics: string | null;
   org_unit_name: string | null;
+  // A group the text names that isn't set up yet (e.g. the boss's group).
+  suggested_unit_name?: string | null;
   period_label: string | null;
   due_date: string | null;
   set_by: string | null;

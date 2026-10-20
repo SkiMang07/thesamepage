@@ -1498,8 +1498,10 @@ function PeopleSection({
     <div>
       <h2 className="font-medium text-ink">Set up your team</h2>
       <p className="mt-1 text-sm text-ink-secondary">
-        Add your people, then give each one a role and a team. Create either right here if it doesn&apos;t exist
-        yet. Expectations follow the role automatically. Editing levels within a ladder, or merging near-duplicate roles,
+        {setupMode
+          ? "Add your people, then give each one a role. Create a role right here if it doesn’t exist yet. "
+          : "Add your people, then give each one a role and a team. Create either right here if it doesn’t exist yet. "}
+        Expectations follow the role automatically. Editing levels within a ladder, or merging near-duplicate roles,
         still happens in{" "}
         <button onClick={onNavigateToRoles} className="underline">
           Roles &amp; expectations
