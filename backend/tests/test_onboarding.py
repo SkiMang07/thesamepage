@@ -972,3 +972,15 @@ def test_the_receipt_names_only_what_a_sheet_can_draw_on():
     assert detail(covered_role_ids=set()) == "Each sheet now draws on the goals you set."
     assert detail(org_goals=0, team_goals=0) == "Each sheet now draws on the expectations you set."
     assert detail(covered_role_ids=set(), org_goals=0, team_goals=0) == "Each sheet draws on your notes and the team you set up."
+
+
+def test_the_receipt_counts_the_teams_your_people_are_in_not_the_group_above():
+    tables = _tables(
+        org_units=[
+            {"id": "u1", "name": "Member Support", "unit_type": "team", "parent_unit_id": "boss", "leader_user_id": "m"},
+            {"id": "boss", "name": "Member Experience", "unit_type": "department", "parent_unit_id": None, "leader_user_id": None},
+        ],
+        projects=[],
+        check_ins=[],
+    )
+    assert onboarding._receipt_data(_Client(tables), "m")["unit_count"] == 1

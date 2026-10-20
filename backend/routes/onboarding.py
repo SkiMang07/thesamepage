@@ -877,7 +877,9 @@ def _receipt_data(supabase, user_id: str) -> dict:
     }
     return dict(
         people=people,
-        unit_count=len(supabase.table("org_units").select("id").execute().data),
+        # The units your people are in, not every unit: a boss's group named in
+        # setup has none of them and isn't one of "your" teams.
+        unit_count=len({p["org_unit_id"] for p in people if p.get("org_unit_id")}),
         covered_role_ids=covered,
         org_goals=sum(1 for level in goal_levels if level in ORG_LEVELS),
         team_goals=sum(1 for level in goal_levels if level == "team"),

@@ -508,7 +508,10 @@ function HierarchyNode({
   const attentionCount = totals.goalsAtRisk + totals.projectsAtRisk;
   let stateLabel = "Outside your scope";
   let stateClass = "text-ink-muted";
-  if (!leader) {
+  // A missing leader is flagged where it is yours to fix: units in your scope,
+  // or anywhere while you lead nothing yet. Your boss's group, named in setup,
+  // has no leader on the app and isn't yours to fill.
+  if (!leader && (inScope || ledScopeIds.size === 0)) {
     stateLabel = "Leader needed";
     stateClass = "text-amber-700";
   } else if (inScope && rollupLoading) {
