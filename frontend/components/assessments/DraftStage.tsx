@@ -354,6 +354,15 @@ function JudgmentRow({
           {item.kind === "metric" && item.target_status === "unresolved" && (
             <p className="mt-0.5 text-xs text-amber-700">No target set · a reading is not judged against a number</p>
           )}
+          {!!item.linked_goals?.length && (
+            <p className="mt-0.5 text-xs text-ink-secondary">
+              Their own goal{item.linked_goals.length === 1 ? "" : "s"} on this:{" "}
+              {item.linked_goals
+                .map((g) => `${g.title}${g.measure_target != null ? ` (target ${g.measure_target}${g.measure_unit === "%" ? "%" : g.measure_unit ? ` ${g.measure_unit}` : ""})` : ""}`)
+                .join("; ")}
+              . Judged here, not as a separate item.
+            </p>
+          )}
           {!open && d.reason && included && <p className="mt-1 line-clamp-2 text-sm text-ink-body">{d.reason}</p>}
         </div>
         <div className="sm:shrink-0 sm:text-right">

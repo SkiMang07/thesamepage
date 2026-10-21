@@ -76,8 +76,10 @@ kept. First use shows a single "Start with one role" prompt. After an approval
 (`?notice=approved&role=`), the notice names who holds the role and how many
 expectations their next prep sheet measures against (from `counts`;
 `lib/expectations-notice.ts`); a role nobody holds gets the plain wording.
-Every variant also says the expectations belong to the role and aren't listed
-on Goals (expectations belong to the role; goals belong to a period).
+Every variant also says the expectations are the holders' starting goals on Goals
+("They’re also Sofia’s starting goals, on Goals."; a role nobody holds says
+"anyone in this role"). Goals shows them live under "From their role" for each
+person, with no copies (`docs/systems/goals.md`).
 
 **Define a role** (`/app/expectations/new`). Paste or upload (PDF, .docx, .txt,
 .md) a job description, and optionally add notes in "What the job description

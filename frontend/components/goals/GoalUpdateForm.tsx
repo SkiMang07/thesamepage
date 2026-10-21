@@ -48,7 +48,10 @@ export default function GoalUpdateForm({
   const [error, setError] = useState<string | null>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const statusRef = useRef<HTMLSelectElement>(null);
-  const m = goal.measure;
+  // A goal linked to a measured expectation reads that expectation's
+  // readings; it has none of its own, so the update carries no value.
+  const fromRole = goal.readings_from === "role" && !!goal.measure;
+  const m = fromRole ? null : goal.measure;
 
   useEffect(() => {
     statusRef.current?.focus({ preventScroll: true });
@@ -116,7 +119,11 @@ export default function GoalUpdateForm({
             ))}
           </select>
         </div>
-        {m ? (
+        {fromRole ? (
+          <p className="self-end text-xs text-ink-muted sm:pb-2">
+            Readings for this goal are the role’s readings of “{goal.source?.name ?? "the expectation"}”. Add one under From their role.
+          </p>
+        ) : m ? (
           <div>
             <label htmlFor={`${fieldId}-value`} className={LABEL}>
               Measured value · optional
@@ -173,7 +180,9 @@ export default function GoalUpdateForm({
         />
       </div>
       <p className="mt-2 text-xs text-ink-muted">
-        {m
+        {fromRole
+          ? "Status and a note only."
+          : m
           ? "A blank value keeps the last recorded value and its original date."
           : "A blank percentage keeps the last recorded one and its original date."}
       </p>

@@ -27,6 +27,9 @@ export type GoalDraft = {
   source: { kind: "expectation" | "goal"; label: string; role: string | null; where?: string | null };
   // The role's bar, shown beside the target the manager sets.
   targetHint: string | null;
+  // From their role (lib/roleGoals.ts): the expectation an individual goal
+  // keeps a link to. Not an AI suggestion, so no AI-draft telemetry.
+  link?: { kind: "metric" | "skill"; id: string } | null;
   // For AI-draft telemetry: how many were suggested, and when they were shown.
   drafted: number;
   shownAt: number;
@@ -79,6 +82,10 @@ export function takeGoalDraft(s: Store | null = store()): GoalDraft | null {
         where: typeof d.source.where === "string" ? d.source.where : null,
       },
       targetHint: typeof d.targetHint === "string" ? d.targetHint : null,
+      link:
+        d.link && (d.link.kind === "metric" || d.link.kind === "skill") && typeof d.link.id === "string" && d.link.id
+          ? { kind: d.link.kind, id: d.link.id }
+          : null,
       drafted: Number.isFinite(d.drafted) ? d.drafted : 1,
       shownAt: Number.isFinite(d.shownAt) ? d.shownAt : Date.now(),
     };

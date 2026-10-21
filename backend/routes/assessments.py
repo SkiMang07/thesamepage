@@ -99,7 +99,37 @@ def _latest_by_config(rows: list[dict], config_col: str) -> dict:
     return out
 
 
-def _shape_items(configs: list[dict], name_key: str, scales_by_config: dict, latest_by_config: dict) -> list[dict]:
+def _linked_goals(supabase, user_id: str, direct_report_id: str) -> dict[str, list[dict]]:
+    """config_id -> this person's own goals that started from that expectation
+    (docs/systems/goals.md -> From their role), so an assessment shows them
+    under the expectation and judges it once, not twice."""
+    try:
+        rows = (
+            supabase.table("goals")
+            .select("id,title,status,due_date,measure_label,measure_target,measure_unit,measure_direction,"
+                    "source_metric_config_id,source_skill_config_id")
+            .eq("owner_id", user_id)
+            .eq("direct_report_id", direct_report_id)
+            .execute()
+            .data
+        )
+    except Exception:
+        logger.warning("scorecard: linked goals failed", exc_info=True)
+        return {}
+    out: dict[str, list[dict]] = {}
+    for g in rows:
+        key = g.get("source_metric_config_id") or g.get("source_skill_config_id")
+        if key and g.get("status") != "cancelled":
+            out.setdefault(key, []).append({
+                "id": g["id"], "title": g.get("title"), "status": g.get("status"), "due_date": g.get("due_date"),
+                "measure_target": g.get("measure_target"), "measure_unit": g.get("measure_unit"),
+                "measure_direction": g.get("measure_direction"),
+            })
+    return out
+
+
+def _shape_items(configs: list[dict], name_key: str, scales_by_config: dict, latest_by_config: dict,
+                 linked: dict | None = None) -> list[dict]:
     out = []
     for c in configs:
         out.append({
@@ -119,6 +149,7 @@ def _shape_items(configs: list[dict], name_key: str, scales_by_config: dict, lat
             "scale_max": c.get("evaluation_scale_max"),
             "scale_definitions": scales_by_config.get(c["id"], []),
             "latest": latest_by_config.get(c["id"]),
+            "linked_goals": (linked or {}).get(c["id"], []),
         })
     return out
 
@@ -175,6 +206,8 @@ def _fetch_scorecard(user_id: str, supabase, direct_report_id: str, authorizatio
         "metric_config_id",
     )
 
+    linked = _linked_goals(supabase, user_id, direct_report_id)
+
     overall_rows = (
         supabase.table("assessments")
         .select("*")
@@ -189,9 +222,9 @@ def _fetch_scorecard(user_id: str, supabase, direct_report_id: str, authorizatio
     return {
         "direct_report": report,
         "role": (expectations or {}).get("role_level"),
-        "skills": _shape_items(skills_cfg, "skill_name", skill_scales, latest_skills),
+        "skills": _shape_items(skills_cfg, "skill_name", skill_scales, latest_skills, linked),
         "values": _shape_items(values_cfg, "value_name", value_scales, latest_values),
-        "metrics": _shape_items(metrics_cfg, "metric_name", metric_scales, latest_metrics),
+        "metrics": _shape_items(metrics_cfg, "metric_name", metric_scales, latest_metrics, linked),
         "overall": overall_rows[0] if overall_rows else None,
         "levels": _ensure_levels(user_id, supabase, authorization),
     }

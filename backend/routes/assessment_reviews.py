@@ -170,6 +170,9 @@ def _catalog(scorecard: dict) -> list[dict]:
                 "target": it.get("target"),
                 "target_status": it.get("target_status"),
                 "prior": prior,
+                # Their own goals that started from this expectation: shown
+                # under it, never assessed as a separate item.
+                "linked_goals": it.get("linked_goals") or [],
             })
     return out
 
@@ -501,6 +504,9 @@ def _item_block(catalog: list[dict], keys: dict[str, str], include_prior: bool =
                 lines.append(f"      approved target: {entry['target']}")
             elif entry.get("target_status") == "unresolved":
                 lines.append("      NO TARGET SET: the manager has not defined one. Record a reading if one exists, but never judge it against a number or imply one.")
+        for g in entry.get("linked_goals") or []:
+            stretch = f", target {g['measure_target']}{(' ' + g['measure_unit']) if g.get('measure_unit') else ''}" if g.get("measure_target") is not None else ""
+            lines.append(f"      their own goal on this expectation (part of judging it, not a separate item): {g['title']}{stretch}")
         for s in entry["scale"]:
             lines.append(f"      {s['point']}: {s['meaning'] or '(no description configured)'}")
         if include_prior and entry.get("prior"):

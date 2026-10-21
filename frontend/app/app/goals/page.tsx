@@ -41,6 +41,8 @@ import {
   reportAiDraft,
   getGoalUpdates,
   getGoals,
+  getRoleGoals,
+  type RoleGoals,
   getLedOrgUnits,
   getOrgMembers,
   getOrgUnits,
@@ -48,7 +50,7 @@ import {
   updateGoal,
   updateGoalStatus,
 } from "@/lib/api";
-import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, INPUT } from "@/lib/tokens";
+import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT } from "@/lib/tokens";
 import {
   LEVELS,
   STATUS_LABEL,
@@ -74,6 +76,7 @@ import { editBucket } from "@/lib/aiDraftTelemetry";
 import UpdatesFeed from "@/components/goals/UpdatesFeed";
 import StillCurrent from "@/components/goals/StillCurrent";
 import Dialog from "@/components/goals/Dialog";
+import FromTheirRole from "@/components/goals/FromTheirRole";
 import { ReviewPresentation, ReviewSetup } from "@/components/goals/ReviewTogether";
 import { useOpenRecord } from "@/lib/scribeCitations";
 
@@ -185,7 +188,7 @@ export default function GoalsPage() {
 
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [reviewSetup, setReviewSetup] = useState(false);
-  const [presenting, setPresenting] = useState<{ ids: string[]; showStatus: boolean } | null>(null);
+  const [presenting, setPresenting] = useState<{ ids: string[]; showStatus: boolean; includeRole?: boolean } | null>(null);
 
   const updateButtons = useRef(new Map<string, HTMLButtonElement>());
   const reviewButton = useRef<HTMLButtonElement>(null);
@@ -232,7 +235,8 @@ export default function GoalsPage() {
       const lvl = url.level ?? "individual";
       const id = url.scope && url.scope !== "all" && url.scope !== "none" ? url.scope : undefined;
       const draft = url.draft ? takeGoalDraft() : null;
-      startedFrom.current = draft;
+      // A goal started from a role expectation isn't an AI suggestion.
+      startedFrom.current = draft && !draft.link ? draft : null;
       const parent = draft?.parentGoalId ?? url.supports;
       setEditor({
         kind: "new",
@@ -364,6 +368,12 @@ export default function GoalsPage() {
   const effectiveScope: Scope = level === "company" || options.some((o) => o.id === scope) ? scope : "all";
   const scopeName = options.find((o) => o.id === effectiveScope)?.label ?? allLabel(level);
   const scoped = useMemo(() => goals.filter((g) => inScope(g, level, effectiveScope)), [goals, level, effectiveScope]);
+  // One person picked at Individual: their role's expectations lead, as their starting goals.
+  const person = level === "individual" && effectiveScope !== "all" && effectiveScope !== "none"
+    ? reports.find((r) => r.id === effectiveScope) ?? null
+    : null;
+  const [roleVersion, setRoleVersion] = useState(0);
+  const [reviewRole, setReviewRole] = useState<RoleGoals | null>(null);
   const openGoals = scoped.filter(isOpen);
   const closedGoals = scoped.filter((g) => !isOpen(g));
   const passesFilter = useCallback(
@@ -591,6 +601,7 @@ export default function GoalsPage() {
     );
     const wasNew = editor?.kind !== "edit";
     if (wasNew) resolveStartedFrom("accepted", body.title);
+    if (saved.source) setRoleVersion((v) => v + 1);
     setGoalFormDirty(false);
     setEditor(null);
     const nextScope = saved.level !== level ? "all" : effectiveScope;
@@ -680,9 +691,17 @@ export default function GoalsPage() {
                 ref={reviewButton}
                 type="button"
                 onClick={() =>
-                  guard(() =>
-                    openGoals.length ? setReviewSetup(true) : setPageError("There are no open goals in this scope to review."),
-                  )
+                  guard(() => {
+                    if (person) {
+                      // Their role leads the review, so it can run before they have goals of their own.
+                      setReviewRole(null);
+                      getRoleGoals(person.id)
+                        .then(setReviewRole)
+                        .catch(() => setReviewRole(null))
+                        .finally(() => setReviewSetup(true));
+                    } else if (openGoals.length) setReviewSetup(true);
+                    else setPageError("There are no open goals in this scope to review.");
+                  })
                 }
                 className={`${BTN_SECONDARY} inline-flex items-center gap-2 py-2`}
               >
@@ -900,9 +919,34 @@ export default function GoalsPage() {
                 <UpdatesFeed rows={feedRows} goalsById={goalsById} onOpenGoal={openDetail} closed={filter === "closed"} />
               )
             ) : (
+              <>
+              {person && (
+                <div className="mb-8 max-w-[870px] rounded-xl bg-surface px-5 py-5">
+                  <FromTheirRole
+                    reportId={person.id}
+                    reportName={person.name}
+                    refreshKey={roleVersion}
+                    onOpenGoal={openDetail}
+                    onStartGoal={(draft) =>
+                      guard(() => {
+                        setDetailId(null);
+                        setEditor({ kind: "new", defaults: { level: "individual", directReportId: person.id, draft } });
+                        window.scrollTo({ top: 0 });
+                      })
+                    }
+                    onReadingsChanged={() => {
+                      getGoals()
+                        .then(setGoals)
+                        .catch(() => setPageError("The board couldn't refresh after that reading. Reload the page to see it."));
+                    }}
+                  />
+                </div>
+              )}
+              {person && <h3 className={`${EYEBROW} mb-3`}>{person.name.split(/\s+/)[0]}&apos;s own goals</h3>}
               <div ref={boardRef}>
                 {shown.length === 0 ? (
                   <EmptyBoard
+                    person={person ? person.name.split(/\s+/)[0] : null}
                     level={level}
                     anyGoals={goals.length > 0}
                     scopedCount={scoped.length}
@@ -947,6 +991,7 @@ export default function GoalsPage() {
                   </div>
                 )}
               </div>
+              </>
             )}
           </>
         )}
@@ -978,16 +1023,18 @@ export default function GoalsPage() {
         <ReviewSetup
           choices={exceptionsFirst(openGoals)}
           scopeName={scopeName}
+          role={person ? reviewRole : null}
           onCancel={() => setReviewSetup(false)}
-          onStart={(ids, showStatus) => {
+          onStart={(ids, showStatus, includeRole) => {
             setReviewSetup(false);
-            setPresenting({ ids, showStatus });
+            setPresenting({ ids, showStatus, includeRole });
           }}
         />
       )}
-      {presenting && presentGoals.length > 0 && (
+      {presenting && (presentGoals.length > 0 || (presenting.includeRole && reviewRole)) && (
         <ReviewPresentation
           goals={presentGoals}
+          role={presenting.includeRole ? reviewRole : null}
           showStatus={presenting.showStatus}
           onExit={() => {
             setPresenting(null);
@@ -1016,6 +1063,7 @@ function SavedReceipt({ receipt, onDismiss }: { receipt: NonNullable<Receipt>; o
 }
 
 function EmptyBoard({
+  person,
   level,
   anyGoals,
   scopedCount,
@@ -1024,6 +1072,8 @@ function EmptyBoard({
   onNew,
   onClear,
 }: {
+  /** First name when one person is picked: their role's expectations sit above. */
+  person: string | null;
   level: GoalLevel;
   anyGoals: boolean;
   scopedCount: number;
@@ -1038,11 +1088,14 @@ function EmptyBoard({
   let action: "new" | "clear" = "new";
   // Individual comes first: it is the level a new account opens on, and where
   // people look for a role's expectations. Say where those are, once.
-  if (level === "individual" && scopedCount === 0) {
+  if (level === "individual" && scopedCount === 0 && person) {
+    title = `${person} has no goals of their own yet.`;
+    body = `${person}’s starting goals are what the role expects, above. Make one of those ${person}’s own, or add something new.`;
+  } else if (level === "individual" && scopedCount === 0) {
     title = anyGoals ? "No individual goals here yet." : "No goals yet.";
     body = (
       <>
-        Role expectations aren’t goals. They’re on{" "}
+        Each person starts with what their role expects. Pick someone above to see theirs, or set roles in{" "}
         <Link href="/app/expectations" className="underline underline-offset-2 hover:text-ink">
           Roles &amp; expectations
         </Link>

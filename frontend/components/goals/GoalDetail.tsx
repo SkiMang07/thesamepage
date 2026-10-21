@@ -16,8 +16,11 @@ import {
   GoalStatus,
   Project,
   getBeyondLinks,
+  getExpectationReadings,
   getGoalCheckIns,
+  type GoalReading,
 } from "@/lib/api";
+import { sourceLine } from "@/lib/roleGoals";
 import { BTN_PRIMARY_SM, INPUT } from "@/lib/tokens";
 import {
   LEVELS,
@@ -65,6 +68,9 @@ export default function GoalDetail({
   const [history, setHistory] = useState<CheckIn[] | null>(null);
   const [historyError, setHistoryError] = useState(false);
   const [meetings, setMeetings] = useState<BeyondLinkHistoryItem[]>([]);
+  // A goal linked to a measured expectation reads that expectation's readings.
+  const [roleReadings, setRoleReadings] = useState<GoalReading[] | null>(null);
+  const fromRole = goal.readings_from === "role" && !!goal.direct_report_id && !!goal.source_metric_config_id;
   const [statusError, setStatusError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -87,13 +93,28 @@ export default function GoalDetail({
     };
   }, [goal.id, historyVersion]);
 
+  useEffect(() => {
+    if (!fromRole || !goal.direct_report_id || !goal.source_metric_config_id) return;
+    let live = true;
+    setRoleReadings(null);
+    getExpectationReadings(goal.direct_report_id, goal.source_metric_config_id)
+      .then((rows) => live && setRoleReadings(rows.map((r) => ({ check_in_id: null, entry_id: r.id, value: r.value, at: r.recorded_at, period: r.period }))))
+      .catch(() => live && setHistoryError(true));
+    return () => {
+      live = false;
+    };
+  }, [fromRole, goal.direct_report_id, goal.source_metric_config_id, historyVersion]);
+
   const parent = goal.parent_goal_id ? allGoals.find((g) => g.id === goal.parent_goal_id) : undefined;
   const children = allGoals.filter((g) => g.parent_goal_id === goal.id);
   const serving = projects.filter((p) => p.goal_id === goal.id);
   const latest = history?.[0];
-  const readings = (history ?? [])
-    .filter((ci) => ci.measured_value != null)
-    .map((ci) => ({ check_in_id: ci.id, value: ci.measured_value as number, at: ci.created_at }));
+  const readings: GoalReading[] = fromRole
+    ? roleReadings ?? []
+    : (history ?? [])
+        .filter((ci) => ci.measured_value != null)
+        .map((ci) => ({ check_in_id: ci.id, value: ci.measured_value as number, at: ci.created_at }));
+  const readingsLoaded = fromRole ? roleReadings !== null : history !== null;
   // Confirmed connections from meetings beyond the team that didn't come
   // with a check-in (confirmed from a suggestion on /app/beyond). They
   // record a source relationship only — never an update or a status.
@@ -156,6 +177,7 @@ export default function GoalDetail({
       <p className="mt-2 text-xs text-ink-muted">
         {scopeLabel(goal)} · {dueLabel(goal)}
       </p>
+      {goal.source && <p className="mt-1 text-xs text-ink-secondary">{sourceLine(goal.source, !!goal.measure)}</p>}
 
       <div className="mt-6">
         <p className="text-2xs uppercase tracking-[0.14em] text-ink-muted">Success criterion</p>
@@ -169,9 +191,9 @@ export default function GoalDetail({
           <GoalMeasure goal={goal} size="detail" />
           <details className="mt-4">
             <summary className={SUMMARY}>
-              Recorded values · {history ? readings.length : goal.reading_count ?? 0}
+              Recorded values · {readingsLoaded ? readings.length : goal.reading_count ?? 0}
             </summary>
-            {history ? (
+            {readingsLoaded ? (
               <ReadingsTable readings={readings} measure={goal.measure} />
             ) : (
               <p className="text-xs text-ink-muted">{historyError ? "Couldn't load the recorded values." : "Loading..."}</p>

@@ -20,7 +20,8 @@
     "test:goal-draft": "node --experimental-strip-types --test lib/goalDraft.test.mjs",
     "test:notes-dump-placement": "node --experimental-strip-types --test lib/notesDumpPlacement.test.mjs",
     "test:career": "node --experimental-strip-types --test lib/career.test.mjs",
-    "test:unit-relation": "node --experimental-strip-types --test lib/unitRelation.test.mjs"
+    "test:unit-relation": "node --experimental-strip-types --test lib/unitRelation.test.mjs",
+    "test:role-goals": "node --experimental-strip-types --test lib/roleGoals.test.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.3",

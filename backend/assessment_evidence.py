@@ -199,7 +199,8 @@ def gather_evidence(
     try:
         goals = (
             supabase.table("goals")
-            .select("id,title,status,success_metrics,due_date,created_at,measure_label,measure_unit,measure_target,measure_direction")
+            .select("id,title,status,success_metrics,due_date,created_at,measure_label,measure_unit,measure_target,measure_direction,"
+                    "source_metric_config_id,source_skill_config_id")
             .eq("owner_id", user_id)
             .eq("direct_report_id", report_id)
             .execute()
@@ -232,9 +233,18 @@ def gather_evidence(
                 bits.append(f"Measure: {g['measure_label']} target {g['measure_target']}{(' ' + g['measure_unit']) if g.get('measure_unit') else ''}")
             if g.get("due_date"):
                 bits.append(f"Due {g['due_date']}")
-            c.add(id=f"goal:{g['id']}", kind="goal", date=_iso(_day(g.get("created_at"))), timing="context",
-                  title=f"Goal: {g['title']}", detail=". ".join(bits), attribution="Their individual goal — the standard, not a result",
-                  href=f"/app/goals?goal={g['id']}")
+            source = g.get("source_metric_config_id") or g.get("source_skill_config_id")
+            if source:
+                # Started from one of their role's expectations: evidence for
+                # that expectation, so it is judged once, not twice.
+                c.add(id=f"goal:{g['id']}", kind="goal", date=_iso(_day(g.get("created_at"))), timing="context",
+                      title=f"Goal: {g['title']}", detail=". ".join(bits),
+                      attribution="Their own goal on one of the role's expectations — part of that expectation, not a separate item",
+                      href=f"/app/goals?goal={g['id']}", config_id=source)
+            else:
+                c.add(id=f"goal:{g['id']}", kind="goal", date=_iso(_day(g.get("created_at"))), timing="context",
+                      title=f"Goal: {g['title']}", detail=". ".join(bits), attribution="Their individual goal — the standard, not a result",
+                      href=f"/app/goals?goal={g['id']}")
             kept_goals += 1
         for ch in checks[:MAX_PER_SOURCE]:
             g = by_goal.get(ch["goal_id"]) or {}

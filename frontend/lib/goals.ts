@@ -58,11 +58,15 @@ export const STALE_DAYS = 14;
 /** A link into /app/goals that says where to land: a level, whose goals (a
  *  person, team or department id), and optionally the New goal form prefilled
  *  for them, supporting a given goal. Every "add a goal" link uses this. */
-export function goalsHref(opts: { level?: GoalLevel; scope?: string | null; create?: boolean; supports?: string | null } = {}) {
+export function goalsHref(
+  opts: { level?: GoalLevel; scope?: string | null; create?: boolean; supports?: string | null; draft?: boolean } = {},
+) {
   const q = new URLSearchParams();
   if (opts.level) q.set("level", opts.level);
   if (opts.scope) q.set("scope", opts.scope);
   if (opts.create) q.set("new", "1");
+  // A suggestion saved with saveGoalDraft() waits in sessionStorage for one read.
+  if (opts.create && opts.draft) q.set("draft", "1");
   if (opts.supports) q.set("supports", opts.supports);
   const qs = q.toString();
   return qs ? `/app/goals?${qs}` : "/app/goals";

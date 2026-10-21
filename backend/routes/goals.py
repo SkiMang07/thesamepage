@@ -52,6 +52,16 @@ so the check-in and the status write-through land in one transaction, and a
 client_request_id makes a retried submit return the row it already created.
 PUT only touches the measure when the body includes `measure`, so callers
 that predate it never clear one.
+
+Goals from expectations (2026-10-20, docs/GOAL_ATTRIBUTION_SCOPING.md Part B):
+an individual goal can start from one of the person's role expectations and
+keep the link (source_metric_config_id / source_skill_config_id). The role's
+expectations themselves are never goal records; routes/role_goals.py shows
+them live. A goal linked to a measured expectation has no readings of its own:
+its readings are that expectation's metric_entries (decision D7), attached as
+latest_reading / recent_readings / reading_count with readings_from = "role",
+and a check-in on it can't carry a measured value. PUT only touches the link
+when the body includes it.
 """
 import math
 from datetime import date
@@ -61,6 +71,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
+from routes.direct_reports import fetch_role_expectations
 from routes.check_ins import (
     GOAL_CHECK_IN_COLUMNS,
     CheckInIn,
@@ -78,7 +89,8 @@ _MEASURE_COLUMNS = ("measure_label", "measure_format", "measure_unit", "measure_
 
 _SELECT_COLUMNS = (
     "id,title,description,success_metrics,level,status,due_date,direct_report_id,"
-    "parent_goal_id,org_unit_id,created_at,period_label,set_by,confirmed_on," + ",".join(_MEASURE_COLUMNS) + ","
+    "parent_goal_id,org_unit_id,created_at,period_label,set_by,confirmed_on,"
+    "source_metric_config_id,source_skill_config_id," + ",".join(_MEASURE_COLUMNS) + ","
     "direct_reports(name),org_units(name,unit_type)"
 )
 
@@ -116,6 +128,10 @@ class GoalIn(BaseModel):
     org_unit_id: str | None = None
     # Omitted = leave the stored measure alone. null = no measure.
     measure: GoalMeasureIn | None = None
+    # The role expectation an individual goal started from (at most one).
+    # Omitted = leave the stored link alone.
+    source_metric_config_id: str | None = None
+    source_skill_config_id: str | None = None
 
 
 class GoalStatusUpdate(BaseModel):
@@ -291,12 +307,95 @@ def _validate_references(supabase, user_id: str, values: dict, goal_id: str | No
         raise HTTPException(status_code=422, detail="That parent chain is too deep")
 
 
+_SOURCE_COLUMNS = ("source_metric_config_id", "source_skill_config_id")
+
+
 def _goal_values(body: GoalIn) -> dict:
-    values = body.model_dump(exclude={"measure"})
+    values = body.model_dump(exclude={"measure", *_SOURCE_COLUMNS})
     values["title"] = values["title"].strip()
     if not values["title"]:
         raise HTTPException(status_code=422, detail="A goal needs a title")
     return _normalize_associations(values)
+
+
+def _source_values(supabase, user_id: str, body: GoalIn, values: dict, goal_id: str | None = None) -> dict:
+    """The link to a role expectation, checked. Only written when the body
+    sends it (or the goal stops being individual, which clears it). A new link
+    must be one of the person's current, non-retired expectations; keeping the
+    link a goal already has is always allowed, even after the item retired."""
+    sent = _SOURCE_COLUMNS[0] in body.model_fields_set or _SOURCE_COLUMNS[1] in body.model_fields_set
+    if values["level"] != "individual":
+        return {col: None for col in _SOURCE_COLUMNS} if (sent or goal_id) else {}
+    if not sent:
+        return {}
+    metric_id, skill_id = body.source_metric_config_id or None, body.source_skill_config_id or None
+    if metric_id and skill_id:
+        raise HTTPException(status_code=422, detail="A goal can start from one expectation, not two")
+    link = {"source_metric_config_id": metric_id, "source_skill_config_id": skill_id}
+    if not (metric_id or skill_id):
+        return link
+    if goal_id:
+        existing = supabase.table("goals").select(",".join(_SOURCE_COLUMNS)).eq("id", goal_id).eq("owner_id", user_id).execute().data
+        if existing and all(existing[0].get(c) == link[c] for c in _SOURCE_COLUMNS):
+            return link
+    report_id = values.get("direct_report_id")
+    if not report_id:
+        raise HTTPException(status_code=422, detail="Pick the person this goal is for")
+    report = supabase.table("direct_reports").select("id,role_level_id").eq("id", report_id).eq("manager_id", user_id).execute().data
+    expectations = fetch_role_expectations(supabase, report[0].get("role_level_id")) if report else None
+    allowed = {m["id"] for m in (expectations or {}).get("metrics") or []} if metric_id else {
+        s["id"] for s in (expectations or {}).get("skills") or []
+    }
+    if (metric_id or skill_id) not in allowed:
+        raise HTTPException(status_code=422, detail="That expectation isn't in this person's current role")
+    return link
+
+
+def _attach_sources(supabase, user_id: str, rows: list[dict]) -> list[dict]:
+    """Name each goal's source expectation, and give a goal linked to a
+    measured expectation that expectation's readings (decision D7)."""
+    metric_ids = sorted({r["source_metric_config_id"] for r in rows if r.get("source_metric_config_id")})
+    skill_ids = sorted({r["source_skill_config_id"] for r in rows if r.get("source_skill_config_id")})
+    names: dict[str, dict] = {}
+    if metric_ids:
+        for c in supabase.table("metric_configs").select("id,metric_name,retired_at,role_level_id").in_("id", metric_ids).execute().data:
+            names[c["id"]] = {"kind": "metric", "id": c["id"], "name": c.get("metric_name"),
+                              "retired": bool(c.get("retired_at")), "role_level_id": c.get("role_level_id")}
+    if skill_ids:
+        for c in supabase.table("skill_configs").select("id,skill_name,retired_at,area,role_level_id").in_("id", skill_ids).execute().data:
+            names[c["id"]] = {"kind": "responsibility" if c.get("area") == "responsibility" else "skill", "id": c["id"],
+                              "name": c.get("skill_name"), "retired": bool(c.get("retired_at")),
+                              "role_level_id": c.get("role_level_id")}
+    entries: dict[tuple, list[dict]] = {}
+    linked_reports = sorted({r["direct_report_id"] for r in rows if r.get("source_metric_config_id") and r.get("direct_report_id")})
+    if metric_ids and linked_reports:
+        for e in (
+            supabase.table("metric_entries")
+            .select("id,direct_report_id,metric_config_id,value,period,recorded_at")
+            .in_("direct_report_id", linked_reports)
+            .in_("metric_config_id", metric_ids)
+            .eq("recorded_by", user_id)
+            .order("recorded_at", desc=True)
+            .limit(1000)
+            .execute()
+            .data
+        ):
+            entries.setdefault((e["direct_report_id"], e["metric_config_id"]), []).append(e)
+    for row in rows:
+        key = row.get("source_metric_config_id") or row.get("source_skill_config_id")
+        row["source"] = names.get(key) if key else None
+        if key and not row["source"]:
+            row["source"] = {"kind": "metric" if row.get("source_metric_config_id") else "skill", "id": key,
+                             "name": None, "retired": False, "role_level_id": None}
+        row["readings_from"] = "role" if row.get("source_metric_config_id") else "goal"
+        if row.get("source_metric_config_id"):
+            found = entries.get((row.get("direct_report_id"), row["source_metric_config_id"]), [])
+            readings = [{"check_in_id": None, "entry_id": e["id"], "value": _num(e.get("value")),
+                         "at": e.get("recorded_at"), "period": e.get("period")} for e in found if e.get("value") is not None]
+            row["latest_reading"] = readings[0] if readings else None
+            row["recent_readings"] = readings[:12]
+            row["reading_count"] = len(readings)
+    return rows
 
 
 def _scoped_goal_query(supabase, user_id: str, columns: str, level, direct_report_id, org_unit_id, unassociated, status):
@@ -333,7 +432,7 @@ def list_goals(
     # Session 26: decorate with progress/trend/last_check_in_at from the
     # check_ins temporal layer — see routes/check_ins.py. Goal rows also get
     # latest_reading / recent_readings / reading_count.
-    return enrich_with_check_ins(supabase, user_id, _shape_rows(rows), "goal_id")
+    return _attach_sources(supabase, user_id, enrich_with_check_ins(supabase, user_id, _shape_rows(rows), "goal_id"))
 
 
 @router.get("/updates")
@@ -404,6 +503,15 @@ def create_goal_check_in(goal_id: str, body: GoalCheckInIn, auth=Depends(get_aut
         raise HTTPException(status_code=422, detail="progress must be between 0 and 100")
     if body.measured_value is not None and not math.isfinite(body.measured_value):
         raise HTTPException(status_code=422, detail="A measured value must be a finite number")
+    if body.measured_value is not None:
+        linked = (
+            supabase.table("goals").select("source_metric_config_id").eq("id", goal_id).eq("owner_id", user_id).execute().data
+        )
+        if linked and linked[0].get("source_metric_config_id"):
+            raise HTTPException(
+                status_code=422,
+                detail="This goal's readings are the role expectation's. Add the reading under From their role.",
+            )
     try:
         rows = (
             supabase.rpc(
@@ -466,7 +574,7 @@ def _fetch_one(supabase, user_id: str, goal_id: str) -> dict:
     if parent_id:
         parent = supabase.table("goals").select("title").eq("id", parent_id).eq("owner_id", user_id).execute().data
         shaped[0]["parent_goal_title"] = parent[0]["title"] if parent else None
-    return enrich_with_check_ins(supabase, user_id, shaped, "goal_id")[0]
+    return _attach_sources(supabase, user_id, enrich_with_check_ins(supabase, user_id, shaped, "goal_id"))[0]
 
 
 @router.post("")
@@ -476,6 +584,7 @@ def create_goal(body: GoalIn, auth=Depends(get_authenticated_client)):
     _validate_status(body.status)
     values = _goal_values(body)
     _validate_references(supabase, user_id, values)
+    values.update(_source_values(supabase, user_id, body, values))
     if "measure" in body.model_fields_set:
         values.update(_measure_columns(body.measure))
     result = supabase.table("goals").insert({**values, "owner_id": user_id}).execute()
@@ -489,6 +598,7 @@ def update_goal(goal_id: str, body: GoalIn, auth=Depends(get_authenticated_clien
     _validate_status(body.status)
     values = _goal_values(body)
     _validate_references(supabase, user_id, values, goal_id)
+    values.update(_source_values(supabase, user_id, body, values, goal_id))
     if "measure" in body.model_fields_set:
         new_measure = _measure_columns(body.measure)
         existing = (

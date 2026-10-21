@@ -12,9 +12,10 @@ type LevelLike = {
 
 const USED_IN = "They’re now used in 1:1 preparation, development and assessments.";
 const OPEN_DETAIL = "The open detail stays listed here until it’s resolved.";
-// Expectations belong to the role; goals belong to a period. Said once, here,
-// because the Goals page doesn't list them and people look for them there.
-const NOT_GOALS = "They belong to the role, so they aren’t listed on Goals.";
+// Expectations belong to the role, and they are each holder's starting goals:
+// Goals shows them live under "From their role" for every person in the role
+// (docs/systems/goals.md). No copies are made, so a revision shows at once.
+const ANYONE_STARTING = "They’re also the starting goals of anyone in this role, on Goals.";
 
 function first(name: string): string {
   return name.trim().split(/\s+/)[0] ?? "";
@@ -45,9 +46,16 @@ export function approvedPayoff(level: LevelLike | null | undefined): string | nu
   return `${holders(people)} ${sheet} against ${what}.`;
 }
 
+// "They’re also Sofia’s starting goals, on Goals." Null-safe on a role nobody holds.
+export function startingGoalsLine(level: LevelLike | null | undefined): string {
+  const people = (level?.people ?? []).filter((p) => p.name && p.name.trim());
+  return people.length ? `They’re also ${holders(people)} starting goals, on Goals.` : ANYONE_STARTING;
+}
+
 export function approvedNotice(kind: "approved" | "approved-open", level: LevelLike | null | undefined): string {
   const payoff = approvedPayoff(level);
+  const starting = startingGoalsLine(level);
   // "They" must still mean the expectations, so the open-detail sentence goes last.
-  const rest = kind === "approved-open" ? [NOT_GOALS, OPEN_DETAIL] : [USED_IN, NOT_GOALS];
+  const rest = kind === "approved-open" ? [starting, OPEN_DETAIL] : [USED_IN, starting];
   return ["Expectations approved.", payoff, ...rest].filter(Boolean).join(" ");
 }

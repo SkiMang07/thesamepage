@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from observability import RequestContextMiddleware, configure_logging, init_sentry
-from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, career, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, file_text, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, person_intake, team_goals, org_units, projects, role_expectations, role_families, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
+from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, career, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, file_text, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, person_intake, team_goals, org_units, projects, role_expectations, role_families, role_goals, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
 configure_logging()
@@ -137,6 +137,7 @@ app.include_router(away.router, prefix="/api/away", tags=["away"])
 app.include_router(one_on_ones.router, prefix="/api/one-on-ones", tags=["one-on-ones"])
 app.include_router(commitments.router, prefix="/api/commitments", tags=["commitments"])
 app.include_router(goals.router, prefix="/api/goals", tags=["goals"])
+app.include_router(role_goals.router, prefix="/api/role-goals", tags=["goals"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(org_units.router, prefix="/api/org-units", tags=["org-units"])
 app.include_router(role_families.router, prefix="/api/role-families", tags=["role-families"])

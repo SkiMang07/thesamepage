@@ -598,7 +598,24 @@ export type Goal = {
   latest_reading?: GoalReading | null;
   recent_readings?: GoalReading[];
   reading_count?: number;
+  // Individual goals only: the role expectation this goal started from
+  // (docs/systems/goals.md -> From their role). A goal linked to a measured
+  // expectation has no readings of its own: readings_from is "role" and the
+  // reading fields above are that expectation's readings.
+  source_metric_config_id?: string | null;
+  source_skill_config_id?: string | null;
+  source?: GoalSource | null;
+  readings_from?: "goal" | "role";
 } & CheckInDerived;
+
+export type GoalSource = {
+  kind: "metric" | "responsibility" | "skill";
+  id: string;
+  name: string | null;
+  // The expectation was dropped by an approved revision; the goal stays.
+  retired: boolean;
+  role_level_id: string | null;
+};
 
 export type GoalMeasureFormat = "count" | "number" | "percent";
 export type GoalMeasureDirection = "at_least" | "at_most" | "below";
@@ -613,7 +630,9 @@ export type GoalMeasure = {
   direction: GoalMeasureDirection;
 };
 
-export type GoalReading = { check_in_id: string; value: number; at: string };
+// check_in_id is null for an expectation's reading (readings_from "role"),
+// which carries its entry_id and period instead.
+export type GoalReading = { check_in_id: string | null; value: number; at: string; entry_id?: string; period?: string | null };
 
 // Session 26 — fields derived from the check_ins temporal layer, attached by
 // the backend's enrich_with_check_ins() on every goals/projects list call.
@@ -692,7 +711,85 @@ export type GoalIn = {
   // Omit to leave the stored measure unchanged; null removes it (refused
   // once readings exist).
   measure?: GoalMeasure | null;
+  // The role expectation an individual goal starts from. Omit to leave the
+  // stored link alone.
+  source_metric_config_id?: string | null;
+  source_skill_config_id?: string | null;
 };
+
+// ---------------------------------------------------------------------------
+// From their role — a person's role expectations as their starting goals,
+// read live from the role (routes/role_goals.py). Never goal records.
+// ---------------------------------------------------------------------------
+
+export type ExpectationReading = {
+  id: string;
+  metric_config_id: string;
+  value: number;
+  period: string | null;
+  recorded_at: string;
+  notes: string | null;
+  // Written by a completed assessment, so it can't be removed here.
+  from_assessment: boolean;
+};
+
+export type RoleGoalLink = { id: string; title: string; status: GoalStatus; due_date: string | null };
+
+export type RoleMeasured = {
+  kind: "metric";
+  id: string;
+  name: string;
+  expectation: string | null;
+  exceeds: string | null;
+  // The bar as written. Null when there is deliberately no target yet.
+  target: string | null;
+  target_status: "set" | "unresolved" | null;
+  measurement_period: "month" | "week" | "quarter" | "annual" | "none" | null;
+  data_source: string | null;
+  latest: ExpectationReading | null;
+  reading_count: number;
+  // Read from the target only when it is unambiguous (backend/expectation_bar.py).
+  bar: { value: number; direction: "at_least" | "at_most" } | null;
+  verdict: "meets" | "below" | null;
+  goals: RoleGoalLink[];
+};
+
+export type RoleObserved = {
+  kind: "responsibility" | "skill";
+  id: string;
+  name: string;
+  expectation: string | null;
+  exceeds: string | null;
+  goals: RoleGoalLink[];
+};
+
+export type RoleValue = { kind: "value"; id: string; name: string; expectation: string | null; company_wide: boolean };
+
+export type RoleGoals = {
+  report: { id: string; name: string };
+  role: { id: string; job_role: string; job_level: number | null } | null;
+  measured: RoleMeasured[];
+  responsibilities: RoleObserved[];
+  skills: RoleObserved[];
+  values: RoleValue[];
+  // Their own goals whose expectation is no longer in the role.
+  unlinked_goals: (RoleGoalLink & { source_name: string | null; reason: "retired" | "other_role" })[];
+};
+
+export const getRoleGoals = (directReportId: string): Promise<RoleGoals> =>
+  authedFetch(`/api/role-goals/${directReportId}`);
+
+export const getExpectationReadings = (directReportId: string, metricConfigId: string): Promise<ExpectationReading[]> =>
+  authedFetch(`/api/role-goals/${directReportId}/readings?metric_config_id=${encodeURIComponent(metricConfigId)}`);
+
+export const addExpectationReading = (
+  directReportId: string,
+  body: { metric_config_id: string; value: number; period: string; notes?: string | null },
+): Promise<ExpectationReading> =>
+  authedFetch(`/api/role-goals/${directReportId}/readings`, { method: "POST", body: JSON.stringify(body) });
+
+export const deleteExpectationReading = (directReportId: string, entryId: string): Promise<{ deleted: string }> =>
+  authedFetch(`/api/role-goals/${directReportId}/readings/${entryId}`, { method: "DELETE" });
 
 export const getGoals = (params?: { level?: GoalLevel; directReportId?: string; orgUnitId?: string; status?: GoalStatus }): Promise<Goal[]> => {
   const q = new URLSearchParams();
@@ -3154,6 +3251,9 @@ export type CatalogItem = {
   target?: string | null;
   target_status?: "set" | "unresolved" | null;
   prior: (Judgment & { date?: string | null }) | null;
+  // Their own goals that started from this expectation (docs/systems/goals.md
+  // -> From their role): shown under it, never assessed as a separate item.
+  linked_goals?: { id: string; title: string; status: string; due_date: string | null; measure_target: number | null; measure_unit: string | null }[];
   state: ItemState;
   attention: string[];
 };

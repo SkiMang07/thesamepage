@@ -30,7 +30,7 @@ components in `components/assessments/`, period presets in
 | `performance_reviews` | **The period assessment.** Activated 2026-09-25. One row per manager × report × period. `status` `draft` → `completed`; `stage` picture / draft / review; `mode` ai / manual; `cadence`, `period_start`, `period_end`, `review_period` (readable label); `evidence` (gathered records + coverage), `picture`, `manager_context`, `excluded_evidence`, `include_private`, `draft` (per-item proposals, decisions, revisions, narrative, summary), `conversation`; `completed_snapshot`, `completed_at`, `reviewed_at`, `rating_ordinal`, `summary`; `version` (optimistic lock). `is_shared_with_report` stays false. |
 | `assessments` | Overall `level_ordinal` rows. Completion writes `source_type = 'performance_review'`, `source_id` = the assessment. |
 | `skill_assessments`, `value_assessments` | Per-item points, each on its config's own scale; `performance_review_id` set by completion. |
-| `metric_entries` | Real readings with a measurement period; `performance_review_id` and `notes` set by completion. |
+| `metric_entries` | Real readings with a measurement period. Completion writes them with `performance_review_id` set; the manager also enters them from the person page and Goals ("From their role", `docs/systems/goals.md`) with `performance_review_id` null. One number track either way, so the latest reading on a scorecard can be a manual one. |
 | `assessment_levels` | Org 1–5 overall scale, auto-seeded on first use. |
 
 At most **one open draft per manager and report** (partial unique index). Earlier
@@ -42,8 +42,17 @@ also `last_review`, `open_review`, `latest_from_review`, and `reviews` — every
 newest first with its `rating_label` and, for completed ones only, the confirmed
 `headline` read from `completed_snapshot`), `GET /api/assessments/{id}`
 (scorecard, now also `last_review` / `open_review`), the person page's Growth card,
-Mission Control, Scribe context and development suggestions all read the same tables,
-and only completion writes to them. Both reads fail soft if `performance_reviews`
+Mission Control, Scribe context and development suggestions all read the same tables.
+Only completion writes the judgment tables; `metric_entries` is also written by hand
+from "From their role" (a reading from a completed assessment can't be removed there).
+
+**A person's own goal on an expectation is judged under it.** An individual goal
+started from a role expectation (`goals.source_metric_config_id` /
+`source_skill_config_id`) is listed under that item in the draft ("Their own goal
+on this: …. Judged here, not as a separate item."), passed to the draft prompt on
+the item's block, and its evidence row carries the item's `config_id`. The
+expectation is assessed once, never twice. `_linked_goals()` in
+`routes/assessments.py` reads them; cancelled goals are left out. Both reads fail soft if `performance_reviews`
 hasn't been migrated.
 
 ## The overview (`/app/assessments`)

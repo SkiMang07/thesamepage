@@ -7,7 +7,11 @@
 // Goals and Projects.
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { goalsHref } from "@/lib/goals";
+import { saveGoalDraft } from "@/lib/goalDraft";
+import { sourceLine } from "@/lib/roleGoals";
+import FromTheirRole from "@/components/goals/FromTheirRole";
 import type { CapacityOverviewItem, DevelopmentBundle, Goal, GoalStatus, Project } from "@/lib/api";
 import { instantDate, shortDate } from "@/components/team/dates";
 import { EYEBROW } from "@/lib/tokens";
@@ -149,6 +153,7 @@ export function WorkView({
   onOpenSettings: () => void;
 }) {
   const first = firstName(personName);
+  const router = useRouter();
   const live = (s: GoalStatus) => s !== "completed" && s !== "cancelled";
   const orderedProjects = [...projects].sort((a, b) => Number(live(b.status)) - Number(live(a.status)));
 
@@ -156,13 +161,26 @@ export function WorkView({
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <section aria-labelledby="work-goals" className="rounded-xl border border-hairline bg-surface px-5 py-5">
         <div className="flex items-center justify-between">
-          <h2 id="work-goals" className={EYEBROW}>Goals{!goalsFailed && goals.length > 0 && ` · ${goals.length}`}</h2>
+          <h2 id="work-goals" className={EYEBROW}>Goals</h2>
           <Link href={goalsHref({ level: "individual", scope: personId })} className="text-xs text-brand hover:text-brand-hover">Open Goals →</Link>
         </div>
+        <div className="mt-4">
+          <FromTheirRole
+            reportId={personId}
+            reportName={personName}
+            compact
+            onAssignRole={onOpenSettings}
+            onStartGoal={(draft) => {
+              const href = goalsHref({ level: "individual", scope: personId, create: true, draft: saveGoalDraft(draft) });
+              router.push(href);
+            }}
+          />
+        </div>
+        <h3 className={`${EYEBROW} mt-6`}>{first}&apos;s own goals{!goalsFailed && goals.length > 0 && ` · ${goals.length}`}</h3>
         {goalsFailed ? (
           <p className="mt-3 text-sm text-amber-700">Goals couldn&apos;t load.</p>
         ) : goals.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-secondary">No goals for {first} yet. <Link href={goalsHref({ level: "individual", scope: personId, create: true })} className="text-brand underline">Add a goal for {first}</Link>.</p>
+          <p className="mt-3 text-sm text-ink-secondary">None yet. <Link href={goalsHref({ level: "individual", scope: personId, create: true })} className="text-brand underline">Add a goal for {first}</Link>.</p>
         ) : (
           <ul className="mt-3 divide-y divide-divider">
             {goals.map((g) => (
@@ -171,6 +189,7 @@ export function WorkView({
                   <p className="min-w-0 text-sm text-ink">{g.title}</p>
                   <span className={`shrink-0 text-xs ${STATUS_TONE[g.status]}`}>{STATUS_LABEL[g.status]}</span>
                 </div>
+                {g.source && <p className="mt-0.5 text-xs text-ink-secondary">{sourceLine(g.source, !!g.measure)}</p>}
                 <p className="mt-0.5 text-xs text-ink-muted">
                   {[g.due_date ? `Due ${shortDate(g.due_date)}` : null, g.progress != null ? `${g.progress}% at last check-in` : null]
                     .filter(Boolean)

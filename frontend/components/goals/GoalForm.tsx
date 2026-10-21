@@ -289,7 +289,9 @@ export default function GoalForm({
     if (v.level === "department" && !v.orgUnitId && departments.length) return setError("Pick the department this goal is for.");
     const measure = buildMeasure();
     if (!measure.ok) return setError(measure.error);
-    if (!answered.current && (v.level === "team" || v.level === "individual")) {
+    // A goal deliberately started from this person's expectation is linked to it, not a duplicate.
+    const linked = !!draft?.link && v.level === "individual";
+    if (!answered.current && !linked && (v.level === "team" || v.level === "individual")) {
       const hit = readsLikeExpectation(v.title, v.dueDate, expectations);
       if (hit) {
         setError(null);
@@ -308,6 +310,11 @@ export default function GoalForm({
       org_unit_id: v.level === "team" || v.level === "department" ? v.orgUnitId || null : null,
       parent_goal_id: v.level === "company" ? null : v.parentGoalId || null,
     };
+    // From their role: keep the link to the expectation, for the person it was started for.
+    if (linked && draft?.link && v.directReportId === defaults.directReportId) {
+      if (draft.link.kind === "metric") body.source_metric_config_id = draft.link.id;
+      else body.source_skill_config_id = draft.link.id;
+    }
     // Only send the measure when it changed, so an edit that never touched
     // it can't collide with the lock.
     const before = start.measure;
@@ -335,7 +342,10 @@ export default function GoalForm({
           {draft.source.kind === "goal"
             ? `a goal above you${draft.source.where ? ` (${draft.source.where})` : ""}`
             : `${draft.source.role ? `the ${draft.source.role} role’s` : "an"} expectation`}
-          : <span className="text-ink">{draft.source.label}</span>. Edit anything. Nothing is saved until you add it.
+          : <span className="text-ink">{draft.source.label}</span>.{" "}
+          {draft.link
+            ? "It stays linked to that expectation. Edit anything. Nothing is saved until you add it."
+            : "Edit anything. Nothing is saved until you add it."}
         </p>
       )}
       <div>

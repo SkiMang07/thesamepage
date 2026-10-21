@@ -7,28 +7,42 @@
 // Status only if opted in. Never shown: update notes, descriptions, source
 // links, other people's records or any manager control. Nothing is sent,
 // shared or published — this is the manager's own screen.
+//
+// With one person picked, the review can open on what their role expects
+// (docs/systems/goals.md -> From their role): each measured item with its bar
+// and latest reading, then the responsibilities by name. Reading notes stay out.
 
 import { useEffect, useState } from "react";
-import type { Goal } from "@/lib/api";
+import type { Goal, RoleGoals } from "@/lib/api";
+import { readingText } from "@/lib/roleGoals";
 import { BTN_PRIMARY, BTN_PRIMARY_SM, BTN_SECONDARY } from "@/lib/tokens";
 import { dueLabel, formatMoment, scopeLabel, targetText } from "@/lib/goals";
 import Dialog, { useFocusTrap } from "./Dialog";
 import GoalMeasure from "./GoalMeasure";
 import { StatusChip } from "./GoalSheet";
 
+function roleItems(role: RoleGoals | null | undefined) {
+  return role ? role.measured.length + role.responsibilities.length : 0;
+}
+
 export function ReviewSetup({
   choices,
   scopeName,
+  role = null,
   onStart,
   onCancel,
 }: {
   choices: Goal[];
   scopeName: string;
-  onStart: (ids: string[], showStatus: boolean) => void;
+  /** One person picked: their role can open the review. */
+  role?: RoleGoals | null;
+  onStart: (ids: string[], showStatus: boolean, includeRole: boolean) => void;
   onCancel: () => void;
 }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(choices.map((g) => g.id)));
   const [showStatus, setShowStatus] = useState(false);
+  const canRole = roleItems(role) > 0;
+  const [includeRole, setIncludeRole] = useState(canRole);
   const [error, setError] = useState<string | null>(null);
   const toggle = (id: string) =>
     setPicked((cur) => {
@@ -51,10 +65,21 @@ export function ReviewSetup({
         onSubmit={(e) => {
           e.preventDefault();
           const ids = choices.filter((g) => picked.has(g.id)).map((g) => g.id);
-          if (!ids.length) return setError("Choose at least one goal.");
-          onStart(ids, showStatus);
+          if (!ids.length && !(canRole && includeRole)) return setError("Choose at least one goal.");
+          onStart(ids, showStatus, canRole && includeRole);
         }}
       >
+        {canRole && role?.role && (
+          <label className="flex items-start gap-3 border-t border-divider py-3.5">
+            <input type="checkbox" className="mt-1" checked={includeRole} onChange={(e) => setIncludeRole(e.target.checked)} />
+            <span className="min-w-0">
+              <b className="block text-sm font-medium text-ink">Start with what the {role.role.job_role} role expects</b>
+              <small className="block text-xs text-ink-muted">
+                Each measured expectation with its bar and latest reading, then the responsibilities. Reading notes stay out.
+              </small>
+            </span>
+          </label>
+        )}
         <fieldset>
           <legend className="sr-only">Goals to show</legend>
           {choices.map((g) => (
@@ -100,22 +125,28 @@ export function ReviewSetup({
 
 export function ReviewPresentation({
   goals,
+  role = null,
   showStatus,
   onExit,
 }: {
   goals: Goal[];
+  /** Opens the review on what their role expects. */
+  role?: RoleGoals | null;
   showStatus: boolean;
   onExit: () => void;
 }) {
   const [index, setIndex] = useState(0);
   const ref = useFocusTrap(onExit);
-  const g = goals[index];
+  const lead = role && roleItems(role) > 0 ? 1 : 0;
+  const total = goals.length + lead;
+  const onRole = lead === 1 && index === 0;
+  const g = onRole ? null : goals[index - lead];
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        setIndex((i) => Math.min(goals.length - 1, i + 1));
+        setIndex((i) => Math.min(total - 1, i + 1));
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         setIndex((i) => Math.max(0, i - 1));
@@ -128,9 +159,9 @@ export function ReviewPresentation({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [goals.length]);
+  }, [total]);
 
-  if (!g) return null;
+  if (!g && !onRole) return null;
   return (
     <div
       ref={ref}
@@ -146,10 +177,39 @@ export function ReviewPresentation({
             End review
           </button>
         </div>
+        {onRole && role?.role ? (
+          <div aria-live="polite" className="flex-1 py-8 lg:py-10">
+            <p className="text-2xs uppercase tracking-[0.14em] text-ink-muted">
+              From their role · 1 of {total}
+            </p>
+            <h2 className="mb-8 mt-4 break-words font-serif text-[2.4rem] font-normal leading-[1.09] tracking-[-0.03em] text-ink sm:text-[clamp(2.2rem,4vw,3.4rem)]">
+              What the {role.role.job_role} role expects
+            </h2>
+            <ul className="grid max-w-[1100px] gap-x-12 gap-y-5 lg:grid-cols-2">
+              {role.measured.map((m) => (
+                <li key={m.id} className="border-t border-hairline pt-3">
+                  <p className="text-xl text-ink">{m.name}</p>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    {m.target ? `Bar: ${m.target}` : m.target_status === "unresolved" ? "No target set yet" : m.expectation}
+                  </p>
+                  <p className="mt-1 text-base text-ink-body">
+                    {m.latest ? `Latest reading ${readingText(m.latest.value, m.latest.period)}` : "No reading yet"}
+                  </p>
+                </li>
+              ))}
+              {role.responsibilities.map((r) => (
+                <li key={r.id} className="border-t border-hairline pt-3">
+                  <p className="text-xl text-ink">{r.name}</p>
+                  <p className="mt-1 text-sm text-ink-muted">Judged by observation</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : g ? (
         <div aria-live="polite" className="grid flex-1 grid-cols-1 items-center gap-6 py-8 lg:grid-cols-[1.2fr_1fr] lg:gap-16 lg:py-10">
           <div className="min-w-0">
             <p className="text-2xs uppercase tracking-[0.14em] text-ink-muted">
-              {scopeLabel(g)} · {index + 1} of {goals.length}
+              {scopeLabel(g)} · {index + 1} of {total}
             </p>
             <h2 className="mb-6 mt-4 break-words font-serif text-[2.4rem] font-normal leading-[1.09] tracking-[-0.03em] text-ink sm:text-[clamp(2.2rem,4vw,3.9rem)]">
               {g.title}
@@ -171,6 +231,7 @@ export function ReviewPresentation({
             )}
           </div>
         </div>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-hairline pt-5">
           <div className="flex items-center gap-3">
             <button type="button" className={BTN_SECONDARY} disabled={index === 0} onClick={() => setIndex((i) => i - 1)}>
@@ -179,15 +240,15 @@ export function ReviewPresentation({
             <button
               type="button"
               className={BTN_PRIMARY_SM}
-              disabled={index === goals.length - 1}
+              disabled={index === total - 1}
               onClick={() => setIndex((i) => i + 1)}
             >
               Next goal →
             </button>
           </div>
-          <span className="flex gap-1.5" aria-label={`Goal ${index + 1} of ${goals.length}`} role="img">
-            {goals.map((x, i) => (
-              <span key={x.id} className={`inline-block h-1 w-7 rounded ${i === index ? "bg-brand" : "bg-hairline"}`} />
+          <span className="flex gap-1.5" aria-label={`${index + 1} of ${total}`} role="img">
+            {Array.from({ length: total }, (_, i) => (
+              <span key={i} className={`inline-block h-1 w-7 rounded ${i === index ? "bg-brand" : "bg-hairline"}`} />
             ))}
           </span>
           <span className="text-2xs text-ink-muted">Local presentation · Nothing is being sent · ← → to move, Esc to end</span>

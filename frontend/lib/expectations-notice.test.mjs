@@ -11,7 +11,7 @@ const level = (names, r = 5, s = 3, v = 0) => ({
 test("one holder: named, with the count from the approved rows", () => {
   assert.equal(
     approvedNotice("approved", level(["Sofia Alvarez"])),
-    "Expectations approved. Sofia’s next prep sheet measures against these 8. They’re now used in 1:1 preparation, development and assessments. They belong to the role, so they aren’t listed on Goals.",
+    "Expectations approved. Sofia’s next prep sheet measures against these 8. They’re now used in 1:1 preparation, development and assessments. They’re also Sofia’s starting goals, on Goals.",
   );
 });
 
@@ -36,7 +36,7 @@ test("nobody assigned: no payoff is claimed and the current wording stands", () 
   assert.equal(approvedPayoff(level([])), null);
   assert.equal(
     approvedNotice("approved", level([])),
-    "Expectations approved. They’re now used in 1:1 preparation, development and assessments. They belong to the role, so they aren’t listed on Goals.",
+    "Expectations approved. They’re now used in 1:1 preparation, development and assessments. They’re also the starting goals of anyone in this role, on Goals.",
   );
   assert.equal(approvedNotice("approved", undefined), approvedNotice("approved", level([])));
 });
@@ -44,15 +44,15 @@ test("nobody assigned: no payoff is claimed and the current wording stands", () 
 test("the open-detail variant keeps its sentence", () => {
   assert.equal(
     approvedNotice("approved-open", level(["Lena Park"], 3, 2, 0)),
-    "Expectations approved. Lena’s next prep sheet measures against these 5. They belong to the role, so they aren’t listed on Goals. The open detail stays listed here until it’s resolved.",
+    "Expectations approved. Lena’s next prep sheet measures against these 5. They’re also Lena’s starting goals, on Goals. The open detail stays listed here until it’s resolved.",
   );
-  assert.equal(approvedNotice("approved-open", null), "Expectations approved. They belong to the role, so they aren’t listed on Goals. The open detail stays listed here until it’s resolved.");
+  assert.equal(approvedNotice("approved-open", null), "Expectations approved. They’re also the starting goals of anyone in this role, on Goals. The open detail stays listed here until it’s resolved.");
 });
 
-test("every variant says expectations aren't goals, and \"they\" still means the expectations", () => {
+test("every variant says they are the holders' starting goals, and \"they\" still means the expectations", () => {
   for (const kind of ["approved", "approved-open"]) {
     const text = approvedNotice(kind, level(["Bram Ito"]));
-    assert.match(text, /They belong to the role, so they aren’t listed on Goals\./);
+    assert.match(text, /They’re also Bram’s starting goals, on Goals\./);
   }
   assert.ok(approvedNotice("approved-open", level(["Bram Ito"])).endsWith("The open detail stays listed here until it’s resolved."));
 });

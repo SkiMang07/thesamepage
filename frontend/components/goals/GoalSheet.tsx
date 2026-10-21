@@ -11,6 +11,7 @@ import type { AssistantPageContext, Goal } from "@/lib/api";
 import AskAboutButton from "@/components/AskAboutButton";
 import { BADGE, STATUS_BAR, STATUS_GLYPH, STATUS_STYLES } from "@/lib/tokens";
 import { STATUS_LABEL, dueLabel, formatMoment, isOpen, reviewReasons, scopeLabel } from "@/lib/goals";
+import { sourceLine } from "@/lib/roleGoals";
 import GoalMeasure from "./GoalMeasure";
 
 export const SHEET_X = "px-6";
@@ -80,6 +81,7 @@ export default function GoalSheet({
           </button>
         </h3>
         <p className="text-2xs text-ink-muted">{dueLabel(goal)}</p>
+        {goal.source && <p className="mt-1 text-2xs text-ink-secondary">{sourceLine(goal.source, !!goal.measure)}</p>}
       </div>
 
       <div className={`${SHEET_X} flex min-h-[150px] flex-col justify-center pb-4 pt-5 sm:min-h-[170px]`}>

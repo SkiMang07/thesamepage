@@ -3,7 +3,7 @@
 `/app/goals` — what the manager is working toward and how they will know it
 worked. Frontend: `app/app/goals/page.tsx`, `components/goals/`, `lib/goals.ts`.
 Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
-`check-ins.md`). Approved design: `docs/design-proposals/2026-09-25-goals-in-view/`
+`check-ins.md`), and `routes/role_goals.py` for From their role. Approved design: `docs/design-proposals/2026-09-25-goals-in-view/`
 (`prototype-v2.html` is the visual reference).
 
 ## The page
@@ -26,9 +26,10 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
   Department, when you lead a unit, the picker names units relative to you and
   lists yours first (the same labels as "Whose goal?"); the heading keeps the
   plain name. The page opens on
-  the first level that has goals unless the URL says otherwise. An empty
-  Individual scope says role expectations aren't goals and links to Roles &
-  expectations.
+  the first level that has goals unless the URL says otherwise. With one
+  person picked at Individual, **From their role** leads (below), then "{Name}'s
+  own goals"; their empty board says their starting goals are above. Individual
+  with All says each person starts with what their role expects.
 - **Links in.** `goalsHref()` (`lib/goals.ts`) builds every link into the page:
   `?level=&scope=` to land on someone, plus `new=1` to open the New goal form
   prefilled for them and `supports=<goal id>` to set what it supports. `new`
@@ -77,12 +78,79 @@ Backend: `routes/goals.py` (check-in helpers in `routes/check_ins.py`, see
   so dictation is available.
 - **Review together.** Pick goals from the current level and scope (open goals
   only, all ticked by default, status opt-in), then a full-screen local
-  presentation: title, success criterion, due date and recorded measure. Never
+  presentation: title, success criterion, due date and recorded measure. With
+  one person picked, "Start with what the {role} role expects" (ticked when the
+  role has measured items or responsibilities) opens on one slide of each
+  measured item's bar and latest reading and the responsibilities by name, and
+  lets the review run before they have goals of their own. Never
   shown: update notes, descriptions, source links, other records or any
   manager control. ← / → move, Esc ends and returns focus. Nothing is sent or
   shared.
 - **Unsaved work.** Update drafts are kept per goal in the page; leaving with a
   typed draft or goal edit asks first, and the browser warns before unload.
+
+## From their role: expectations as starting goals
+
+Decided by Andrew 2026-10-20 (`docs/decisions/expectations-are-starting-goals.md`).
+Expectations belong to the role; a goal belongs to a period. A person's role
+expectations are shown as their **starting goals**, read live from their current
+approved role through `fetch_role_expectations()`. Nothing is copied per person:
+a revision shows at once, a retired item drops off, and a role change switches
+the list. These rows are not goal records. They don't appear in Needs review,
+No check-ins or Closed, can't be cancelled and don't roll up. No AI anywhere.
+
+Where: the Goals page with one person picked at Individual, and the person
+page's Work view (compact; "add their role" opens the person's settings).
+`components/goals/FromTheirRole.tsx`, helpers in `lib/roleGoals.ts`
+(`npm run test:role-goals`).
+
+- **Order.** Measured responsibilities, then responsibilities judged by
+  observation, then skills and values behind one "And N skills and N values"
+  disclosure, so a long role doesn't bury the person's own goals.
+- **No role, or no expectations.** "Add {first}'s role to see what it expects"
+  / "{Role} has no expectations yet. Define them in Roles & expectations."
+- **Readings** of a measured item are `metric_entries`, the same rows a
+  completed assessment writes: one number track. "+ Add a reading" takes any
+  finite number (0 is a reading) and a period, prefilled from the item's
+  `measurement_period` ("Oct 2026", "Q4 2026", "Week of Oct 19, 2026", "2026",
+  else the date) and editable, plus an optional note. "Readings · N" lists them
+  newest first; a manual one can be removed, one from a completed assessment
+  can't (409). `GET /api/role-goals/{report_id}`,
+  `GET|POST /api/role-goals/{report_id}/readings`,
+  `DELETE /api/role-goals/{report_id}/readings/{entry_id}`. A reading is only
+  for an item in the person's **current** role; the report must be the caller's
+  (route check and the `metric_entries` policy's `with check`).
+- **The bar.** The row shows "Bar: {target}" as written, "No target set yet…"
+  for an unresolved target, or the meets wording. "Latest reading meets the
+  bar." / "…is below the bar." appears only when the target text states exactly
+  one number and a direction (in the target, or in meets wording that names no
+  other number), read by `backend/expectation_bar.py`. Otherwise no verdict.
+  A verdict never sets a status.
+- **Make it {first}'s goal** opens the New goal form from that item: title is
+  the item's name to rewrite, a measured item prefills the measure label and a
+  direction from the bar with the target blank beside "The role's bar is …",
+  and the goal keeps a link to the item (`goals.source_metric_config_id` or
+  `source_skill_config_id`; at most one, individual goals only). The "reads like
+  an expectation" check is skipped for it: it is linked on purpose, and it is
+  not an AI suggestion, so no AI-draft telemetry. From the person page the draft
+  travels through `saveGoalDraft()` and `?new=1&draft=1`.
+- **A linked goal** shows "Stretch on “{item}”" (measured item and the goal has
+  its own target) or "Builds on “{item}”" on its sheet, in Details and on the
+  person page, plus "· that expectation was retired" when it was. A goal on a
+  measured item has **no readings of its own** (D7): `latest_reading`,
+  `recent_readings` and `reading_count` are the item's `metric_entries`
+  (`readings_from: "role"`, each reading with its `period`), Details lists them,
+  its update form takes status and a note only, and the check-in route refuses a
+  `measured_value` (422). The item's row lists "Their own goal on this: …"; goals
+  on items no longer in the role are listed under the section with why.
+- **Link rules.** Create/update check a new link is one of the person's
+  current, non-retired items of the right kind (422 otherwise). PUT touches the
+  link only when the body sends it, so keeping a retired link is fine. A goal
+  that stops being individual loses its link (`goals_source_individual`).
+- **Assessments** show a linked goal under its expectation, never as a separate
+  item (`assessments.md`).
+- **Not built yet:** the prep sheet citing an item's latest reading ("below the
+  bar on CSAT since September"), scoping B2.
 
 ## Success measure: written, and optionally one number
 
@@ -171,6 +239,7 @@ are never drafted.
 ## Verification
 
 `backend/tests/test_goals.py` covers the route and enrichment semantics with an
-in-memory client. The SQL function, trigger, constraints and owner isolation
+in-memory client; `backend/tests/test_role_goals.py` covers From their role (the
+bar reader, the live view, readings, links, assessment grouping). The SQL function, trigger, constraints and owner isolation
 were exercised against local Postgres (`local_verify_stub.sql` + `schema.sql`,
 and the pre-change schema + the migration).

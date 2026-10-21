@@ -576,6 +576,10 @@ alter table metric_entries enable row level security;
 
 create index metric_entries_review_idx on metric_entries (performance_review_id)
   where performance_review_id is not null;
+-- Readings per person per expectation, newest first (2026-10-20: written from
+-- the person page and Goals as well as from a completed assessment).
+create index metric_entries_report_config_idx
+  on metric_entries (direct_report_id, metric_config_id, recorded_at desc);
 
 -- ============================================================
 -- SKILL SETTINGS AND SCALE
@@ -803,8 +807,24 @@ create table goals (
       and measure_target is not null and measure_direction is not null
       and measure_target not in ('NaN', 'Infinity', '-Infinity')
       and (measure_format <> 'count' or (measure_target >= 0 and measure_target = trunc(measure_target))))
+  ),
+  -- Individual goals start from the role's expectations (2026-10-20,
+  -- docs/GOAL_ATTRIBUTION_SCOPING.md Part B). The expectation a personalised
+  -- goal started from: at most one, individual goals only. A goal linked to a
+  -- measured expectation reads that expectation's metric_entries; it has no
+  -- readings of its own.
+  source_metric_config_id uuid references metric_configs(id) on delete set null,
+  source_skill_config_id  uuid references skill_configs(id) on delete set null,
+  constraint goals_one_source check (source_metric_config_id is null or source_skill_config_id is null),
+  constraint goals_source_individual check (
+    (source_metric_config_id is null and source_skill_config_id is null) or level = 'individual'
   )
 );
+
+create index goals_source_metric_idx on goals (source_metric_config_id)
+  where source_metric_config_id is not null;
+create index goals_source_skill_idx on goals (source_skill_config_id)
+  where source_skill_config_id is not null;
 
 alter table goals enable row level security;
 
@@ -1972,8 +1992,16 @@ create policy "metric_scale_defs_select_own_org" on metric_scale_definitions
   );
 
 -- metric_entries
+-- A reading must be about one of the caller's own reports (2026-10-20).
 create policy "metric_entries_all_own" on metric_entries
-  for all using (recorded_by = auth.uid()) with check (recorded_by = auth.uid());
+  for all using (recorded_by = auth.uid())
+  with check (
+    recorded_by = auth.uid()
+    and exists (
+      select 1 from direct_reports d
+      where d.id = metric_entries.direct_report_id and d.manager_id = auth.uid()
+    )
+  );
 
 -- skill_configs
 create policy "skill_configs_all_own_org" on skill_configs

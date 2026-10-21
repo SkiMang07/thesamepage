@@ -288,7 +288,7 @@ export default function TeamGoalsModal({ onClose, supportsGoalId = null }: { onC
 
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-4">
               <p className="max-w-[52ch] text-[13px] text-ink-muted">
-                You won’t set individual goals here. You can add them later from each person’s page.
+                You won’t set individual goals here. Each person starts with what their role expects; add goals of their own later from their page.
               </p>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={close} className={BTN_GHOST}>

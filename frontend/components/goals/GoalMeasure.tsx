@@ -88,7 +88,10 @@ export default function GoalMeasure({ goal, size = "card" }: { goal: Goal; size?
         </span>
       </div>
       <p className={`mt-2 text-ink-body ${big ? "text-xl" : "text-xs"}`}>{m.label}</p>
-      <p className={`mt-1.5 text-ink-muted ${big ? "text-sm" : "text-xs"}`}>Value recorded {formatMoment(reading.at)}</p>
+      <p className={`mt-1.5 text-ink-muted ${big ? "text-sm" : "text-xs"}`}>
+        Value recorded {formatMoment(reading.at)}
+        {goal.readings_from === "role" && `${reading.period ? ` for ${reading.period}` : ""} · a reading of the role’s expectation`}
+      </p>
       <MeasurePlot readings={readings} measure={m} height={big ? 100 : size === "detail" ? 72 : 42} />
       {met && (
         <p className={`mt-3 text-brand ${big ? "text-sm" : "text-xs"}`}>Recorded value meets the current target.</p>
@@ -131,7 +134,7 @@ export function MeasurePlot({ readings, measure, height = 42 }: { readings: Goal
         <path d={line} fill="none" className="stroke-brand" strokeWidth={2} vectorEffect="non-scaling-stroke" />
         {geo.points.map((p) => (
           <path
-            key={p.reading.check_in_id}
+            key={p.reading.check_in_id ?? p.reading.entry_id ?? p.reading.at}
             d={`M${p.x} ${p.y}h0`}
             className="stroke-brand"
             strokeWidth={6}
@@ -158,19 +161,22 @@ export function MeasurePlot({ readings, measure, height = 42 }: { readings: Goal
 /** The readable alternative to the plot: every recorded value, newest first. */
 export function ReadingsTable({ readings, measure }: { readings: GoalReading[]; measure: Measure }) {
   if (readings.length === 0) return <p className="mt-2 text-xs text-ink-muted">No value recorded yet.</p>;
+  const periods = readings.some((r) => r.period);
   return (
     <table className="mt-3 text-xs">
       <thead>
         <tr className="text-ink-muted">
           <th scope="col" className="py-1.5 pr-8 text-left font-normal">Date</th>
           <th scope="col" className="py-1.5 pr-8 text-left font-normal">Value</th>
+          {periods && <th scope="col" className="py-1.5 pr-8 text-left font-normal">Period</th>}
         </tr>
       </thead>
       <tbody className="text-ink-body">
         {readings.map((r) => (
-          <tr key={r.check_in_id} className="border-t border-divider">
+          <tr key={r.check_in_id ?? r.entry_id ?? r.at} className="border-t border-divider">
             <td className="py-1.5 pr-8">{formatMoment(r.at)}</td>
             <td className="py-1.5 pr-8 tabular-nums">{formatValue(r.value, measure)}</td>
+            {periods && <td className="py-1.5 pr-8">{r.period ?? ""}</td>}
           </tr>
         ))}
       </tbody>
