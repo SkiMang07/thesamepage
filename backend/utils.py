@@ -303,6 +303,16 @@ def get_entitlement(user_id: str, supabase: Client, fresh: bool = False) -> dict
     return data
 
 
+def forget_user(user_id: str) -> None:
+    """Drop every cached token and entitlement for a user whose account was
+    just deleted, so a token still in the browser can't be served from cache."""
+    with _token_cache_lock:
+        for t in [t for t, (data, _) in _token_cache.items() if (data or {}).get("id") == user_id]:
+            del _token_cache[t]
+    with _entitlement_cache_lock:
+        _entitlement_cache.pop(user_id, None)
+
+
 def get_admin_client() -> Client:
     """Service-role client — bypasses RLS. Use ONLY for admin/background jobs,
     never inside a user-facing request path for user data."""

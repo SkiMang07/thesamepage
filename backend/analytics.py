@@ -156,3 +156,45 @@ def ai_draft_resolved(
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             props[name] = min(value, 1_000)
     capture(user_id, "ai_draft_resolved", props)
+
+
+# ── Account deletion (PRELAUNCH_BACKLOG §7 E) ─────────────────────────────
+# Deleting an account deletes the PostHog person whose distinct_id is the
+# user id (the browser identifies with it too, frontend/lib/analytics.ts),
+# with their events and any recordings. PostHog queues the event deletion and
+# runs it in the background; a 2xx means it is queued. Uses the private API,
+# so it needs a personal key (person:write), not the public project key.
+POSTHOG_PERSONS_BULK_DELETE_URL = "https://us.posthog.com/api/projects/{project_id}/persons/bulk_delete/"
+
+
+class AnalyticsDeletionError(Exception):
+    """PostHog could not be asked to delete. Never carries the key."""
+
+
+def deletion_needed() -> bool:
+    """Events were ever sent from this deployment, so there is something to delete."""
+    return bool(settings.POSTHOG_PROJECT_KEY)
+
+
+def deletion_configured() -> bool:
+    return bool(settings.POSTHOG_PERSONAL_API_KEY and settings.POSTHOG_PROJECT_ID)
+
+
+def delete_person(user_id: str, timeout: float = 10.0) -> dict:
+    if not deletion_configured():
+        raise AnalyticsDeletionError("POSTHOG_PERSONAL_API_KEY or POSTHOG_PROJECT_ID is not set")
+    try:
+        response = httpx.post(
+            POSTHOG_PERSONS_BULK_DELETE_URL.format(project_id=settings.POSTHOG_PROJECT_ID),
+            json={"distinct_ids": [user_id], "delete_events": True, "delete_recordings": True},
+            headers={"Authorization": f"Bearer {settings.POSTHOG_PERSONAL_API_KEY}"},
+            timeout=timeout,
+        )
+    except httpx.HTTPError as exc:
+        raise AnalyticsDeletionError(f"posthog unreachable: {type(exc).__name__}") from None
+    if response.status_code >= 400:
+        raise AnalyticsDeletionError(f"posthog bulk_delete refused: {response.status_code}")
+    try:
+        return response.json() or {}
+    except ValueError:
+        return {}

@@ -16,6 +16,7 @@ Does nothing until HUBSPOT_TOKEN (a private-app token with contact write
 access) is set on Railway.
 """
 import logging
+from urllib.parse import quote
 
 import httpx
 
@@ -56,3 +57,56 @@ def set_contact_properties(email: str, properties: dict, timeout: float = 10.0) 
         raise HubSpotError(f"hubspot unreachable: {type(exc).__name__}") from None
     if response.status_code >= 400:
         raise HubSpotError(f"hubspot upsert refused: {response.status_code}")
+
+
+# ── Account deletion (PRELAUNCH_BACKLOG §7 E) ─────────────────────────────
+# When a manager deletes their account, their HubSpot contact goes too: a
+# GDPR delete, which HubSpot makes permanent. Looked up first, because a GDPR
+# delete by an email HubSpot doesn't have blocklists that email for good. A
+# deleted contact can still come back through the API (a later sign-up's
+# wrap-up reminder), just as a new contact with no history.
+#
+# The portal is shared with Prism Tree and By 2 Pedals, so this also removes
+# the person from those lists if the same email is there. That is what the
+# person asked for.
+CONTACT_URL = "https://api.hubapi.com/crm/v3/objects/contacts/{id}"
+GDPR_DELETE_URL = "https://api.hubapi.com/crm/v3/objects/contacts/gdpr-delete"
+
+
+def delete_contact(email: str, timeout: float = 10.0) -> bool:
+    """Permanently delete the contact with this email, if HubSpot has one.
+
+    Returns True when a contact was deleted, False when there was none.
+    Raises HubSpotError on any failure so the caller can stop before deleting
+    anything else.
+    """
+    if not enabled():
+        raise HubSpotError("HUBSPOT_TOKEN is not set")
+    if not email:
+        return False
+    headers = {"Authorization": f"Bearer {settings.HUBSPOT_TOKEN}"}
+    try:
+        found = httpx.get(
+            CONTACT_URL.format(id=quote(email, safe="")),
+            params={"idProperty": "email", "properties": "email"},
+            headers=headers,
+            timeout=timeout,
+        )
+    except httpx.HTTPError as exc:
+        raise HubSpotError(f"hubspot unreachable: {type(exc).__name__}") from None
+    if found.status_code == 404:
+        return False
+    if found.status_code >= 400:
+        raise HubSpotError(f"hubspot lookup refused: {found.status_code}")
+    contact_id = (found.json() or {}).get("id")
+    if not contact_id:
+        return False
+    try:
+        response = httpx.post(
+            GDPR_DELETE_URL, json={"objectId": str(contact_id)}, headers=headers, timeout=timeout,
+        )
+    except httpx.HTTPError as exc:
+        raise HubSpotError(f"hubspot unreachable: {type(exc).__name__}") from None
+    if response.status_code >= 400:
+        raise HubSpotError(f"hubspot gdpr delete refused: {response.status_code}")
+    return True

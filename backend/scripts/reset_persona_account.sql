@@ -171,6 +171,10 @@ begin
     knowledge_skipped_at = null
   where id = v_uid;
 
+  -- A persona deleted through Settings left a tombstone that would deny it a
+  -- fresh clock on sign-up. A reset means brand new, so clear it.
+  delete from deleted_accounts where email_hash = account_email_hash(v_email);
+
   delete from organizations where id = v_org;
 
   if v_delete_login then

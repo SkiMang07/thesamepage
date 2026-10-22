@@ -47,6 +47,9 @@ import {
   getRoleLevels,
   getSetupStatus,
   getWorkUnitConfigs,
+  ACCOUNT_DELETE_PHRASE,
+  deleteAccount,
+  exportAccount,
   previewAwayPeriod,
   setupOwnUnit,
   unarchiveDirectReport,
@@ -58,6 +61,7 @@ import {
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { createClient } from "@/lib/supabase";
+import { setAnalyticsUser } from "@/lib/analytics";
 import NoteField from "@/components/NoteField";
 import {
   CARD,
@@ -66,6 +70,7 @@ import {
   LABEL,
   BTN_PRIMARY,
   BTN_SECONDARY,
+  BTN_DANGER,
   EYEBROW,
 } from "@/lib/tokens";
 import {
@@ -485,8 +490,8 @@ const EDITOR_COPY: Record<SectionId, { eyebrow: string; title: string; descripti
   account: {
     eyebrow: "Your account",
     title: "Account and session",
-    description: "Review the identity used to sign in and manage this browser session.",
-    scope: "Signing out ends only this browser session. Your team and workspace data stay exactly as they are.",
+    description: "Your sign-in, a copy of everything you've saved, and deleting your account.",
+    scope: "Signing out ends only this browser session. Deleting your account is permanent.",
   },
 };
 
@@ -604,7 +609,142 @@ function AccountSection({ profile, onSignedOut }: { profile: Profile | null; onS
         {signingOut ? "Signing out…" : "Sign out"}
       </button>
       {signOutError && <p className="mt-3 text-sm text-red-700">{signOutError}</p>}
+
+      <ExportYourData />
+      <DeleteYourAccount />
     </section>
+  );
+}
+
+// Your record is yours to take (PRELAUNCH_BACKLOG §7 E). One JSON file, every
+// table the account holds, rows as stored.
+function ExportYourData() {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleExport() {
+    setExporting(true);
+    setError(null);
+    try {
+      const data = await exportAccount();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `the-same-page-export-${data.exported_at.slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : "The export didn't download. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="mt-8 max-w-xl border-t border-hairline pt-6">
+      <h3 className="text-sm font-semibold text-ink">Download your data</h3>
+      <p className="mt-1 text-sm text-ink-secondary">
+        One file with everything you&apos;ve saved: your people, 1:1s, commitments, goals, projects, notes and
+        settings. Files you uploaded aren&apos;t included, but the text we read from them is.
+      </p>
+      <button type="button" onClick={handleExport} disabled={exporting} className={`${BTN_SECONDARY} mt-4`}>
+        {exporting ? "Preparing…" : "Download (JSON)"}
+      </button>
+      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+// Deletion is permanent. There are no backups (Supabase Free), so the copy
+// says so plainly and the typed phrase is checked here and again on the server.
+function DeleteYourAccount() {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const matches = typed.trim().toLowerCase() === ACCOUNT_DELETE_PHRASE;
+
+  async function handleDelete() {
+    if (!matches) return;
+    setDeleting(true);
+    setError(null);
+    // Stop analytics first, so the click itself can't recreate the PostHog
+    // person the server is about to delete.
+    setAnalyticsUser(null);
+    try {
+      await deleteAccount(typed);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? e.detail
+          : "We couldn't confirm the deletion. Reload the page: if you're signed out, it went through.",
+      );
+      setDeleting(false);
+      return;
+    }
+    // The login no longer exists; clear this browser's session and leave.
+    try {
+      await createClient().auth.signOut({ scope: "local" });
+    } catch {
+      /* the session is already dead server-side */
+    }
+    window.location.replace("/app/login?deleted=1");
+  }
+
+  return (
+    <div className="mt-8 max-w-xl border-t border-hairline pt-6">
+      <h3 className="text-sm font-semibold text-ink">Delete your account</h3>
+      <p className="mt-1 text-sm text-ink-secondary">
+        This permanently deletes your account and everything in it: your people, notes, 1:1s, commitments,
+        goals, projects, uploaded files and settings. We also remove you from our email and analytics tools.
+      </p>
+      {!open ? (
+        <button type="button" onClick={() => setOpen(true)} className={`${BTN_SECONDARY} mt-4 text-red-700`}>
+          Delete account…
+        </button>
+      ) : (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-medium text-red-800">This can&apos;t be undone.</p>
+          <p className="mt-1 text-sm text-red-800">
+            We don&apos;t keep backups, so once it&apos;s deleted, neither you nor we can get any of it back.
+            Download your data first if you want a copy.
+          </p>
+          <label htmlFor="delete-confirm" className={`${labelCls} mt-4`}>
+            Type <span className="font-mono">{ACCOUNT_DELETE_PHRASE}</span> to confirm
+          </label>
+          <input
+            id="delete-confirm"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            className={inputCls}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={deleting}
+          />
+          <div className="mt-4 flex items-center gap-3">
+            <button type="button" onClick={handleDelete} disabled={!matches || deleting} className={BTN_DANGER}>
+              {deleting ? "Deleting…" : "Delete my account permanently"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setTyped("");
+                setError(null);
+              }}
+              disabled={deleting}
+              className={BTN_SECONDARY}
+            >
+              Cancel
+            </button>
+          </div>
+          {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 

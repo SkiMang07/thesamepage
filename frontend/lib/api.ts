@@ -96,6 +96,8 @@ function announceRecordChange(path: string, method: string) {
   if (path === "/api/files/extract-text") return;
   // Proposing suggestions writes proposals, not records.
   if (path === "/api/beyond/suggestions/refresh") return;
+  // Deleting the account is followed by sign-out, not a refresh.
+  if (path === "/api/settings/account") return;
   window.dispatchEvent(new Event(RECORDS_CHANGED_EVENT));
   window.localStorage.setItem(RECORDS_CHANGED_STORAGE_KEY, String(Date.now()));
 }
@@ -2121,6 +2123,20 @@ export const unplanCareerConversation = (planId: string): Promise<CareerPersonDe
 
 export const skipCareerConversation = (directReportId: string): Promise<CareerPersonDetail> =>
   authedFetch(`/api/career/person/${directReportId}/skip?${careerDate()}`, { method: "POST" });
+
+// Your account (PRELAUNCH_BACKLOG §7 E). The export is one JSON object, every
+// table the account holds; the page saves it as a file. Deletion is permanent
+// (no backups) and needs the typed phrase, checked again by the backend.
+export const ACCOUNT_DELETE_PHRASE = "delete my account";
+export type AccountExport = {
+  exported_at: string;
+  format_version: number;
+  account: Record<string, unknown>;
+  data: Record<string, unknown[]>;
+};
+export const exportAccount = (): Promise<AccountExport> => authedFetch("/api/settings/account/export");
+export const deleteAccount = (confirm: string): Promise<{ deleted: boolean }> =>
+  authedFetch("/api/settings/account", { method: "DELETE", body: JSON.stringify({ confirm }) });
 
 export const getRoleLevels = (): Promise<RoleLevel[]> => authedFetch("/api/settings/role-levels");
 

@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     # Product analytics. Empty means no events are sent (analytics.py).
     POSTHOG_PROJECT_KEY: str = ""
+    # Account deletion removes the person and their events from PostHog
+    # (analytics.delete_person). Needs a personal API key with person:write
+    # and the numeric project id. If POSTHOG_PROJECT_KEY is set and these are
+    # not, account deletion refuses rather than leave analytics behind.
+    POSTHOG_PERSONAL_API_KEY: str = ""
+    POSTHOG_PROJECT_ID: str = ""
     # HubSpot private-app token (contacts write). Empty means the first-1:1
     # wrap-up reminder is off (hubspot.py, jobs/wrapup_reminder.py).
     HUBSPOT_TOKEN: str = ""

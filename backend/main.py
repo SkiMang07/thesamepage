@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from observability import RequestContextMiddleware, configure_logging, init_sentry
-from routes import assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, career, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, file_text, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, person_intake, team_goals, org_units, projects, role_expectations, role_families, role_goals, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
+from routes import account, assessment_reviews, assessments, assistant, away, beyond, beyond_continuity, capacity, career, commitments, dashboard, development, direct_reports, documents, entitlement, expectations_ai, file_text, goals, invites, notes_dump, one_on_ones, onboarding, org_goals, person_intake, team_goals, org_units, projects, role_expectations, role_families, role_goals, roles_import, setup_status, settings as settings_routes, team, telemetry, transcribe
 from utils import get_authenticated_client, get_entitlement, limiter
 
 configure_logging()
@@ -73,6 +73,8 @@ _READ_ONLY_ALLOWED = (
     "/api/dashboard/reconcile",
     "/api/dashboard/explain",
     "/api/away/preview",
+    # Export and delete: an account whose clock ran out can still leave.
+    "/api/settings/account",
 )
 READ_ONLY_DETAIL = (
     "Your free period has ended, so your account is read-only. "
@@ -146,6 +148,7 @@ app.include_router(role_families.router, prefix="/api/role-families", tags=["rol
 app.include_router(roles_import.router, prefix="/api/roles/import", tags=["roles-import"])
 app.include_router(role_expectations.router, prefix="/api/role-expectations", tags=["role-expectations"])
 app.include_router(capacity.router, prefix="/api/capacity", tags=["capacity"])
+app.include_router(account.router, prefix="/api/settings/account", tags=["settings"])
 app.include_router(settings_routes.router, prefix="/api/settings", tags=["settings"])
 app.include_router(expectations_ai.router, prefix="/api/expectations", tags=["expectations"])
 # Period assessments are registered before /api/assessments so the

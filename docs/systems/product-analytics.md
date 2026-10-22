@@ -139,6 +139,16 @@ Add a row here when one is decided, then add its events to the catalog above. Ca
 - **Draft trust.** Share of `ai_draft_resolved` accepted with `edit_bucket` `none` or `light`, by `surface`. Needs no new event.
 - **Dictation use.** Share of saved sheets that used the mic. Needs a flag the frontend already knows, passed on the prep request.
 
+## Deleting a person
+
+Deleting an account (Settings → Your account) deletes the PostHog person
+whose distinct id is the user id, with their events and recordings, through
+`analytics.delete_person()` and PostHog's `persons/bulk_delete` endpoint.
+PostHog queues the event deletion and runs it in the background. It needs
+`POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` on Railway; without them,
+account deletion refuses rather than leave the events behind.
+`docs/ENGINEERING.md` → Account export and deletion has the full order.
+
 ## Adding an event
 
 1. Decide whether the browser or the server sees the moment; prefer the server.

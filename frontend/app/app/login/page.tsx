@@ -42,6 +42,9 @@ function LoginForm() {
     if (searchParams.has("password")) setMethod("password");
   }, [searchParams]);
 
+  // Settings sends a just-deleted account here.
+  const accountDeleted = searchParams.has("deleted");
+
   // Show an error if the auth routes redirected here with ?error=
   useEffect(() => {
     if (searchParams.get("error")) {
@@ -140,6 +143,9 @@ function LoginForm() {
               placeholder="Password"
               className="w-full rounded-md border border-control px-4 py-2 focus:border-brand focus:outline-none"
             />
+          )}
+          {accountDeleted && !error && (
+            <p className="text-sm text-ink-secondary">Your account and everything in it has been deleted.</p>
           )}
           {error && <p className="text-sm text-red-700">{error}</p>}
           <button

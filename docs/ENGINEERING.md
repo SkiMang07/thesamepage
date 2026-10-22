@@ -387,6 +387,9 @@ The deliberate exceptions to RLS, all in `schema.sql`:
 | `get_invite_preview(token)` | the only function granted to `anon`; returns names + expiry, never the row |
 | `accept_direct_report_invite(token)` | claims a report row for `auth.uid()`, re-checks `auth.email()` internally as defense in depth |
 | `handle_new_user()` | signup trigger; defaults every new user to `role = 'manager'` |
+| `ensure_entitlement()` | creates the caller's `subscriptions` row; see Entitlement below |
+| `account_deletion_preflight()` | the refusals `delete_my_account()` makes, callable first so they cost nothing |
+| `delete_my_account()` | deletes everything the caller's account owns, the org and the `auth.users` row, in one transaction; see Account export and deletion |
 
 **Every rollup returns aggregates only, by construction** — a count or a summed
 figure per org unit, never a row identifying a person. That is what makes
@@ -424,6 +427,51 @@ defaulting to `SET NULL` on any new `org_unit_id` column.**
 
 ---
 
+### Account export and deletion
+
+Settings → Your account. `routes/account.py`, both on the user's own JWT
+client:
+
+- `GET /api/settings/account/export` reads every table through RLS and returns
+  one JSON object: `account` (user, organization, subscription) and `data`
+  (one key per table, rows as stored). Uploaded files are not included; their
+  extracted text is. `EXPORT_TABLES` / `EXPORT_EXCLUDED` must name every table
+  in `schema.sql`; `tests/test_account.py` fails otherwise.
+- `DELETE /api/settings/account` (body `{"confirm": "delete my account"}`)
+  first calls `account_deletion_preflight()`, which runs the database's own
+  refusals (a shared org, no permission to delete from `auth.users`, the
+  migration not run) before anything that can't be undone. Then it deletes, in
+  this order: the HubSpot contact (GDPR delete, looked up by email
+  first) and the PostHog person with events and recordings; then the org's
+  files in `context-engine-docs`; then `delete_my_account()`. If either
+  outside service can't be reached, or PostHog deletion isn't configured while
+  `POSTHOG_PROJECT_KEY` is, it stops with nothing deleted. Storage goes before
+  the database because the storage delete policy needs `current_org_id()`.
+
+Why a SECURITY DEFINER function and not the JWT client or the service role:
+RLS gives users no DELETE on `organizations`, `users`, `subscriptions`,
+`mission_control_*` or `manager_report_connections`, and about 45 foreign keys
+to `auth.users` are NO ACTION, so the login can't go first and cascade the
+rest. The function is keyed to `auth.uid()`, refuses an org with a second
+non-IC user, and runs as one transaction: any failure deletes nothing. No
+service-role key is involved.
+
+There are no backups on Supabase Free, so a deletion is final. It writes a
+tombstone to `deleted_accounts` (sha256 of the lowercased email, the clock the
+account had, whether it was comped). `ensure_entitlement()` checks it, so the
+same email signing up again gets its old clock back and no founding place.
+Only an account that had a clock leaves one; an IC or a manager who never
+loaded the app shell gets the normal allocation on return.
+The persona reset script clears a persona's tombstone.
+
+Both routes are in `_READ_ONLY_ALLOWED`: an expired account can still take its
+record and leave. **A new table needs a line in `delete_my_account()`** (or a
+cascade from a table that has one), and a place in `EXPORT_TABLES` or
+`EXPORT_EXCLUDED`. `database/checks/account_deletion_check.py` proves the
+function against a local Postgres. It seeds two accounts in every table, with
+no hand-written fixtures, deletes one, and checks that the other is untouched
+and the export's RLS reads see only the caller's rows.
+
 ## Verifying schema and RLS changes
 
 `database/local_verify_stub.sql` (checked in) stands up bare `auth`/`storage`
@@ -448,6 +496,9 @@ Two rules:
   think.** Write a throwaway functional `.sql` on top of it (`set role
   authenticated`, `set_config('app.current_user_id', ...)`) that actually
   exercises the policy or function you changed — including the failure cases.
+- **When a table or foreign key changes, run the account deletion check** on
+  the same database: `python3 database/checks/account_deletion_check.py
+  "dbname=tsp_verify user=postgres"` (needs `psycopg`).
 
 Device `device_bash` has a short per-call cap, too short for `npm ci` / `next build` /
 `pip install`. Rebuild in the cloud sandbox from the connected folder instead.
@@ -519,7 +570,8 @@ while Andrew is actively running the backend locally, and it is a separate
 | `SENTRY_DSN` | Sentry | Railway | not a secret; leaks only let someone send you errors |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry → thesamepage-frontend → Client Keys | Vercel (Config, not Secret) | public by design, ships in the browser bundle |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `POSTHOG_PROJECT_KEY` | PostHog → Settings → Project → General → Project API key (`phc_`) | Vercel (Config), Railway | same value in both; public by design, ships in the browser bundle; a leak only lets someone send events, and the free plan drops them past 1M |
-| `HUBSPOT_TOKEN` | HubSpot → Settings → Integrations → Private Apps → "tsp-railway-2026-10" (scope: contacts write) | Railway (API and the reminder cron) | empty turns the first-1:1 wrap-up reminder off; writes contacts only |
+| `HUBSPOT_TOKEN` | HubSpot → Settings → Integrations → Private Apps → "tsp-railway-2026-10" (scopes: contacts read and write) | Railway (API and the reminder cron) | empty turns the first-1:1 wrap-up reminder off; reads contacts to find one for account deletion, writes and GDPR-deletes them |
+| `POSTHOG_PERSONAL_API_KEY` / `POSTHOG_PROJECT_ID` | PostHog → Settings → Personal API keys (scope `person:write`, this project only); the numeric project id from Project settings | Railway | account deletion uses them to delete the person and their events; if `POSTHOG_PROJECT_KEY` is set and these aren't, account deletion refuses |
 | `SENTRY_AUTH_TOKEN` (optional) | Sentry → Settings → Auth Tokens (org token) | Vercel (Secret) | only for source-map upload at build; the build works without it |
 
 **Name keys `tsp-<host>-<yyyy-mm>`** (`tsp-railway-2026-09`), so the dashboard
