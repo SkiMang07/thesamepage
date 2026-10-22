@@ -570,7 +570,7 @@ while Andrew is actively running the backend locally, and it is a separate
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | Claude Console → The Same Page Production workspace → API keys | Railway | every AI feature |
 | `OPENAI_API_KEY` | OpenAI → API keys | Railway | transcription only |
-| `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API Keys (the publishable key, `sb_publishable_…`, once switched) | Railway, Vercel | public by design; RLS is the guard |
+| `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → Settings → API Keys (the publishable key, `sb_publishable_…`) | Railway, Vercel | public by design; RLS is the guard. On Vercel the Supabase integration manages it; the frontend falls back to `NEXT_PUBLIC_SUPABASE_ANON_KEY` only if it is missing |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API Keys (a secret key, `sb_secret_…`, once switched) | Railway | bypasses RLS; no request path uses it |
 | SMTP app password (`tsp-supabase-smtp-2026-09`) | Google account for ag@thesamepage.xyz → Security → App passwords (needs 2-Step Verification) | Supabase → Auth → Emails → SMTP Settings | sends login email via smtp.gmail.com:465; to rotate, paste the new one, send a test magic link, then revoke the old one in Google |
 | `STRIPE_*` | Stripe | Railway | empty until billing ships |
@@ -581,7 +581,8 @@ while Andrew is actively running the backend locally, and it is a separate
 | `POSTHOG_PERSONAL_API_KEY` / `POSTHOG_PROJECT_ID` | PostHog → Settings → Personal API keys (scope `person:write`, this project only); the numeric project id from Project settings | Railway | account deletion uses them to delete the person and their events; if `POSTHOG_PROJECT_KEY` is set and these aren't, account deletion refuses |
 | `SENTRY_AUTH_TOKEN` (optional) | Sentry → Settings → Auth Tokens (org token) | Vercel (Secret) | only for source-map upload at build; the build works without it |
 
-**Name keys `tsp-<host>-<yyyy-mm>`** (`tsp-railway-2026-09`), so the dashboard
+**Name keys `tsp-<host>-<yyyy-mm>`** (`tsp-railway-2026-09`; Supabase only
+accepts underscores, so `tsp_railway_2026_10` there), so the dashboard
 shows at a glance which key serves where and how old it is. A key whose host
 you can't name is a key to delete.
 
@@ -625,10 +626,13 @@ only the values change. The switch, once:
    `SUPABASE_SERVICE_ROLE_KEY` = the secret key, on the API service and on
    every other service that has them (the wrap-up reminder cron; the worker if
    it's been created). Each redeploys on save.
-3. **Vercel:** `NEXT_PUBLIC_SUPABASE_ANON_KEY` = the publishable key, on
-   Production. The Supabase integration set the old value, so check the new
-   one isn't overwritten by the integration, then redeploy (the value is baked
-   in at build).
+3. **Vercel:** nothing to paste. The Supabase integration (the env vars with
+   the lightning icon) writes `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` itself
+   when the publishable key exists, and the frontend reads that first, falling
+   back to `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Redeploy without the build cache
+   (the value is baked in at build). The integration's other vars
+   (`SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `POSTGRES_*`) are
+   unused by the frontend.
 4. **Verify:** `/health` is ok, sign in on the app (a magic link round-trips),
    and a signed-in page loads data. Users stay signed in throughout: their
    session tokens don't change.
