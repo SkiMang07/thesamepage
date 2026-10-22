@@ -21,10 +21,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.wrappers import LimitGroup
 import httpx
-from gotrue.http_clients import SyncClient as GoTrueHttpClient
 from postgrest import SyncPostgrestClient
 from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
-from postgrest.utils import SyncClient as PostgrestHttpClient
 from supabase import create_client, Client, SupabaseAuthClient
 
 from config import settings
@@ -213,21 +211,16 @@ class _JwtClockSkewRetryTransport(httpx.BaseTransport):
 _POSTGREST_TRANSPORT = _JwtClockSkewRetryTransport(_SUPABASE_TRANSPORT)
 
 
-class _PooledPostgrestClient(SyncPostgrestClient):
-    def create_session(self, base_url, headers, timeout, verify=True, proxy=None):
-        return PostgrestHttpClient(
-            base_url=base_url,
-            headers=headers,
-            timeout=timeout,
-            transport=_POSTGREST_TRANSPORT,
-            follow_redirects=True,
-        )
-
-
+# supabase-py >= 2.2x builds its sub-clients from an injectable httpx.Client.
+# Each per-request Supabase client still gets its OWN httpx.Client (no default
+# headers; postgrest and auth send their headers per request), and only the
+# transport underneath is shared.
 class _PooledSupabaseClient(Client):
     @staticmethod
-    def _init_postgrest_client(rest_url, headers, schema, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT, verify=True, proxy=None):
-        return _PooledPostgrestClient(rest_url, headers=headers, schema=schema, timeout=timeout)
+    def _init_postgrest_client(rest_url, headers, schema, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT,
+                               verify=True, proxy=None, http_client=None):
+        session = httpx.Client(transport=_POSTGREST_TRANSPORT, timeout=timeout, follow_redirects=True)
+        return SyncPostgrestClient(rest_url, headers=headers, schema=schema, http_client=session)
 
     @staticmethod
     def _init_supabase_auth_client(auth_url, client_options, verify=True, proxy=None):
@@ -238,7 +231,7 @@ class _PooledSupabaseClient(Client):
             storage=client_options.storage,
             headers=client_options.headers,
             flow_type=client_options.flow_type,
-            http_client=GoTrueHttpClient(transport=_SUPABASE_TRANSPORT, follow_redirects=True),
+            http_client=httpx.Client(transport=_SUPABASE_TRANSPORT, follow_redirects=True),
         )
 
 
@@ -259,12 +252,12 @@ def get_authenticated_client(authorization: str = Header(None)) -> tuple[str, Cl
     # Propagate the user's JWT to Storage too (added Session 28 — the Context
     # Engine's upload endpoint is the first route to touch `client.storage`).
     # `postgrest.auth(token)` only sets the Authorization header on the
-    # postgrest client's own httpx session — it does NOT touch
+    # postgrest client's own headers — it does NOT touch
     # `client.options.headers`, which is what `client.storage` (lazily built
     # on first access) uses to construct its own httpx session. Without this
     # line, Storage requests would authenticate as the anon key, `auth.uid()`
     # would be null inside storage.objects' RLS policies, and every upload
-    # would be rejected — confirmed by reading supabase-py 2.9.1's
+    # would be rejected — confirmed by reading supabase-py's (2.9.1, still true in 2.32)
     # SyncClient.storage property and BasePostgrestClient.auth() source.
     client.options.headers["Authorization"] = f"Bearer {token}"
     return user_id, client

@@ -570,8 +570,8 @@ while Andrew is actively running the backend locally, and it is a separate
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | Claude Console → The Same Page Production workspace → API keys | Railway | every AI feature |
 | `OPENAI_API_KEY` | OpenAI → API keys | Railway | transcription only |
-| `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API Keys | Railway, Vercel | public by design; RLS is the guard |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API Keys | Railway | bypasses RLS; no request path uses it |
+| `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API Keys (the publishable key, `sb_publishable_…`, once switched) | Railway, Vercel | public by design; RLS is the guard |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API Keys (a secret key, `sb_secret_…`, once switched) | Railway | bypasses RLS; no request path uses it |
 | SMTP app password (`tsp-supabase-smtp-2026-09`) | Google account for ag@thesamepage.xyz → Security → App passwords (needs 2-Step Verification) | Supabase → Auth → Emails → SMTP Settings | sends login email via smtp.gmail.com:465; to rotate, paste the new one, send a test magic link, then revoke the old one in Google |
 | `STRIPE_*` | Stripe | Railway | empty until billing ships |
 | `SENTRY_DSN` | Sentry | Railway | not a secret; leaks only let someone send you errors |
@@ -612,11 +612,31 @@ six months.
 
 **Supabase is different.** The legacy `anon`/`service_role` JWTs cannot be
 rotated one at a time: rotating the legacy JWT secret or disabling legacy keys
-kills both. Supabase is retiring them by the end of 2026, so the next Supabase
-rotation is the migration to `sb_publishable_…` / `sb_secret_…` keys, which
-needs `supabase` ≥ 2.16 in `backend/requirements.txt` (2.9.1 rejects any key
-that isn't a JWT). After that migration, each secret key rotates on its own
-with the steps above.
+kills both, and Supabase retires them at the end of 2026. The backend runs
+`supabase` 2.32, which accepts the new `sb_publishable_…` / `sb_secret_…` keys
+(2.9.1 refused any key that wasn't a JWT). The variable names stay the same;
+only the values change. The switch, once:
+
+1. **Create** both keys in Supabase → Settings → API Keys → "Publishable and
+   secret API keys" (a project may already have a `default` publishable key).
+   Name the secret key `tsp-railway-<yyyy-mm>`. Legacy keys keep working
+   meanwhile.
+2. **Railway:** `SUPABASE_ANON_KEY` = the publishable key,
+   `SUPABASE_SERVICE_ROLE_KEY` = the secret key, on the API service and on
+   every other service that has them (the wrap-up reminder cron; the worker if
+   it's been created). Each redeploys on save.
+3. **Vercel:** `NEXT_PUBLIC_SUPABASE_ANON_KEY` = the publishable key, on
+   Production. The Supabase integration set the old value, so check the new
+   one isn't overwritten by the integration, then redeploy (the value is baked
+   in at build).
+4. **Verify:** `/health` is ok, sign in on the app (a magic link round-trips),
+   and a signed-in page loads data. Users stay signed in throughout: their
+   session tokens don't change.
+5. **Disable** the legacy keys in Supabase → API Keys → "Legacy API keys".
+   It's reversible in the dashboard if anything was missed; re-enable and
+   look for the client still sending the old key.
+
+After that, each secret key rotates on its own with the steps above.
 
 ---
 
