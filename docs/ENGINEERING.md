@@ -462,7 +462,9 @@ Postgres run above when schema changed.
 
 `.github/workflows/ci.yml` runs on every push and pull request against a clean
 checkout of the commit: `pytest` plus `pip-audit` for the backend, `tsc --noEmit`
-plus `npm audit --audit-level=high` for the frontend. It is an alarm, not a
+plus two `npm audit` runs for the frontend: `--omit=dev --audit-level=high` on
+what ships, `--audit-level=critical` on build tools (Tailwind 3's `braces` has an
+unfixable high advisory that only touches the build). It is an alarm, not a
 gate. Railway and Vercel deploy on push whatever CI says, so a red run means
 "check production now". `frontend/package-lock.json` is gitignored, so CI and
 Vercel both resolve the ranges in `package.json` fresh. That is why the security
@@ -603,5 +605,10 @@ Not yet built, deliberately:
 - CI doesn't block deploys. Railway and Vercel deploy on push, and CI (above)
   only reports. Making it a gate would mean deploy hooks or GitHub-triggered
   deploys instead of the platforms' own git integrations.
+- Tailwind 4. Tailwind 3 depends on `braces`, which carries a high-severity
+  advisory (GHSA-vfj7-8cjw-p6xm, stack exhaustion on deeply nested patterns)
+  with no fixed release. Only the build reads it, on our own source globs, so
+  CI audits build tools at critical. Moving to Tailwind 4 removes it; it is a
+  config rewrite plus a visual pass over every page, so post-launch.
 - Pagination — no list endpoint paginates. Fine at one manager's scale, not at
   an org's.

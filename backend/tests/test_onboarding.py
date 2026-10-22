@@ -501,6 +501,23 @@ from routes.onboarding import (  # noqa: E402
 NOW = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
 
 
+class _FrozenDatetime(datetime):
+    """`datetime` with now() pinned to NOW, for routes.onboarding only."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return NOW if tz is None else NOW.astimezone(tz)
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch):
+    # The stamps below are built from NOW, but build_status and the "Not now"
+    # route read the real clock. Without this, a fixture stamped "1 day ago"
+    # drifts past QUIET_AFTER_DAYS a week after NOW and the card goes quiet.
+    monkeypatch.setattr(onboarding, "datetime", _FrozenDatetime)
+    return NOW
+
+
 def _ago(days):
     return (NOW - timedelta(days=days)).isoformat()
 
@@ -545,7 +562,7 @@ def _incomplete(**over):
     return _tables(goals=[{"level": "company", "status": "active"}], one_on_ones=[_sheet()], **over)
 
 
-def test_the_entry_modal_is_pending_once_activated_and_until_it_is_closed():
+def test_the_entry_modal_is_pending_once_activated_and_until_it_is_closed(frozen_clock):
     tables = _incomplete(users=[_user(setup_intro_seen_at=None, setup_card_dismissals=0)])
     status = build_status("m", _Client(tables))
     assert status["intro_pending"] is True and status["card"]["level"] == "full"
@@ -559,7 +576,7 @@ def test_the_entry_modal_waits_for_the_first_prep_sheet():
     assert build_status("m", _Client(tables))["intro_pending"] is False
 
 
-def test_the_card_goes_quiet_then_hidden_from_the_stored_state():
+def test_the_card_goes_quiet_then_hidden_from_the_stored_state(frozen_clock):
     quiet = build_status("m", _Client(_incomplete(users=[_prompt_user(setup_card_dismissals=1)])))
     assert quiet["card"]["level"] == "quiet"
     stale = _prompt_user(setup_intro_seen_at=_ago(9), setup_org_at=_ago(9), setup_expectations_at=_ago(9))
@@ -712,12 +729,12 @@ def test_the_entry_modal_is_stamped_and_reported_once(_coverage_and_events):
         _teardown(main, utils)
 
 
-def test_not_now_snoozes_longer_each_time_and_reports_counts_only(_coverage_and_events):
+def test_not_now_snoozes_longer_each_time_and_reports_counts_only(_coverage_and_events, frozen_clock):
     users = [_prompt_user()]
     client, main, utils = _route_client(users)
     try:
         for expected_days in (1, 3, 7, 14, 14):
-            before = datetime.now(timezone.utc)
+            before = NOW
             assert client.post("/api/onboarding/card-dismissed").status_code == 200
             until = datetime.fromisoformat(users[0]["setup_card_snoozed_until"])
             days = (until - before).total_seconds() / 86400
