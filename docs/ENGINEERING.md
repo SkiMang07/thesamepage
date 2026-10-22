@@ -222,6 +222,13 @@ user's own client the first time the app shell loads (`GET /api/entitlement`,
 via `<EntitlementNotice />`). Invited ICs never get a row. Users can read their
 row but never write it.
 
+A founding place is the lowest free number in 1–20, so a place freed by a
+deleted account is handed out again; the deleted email's tombstone stops it
+coming back for one. Sign-ups matching `test_account_patterns` (Andrew's and
+Susie's plus-addresses) are test accounts: they get the founding year's clock
+but never a place, so persona runs and resets can't use up the 20. Add a row
+there for any new test address pattern.
+
 `read_only_gate` in `main.py` returns 402 on every POST/PUT/PATCH/DELETE under
 `/api/` for a read-only account, except the read-shaped POSTs listed in
 `_READ_ONLY_ALLOWED`. **A new POST that only reads (a preview, an explain) must

@@ -19,7 +19,7 @@ SCRIPT = REPO / "backend" / "scripts" / "reset_persona_account.sql"
 # Not deleted from by name: `users` is kept (reset) or cascades from
 # auth.users (delete login); `organizations` is deleted last, after the
 # users.org_id unlink, and is asserted separately below.
-KEPT = {"users"}
+KEPT = {"users", "test_account_patterns"}  # users: cascades from auth.users; patterns: config, not a persona's rows
 
 
 def _strip_sql_comments(sql: str) -> str:

@@ -30,7 +30,7 @@ from collections import defaultdict
 import psycopg
 from psycopg import sql
 
-SKIP = {"organizations", "users", "deleted_accounts"}  # seeded by hand / under test
+SKIP = {"organizations", "users", "deleted_accounts", "test_account_patterns"}  # seeded by hand / under test / config
 # Mirrors EXPORT_EXCLUDED in backend/routes/account.py.
 NOT_EXPORTED = {"ai_jobs", "deleted_accounts", "users", "organizations"}
 

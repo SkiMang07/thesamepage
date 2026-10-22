@@ -89,6 +89,7 @@ EXPORT_TABLES = (
 EXPORT_EXCLUDED = {
     "ai_jobs": "overnight-prep job bookkeeping; the prep it produces is in one_on_ones",
     "deleted_accounts": "other people's hashed-email tombstones; never readable by a user",
+    "test_account_patterns": "operator config (which emails are test sign-ups); no user's record",
 }
 # Columns left out of the export: secrets, not the person's record.
 REDACTED_COLUMNS = {

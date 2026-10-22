@@ -1491,7 +1491,8 @@ create unique index team_dev_focus_manager_all_teams_uq
 -- Written only by ensure_entitlement() (SECURITY DEFINER, creates the row on
 -- first app load) and, once it exists, the Stripe webhook. Select-only to
 -- the owner. founding_number 1-20 = a founding place (one year); a trialing
--- row without one got 14 days. 'active' with no Stripe id = comped.
+-- row without one got 14 days, or is a test account (one year; see
+-- test_account_patterns). 'active' with no Stripe id = comped.
 -- Past trial_ends_at and not 'active' = read-only (backend 402s writes).
 -- See docs/PRELAUNCH_BACKLOG.md §7 B.
 -- -------------------------
@@ -3202,6 +3203,23 @@ create table deleted_accounts (
 alter table deleted_accounts enable row level security;
 revoke all on table deleted_accounts from anon, authenticated;
 
+-- test_account_patterns: sign-ups whose email matches one of these (SQL LIKE,
+-- lower-case) are test accounts. ensure_entitlement() gives them the founding
+-- year's clock but never a founding place, so persona runs and resets can't
+-- use up the 20. No RLS policies; edit it in the SQL editor.
+create table test_account_patterns (
+  pattern  text primary key check (pattern = lower(pattern)),
+  note     text
+);
+
+alter table test_account_patterns enable row level security;
+revoke all on table test_account_patterns from anon, authenticated;
+
+insert into test_account_patterns (pattern, note) values
+  ('andrewgodlew+%@gmail.com',   'Andrew''s persona and test sign-ups'),
+  ('suzie.godlewski+%@gmail.com', 'Susie''s test sign-ups')
+on conflict (pattern) do nothing;
+
 
 create or replace function public.account_email_hash(p_email text)
 returns text
@@ -3266,11 +3284,19 @@ begin
           values (v_uid, 'manager', 'trialing', v_gone.trial_ends_at)
           returning * into v_sub;
         end if;
+      elsif exists (select 1 from test_account_patterns where v_email like pattern) then
+        -- A test account: the founding year's clock, never a founding place.
+        insert into subscriptions (user_id, plan, status, trial_ends_at)
+        values (v_uid, 'manager', 'trialing', now() + interval '1 year')
+        returning * into v_sub;
       else
-        select coalesce(max(founding_number), 0) + 1 into v_next
-          from subscriptions where founding_number is not null;
+        -- The lowest free place, so a place given up by a deleted account
+        -- (or a test account cleared before launch) is handed out again.
+        select min(n) into v_next
+          from generate_series(1, 20) as n
+          where not exists (select 1 from subscriptions where founding_number = n);
 
-        if v_next <= 20 then
+        if v_next is not null then
           insert into subscriptions (user_id, plan, status, founding_number, trial_ends_at)
           values (v_uid, 'manager', 'trialing', v_next, now() + interval '1 year')
           returning * into v_sub;
