@@ -48,14 +48,12 @@ this (`app.thesamepage.io` in an old mockup, `thesamepage.app` assumed by the
 notes-ingestion scoping doc) — neither is real. Andrew confirmed
 `thesamepage.xyz`; the docs assume `app.thesamepage.xyz` for the product.
 
-**The one clause intentionally left open: AI and model training.** Prism
-Tree's Privacy Policy makes a hard promise — "we do not use your data to
-train AI models." Andrew asked to leave this undecided rather than commit
-either way before the question's actually been thought through. Both
-`privacy.html` and `security.html` carry a visible `.draft-note` (dashed
-border, same visual language the theme already uses for "real thing not here
-yet" placeholders like `.shot` and `.avatar`) flagging this as unresolved —
-it should not be mistaken for reviewed, ready-to-publish copy.
+**AI and model training: a hard no.** Decided by Andrew 2026-10-22. All
+three documents say we never use customer content to train AI models, ours
+or anyone else's, and that content reaches an AI provider only at the moment
+a feature runs, under commercial terms that bar the provider from training on
+it. For a product holding notes about people's employees, that is the
+simplest promise to keep and to read.
 
 ## The structural rewrite Prism Tree's docs don't need
 
@@ -90,19 +88,21 @@ doesn't.
   the security statement, are dropped rather than adapted. The security
   statement says plainly that there's no separate secrets-encryption layer
   to describe, because there's nothing to encrypt beyond the database itself.
-- **AI is Anthropic only, first-party key.** `claude-sonnet-4-6` /
-  `claude-haiku-4-5`, confirmed in `backend/config.py`. No OpenAI, no
-  user-supplied key, so no "you bear the cost of your own API usage" clause.
-- **Infra facts confirmed, not assumed identical.** Same three vendors as
-  Prism Tree (Vercel, Railway, Supabase) — genuinely true, not a copy
-  shortcut — but the AWS region Prism Tree states (US-West-2, Oregon) is
-  *not* confirmed for The Same Page's Supabase project. Both
-  `privacy.html`'s Third-Party Services table and `security.html` state
-  "Amazon Web Services infrastructure" without a region, with a `.draft-note`
-  flagging it for confirmation rather than guessing.
-- **Governing law.** Carried over as Maine, matching the mailing address —
-  flagged with a `.draft-note` in `terms.html` rather than stated as settled,
-  since address and legal domicile aren't automatically the same thing.
+- **Sub-processors are listed, with what each receives.** Supabase
+  (database, storage, sign-in; AWS us-east-1, Northern Virginia, confirmed in
+  the Supabase dashboard), Vercel, Railway, Anthropic, OpenAI (dictation
+  transcription and the 5xx fallback in `ai_core.py`), PostHog, Sentry and
+  HubSpot (wrap-up reminder email, marketing site, contact form). Stripe is
+  promised "when billing is introduced" and gets added when it ships. When a
+  new outside service starts receiving data, the Privacy table and the
+  Security page change in the same release.
+- **Governing law is Maine**, with disputes in Maine courts. Andrew confirmed
+  2026-10-22.
+- **Claims that track the product:** self-serve export and permanent
+  deletion (Settings → Your account), no backups to restore from (Supabase
+  Free), read-only after a free period, sign-in by emailed link (no
+  passwords), usage events that never carry typed content. If any of these
+  changes, the legal text is wrong until it is updated.
 
 ## Technical note for the build pass
 
@@ -135,19 +135,19 @@ and the footer/nav CTA is unbroken everywhere else on the site.
   encryption, row-level security, and responsible disclosure." (145
   characters)
 
+## Where the live text lives
+
+Live at `/legal/privacy`, `/legal/terms` and `/legal/security` on
+thesamepage.xyz, each a `legal.html` page whose `legal-body` module holds the
+whole document. The source for each body is
+`website/prototype/legal-body-{privacy,terms,security}.html`: edit there,
+then replace the module's text through the rich-text field's Advanced →
+Source code view (pasting rendered text strips the headings), and set
+"Last updated". The footer carries Privacy / Terms / Security links from
+`partials/footer.html`.
+
 ## Open questions
 
-- **The AI/model-training clause** — Andrew's call, left as a visible draft
-  note in both `privacy.html` and `security.html`. Needs a real answer
-  before publish, not a default.
-- **Supabase's AWS region** — one line to confirm, flagged in both documents
-  it appears in.
-- **Governing-law state** — assumed Maine from the mailing address; flagged
-  in `terms.html`, say the word if it should be different.
-- **The employee-data framing in Section 2 of the privacy policy** — this is
-  new language with no Prism Tree precedent to lean on. Andrew should read
-  it closely rather than rubber-stamp it; it's the one section doing real
-  legal work rather than adapted boilerplate.
-- Nothing else is open. Once these four are answered, the docs are ready to
-  review as prototypes, then cut into `legal-body.module` and `legal.html`
-  the same way About and Contact were.
+- None blocking. Worth a lawyer's read once there are paying customers,
+  starting with Section 2 of the Privacy Policy (data about the people you
+  manage), which is new language with no Prism Tree precedent.

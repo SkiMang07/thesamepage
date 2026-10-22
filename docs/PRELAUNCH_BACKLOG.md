@@ -331,6 +331,16 @@ Judgment surfaces:
   no domain, no healthcheck; success is a `worker_started` then a
   `nightly_prep` log line. `docs/ENGINEERING.md` → Background worker has the rest.
 
+- [ ] **P2-11 · Commitments have no urgency marker** — [Andrew, 2026-10-18,
+  from the Manager's Playbook ch. 2 interview] — Andrew's own 1:1 doc now
+  tags each item by priority, because a long list with no sense of urgency
+  lets small items sit for weeks (an unfixed workflow, a business case held
+  without telling the report). `docs/systems/commitments.md` describes no
+  priority or urgency field on a commitment. Decide whether commitments and
+  the commitments table (Mission Control, Team) need one, and whether
+  anything overdue should prompt the manager to say so first. Idea only: don't
+  claim the app has it in site or playbook copy. **Effort M.**
+
 ## 5. First five moves, in order
 
 1. **P0-1 (billing decision).** It gates the launch plan itself — everything
@@ -480,7 +490,7 @@ scope here because "production-ready" includes them.
   Under both published posts the card reads "The first pieces are being
   written. Check back shortly." Fix in HubSpot blog settings and
   `blog-index.html`. Effort S.
-- [ ] **N-10 · The Privacy Policy says AI is Anthropic-only; dictation ships
+- [x] **N-10 · The Privacy Policy says AI is Anthropic-only; dictation ships
   audio to OpenAI.** `gtm/site/legal.md:93` locks "AI is Anthropic only,
   first-party key" but `backend/config.py` `AI_TRANSCRIBE_MODEL` /
   `OPENAI_API_KEY` and `backend/routes/transcribe.py` send every dictation
@@ -488,16 +498,22 @@ scope here because "production-ready" includes them.
   pages, and revisit the four open legal questions still flagged in
   `legal.md` (AI-training clause, Supabase region, governing law). Effort S,
   but it is a truthfulness issue on a page a customer's IT team will read.
+  **Done 2026-10-22** (dee6380). All three pages rewritten and republished:
+  OpenAI, PostHog, Sentry and HubSpot listed; no training on customer
+  content; Maine law; us-east-1. See `gtm/site/legal.md`.
 
 ### Found while closing Block A (2026-09-23/24)
 
-- [ ] **N-11 · Five of six marketing pages are still drafts.** About, Contact,
+- [x] **N-11 · Five of six marketing pages are still drafts.** About, Contact,
   Legal, Security and Terms have never been published (only Home is, as of
   2026-09-24). The nav's "Company" dropdown and the footer point at them, so
   those links render empty or unset until they go live. Legal still carries a
   "Draft, needs your decision" block (the AI-training clause) that must be
   answered before it publishes; see N-10 and `gtm/site/legal.md`. Publish as a
   set once the copy is signed off.
+  **Done 2026-10-22.** All six are published: Home, About, Contact, and the
+  legal set at `/legal/privacy`, `/legal/terms` (moved from `/terms`)
+  and `/legal/security`. The footer now links all three.
 - [x] **N-13 · Scribe answers can be cut off mid-sentence.** On
   `claude-sonnet-5` the model thinks by default, and thinking tokens count
   against the loop's `max_tokens=2000` (`assistant_engine.py`). On a long
@@ -758,13 +774,18 @@ Decided the same day, behind the sentence:
   there are 31 dated migrations; the rule says both move together. Run
   `schema.sql` against `local_verify_stub.sql` once more as a clean gate,
   and diff a `pg_dump --schema-only` of production against it.
-- [ ] ✘ Account deletion and data export. No route deletes a user or org
+- [x] ✔ Account deletion and data export. No route deletes a user or org
   (16 `@router.delete` handlers, all for child records); no export. For a
   product whose pitch is "you own the record", a manager needs to be able to
   take it and leave. Minimum: a documented manual path you can run in a day;
   better: `DELETE /api/settings/account` + a JSON export. Effort M.
-- [ ] ✘ Sub-processor and legal pages updated for OpenAI (N-10) and the
-  four open questions in `gtm/site/legal.md` answered.
+  **Done 2026-10-22** (65b5ef7, deployed). Settings → Your account has a JSON
+  export and a typed-confirmation delete that also removes the HubSpot contact
+  and PostHog person. A returning email gets its old clock back. The live test
+  is in `business/live-test-queue.md`. Reasoning:
+  `docs/decisions/account-deletion-is-final.md`.
+- [x] ✔ Sub-processor and legal pages updated for OpenAI (N-10) and the
+  four open questions in `gtm/site/legal.md` answered. Done 2026-10-22.
 
 ### F. Reliability and performance
 
