@@ -313,7 +313,7 @@ STEP_NAME = {"org": "team and roles", "expectations": "role expectations", "goal
 
 STEP_LINE = {
     "org": "Puts each person in a team and gives them a role, so a prep sheet knows who they work alongside and what they do.",
-    "expectations": "Gives the sheet the standard each role is held to. Goals are separate: what the team works toward this period.",
+    "expectations": "Sets the standard each role is held to. It shapes the prep sheet, and it becomes each person's starting goals on Goals.",
     "goals": "Records what your team is working toward this period, and the company or department goals above it.",
 }
 

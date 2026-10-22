@@ -1095,7 +1095,7 @@ function EmptyBoard({
     title = anyGoals ? "No individual goals here yet." : "No goals yet.";
     body = (
       <>
-        Each person starts with what their role expects. Pick someone above to see theirs, or set roles in{" "}
+        Each person starts with what their role expects. Pick someone to see theirs, or set roles in{" "}
         <Link href="/app/expectations" className="underline underline-offset-2 hover:text-ink">
           Roles &amp; expectations
         </Link>

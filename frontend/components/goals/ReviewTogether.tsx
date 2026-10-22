@@ -14,7 +14,7 @@
 
 import { useEffect, useState } from "react";
 import type { Goal, RoleGoals } from "@/lib/api";
-import { readingText } from "@/lib/roleGoals";
+import { barUnit, readingText } from "@/lib/roleGoals";
 import { BTN_PRIMARY, BTN_PRIMARY_SM, BTN_SECONDARY } from "@/lib/tokens";
 import { dueLabel, formatMoment, scopeLabel, targetText } from "@/lib/goals";
 import Dialog, { useFocusTrap } from "./Dialog";
@@ -193,7 +193,7 @@ export function ReviewPresentation({
                     {m.target ? `Bar: ${m.target}` : m.target_status === "unresolved" ? "No target set yet" : m.expectation}
                   </p>
                   <p className="mt-1 text-base text-ink-body">
-                    {m.latest ? `Latest reading ${readingText(m.latest.value, m.latest.period)}` : "No reading yet"}
+                    {m.latest ? `Latest reading ${readingText(m.latest.value, m.latest.period, barUnit(m.target))}` : "No reading yet"}
                   </p>
                 </li>
               ))}

@@ -243,7 +243,7 @@ export function setupSteps(s: OnboardingSteps, nextKey?: OnboardingStepKey | nul
     {
       key: "expectations",
       title: "Role expectations",
-      changes: "Gives the sheet the standard each role is held to. Goals are separate: what the team works toward this period.",
+      changes: "Sets the standard each role is held to. It shapes the prep sheet, and it becomes each person's starting goals on Goals.",
       time: "About 2 minutes per role",
       action: expAction.action,
       href: expAction.href,

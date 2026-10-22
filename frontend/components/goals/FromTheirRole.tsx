@@ -28,7 +28,7 @@ import {
 import type { GoalDraft } from "@/lib/goalDraft";
 import { BTN_PRIMARY_SM, EYEBROW, INPUT, LABEL } from "@/lib/tokens";
 import { formatMoment } from "@/lib/goals";
-import { defaultPeriod, draftFromExpectation, parseReading, readingText, verdictText } from "@/lib/roleGoals";
+import { barUnit, defaultPeriod, draftFromExpectation, parseReading, readingText, verdictText } from "@/lib/roleGoals";
 
 function first(name: string) {
   return name.trim().split(/\s+/)[0] || name;
@@ -386,7 +386,7 @@ function MeasuredRow({
       <p className="mt-0.5 text-xs text-ink-body">
         {item.latest ? (
           <>
-            Latest reading {readingText(item.latest.value, item.latest.period)}
+            Latest reading {readingText(item.latest.value, item.latest.period, barUnit(item.target))}
             <span className="text-ink-muted">
               {" "}
               · {item.latest.from_assessment ? "from an assessment" : `recorded ${formatMoment(item.latest.recorded_at)}`}
@@ -425,7 +425,7 @@ function MeasuredRow({
         <form noValidate onSubmit={save} className="mt-2 rounded-md bg-sunken/60 p-3" aria-label={`Add a reading for ${item.name}`}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label htmlFor={`${fieldId}-value`} className={LABEL}>Reading</label>
+              <label htmlFor={`${fieldId}-value`} className={LABEL}>Reading{barUnit(item.target) ? " (%)" : ""}</label>
               <input
                 id={`${fieldId}-value`}
                 type="number"
@@ -435,7 +435,7 @@ function MeasuredRow({
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 className={INPUT}
-                placeholder={item.latest ? `Last: ${item.latest.value}` : "e.g. 7.2"}
+                placeholder={item.latest ? `Last: ${readingText(item.latest.value, null, barUnit(item.target))}` : "e.g. 7.2"}
               />
             </div>
             <div>

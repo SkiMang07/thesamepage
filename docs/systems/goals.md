@@ -112,8 +112,11 @@ page's Work view (compact; "add their role" opens the person's settings).
 - **Readings** of a measured item are `metric_entries`, the same rows a
   completed assessment writes: one number track. "+ Add a reading" takes any
   finite number (0 is a reading) and a period, prefilled from the item's
-  `measurement_period` ("Oct 2026", "Q4 2026", "Week of Oct 19, 2026", "2026",
-  else the date) and editable, plus an optional note. "Readings · N" lists them
+  `measurement_period` and editable, plus an optional note. Monthly and
+  quarterly items default to the last complete period ("Sep 2026", "Q3 2026"
+  on Oct 20), because that is the number a manager has in hand; weekly, annual
+  and unset take the current week, year or date. A reading is shown in the
+  bar's unit: "89% (Q3 2026)" when the target is written with a "%". "Readings · N" lists them
   newest first; a manual one can be removed, one from a completed assessment
   can't (409). `GET /api/role-goals/{report_id}`,
   `GET|POST /api/role-goals/{report_id}/readings`,
@@ -127,8 +130,10 @@ page's Work view (compact; "add their role" opens the person's settings).
   other number), read by `backend/expectation_bar.py`. Otherwise no verdict.
   A verdict never sets a status.
 - **Make it {first}'s goal** opens the New goal form from that item: title is
-  the item's name to rewrite, a measured item prefills the measure label and a
-  direction from the bar with the target blank beside "The role's bar is …",
+  the item's name to rewrite, a measured item prefills the measure label, a
+  direction from the bar and Percentage when the bar has a "%" (else Number),
+  with the target blank beside "The role's bar is …"; the measure help says its
+  values are the role's readings, not values typed in an update,
   and the goal keeps a link to the item (`goals.source_metric_config_id` or
   `source_skill_config_id`; at most one, individual goals only). The "reads like
   an expectation" check is skipped for it: it is linked on purpose, and it is

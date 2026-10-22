@@ -204,6 +204,8 @@ export default function GoalForm({
   const draft = goal ? undefined : defaults.draft;
   const isEdit = !!goal;
   const locked = isEdit && !!goal?.measure && (goal?.reading_count ?? 0) > 0;
+  // A goal linked to a measured expectation takes its values from the role's readings.
+  const roleReadings = goal ? goal.readings_from === "role" : draft?.link?.kind === "metric";
   const dirty = JSON.stringify(v) !== JSON.stringify(start);
 
   useEffect(() => {
@@ -465,7 +467,9 @@ export default function GoalForm({
           <span>
             <span className="block text-sm font-semibold text-ink">Track a number · optional</span>
             <span className="mt-0.5 block text-xs text-ink-muted">
-              One measured value with a target. You record the value when you add an update; nothing is calculated for you.
+              {roleReadings
+                ? "One measured value with a target. Its values are the role’s readings, added under From their role on this person’s goals; nothing is calculated for you."
+                : "One measured value with a target. You record the value when you add an update; nothing is calculated for you."}
             </span>
           </span>
         </label>

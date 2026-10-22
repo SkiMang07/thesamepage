@@ -10,12 +10,17 @@ type Period = "month" | "week" | "quarter" | "annual" | "none" | null | undefine
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** The period a new reading is for, prefilled from the expectation's measurement period. Editable. */
+/** The period a new reading is for, prefilled from the expectation's measurement
+ *  period. Editable. A monthly or quarterly number is usually in hand only once
+ *  the period has closed, so those default to the last complete one. */
 export function defaultPeriod(period: Period, now: Date = new Date()): string {
   const y = now.getFullYear();
   const m = now.getMonth();
-  if (period === "month") return `${MONTHS[m]} ${y}`;
-  if (period === "quarter") return `Q${Math.floor(m / 3) + 1} ${y}`;
+  if (period === "month") return m === 0 ? `Dec ${y - 1}` : `${MONTHS[m - 1]} ${y}`;
+  if (period === "quarter") {
+    const q = Math.floor(m / 3);
+    return q === 0 ? `Q4 ${y - 1}` : `Q${q} ${y}`;
+  }
   if (period === "annual") return String(y);
   if (period === "week") {
     const monday = new Date(y, m, now.getDate() - ((now.getDay() + 6) % 7));
@@ -24,9 +29,14 @@ export function defaultPeriod(period: Period, now: Date = new Date()): string {
   return `${MONTHS[m]} ${now.getDate()}, ${y}`;
 }
 
-/** "92 (Oct 2026)" — a reading as the manager entered it. */
-export function readingText(value: number, period: string | null | undefined): string {
-  const v = Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+/** "%" when the role's bar is written as a percentage ("92% or above"), else null. */
+export function barUnit(target: string | null | undefined): "%" | null {
+  return target && target.includes("%") ? "%" : null;
+}
+
+/** "89% (Q3 2026)" — a reading as the manager entered it, in the bar's unit. */
+export function readingText(value: number, period: string | null | undefined, unit: string | null = null): string {
+  const v = (Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100)) + (unit ?? "");
   return period ? `${v} (${period})` : v;
 }
 
@@ -75,7 +85,7 @@ export function draftFromExpectation(item: ExpectationLike, role: string | null)
     parentGoalId: null,
     measure:
       item.kind === "metric"
-        ? { label: item.name, format: "number" as const, direction: item.bar?.direction === "at_most" ? ("at_most" as const) : ("at_least" as const) }
+        ? { label: item.name, format: barUnit(item.target) ? ("percent" as const) : ("number" as const), direction: item.bar?.direction === "at_most" ? ("at_most" as const) : ("at_least" as const) }
         : null,
     source: { kind: "expectation" as const, label: item.name, role, where: null },
     targetHint: item.kind === "metric" ? item.target ?? null : null,
