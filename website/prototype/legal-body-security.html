@@ -1,27 +1,30 @@
 <p>Your organization is storing its performance record, its team&rsquo;s development history, and honest notes about real people in The Same Page. Here&rsquo;s exactly how we protect it.</p>
-<blockquote><p>The short version: your organization&rsquo;s data is isolated at the database level, encrypted in transit, and never used to build ad profiles or sold to anyone.</p></blockquote>
+<blockquote><p>The short version: your organization&rsquo;s data is isolated at the database level, encrypted in transit and at rest, never used to train AI models, and never sold to anyone.</p></blockquote>
 <h2>Data Storage</h2>
-<p>All data is stored in a PostgreSQL database hosted by <a href="https://supabase.com">Supabase</a> on Amazon Web Services infrastructure.</p>
-<div class="draft-note"><b>Draft &mdash; confirm before publishing:</b> Prism Tree&rsquo;s statement names an exact AWS region (US-West-2, Oregon). Confirm your Supabase project&rsquo;s region and this can state it the same way, or drop the claim if it varies.</div>
+<p>All data is stored in a PostgreSQL database hosted by <a href="https://supabase.com">Supabase</a> on Amazon Web Services in the United States (us-east-1, Northern Virginia). Files you attach are kept in Supabase Storage in the same region, in a folder scoped to your organization.</p>
 <h2>Encryption in Transit</h2>
-<p>All communication between your browser and The Same Page &mdash; both the frontend and the backend API &mdash; is encrypted using HTTPS/TLS. Unencrypted HTTP connections are not accepted.</p>
+<p>All communication between your browser and The Same Page, for both the web app and the backend API, is encrypted using HTTPS/TLS. Unencrypted HTTP connections are not accepted.</p>
 <h2>Encryption at Rest</h2>
-<p>Standard encryption at rest is provided by our infrastructure (Supabase on AWS). Unlike some tools in this space, The Same Page does not store OAuth tokens or user-supplied API keys today, so there&rsquo;s no separate secrets-encryption layer to describe &mdash; there&rsquo;s nothing beyond the database itself that needs one.</p>
+<p>Data at rest is encrypted by our infrastructure provider (Supabase on AWS). The Same Page does not store passwords, OAuth tokens, or user-supplied API keys.</p>
 <h2>Per-Organization Data Isolation</h2>
-<p>The Same Page uses Row-Level Security (RLS) enforced at the database layer by Supabase. Every query against your data includes a database-level policy check &mdash; your organization&rsquo;s data is isolated from every other organization&rsquo;s regardless of application-level logic, and what an individual account can see within your own organization is scoped the same way. This is a database-enforced constraint, not just a software guard.</p>
+<p>The Same Page uses Row-Level Security (RLS) enforced at the database layer. Every query against your data passes a database-level policy check, so your organization&rsquo;s data is isolated from every other organization&rsquo;s regardless of application logic, and what an individual account can see within your organization is scoped the same way. This is a database-enforced constraint, not just a software guard.</p>
 <h2>Authentication</h2>
-<p>User authentication is handled by Supabase Auth, which verifies tokens on every authenticated API request &mdash; tokens are never trusted client-side only. Passwords are never stored in plaintext.</p>
+<p>Sign-in is handled by Supabase Auth using single-use links sent to your email address. Every authenticated API request has its token verified on the server; tokens are never trusted on the client alone.</p>
+<h2>AI Providers</h2>
+<p>When you use an AI feature, the content that feature needs is sent to our AI provider (Anthropic, or OpenAI as a backup and for voice transcription) at that moment, under commercial terms that do not permit the provider to train on it. We do not use your content to train AI models, and nothing an AI drafts is saved until a person reviews and confirms it.</p>
+<h2>Usage Measurement and Error Monitoring</h2>
+<p>We measure product usage with PostHog and monitor errors with Sentry. Both are configured so that what you type never leaves as part of them: usage events are page views and counts, IP addresses are discarded, session recording is off, and request credentials are filtered from error reports. There are no advertising SDKs or ad pixels in the app.</p>
+<h2>Account Export and Deletion</h2>
+<p>You can download everything your account holds, or permanently delete your account, from Settings at any time. Deletion removes your records from our database and file storage, and your contact and usage records from our email and analytics providers. It cannot be undone.</p>
 <h2>Rate Limiting</h2>
 <p>API endpoints are rate-limited to protect against abuse and runaway automation.</p>
-<h2>No Ads, No Tracking, No Data Selling</h2>
-<p>The Same Page contains no advertising SDKs, no third-party analytics trackers, and no ad pixels. We do not sell or share your data with data brokers, advertisers, or recruiters.</p>
 <h2>What We Don&rsquo;t Do</h2>
 <ul>
-<li>We do not store credit card numbers (billing, if added in the future, will be handled by a PCI-compliant processor)</li>
-<li>We do not use your organization&rsquo;s data to train AI models beyond what&rsquo;s described in our <a href="/legal/privacy">Privacy Policy</a></li>
 <li>We do not sell or share data with recruiters, advertisers, or data brokers</li>
+<li>We do not use your organization&rsquo;s content to train AI models</li>
+<li>We do not store payment card numbers; when billing is introduced, it will be handled by a PCI-compliant payment processor</li>
 </ul>
 <h2>Responsible Disclosure</h2>
-<p>If you discover a security vulnerability in The Same Page, please report it to us at <strong>andrewgodlew@gmail.com</strong> before disclosing it publicly. We will investigate and respond promptly.</p>
+<p>If you discover a security vulnerability in The Same Page, please report it to <strong>ag@thesamepage.xyz</strong> before disclosing it publicly. We will investigate and respond promptly.</p>
 <h2>Questions</h2>
-<p>For security-related questions, contact us at andrewgodlew@gmail.com.</p>
+<p>For security-related questions, contact us at ag@thesamepage.xyz.</p>

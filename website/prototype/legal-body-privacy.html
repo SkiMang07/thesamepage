@@ -1,0 +1,74 @@
+<p>The Same Page (&ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;) operates The Same Page, a team-management platform accessible at app.thesamepage.xyz. This Privacy Policy explains what data we collect, how we use it, who helps us run the service, and your rights regarding your data.</p>
+<blockquote><p>The short version: what you write in The Same Page belongs to you and your organization. We never sell it, never show ads, and never use it to train AI models. We measure how the app is used with counts and page views, never with what you typed.</p></blockquote>
+<h2>What We Collect</h2>
+<h3>Account Information</h3>
+<p>When you create an account, we collect your email address and name. Sign-in works by a link emailed to you, handled by our authentication provider, so we do not store a password.</p>
+<h3>Organization and Team Data</h3>
+<p>When someone sets up The Same Page for their team, we store the organization&rsquo;s structure: its teams, reporting lines, roles, and who leads what.</p>
+<h3>Performance and Development Data</h3>
+<p>This is the core of the product: goals, projects, priorities, capacity plans, 1:1 and meeting notes, prep sheets, commitments, role expectations, wrap-up summaries, development plans, and the assessments a manager records about their team&rsquo;s work. This is the record The Same Page exists to hold.</p>
+<h3>Files and Dictation</h3>
+<p>You can attach files (such as PDFs, Word documents, or meeting transcripts) and dictate notes by voice. Attached files and the text read from them are stored with your organization&rsquo;s data. Dictated audio is sent for transcription and is not stored by us; only the resulting text you choose to keep is saved.</p>
+<h3>AI-Drafted Content</h3>
+<p>When you use an AI-assisted feature, such as a prep sheet, an assessment draft, or a meeting wrap-up, we generate draft content from the data above using third-party AI models. Drafts are always shown to you for review. Nothing AI-generated becomes part of the record until a person confirms it.</p>
+<h3>Usage and Diagnostic Data</h3>
+<p>We record how the app is used so we can improve it: which pages are visited and counts of actions (for example, that a prep sheet was saved, or how many people were added to a team). These records are tied to your account ID. They never contain what you typed: no notes, names, prompts, transcripts, or file contents. We discard IP addresses, and we do not use session recording, heatmaps, or ad-tracking pixels.</p>
+<p>When something breaks, we capture a technical error report (what failed, where, and on which account) so we can fix it. We also keep basic server logs (timestamps, response codes) for reliability and security.</p>
+<h2>Data About Other People on Your Team</h2>
+<p>Unlike a typical single-user app, The Same Page is built to hold information about other people, specifically the people you manage. If you&rsquo;re a manager, your account may include your direct reports&rsquo; names, roles, goals, meeting notes, and assessment history, entered by you as part of normal use.</p>
+<p>Your organization is responsible for having the right to collect and store this information about its employees, and for telling its employees how that information is handled internally. That&rsquo;s a matter between your organization and its people, not something this policy can settle on your organization&rsquo;s behalf.</p>
+<p>Some team members may also have their own login to The Same Page, for example to see their own goals. Where that&rsquo;s the case, this policy covers their account data the same way it covers yours.</p>
+<h2>How We Use Your Data</h2>
+<p>We use your data to:</p>
+<ul>
+<li>Provide and operate The Same Page for you and your organization</li>
+<li>Generate AI-drafted content, always shown to you for review before anything is saved</li>
+<li>Maintain accounts and authenticate sign-in</li>
+<li>Send service emails, such as sign-in links and reminders about your own meetings</li>
+<li>Understand, in aggregate, how the product is used, and find and fix errors</li>
+<li>Respond to support requests</li>
+</ul>
+<p>We do <strong>not</strong>:</p>
+<ul>
+<li>Sell your data or your team&rsquo;s data to anyone</li>
+<li>Display advertising of any kind</li>
+<li>Share your organization&rsquo;s data with other organizations, recruiters, or data brokers</li>
+<li><strong>Use your content to train AI models</strong>, ours or anyone else&rsquo;s. Your content is sent to an AI provider only at the moment you use an AI feature, under commercial terms that do not permit the provider to train on it.</li>
+</ul>
+<h2>Service Providers</h2>
+<p>We rely on the following companies to run The Same Page. Each receives only the data it needs to do its job.</p>
+<table>
+<tr><th>Provider</th><th>What it does</th><th>Data it receives</th></tr>
+<tr><td>Supabase</td><td>Database, file storage, and sign-in</td><td>All stored account and organization data, including attached files. Hosted on Amazon Web Services in the United States (us-east-1, Northern Virginia).</td></tr>
+<tr><td>Vercel</td><td>Hosts the web app</td><td>Serves the application; does not store your content</td></tr>
+<tr><td>Railway</td><td>Hosts the backend API</td><td>Processes requests; does not store your content</td></tr>
+<tr><td>Anthropic</td><td>AI drafting (Claude models)</td><td>The content needed for an AI feature, at the moment you use it</td></tr>
+<tr><td>OpenAI</td><td>Voice transcription, and backup AI drafting if Anthropic is unavailable</td><td>Dictated audio, and the content needed for an AI feature if the backup is used</td></tr>
+<tr><td>PostHog</td><td>Product usage measurement</td><td>Page views and action counts tied to your account ID; never your content, name, or email</td></tr>
+<tr><td>Sentry</td><td>Error monitoring</td><td>Technical error reports tied to your account ID</td></tr>
+<tr><td>HubSpot</td><td>Email and our marketing website</td><td>Your email address and first name, to send service emails such as meeting reminders. Also anything you submit through our website&rsquo;s contact form.</td></tr>
+</table>
+<p>When billing is introduced, payments will be handled by a PCI-compliant payment processor. We will never see or store your full card number, and we will add that processor to this list.</p>
+<p>Our marketing website (thesamepage.xyz) is hosted by HubSpot, which may use cookies there. The app itself does not use advertising or cross-site tracking cookies.</p>
+<h2>Data Storage and Security</h2>
+<p>All data is stored in a PostgreSQL database hosted by Supabase on Amazon Web Services in the United States. Row-Level Security is enforced at the database layer: your organization&rsquo;s data is isolated from every other organization&rsquo;s, and what any individual account can see within your organization is scoped by that database-level policy, not just by application code. All data in transit is encrypted over HTTPS/TLS.</p>
+<p>For more detail, see our <a href="/legal/security">Security Statement</a>.</p>
+<h2>Data Retention and Deletion</h2>
+<p>Your data is kept for as long as your account is active. You can delete your account at any time from Settings. Deletion is permanent: it removes your account, your organization&rsquo;s records, and your attached files from our database, and removes your contact and usage records from HubSpot and PostHog. We cannot recover an account once it has been deleted.</p>
+<h2>Your Rights</h2>
+<p>You can:</p>
+<ul>
+<li><strong>Access</strong> your data. It is all visible within the app.</li>
+<li><strong>Export</strong> your data. Settings lets you download everything your account holds as a single file.</li>
+<li><strong>Correct</strong> your data. Anything you entered can be edited in the app.</li>
+<li><strong>Delete</strong> your account and its data, as described above.</li>
+</ul>
+<p>If your information was entered by your manager as part of your organization&rsquo;s account, start with your employer for requests about that data. Your organization controls its own account, and we will help it fulfill your request. Depending on where you live, you may have additional rights under local law; contact us and we will respond.</p>
+<h2>Children&rsquo;s Privacy</h2>
+<p>The Same Page is a workplace product intended for adults aged 18 and older. We do not knowingly collect data from anyone under 18.</p>
+<h2>Changes to This Policy</h2>
+<p>We may update this policy from time to time. We will communicate material changes by updating the &ldquo;Last updated&rdquo; date above and, where appropriate, by email. Continued use of the service after changes take effect constitutes acceptance of the revised policy.</p>
+<h2>Contact</h2>
+<p>Questions about this policy? Reach us at:<br>
+<strong>Email:</strong> ag@thesamepage.xyz<br>
+<strong>Mail:</strong> The Same Page, 45 Portland Rd. Ste 7 - 1008, Kennebunk, ME 04043-6660</p>
