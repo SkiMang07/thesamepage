@@ -67,6 +67,8 @@ EXPORT_TABLES = (
     # 1:1s and commitments
     "one_on_one_series", "one_on_ones", "commitments", "dr_capture_notes",
     "away_periods", "away_period_shifts",
+    "call_transcripts", "call_transcript_segments", "call_transcript_gaps",
+    "transcription_usage",
     # Assessments and development
     "assessments", "performance_reviews", "metric_entries", "skill_assessments",
     "value_assessments", "career_conversations", "development_plans",
@@ -101,6 +103,7 @@ REDACTED_COLUMNS = {
 _ORDER_KEYS = {
     "outside_meeting_people": ("meeting_id", "person_id"),
     "mission_control_morning_lines": ("local_date", "fingerprint"),
+    "transcription_usage": ("month",),
 }
 
 
@@ -152,6 +155,10 @@ def _own_rows(table: str, rows: list[dict], user_id: str) -> list[dict]:
     # included). That row is the manager's record, not the IC's.
     if table == "direct_reports":
         return [r for r in rows if r.get("manager_id") == user_id]
+    # Likewise a report can read their manager's transcript of their 1:1s;
+    # it is the manager's record.
+    if table in ("call_transcripts", "call_transcript_segments"):
+        return [r for r in rows if r.get("owner_id") == user_id]
     return rows
 
 

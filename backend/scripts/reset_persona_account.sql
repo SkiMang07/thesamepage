@@ -98,6 +98,10 @@ begin
   delete from dev_plan_training where development_plan_id in (select id from development_plans where manager_id = v_uid);
   delete from dev_plan_manager_notes where development_plan_id in (select id from development_plans where manager_id = v_uid);
   delete from team_dev_focus where manager_id = v_uid;
+  delete from call_transcript_segments where owner_id = v_uid;
+  delete from call_transcript_gaps where owner_id = v_uid;
+  delete from call_transcripts where owner_id = v_uid;
+  delete from transcription_usage where user_id = v_uid;
   delete from subscriptions where user_id = v_uid;
   delete from document_scopes where document_id in (select id from documents where org_id = v_org);
   delete from document_citations where document_id in (select id from documents where org_id = v_org);

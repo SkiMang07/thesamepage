@@ -73,7 +73,10 @@ def test_delete_function_clears_every_no_cascade_reference_to_the_login():
 
 
 def test_migration_and_schema_define_the_same_function():
-    migration = (REPO / "database" / "migrations" / "2026-10-22_account_deletion.sql").read_text()
+    # The newest migration that (re)defines it must match schema.sql.
+    defining = [p for p in sorted((REPO / "database" / "migrations").glob("*.sql"))
+                if "function public.delete_my_account()" in p.read_text()]
+    migration = defining[-1].read_text()
     m = re.search(r"function public\.delete_my_account\(\).*?\$\$(.*?)\$\$", _strip(migration), re.S)
     assert m and m.group(1).strip() == _delete_function_body().strip()
 

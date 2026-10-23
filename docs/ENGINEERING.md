@@ -388,15 +388,17 @@ a query or a policy.
 | Model | Predicate | Tables |
 |---|---|---|
 | Manager-scoped | `manager_id = auth.uid()` | direct_reports, one_on_one_series, one_on_ones, commitments, dr_capture_notes, assessments, performance_reviews, skill/value_assessments, metric_entries, team_messages, team_meetings, team_meeting_series, team_meeting_agenda_items, team_callouts, team_dev_focus, direct_report_invites, development_plans + dev_plan_*, assistant_messages, mission_control_events, capacity_profiles, time_off_entries, away_periods, away_period_shifts |
-| Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins, project_follow_throughs, outside_people, outside_meetings, outside_meeting_people, outside_meeting_links, outside_meeting_series |
+| Owner-scoped | `owner_id = auth.uid()` | goals, projects, check_ins, project_follow_throughs, outside_people, outside_meetings, outside_meeting_people, outside_meeting_links, outside_meeting_series, call_transcripts (+ segments and gaps, owner_id denormalized; the report also reads their own 1:1 transcript) |
 | Org-scoped | `org_id = public.current_org_id()` | organizations, users, org_units, role_families, role_levels, *_configs, role_expectation_drafts, role_expectation_decisions, *_scale_definitions, assessment_levels, capacity_settings, work_unit_configs, documents, document_series, document_scopes, document_citations |
 
 **Naming gotcha:** `goals` and `projects` policies are named `goals_all_own_org` /
 `projects_all_own_org` but scope by `owner_id`, not org. Never infer the scoping
 model from a policy name — read the predicate.
 
-One additive exception: `direct_reports_select_own_as_ic` lets a claimed IC read
-their own `direct_reports` row.
+Two additive exceptions. `direct_reports_select_own_as_ic` lets a claimed IC read
+their own `direct_reports` row. The other: `call_transcripts_select_as_report` and
+`call_transcript_segments_select_as_report` let a claimed IC read the transcript
+of their own 1:1s, through `call_transcript_ids_for_report()`.
 
 ### Never inline a users subquery in a policy
 
@@ -424,6 +426,10 @@ The deliberate exceptions to RLS, all in `schema.sql`:
 | `ensure_entitlement()` | creates the caller's `subscriptions` row; see Entitlement below |
 | `account_deletion_preflight()` | the refusals `delete_my_account()` makes, callable first so they cost nothing |
 | `delete_my_account()` | deletes everything the caller's account owns, the org and the `auth.users` row, in one transaction; see Account export and deletion |
+| `call_transcript_ids_for_report()` | the 1:1 transcripts the caller can read as the report; the only gate the report's read policies use. Keeps anon EXECUTE for the same reason as `current_org_id()` and returns nothing signed out |
+| `call_transcript_report_gaps(id)` | a transcript's gaps as start/end only, never `kind` (whether it was off the record) |
+| `add_transcription_seconds(segment_id)` | bills one stored segment to the caller's month, once; the only writer of `transcription_usage` |
+| `transcription_allowance_state()` | names the caller's transcription tier and seconds used; the hours live in `config.TRANSCRIPTION_ALLOWANCES` |
 
 **Revoke from `anon` by name, not just from `public`.** Supabase's default
 privileges grant EXECUTE on every new function in `public` straight to `anon`,
@@ -446,6 +452,9 @@ read policy on any base table.
 ### Privacy boundary
 
 - `one_on_ones.notes` — the writing manager only.
+- Call transcripts — the recording manager, plus read-only access for the report
+  to their own 1:1 transcripts; why a gap exists never reaches the report
+  (`docs/decisions/call-transcripts-text-only-report-reads.md`).
 - Everything else (assessments, metrics, development plans, goals) — the direct
   manager and up the hierarchy chain.
 - Anything outside your own team — aggregates only, no exceptions.

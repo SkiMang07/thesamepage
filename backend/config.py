@@ -78,3 +78,20 @@ AI_SCRIBE_THINKING = settings.AI_SCRIBE_THINKING
 # Transcription model — an OpenAI name, NOT an Anthropic one. This never
 # routes through the Anthropic path or the provider-fallback map.
 AI_TRANSCRIBE_MODEL = settings.AI_TRANSCRIBE_MODEL
+
+# Call transcription allowances, by the tier transcription_allowance_state()
+# names in the database: (hours, period). "month" resets on the 1st (UTC);
+# "total" is for the life of the trial. Here and not in the database so a
+# change is a deploy, not a migration. Checked at start only: a call that
+# crosses 100% partway through is allowed to finish
+# (docs/systems/call-transcription.md).
+TRANSCRIPTION_ALLOWANCES: dict[str, tuple[float, str]] = {
+    "paid":      (30, "month"),
+    "comped":    (30, "month"),   # active with no Stripe id: same as paid
+    "founding":  (20, "month"),
+    "test":      (20, "month"),   # test_account_patterns: persona runs mustn't burn real money
+    "trial":     (5, "total"),
+    "read_only": (0, "month"),
+    "ic":        (0, "month"),    # an invited report never records
+    "none":      (0, "month"),    # no subscriptions row yet
+}

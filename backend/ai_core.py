@@ -551,3 +551,124 @@ def transcribe_audio(
         "audio_seconds": usage.get("seconds"),
     }})
     return text
+
+
+# --- call transcription -----------------------------------------------------
+# One 3-minute segment of one track of a recorded meeting (routes/
+# call_transcripts.py). Same vendor, model and retention as dictation: the
+# audio is sent, transcribed and dropped, and neither it nor the text is ever
+# logged. Its own size cap so dictation's limits stay exactly as they are.
+#
+# Lines carry t_ms on the transcript's timeline so two tracks can be
+# interleaved. A model that returns segment timestamps (verbose_json) gives one
+# line per spoken segment; one that doesn't gives one line per audio segment at
+# its offset, so interleaving degrades to segment order instead of breaking.
+
+# A 3-minute track at 32 kbps is ~0.7 MB. Safari ignores the bitrate hint, so
+# the headroom is generous; OpenAI's own ceiling is 25 MB.
+MAX_CALL_SEGMENT_BYTES = 12 * 1024 * 1024
+
+# Models that accept response_format=verbose_json with segment timestamps.
+# The gpt-*-transcribe family answers json/text only.
+_TIMESTAMP_MODELS = {"whisper-1"}
+
+
+def _call_segment_lines(body: dict, offset_ms: int) -> list[dict]:
+    segments = body.get("segments")
+    if isinstance(segments, list) and segments:
+        lines = []
+        for seg in segments:
+            if not isinstance(seg, dict):
+                continue
+            text = str(seg.get("text") or "").strip()
+            if not text:
+                continue
+            try:
+                start = max(0.0, float(seg.get("start") or 0))
+            except (TypeError, ValueError):
+                start = 0.0
+            lines.append({"t_ms": offset_ms + round(start * 1000), "text": text})
+        if lines:
+            return lines
+    text = str(body.get("text") or "").strip()
+    return [{"t_ms": offset_ms, "text": text}] if text else []
+
+
+def transcribe_call_segment(
+    audio_bytes: bytes,
+    offset_ms: int,
+    filename: str = "segment.webm",
+    content_type: str = "audio/webm",
+    vocabulary: str = "",
+) -> dict:
+    """One audio segment in; `{"lines": [{t_ms, text}], "audio_seconds"}` out.
+
+    Verbatim, like transcribe_audio(): no model tidies or summarises what was
+    said. The transcript is evidence the manager reviews in the wrap-up, never
+    a record on its own (draft-then-review happens there, not here).
+    `audio_seconds` is the vendor's billed duration when the response reports
+    one, else None (the route then bills the capped client duration).
+    """
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(status_code=503, detail="Call transcription is not configured on this server")
+    if not audio_bytes:
+        raise HTTPException(status_code=422, detail="Empty segment")
+    if len(audio_bytes) > MAX_CALL_SEGMENT_BYTES:
+        raise HTTPException(status_code=413, detail="Segment too large")
+
+    timestamps = AI_TRANSCRIBE_MODEL in _TIMESTAMP_MODELS
+    data: dict = {"model": AI_TRANSCRIBE_MODEL,
+                  "response_format": "verbose_json" if timestamps else "json"}
+    if timestamps:
+        data["timestamp_granularities[]"] = "segment"
+    hint = (vocabulary or "").strip()
+    if hint:
+        data["prompt"] = hint[:400]
+
+    started = time.monotonic()
+    try:
+        resp = httpx.post(
+            _TRANSCRIBE_URL,
+            headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+            files={"file": (filename, audio_bytes, content_type)},
+            data=data,
+            timeout=180.0,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        _log_failure("openai", "transcribe_call", AI_TRANSCRIBE_MODEL, e.response.status_code, started)
+        raise HTTPException(status_code=502, detail="Could not transcribe that segment")
+    except httpx.RequestError as e:
+        logger.warning("call transcription request error: %s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="Could not reach the transcription service")
+
+    try:
+        body = resp.json()
+        if not isinstance(body, dict):
+            raise ValueError("not an object")
+        lines = _call_segment_lines(body, offset_ms)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=f"Unexpected transcription response shape: {e}")
+
+    usage = body.get("usage") or {}
+    seconds = usage.get("seconds") if usage.get("type", "duration") == "duration" else None
+    if seconds is None and timestamps:
+        seconds = body.get("duration")
+    try:
+        audio_seconds = float(seconds) if seconds is not None else None
+    except (TypeError, ValueError):
+        audio_seconds = None
+
+    # Size, counts and usage only: never the audio or the text.
+    logger.info("ai_call", extra={"fields": {
+        "provider": "openai",
+        "kind": "transcribe_call",
+        "model": AI_TRANSCRIBE_MODEL,
+        "latency_ms": round((time.monotonic() - started) * 1000),
+        "audio_bytes": len(audio_bytes),
+        "lines": len(lines),
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "audio_seconds": audio_seconds,
+    }})
+    return {"lines": lines, "audio_seconds": audio_seconds}
