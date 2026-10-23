@@ -35,7 +35,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from config import settings
-from utils import get_authenticated_client, meeting_date_of, meeting_sort_key
+from utils import fetch_all, get_authenticated_client, meeting_date_of, meeting_sort_key
 
 logger = logging.getLogger(__name__)
 
@@ -180,25 +180,23 @@ def get_team_overview(auth=Depends(get_authenticated_client)):
     # 21-day cadence clock, or the badge would go stale the moment a manager
     # preps. Same rule applied in one_on_ones.py's prep recency logic —
     # these two share the threshold (see CLAUDE.md); don't change one alone.
-    one_on_ones = (
+    one_on_ones = fetch_all(lambda: (
         supabase.table("one_on_ones")
-        .select("direct_report_id,scheduled_at,created_at,summary")
+        .select("id,direct_report_id,scheduled_at,created_at")
         .eq("manager_id", user_id)
         .not_.is_("summary", "null")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     # Newest MEETING first, not newest row — see utils.meeting_date_of().
     one_on_ones.sort(key=meeting_sort_key, reverse=True)
 
-    open_commitments = (
+    open_commitments = fetch_all(lambda: (
         supabase.table("commitments")
         .select("direct_report_id")
         .eq("owner_id", user_id)
         .eq("status", "open")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
 
     # Newest-first order means the first occurrence per report is the latest 1:1.
     last_one_on_one: dict = {}

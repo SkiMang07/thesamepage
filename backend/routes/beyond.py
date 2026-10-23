@@ -55,7 +55,7 @@ from config import AI_DEFAULT_MODEL_HEAVY
 from routes.check_ins import CheckInIn, create_check_in, enrich_with_check_ins
 from routes.org_goals import seed_new_boss_meeting
 from routes.team import _encode_meeting_date
-from utils import get_authenticated_client, get_org, limiter, meeting_date_of, meeting_day_of, meeting_sort_key
+from utils import fetch_all, get_authenticated_client, get_org, limiter, meeting_date_of, meeting_day_of, meeting_sort_key
 
 logger = logging.getLogger(__name__)
 
@@ -488,24 +488,22 @@ def _team_context(supabase, user_id: str) -> tuple[list[dict], list[dict], list[
         .execute()
         .data
     )
-    goals = (
+    goals = fetch_all(lambda: (
         supabase.table("goals")
         .select("id,title,level,status")
         .eq("owner_id", user_id)
         .in_("status", _ACTIVE_STATUSES)
         .order("title")
-        .execute()
-        .data
-    )
-    projects = (
+        .order("id")
+    ))
+    projects = fetch_all(lambda: (
         supabase.table("projects")
         .select("id,title,status")
         .eq("owner_id", user_id)
         .in_("status", _ACTIVE_STATUSES)
         .order("title")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     return reports, goals, projects
 
 
@@ -583,15 +581,14 @@ def get_overview(auth=Depends(get_authenticated_client)):
     meetings.sort(key=meeting_sort_key, reverse=True)
     joins = _meeting_people(supabase, user_id, [m["id"] for m in meetings])
 
-    open_items = (
+    open_items = fetch_all(lambda: (
         supabase.table("commitments")
         .select("outside_person_id,committed_by")
         .eq("owner_id", user_id)
         .eq("status", "open")
         .not_.is_("outside_person_id", "null")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     you_owe: dict[str, int] = {}
     they_owe: dict[str, int] = {}
     for row in open_items:
@@ -1180,8 +1177,8 @@ def log_meeting(meeting_id: str, body: LogMeetingIn, auth=Depends(get_authentica
         r["id"]
         for r in supabase.table("direct_reports").select("id").eq("manager_id", user_id).execute().data
     }
-    goal_ids = {g["id"] for g in supabase.table("goals").select("id").eq("owner_id", user_id).execute().data}
-    project_ids = {p["id"] for p in supabase.table("projects").select("id").eq("owner_id", user_id).execute().data}
+    goal_ids = {g["id"] for g in fetch_all(lambda: supabase.table("goals").select("id").eq("owner_id", user_id).order("id"))}
+    project_ids = {p["id"] for p in fetch_all(lambda: supabase.table("projects").select("id").eq("owner_id", user_id).order("id"))}
 
     commitment_rows: list[dict] = []
     for c in body.commitments:
@@ -1505,23 +1502,21 @@ def _gather_prep_sources(supabase, user_id: str, meeting: dict, person: dict) ->
     if not team_update:
         return sources
 
-    goals = (
+    goals = fetch_all(lambda: (
         supabase.table("goals")
         .select("id,title,level,status,due_date")
         .eq("owner_id", user_id)
         .neq("level", "individual")
         .in_("status", _ACTIVE_STATUSES)
-        .execute()
-        .data
-    )
-    projects = (
+        .order("id")
+    ))
+    projects = fetch_all(lambda: (
         supabase.table("projects")
         .select("id,title,status,due_date")
         .eq("owner_id", user_id)
         .in_("status", _ACTIVE_STATUSES)
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     enrich_with_check_ins(supabase, user_id, goals, "goal_id")
     enrich_with_check_ins(supabase, user_id, projects, "project_id")
     keep = ("id", "title", "level", "status", "due_date", "progress", "trend")

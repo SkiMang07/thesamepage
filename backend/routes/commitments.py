@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import analytics
-from utils import get_authenticated_client, meeting_day_of
+from utils import fetch_all, get_authenticated_client, meeting_day_of
 
 router = APIRouter()
 
@@ -101,21 +101,23 @@ def list_commitments(
     than leaking or being guessed at."""
     user_id, supabase = auth
 
-    query = (
-        supabase.table("commitments")
-        .select("id,description,due_date,status,committed_by,created_at,completed_at,direct_report_id,source_type,source_id,direct_reports(name)")
-        .eq("owner_id", user_id)
-    )
-    if direct_report_id:
-        query = query.eq("direct_report_id", direct_report_id)
-    if status:
-        query = query.eq("status", status)
-    if source_type:
-        query = query.eq("source_type", source_type)
-    if source_id:
-        query = query.eq("source_id", source_id)
+    def build():
+        query = (
+            supabase.table("commitments")
+            .select("id,description,due_date,status,committed_by,created_at,completed_at,direct_report_id,source_type,source_id,direct_reports(name)")
+            .eq("owner_id", user_id)
+        )
+        if direct_report_id:
+            query = query.eq("direct_report_id", direct_report_id)
+        if status:
+            query = query.eq("status", status)
+        if source_type:
+            query = query.eq("source_type", source_type)
+        if source_id:
+            query = query.eq("source_id", source_id)
+        return query.order("created_at", desc=True).order("id")
 
-    rows = query.order("created_at", desc=True).execute().data
+    rows = fetch_all(build)
 
     # Flatten the joined direct report name for a cleaner API shape.
     for row in rows:
@@ -361,7 +363,7 @@ def commitments_board(auth=Depends(get_authenticated_client)):
     since = (datetime.now(timezone.utc) - timedelta(days=RECENT_DAYS)).isoformat()
     cols = ("id,title,description,due_date,status,committed_by,created_at,completed_at,"
             "direct_report_id,outside_person_id,org_unit_id,is_team_commitment,source_type,source_id")
-    open_rows = supabase.table("commitments").select(cols).eq("owner_id", user_id).eq("status", "open").execute().data
+    open_rows = fetch_all(lambda: supabase.table("commitments").select(cols).eq("owner_id", user_id).eq("status", "open").order("id"))
     done_rows = (
         supabase.table("commitments").select(cols).eq("owner_id", user_id).eq("status", "done")
         .gte("completed_at", since).execute().data

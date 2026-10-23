@@ -104,6 +104,11 @@ class _Query:
         self._limit = n
         return self
 
+    def range(self, *_a, **_k):
+        # utils.fetch_all pages with .range(); fixtures hold far fewer than
+        # utils.MAX_ROWS rows, so the first page is the whole result.
+        return self
+
     def execute(self):
         if self.db.fail_on == self.name:
             raise RuntimeError(f"relation {self.name} does not exist")

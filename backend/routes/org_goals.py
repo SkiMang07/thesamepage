@@ -48,7 +48,7 @@ from routes.goals import GoalIn, ORG_LEVELS, _goal_values, _validate_references,
 from routes.notes_dump import _iso_date, _low, _s, assemble_text, read_files, size_bucket
 from routes.role_expectations import numbers_in, strip_unsupported, unsupported_numbers
 from routes.roles_import import _parse_json_object
-from utils import get_authenticated_client, limiter
+from utils import fetch_all, get_authenticated_client, limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -249,7 +249,7 @@ def apply_goals(supabase, user_id: str, body: ApplyIn) -> dict:
     unit_by_id = {u["id"]: u for u in units}
     existing = {
         (g["level"], g["title"].strip().lower())
-        for g in supabase.table("goals").select("title,level").eq("owner_id", user_id).neq("status", "cancelled").execute().data
+        for g in fetch_all(lambda: supabase.table("goals").select("title,level").eq("owner_id", user_id).neq("status", "cancelled").order("id"))
     }
     today = date.today().isoformat()
     for item in body.goals:
@@ -395,14 +395,14 @@ def next_boss_meeting_id(supabase, user_id: str) -> str | None:
     people = boss_ids(supabase, user_id)
     if not people:
         return None
-    joins = supabase.table("outside_meeting_people").select("meeting_id,person_id").eq("owner_id", user_id).execute().data
+    joins = fetch_all(lambda: supabase.table("outside_meeting_people").select("meeting_id,person_id").eq("owner_id", user_id).order("meeting_id").order("person_id"))
     meeting_ids = {j["meeting_id"] for j in joins if j["person_id"] in people}
     if not meeting_ids:
         return None
-    meetings = (
+    meetings = fetch_all(lambda: (
         supabase.table("outside_meetings").select("id,scheduled_at,summary")
-        .eq("owner_id", user_id).is_("summary", "null").execute().data
-    )
+        .eq("owner_id", user_id).is_("summary", "null").order("id")
+    ))
     today = date.today().isoformat()
     upcoming = [m for m in meetings if m["id"] in meeting_ids and (not m.get("scheduled_at") or str(m["scheduled_at"])[:10] >= today)]
     upcoming.sort(key=lambda m: str(m.get("scheduled_at") or "9999"))

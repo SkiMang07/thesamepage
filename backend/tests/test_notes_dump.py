@@ -68,6 +68,11 @@ class _Q:
         self.mode, self.payload = "update", payload
         return self
 
+    def range(self, *_a, **_k):
+        # utils.fetch_all pages with .range(); fixtures hold far fewer than
+        # utils.MAX_ROWS rows, so the first page is the whole result.
+        return self
+
     def execute(self):
         rows = self.db.rows.setdefault(self.name, [])
         if self.mode == "insert":

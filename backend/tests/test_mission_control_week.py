@@ -196,7 +196,9 @@ class _Q:
         self.client, self.name = client, name
 
     def __getattr__(self, attr):
-        if attr in {"select", "eq", "neq", "is_", "gte", "lt", "lte", "in_", "order", "limit"}:
+        if attr == "not_":
+            return self
+        if attr in {"select", "eq", "neq", "is_", "gte", "lt", "lte", "in_", "order", "limit", "range"}:
             def chain(*args, **kwargs):
                 self.client.calls.append((self.name, attr, args))
                 return self

@@ -60,7 +60,7 @@ from postgrest.exceptions import APIError
 from pydantic import BaseModel
 
 from routes.check_ins import CheckInIn, enrich_with_check_ins, list_check_ins
-from utils import get_authenticated_client
+from utils import fetch_all, get_authenticated_client
 
 router = APIRouter()
 
@@ -203,16 +203,20 @@ def list_projects(
     auth=Depends(get_authenticated_client),
 ):
     user_id, supabase = auth
-    query = supabase.table("projects").select(_SELECT_COLUMNS).eq("owner_id", user_id)
-    if direct_report_id:
-        query = query.eq("direct_report_id", direct_report_id)
-    if goal_id:
-        query = query.eq("goal_id", goal_id)
-    if org_unit_id:
-        query = query.eq("org_unit_id", org_unit_id)
-    if status:
-        query = query.eq("status", status)
-    rows = query.order("created_at", desc=True).execute().data
+
+    def build():
+        query = supabase.table("projects").select(_SELECT_COLUMNS).eq("owner_id", user_id)
+        if direct_report_id:
+            query = query.eq("direct_report_id", direct_report_id)
+        if goal_id:
+            query = query.eq("goal_id", goal_id)
+        if org_unit_id:
+            query = query.eq("org_unit_id", org_unit_id)
+        if status:
+            query = query.eq("status", status)
+        return query.order("created_at", desc=True).order("id")
+
+    rows = fetch_all(build)
     # Session 26: decorate with progress/trend/last_check_in_at from the
     # check_ins temporal layer — see routes/check_ins.py.
     rows = enrich_with_check_ins(supabase, user_id, _shape_rows(rows), "project_id")

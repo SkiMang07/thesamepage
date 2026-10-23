@@ -78,7 +78,7 @@ from routes.check_ins import (
     enrich_with_check_ins,
     list_check_ins,
 )
-from utils import get_authenticated_client
+from utils import fetch_all, get_authenticated_client
 
 router = APIRouter()
 
@@ -427,8 +427,11 @@ def list_goals(
     auth=Depends(get_authenticated_client),
 ):
     user_id, supabase = auth
-    query = _scoped_goal_query(supabase, user_id, _SELECT_COLUMNS, level, direct_report_id, org_unit_id, False, status)
-    rows = query.order("created_at", desc=True).execute().data
+    rows = fetch_all(lambda: (
+        _scoped_goal_query(supabase, user_id, _SELECT_COLUMNS, level, direct_report_id, org_unit_id, False, status)
+        .order("created_at", desc=True)
+        .order("id")
+    ))
     # Session 26: decorate with progress/trend/last_check_in_at from the
     # check_ins temporal layer — see routes/check_ins.py. Goal rows also get
     # latest_reading / recent_readings / reading_count.

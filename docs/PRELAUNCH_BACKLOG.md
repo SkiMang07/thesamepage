@@ -856,9 +856,15 @@ Decided the same day, behind the sentence:
   That's fine for launch; add them to Preview if previews are ever used for
   testing. Domains: only thesamepage-blush.vercel.app is attached, so
   `app.thesamepage.xyz` does not resolve yet (see the custom-domain item).
-- [ ] ✘ Pagination on list endpoints (`docs/ENGINEERING.md` → Open
-  questions). Fine at one team; a manager who imports 40 reports and a year
-  of 1:1s will feel it. Post-launch is acceptable; note it.
+- [x] ✔ Pagination on list endpoints. The real launch risk was Supabase's
+  1,000-row cap (production setting checked 2026-10-22). It silently cut off
+  manager-wide reads: the 1:1 and team overviews, Mission Control, and the
+  goals, projects and commitments lists. Those reads, and every other
+  manager-wide read on a growing table, now page through `utils.fetch_all()`
+  (`docs/ENGINEERING.md` → Reads that grow with use). True response
+  pagination waits until post-launch. That covers 1:1 history and team
+  meetings, whose features read the full list, then the Scribe thread,
+  captures and team messages (`docs/ENGINEERING.md` → Open questions).
 - [x] ✔ `frontend/app/app/error.tsx` + `not-found.tsx` (N-7).
 
 ### G. Verification and release discipline

@@ -27,7 +27,7 @@ class _Query:
     def __init__(self, db, name):
         self.db, self.name = db, name
         self.filters, self.op, self.payload, self._limit, self._negate = [], "select", None, None, False
-        self._order = None
+        self._order = []
         self.embeds = []
 
     def select(self, cols="*", **_k):
@@ -69,11 +69,16 @@ class _Query:
         return self._add(lambda r: r.get(col) is None)
 
     def order(self, col, desc=False):
-        self._order = (col, desc)
+        self._order.append((col, desc))  # later keys break ties, as in SQL
         return self
 
     def limit(self, n):
         self._limit = n
+        return self
+
+    def range(self, *_a, **_k):
+        # utils.fetch_all pages with .range(); fixtures hold far fewer than
+        # utils.MAX_ROWS rows, so the first page is the whole result.
         return self
 
     def execute(self):
@@ -95,9 +100,8 @@ class _Query:
             for row in match:
                 table.remove(row)
             return _Result([])
-        if self._order:
-            col, desc = self._order
-            match.sort(key=lambda r: str(r.get(col) or ""), reverse=desc)
+        for col, desc in reversed(self._order):
+            match.sort(key=lambda r, col=col: str(r.get(col) or ""), reverse=desc)
         rows = [dict(r) for r in match]
         for row in rows:
             for name, _cols in self.embeds:

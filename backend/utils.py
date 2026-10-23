@@ -398,6 +398,35 @@ def meeting_sort_key(row: dict | None) -> str:
     return str(meeting_date_of(row) or "")
 
 
+# Supabase's Data API returns at most this many rows per request (Integrations
+# -> Data API -> Max rows; production is 1000, checked 2026-10-22). It truncates
+# silently: a query that matches more simply returns the first 1000, and with
+# no ORDER BY "first" is arbitrary. Keep this equal to that setting -- if the
+# setting were lower, fetch_all would mistake a capped page for the last one.
+MAX_ROWS = 1000
+
+
+def fetch_all(build) -> list[dict]:
+    """Every row a query matches, read MAX_ROWS at a time.
+
+    Use it for any read whose row count grows with use rather than with team
+    size -- 1:1s, commitments, check-ins, agenda items, messages, events --
+    when the read is scoped to a whole manager rather than one person or item.
+    A year of 1:1s for a 40-person team is ~2,000 rows; without paging, the
+    tail would vanish without an error.
+
+    `build` returns a fresh query each call (the builder mutates on .range()),
+    and that query's order must be total -- end it with a unique column such as
+    `.order("id")` -- or rows repeat or disappear across page boundaries.
+    """
+    rows: list[dict] = []
+    while True:
+        page = build().range(len(rows), len(rows) + MAX_ROWS - 1).execute().data or []
+        rows.extend(page)
+        if len(page) < MAX_ROWS:
+            return rows
+
+
 def get_org(user_id: str, supabase: Client) -> dict | None:
     """Read-only org lookup — unlike ensure_org(), never creates one. A GET
     endpoint (dashboard insight, 1:1 overview, prep) shouldn't bootstrap an

@@ -25,6 +25,7 @@ against the live database. RLS on check_ins is owner-scoped
 """
 from fastapi import HTTPException
 from pydantic import BaseModel
+from utils import fetch_all
 
 _STATUSES = ("active", "on_track", "at_risk", "completed", "cancelled")
 
@@ -140,15 +141,14 @@ def enrich_with_check_ins(supabase, user_id: str, rows: list[dict], parent_fk: s
     ids = [r["id"] for r in rows]
     if not ids:
         return rows
-    check_ins = (
+    check_ins = fetch_all(lambda: (
         supabase.table("check_ins")
         .select(_columns_for(parent_fk))
         .eq("owner_id", user_id)
         .in_(parent_fk, ids)
         .order("created_at", desc=True)
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     by_parent: dict[str, list[dict]] = {}
     for ci in check_ins:
         by_parent.setdefault(ci[parent_fk], []).append(ci)

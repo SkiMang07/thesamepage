@@ -29,7 +29,7 @@ from mission_control_engine import build_brief
 from routes.dashboard import _load_action_snapshot
 from scribe_context import get_entity_context, get_people_context
 from scribe_workspace import search_workspace
-from utils import get_authenticated_client, limiter
+from utils import fetch_all, get_authenticated_client, limiter
 
 router = APIRouter()
 logger = logging.getLogger("assistant_routes")
@@ -190,22 +190,20 @@ def _build_tool_executor(
         return result
 
     return {
-        "list_goals": lambda _: (
+        "list_goals": lambda _: fetch_all(lambda: (
             supabase.table("goals")
             .select("id,title,level,status")
             .eq("owner_id", user_id)
             .order("title")
-            .execute()
-            .data
-        ),
-        "list_projects": lambda _: (
+            .order("id")
+        )),
+        "list_projects": lambda _: fetch_all(lambda: (
             supabase.table("projects")
             .select("id,title,status")
             .eq("owner_id", user_id)
             .order("title")
-            .execute()
-            .data
-        ),
+            .order("id")
+        )),
         "list_direct_reports": lambda _: (
             # Archived people (Session 43) excluded — same rule as every
             # other roster surface. See docs/TEAM_SETUP_UX_REVIEW.md §7.3.
@@ -312,14 +310,13 @@ def _save_turn(supabase, user_id: str, user_text: str, assistant_text: str, draf
 def get_thread(auth=Depends(get_authenticated_client)):
     """Return the stored thread for the current manager (for drawer hydration)."""
     user_id, supabase = auth
-    rows = (
+    rows = fetch_all(lambda: (
         supabase.table("assistant_messages")
         .select("id,role,content,drafts,created_at")
         .eq("manager_id", user_id)
         .order("created_at")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     return _normalise_thread_rows(rows)
 
 

@@ -53,6 +53,7 @@ from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
     ensure_org,
+    fetch_all,
     get_authenticated_client,
     get_email_from_token,
     get_org,
@@ -950,38 +951,49 @@ def get_one_on_ones_overview(auth=Depends(get_authenticated_client)):
     # Read-only — a page load shouldn't bootstrap an organization row.
     org = get_org(user_id, supabase)
 
-    # Every session for these reports, newest first — one query, split in
-    # Python into "planned" (prep_guide set, summary null) and "completed"
-    # (summary set) per the standing no-status-column rule (see
-    # _serialize_session's docstring above). setdefault + newest-first order
-    # means the first hit per report is the latest of each kind.
-    sessions = (
+    # Two reads, split by the standing no-status-column rule (see
+    # _serialize_session's docstring above): a summary marks a completed
+    # conversation, a null summary the unfinished next-meeting workspace.
+    # Completed rows only feed "last met" and the commitment count, so they
+    # carry no notes or prep -- a year of a 40-person team is ~2,000 of them,
+    # and both reads page past Supabase's 1,000-row cap (utils.fetch_all).
+    completed = fetch_all(lambda: (
+        supabase.table("one_on_ones")
+        .select("id,direct_report_id,scheduled_at,created_at,summary")
+        .eq("manager_id", user_id)
+        .not_.is_("summary", "null")
+        .order("id")
+    ))
+    unfinished = fetch_all(lambda: (
         supabase.table("one_on_ones")
         .select(
             "id,direct_report_id,series_id,scheduled_at,summary,notes,prep_guide,"
             "carry_forward_items,created_at,logged_at,one_on_one_series(interval_weeks,timezone,active)"
         )
         .eq("manager_id", user_id)
-        .execute()
-        .data
-    )
+        .is_("summary", "null")
+        .order("id")
+    ))
     # Newest MEETING first, not newest row. Ordering by created_at used to put
     # a conversation logged today but held last month ahead of one held this
     # week, so "the latest completed 1:1" could name the wrong meeting and the
-    # due badge below inherited its date.
-    sessions.sort(key=meeting_sort_key, reverse=True)
+    # due badge below inherited its date. setdefault on that order keeps the
+    # latest of each kind per report.
+    completed.sort(key=meeting_sort_key, reverse=True)
+    unfinished.sort(key=meeting_sort_key, reverse=True)
 
-    planned_by_report: dict[str, dict] = {}
     completed_by_report: dict[str, dict] = {}
-    for row in sessions:
-        rid = row["direct_report_id"]
+    for row in completed:
+        # An empty-string summary is not a completed conversation (same
+        # truthiness rule as _serialize_session).
         if row.get("summary"):
-            completed_by_report.setdefault(rid, row)
-        else:
-            # Every completed conversation leaves one unfinished next-meeting
-            # workspace, even when it is still undated and has no carry-forward
-            # topics. It remains the single place where later context gathers.
-            planned_by_report.setdefault(rid, row)
+            completed_by_report.setdefault(row["direct_report_id"], row)
+    # Every completed conversation leaves one unfinished next-meeting
+    # workspace, even when it is still undated and has no carry-forward
+    # topics. It remains the single place where later context gathers.
+    planned_by_report: dict[str, dict] = {}
+    for row in unfinished:
+        planned_by_report.setdefault(row["direct_report_id"], row)
 
     # Commitments logged against each report's last completed session —
     # total count regardless of current status (open/done/dropped), since
@@ -1226,14 +1238,13 @@ def assemble_prep_inputs(
 def _goal_levels(supabase, user_id: str) -> set[str]:
     """The levels of the manager's goals that are not cancelled. Names the owner
     explicitly: the overnight worker runs with the service-role client."""
-    rows = (
+    rows = fetch_all(lambda: (
         supabase.table("goals")
         .select("level")
         .eq("owner_id", user_id)
         .neq("status", "cancelled")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     return {row["level"] for row in rows}
 
 

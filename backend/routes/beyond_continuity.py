@@ -70,7 +70,7 @@ from routes.beyond import (
     _serialize_meeting,
     fetch_prep_items,
 )
-from utils import get_authenticated_client, limiter, meeting_date_of, meeting_day_of, meeting_sort_key
+from utils import fetch_all, get_authenticated_client, limiter, meeting_date_of, meeting_day_of, meeting_sort_key
 
 logger = logging.getLogger(__name__)
 
@@ -147,24 +147,22 @@ def _open_commitments(supabase, user_id: str) -> list[dict]:
         "id,description,due_date,status,committed_by,direct_report_id,outside_person_id,"
         "source_type,source_id,created_at,direct_reports(name)"
     )
-    by_person = (
+    by_person = fetch_all(lambda: (
         supabase.table("commitments")
         .select(columns)
         .eq("owner_id", user_id)
         .eq("status", "open")
         .not_.is_("outside_person_id", "null")
-        .execute()
-        .data
-    )
-    by_source = (
+        .order("id")
+    ))
+    by_source = fetch_all(lambda: (
         supabase.table("commitments")
         .select(columns)
         .eq("owner_id", user_id)
         .eq("status", "open")
         .eq("source_type", "outside_meeting")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     merged: dict[str, dict] = {}
     for row in [*by_person, *by_source]:
         joined = row.pop("direct_reports", None) or {}
@@ -783,14 +781,13 @@ def gather_suggestion_evidence(supabase, user_id: str, today: date | None = None
     development plans (none of those tables are read here)."""
     today = today or date.today()
     people = _people_by_id(supabase, user_id)
-    meetings = (
+    meetings = fetch_all(lambda: (
         supabase.table("outside_meetings")
         .select(_MEETING_COLUMNS)
         .eq("owner_id", user_id)
         .not_.is_("summary", "null")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     meetings.sort(key=meeting_sort_key, reverse=True)
     logged = {m["id"]: m for m in meetings}
     joins = _meeting_people(supabase, user_id, list(logged))
@@ -1032,11 +1029,12 @@ def refresh_suggestions(request: Request, auth=Depends(get_authenticated_client)
     showing = {r["suggestion_key"] for r in existing if r["status"] in ("open", "connected")}
     linked = {
         (row["meeting_id"], row.get("goal_id") or row.get("project_id"))
-        for row in supabase.table("outside_meeting_links")
-        .select("meeting_id,goal_id,project_id")
-        .eq("owner_id", user_id)
-        .execute()
-        .data
+        for row in fetch_all(lambda: (
+            supabase.table("outside_meeting_links")
+            .select("id,meeting_id,goal_id,project_id")
+            .eq("owner_id", user_id)
+            .order("id")
+        ))
     }
     fresh = [
         {**s, "owner_id": user_id, "status": "open"}

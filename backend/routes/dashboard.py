@@ -48,6 +48,7 @@ from routes.expectations_ai import _compute_coverage
 from routes.one_on_ones import get_one_on_ones_overview
 from routes.onboarding import setup_prompt
 from utils import (
+    fetch_all,
     get_authenticated_client,
     get_org,
     limiter,
@@ -152,28 +153,26 @@ def get_dashboard_insight(request: Request, auth=Depends(get_authenticated_clien
     # Same "completed only" rule as direct_reports.py's /overview — a
     # planned (prepped, not-yet-happened) session must not reset the
     # cadence clock.
-    one_on_ones = (
+    one_on_ones = fetch_all(lambda: (
         supabase.table("one_on_ones")
-        .select("direct_report_id,scheduled_at,created_at,summary")
+        .select("id,direct_report_id,scheduled_at,created_at")
         .eq("manager_id", user_id)
         .not_.is_("summary", "null")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     # Newest MEETING first, not newest row — see utils.meeting_date_of().
     one_on_ones.sort(key=meeting_sort_key, reverse=True)
     last_one_on_one: dict = {}
     for row in one_on_ones:
         last_one_on_one.setdefault(row["direct_report_id"], meeting_date_of(row))
 
-    open_commitments = (
+    open_commitments = fetch_all(lambda: (
         supabase.table("commitments")
         .select("direct_report_id,due_date")
         .eq("owner_id", user_id)
         .eq("status", "open")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     today = date.today()
     today_iso = today.isoformat()
     open_counts: dict = {}
@@ -206,15 +205,14 @@ def get_dashboard_insight(request: Request, auth=Depends(get_authenticated_clien
             "overdue_commitments": overdue_counts.get(r["id"], 0),
         })
 
-    at_risk_goals = (
+    at_risk_goals = fetch_all(lambda: (
         supabase.table("goals")
         .select("title,level")
         .eq("owner_id", user_id)
         .eq("status", "at_risk")
         .neq("level", "individual")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
 
     prompt = _build_insight_prompt(team_summary, at_risk_goals)
 
@@ -381,21 +379,20 @@ def _load_action_snapshot(user_id: str, supabase, local_date: date) -> tuple[dic
         sessions = _safe_call(
             coverage,
             "conversations",
-            lambda: (
+            lambda: fetch_all(lambda: (
                 supabase.table("one_on_ones")
                 .select("id,direct_report_id,scheduled_at,summary,prep_guide,created_at")
                 .eq("manager_id", user_id)
                 .order("created_at", desc=True)
-                .execute()
-                .data
-            ),
+                .order("id")
+            )),
             [],
         )
 
     commitments = _safe_call(
         coverage,
         "commitments",
-        lambda: (
+        lambda: fetch_all(lambda: (
             supabase.table("commitments")
             .select("id,direct_report_id,status,committed_by,due_date,created_at,completed_at,source_type,source_id")
             .eq("owner_id", user_id)
@@ -404,9 +401,8 @@ def _load_action_snapshot(user_id: str, supabase, local_date: date) -> tuple[dic
             # read as "the manager's own" (docs/decisions/nullable-commitment-owner.md).
             .neq("committed_by", "counterpart")
             .order("created_at", desc=True)
-            .execute()
-            .data
-        ),
+            .order("id")
+        )),
         [],
     )
     if coverage["commitments"] == "ok" and any(
@@ -417,38 +413,35 @@ def _load_action_snapshot(user_id: str, supabase, local_date: date) -> tuple[dic
     goals = _safe_call(
         coverage,
         "goals",
-        lambda: (
+        lambda: fetch_all(lambda: (
             supabase.table("goals")
             .select("id,title,status,due_date,created_at")
             .eq("owner_id", user_id)
-            .execute()
-            .data
-        ),
+            .order("id")
+        )),
         [],
     )
     projects = _safe_call(
         coverage,
         "projects",
-        lambda: (
+        lambda: fetch_all(lambda: (
             supabase.table("projects")
             .select("id,title,status,due_date,goal_id,created_at")
             .eq("owner_id", user_id)
-            .execute()
-            .data
-        ),
+            .order("id")
+        )),
         [],
     )
     check_ins = _safe_call(
         coverage,
         "check_ins",
-        lambda: (
+        lambda: fetch_all(lambda: (
             supabase.table("check_ins")
             .select("id,goal_id,project_id,status,created_at")
             .eq("owner_id", user_id)
             .order("created_at", desc=True)
-            .execute()
-            .data
-        ),
+            .order("id")
+        )),
         [],
     )
     if coverage["check_ins"] != "ok":
@@ -708,26 +701,24 @@ def _load_week_snapshot(user_id: str, supabase, local_date: date) -> dict:
     commitments = _safe_call(
         coverage,
         "commitments",
-        lambda: (
+        lambda: fetch_all(lambda: (
             supabase.table("commitments")
             .select("id,title,description,direct_report_id,committed_by,status,due_date,completed_at,source_type,source_id,created_at")
             .eq("owner_id", user_id)
             .neq("committed_by", "counterpart")
-            .execute()
-            .data
-        ),
+            .order("id")
+        )),
         [],
     )
 
     def load_goals():
-        goals = (
+        goals = fetch_all(lambda: (
             supabase.table("goals")
             .select("id,title,level,status,due_date,success_metrics,direct_report_id,org_unit_id,org_units(name)")
             .eq("owner_id", user_id)
             .in_("status", ["active", "on_track", "at_risk"])
-            .execute()
-            .data
-        )
+            .order("id")
+        ))
         ids = [row["id"] for row in goals]
         check_ins = []
         projects = []
@@ -887,14 +878,13 @@ def reconcile_mission_control_outcomes(auth=Depends(get_authenticated_client)):
     )
     if not clicks:
         return {"completed": 0}
-    existing = (
+    existing = fetch_all(lambda: (
         supabase.table("mission_control_events")
         .select("parent_event_id")
         .eq("manager_id", user_id)
         .eq("event_type", "downstream_completed")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     done = {row["parent_event_id"] for row in existing}
     inserts = []
     for click in clicks:

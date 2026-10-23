@@ -64,6 +64,11 @@ class _Q:
         self.mode, self.payload = "update", payload
         return self
 
+    def range(self, *_a, **_k):
+        # utils.fetch_all pages with .range(); fixtures hold far fewer than
+        # utils.MAX_ROWS rows, so the first page is the whole result.
+        return self
+
     def execute(self):
         if self.name not in self.db.rows:
             raise KeyError(self.name)

@@ -74,7 +74,7 @@ from routes.goals import GoalIn, _goal_values, _validate_level, _validate_refere
 from routes.org_units import _validate_parent_assignment
 from routes.role_expectations import _extract_pdf_text, _squash, numbers_in, strip_unsupported
 from routes.roles_import import _extract_docx_text, _infer_import_type, _parse_json_object, _validate_role
-from utils import ensure_org, get_authenticated_client, get_email_from_token, limiter
+from utils import ensure_org, fetch_all, get_authenticated_client, get_email_from_token, limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -1100,7 +1100,7 @@ def apply_items(supabase, user_id: str, org_id: str, body: ApplyIn) -> dict:
 
     existing_goals = {
         (g["level"], g["title"].strip().lower())
-        for g in supabase.table("goals").select("title,level").eq("owner_id", user_id).neq("status", "cancelled").execute().data
+        for g in fetch_all(lambda: supabase.table("goals").select("title,level").eq("owner_id", user_id).neq("status", "cancelled").order("id"))
     }
     for item in body.goals:
         title = item.title.strip()
@@ -1175,10 +1175,10 @@ def _apply_commitments(supabase, user_id: str, body: ApplyIn, saved: dict, refus
     mine = {
         r["id"] for r in supabase.table("direct_reports").select("id").eq("manager_id", user_id).execute().data
     }
-    open_rows = (
+    open_rows = fetch_all(lambda: (
         supabase.table("commitments").select("direct_report_id,description,committed_by")
-        .eq("owner_id", user_id).eq("status", "open").execute().data
-    )
+        .eq("owner_id", user_id).eq("status", "open").order("id")
+    ))
     existing = {
         (r["direct_report_id"], r.get("committed_by") or "manager", " ".join((r.get("description") or "").split()).lower())
         for r in open_rows

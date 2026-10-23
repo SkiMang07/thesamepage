@@ -151,7 +151,7 @@ from pydantic import BaseModel, Field
 from ai_core import generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from routes.check_ins import enrich_with_check_ins
-from utils import get_authenticated_client, limiter
+from utils import fetch_all, get_authenticated_client, limiter
 
 router = APIRouter()
 
@@ -223,22 +223,21 @@ def get_team(auth=Depends(get_authenticated_client)):
         return []
     report_ids = [r["id"] for r in reports]
 
-    projects = (
+    projects = fetch_all(lambda: (
         supabase.table("projects")
         .select("id,title,status,due_date,direct_report_id")
         .eq("owner_id", user_id)
         .in_("direct_report_id", report_ids)
         .in_("status", _ACTIVE_STATUSES)
         .order("due_date")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
 
     # Priorities = individual-level goals. Mission Control deliberately keeps
     # these off the dashboard (see dashboard/page.tsx's GOAL_CARD_LEVELS
     # comment — individual goals live on the report's own page); Team View is
     # exactly where "priorities per person" belongs.
-    priorities = (
+    priorities = fetch_all(lambda: (
         supabase.table("goals")
         .select("id,title,status,due_date,direct_report_id")
         .eq("owner_id", user_id)
@@ -246,19 +245,17 @@ def get_team(auth=Depends(get_authenticated_client)):
         .in_("direct_report_id", report_ids)
         .in_("status", _ACTIVE_STATUSES)
         .order("due_date")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
 
-    latest_messages = (
+    latest_messages = fetch_all(lambda: (
         supabase.table("team_messages")
         .select("id,direct_report_id,message,created_at")
         .eq("manager_id", user_id)
         .in_("direct_report_id", report_ids)
         .order("created_at", desc=True)
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
 
     projects_by_report: dict = {}
     for p in projects:
@@ -337,15 +334,14 @@ def get_team_goals(auth=Depends(get_authenticated_client)):
     same underlying data.
     """
     user_id, supabase = auth
-    rows = (
+    rows = fetch_all(lambda: (
         supabase.table("goals")
         .select("id,title,level,status,due_date,org_unit_id,org_units(name)")
         .eq("owner_id", user_id)
         .in_("level", _MISSION_CONTROL_GOAL_LEVELS)
         .order("due_date")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     for row in rows:
         org_unit = row.pop("org_units", None) or {}
         row["org_unit_name"] = org_unit.get("name")
@@ -643,22 +639,20 @@ def list_team_meetings(auth=Depends(get_authenticated_client)):
     (null org_unit_id means "all teams" and shows under every team), same
     convention as callouts and notes before it."""
     user_id, supabase = auth
-    rows = (
+    rows = fetch_all(lambda: (
         supabase.table("team_meetings")
         .select("*,team_meeting_series(interval_weeks,active)")
         .eq("manager_id", user_id)
         .order("scheduled_at", desc=True)
-        .execute()
-        .data
-    )
-    items = (
+        .order("id")
+    ))
+    items = fetch_all(lambda: (
         supabase.table("team_meeting_agenda_items")
         .select("*")
         .eq("manager_id", user_id)
         .order("position")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     items_by_meeting: dict[str, list[dict]] = {}
     for item in items:
         items_by_meeting.setdefault(item["meeting_id"], []).append(item)
@@ -1160,16 +1154,15 @@ def _roll_forward(
         )
         series = rows[0] if rows else None
 
-    open_rows = (
+    open_rows = fetch_all(lambda: (
         supabase.table("team_meetings")
         .select("*,team_meeting_series(interval_weeks,active)")
         .eq("manager_id", user_id)
         .is_("summary", "null")
         .neq("id", meeting["id"])
         .order("scheduled_at")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     same_team = [
         row for row in open_rows if row.get("org_unit_id") == meeting.get("org_unit_id")
     ]
@@ -1249,7 +1242,7 @@ def list_team_commitments(auth=Depends(get_authenticated_client)):
     each still assigned to exactly one direct report. Same joined-name shape
     as commitments.py's list_commitments, filtered to the team-wide subset."""
     user_id, supabase = auth
-    rows = (
+    rows = fetch_all(lambda: (
         supabase.table("commitments")
         .select(
             "id,description,due_date,status,committed_by,created_at,completed_at,"
@@ -1258,9 +1251,8 @@ def list_team_commitments(auth=Depends(get_authenticated_client)):
         .eq("owner_id", user_id)
         .eq("is_team_commitment", True)
         .order("due_date")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     for row in rows:
         joined = row.pop("direct_reports", None) or {}
         row["direct_report_name"] = joined.get("name")

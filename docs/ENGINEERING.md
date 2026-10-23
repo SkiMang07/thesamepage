@@ -333,6 +333,33 @@ State owned locally resets to defaults on every switch, which reads as data loss
 to the user even though the rows are fine. `roleLevels` / `reports` / `orgUnits`
 already follow this pattern.
 
+### Reads that grow with use
+
+Supabase's Data API returns at most 1,000 rows per request (Integrations →
+Data API → Max rows; production is 1000). Past that it truncates silently:
+no error, and without an `ORDER BY` the rows kept are arbitrary. A
+40-person team passes 1,000 logged 1:1s in about six months, and passes it
+sooner on commitments.
+
+So any read scoped to a whole manager on a table that grows with use goes
+through `utils.fetch_all()`. That covers 1:1s, commitments, check-ins, agenda
+items, messages, Mission Control events, goals and projects, and Beyond
+meetings and links. `fetch_all()` pages with `.range()` until a short page
+comes back. Pass it a function that builds a fresh query, ending in a unique
+key (`.order("id")`), or rows repeat or vanish between pages.
+`utils.MAX_ROWS` must equal the dashboard setting.
+`tests/test_fetch_all.py` pins this with a fake that enforces the cap.
+
+These reads don't need it:
+- one person's or one item's rows (a report's history, a goal's check-ins);
+- reads bounded by a date window or `.limit()`;
+- reads bounded by team size (reports, org units, roles);
+- each person's single open 1:1 workspace.
+
+Fetching everything is still the default for a small table. Where only the
+latest row per person is needed, select only the columns it uses. The 1:1
+overview reads completed rows without notes or prep for that reason.
+
 ### Route declaration order
 
 FastAPI matches in declaration order, so a literal path must be declared before a
@@ -705,5 +732,18 @@ Not yet built, deliberately:
   with no fixed release. Only the build reads it, on our own source globs, so
   CI audits build tools at critical. Moving to Tailwind 4 removes it; it is a
   config rewrite plus a visual pass over every page, so post-launch.
-- Pagination — no list endpoint paginates. Fine at one manager's scale, not at
-  an org's.
+- Pagination. Truncation is handled (see Conventions → Reads that grow with
+  use); response size is not. Two lists return everything and are the first
+  to page when that matters:
+  - `/one-on-ones/{id}/history` sends every 1:1 with a person, notes
+    included, at about 17–52 a year.
+  - `/team/meetings` sends every meeting and agenda item, at about 52 a
+    year per team.
+
+  Paging either moves features to the server. The person page searches
+  every summary in the browser ("N of M mention…"), and Follow-through and
+  `?conversation=` look sessions up in the full list. The meeting page works
+  out outcomes and carry-forward from every meeting. The fix is a cursor
+  (`?limit=&before=`, keyed on meeting date + id), server-side search, and
+  `GET /team/meetings/{id}`. The Scribe thread, captures and team messages
+  are next after those. Post-launch.

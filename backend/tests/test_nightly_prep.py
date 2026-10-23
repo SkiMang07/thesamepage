@@ -127,6 +127,11 @@ class _Query:
         self.operation = "delete"
         return self
 
+    def range(self, *_a, **_k):
+        # utils.fetch_all pages with .range(); fixtures hold far fewer than
+        # utils.MAX_ROWS rows, so the first page is the whole result.
+        return self
+
     def execute(self):
         self.client.log.append((self.table, self.operation))
         rows = self.client.rows.setdefault(self.table, [])

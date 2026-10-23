@@ -53,7 +53,7 @@ from pydantic import BaseModel, ConfigDict
 import analytics
 from routes.expectations_ai import _compute_coverage
 from routes.org_goals import clear_unknown, read_unknown
-from utils import get_authenticated_client, meeting_day_of
+from utils import fetch_all, get_authenticated_client, meeting_day_of
 
 logger = logging.getLogger(__name__)
 
@@ -515,24 +515,22 @@ def _has_prep_sheet(supabase, user_id: str) -> bool:
 
 def _is_onboarded(supabase, user_id: str) -> bool:
     """A logged 1:1, then a later prep sheet for the same person. Cheap first: no log, no second query."""
-    logged = (
+    logged = fetch_all(lambda: (
         supabase.table("one_on_ones")
         .select("id,direct_report_id,scheduled_at,created_at")
         .eq("manager_id", user_id)
         .not_.is_("summary", "null")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     if not logged:
         return False
-    prepped = (
+    prepped = fetch_all(lambda: (
         supabase.table("one_on_ones")
         .select("id,direct_report_id,scheduled_at,created_at")
         .eq("manager_id", user_id)
         .not_.is_("prep_guide", "null")
-        .execute()
-        .data
-    )
+        .order("id")
+    ))
     return carried_forward(logged, prepped)
 
 
@@ -642,7 +640,7 @@ def build_status(user_id: str, supabase) -> dict:
             for r in coverage["roles"]
             if r["metrics_count"] + r["skills_count"] + r["values_count"] > 0
         }
-        goal_rows = supabase.table("goals").select("level,org_unit_id").neq("status", "cancelled").execute().data
+        goal_rows = fetch_all(lambda: supabase.table("goals").select("level,org_unit_id").neq("status", "cancelled").order("id"))
         goal_levels = {g["level"] for g in goal_rows}
         goal_scope = goal_relationship(units, goal_rows, user_id)
         role_labels = {
@@ -888,12 +886,13 @@ def _receipt_data(supabase, user_id: str) -> dict:
     goal_levels = [g["level"] for g in supabase.table("goals").select("level").neq("status", "cancelled").execute().data]
     prepped = {
         r["direct_report_id"]
-        for r in supabase.table("one_on_ones")
-        .select("direct_report_id")
-        .eq("manager_id", user_id)
-        .not_.is_("prep_guide", "null")
-        .execute()
-        .data
+        for r in fetch_all(lambda: (
+            supabase.table("one_on_ones")
+            .select("id,direct_report_id")
+            .eq("manager_id", user_id)
+            .not_.is_("prep_guide", "null")
+            .order("id")
+        ))
     }
     return dict(
         people=people,

@@ -81,11 +81,16 @@ class _Query:
         return self
 
     def order(self, col, desc=False, **_k):
-        self._order = (col, desc)
+        self._order = [*getattr(self, "_order", []), (col, desc)]  # later keys break ties
         return self
 
     def limit(self, n):
         self._limit = n
+        return self
+
+    def range(self, *_a, **_k):
+        # utils.fetch_all pages with .range(); fixtures hold far fewer than
+        # utils.MAX_ROWS rows, so the first page is the whole result.
         return self
 
     def execute(self):
@@ -109,10 +114,8 @@ class _Query:
                 table.remove(row)
             return _Result([])
         rows = [dict(r) for r in match]
-        order = getattr(self, "_order", None)
-        if order:
-            col, desc = order
-            rows.sort(key=lambda r: (r.get(col) is None, r.get(col) if r.get(col) is not None else 0), reverse=desc)
+        for col, desc in reversed(getattr(self, "_order", [])):
+            rows.sort(key=lambda r, col=col: (r.get(col) is None, r.get(col) if r.get(col) is not None else 0), reverse=desc)
         for row in rows:
             for name, _cols in self.embeds:
                 fk = _EMBED_FK.get(name)
