@@ -708,9 +708,13 @@ Decided the same day, behind the sentence:
   ag@thesamepage.xyz's Gmail reputation. Needs the widget on
   `app/app/login/page.tsx` plus the secret in Supabase → Attack Protection.
   Worth doing if the audit log ever shows bursts of sign-in requests.
-- [ ] Trim the Redirect URLs allow-list: it still carries the Vercel
-  preview wildcards and thesamepage-blush.vercel.app/auth/callback from
-  before N-4. Keep app.thesamepage.xyz/auth/callback and localhost.
+- [x] ✔ Trim the Redirect URLs allow-list. Done 2026-10-22: the four Vercel
+  preview entries and thesamepage-blush.vercel.app/auth/callback are gone.
+  The list is now app.thesamepage.xyz/auth/callback and
+  localhost:3000/auth/callback. thesamepage-blush.vercel.app still 307s to
+  app.thesamepage.xyz, so no sign-in starts there. Preview deployments
+  can't complete a magic link, and couldn't before either (no Supabase
+  variables on Preview).
 
 ### D. Observability — you cannot see a production failure today
 
