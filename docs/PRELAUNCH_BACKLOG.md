@@ -910,10 +910,16 @@ Decided the same day, behind the sentence:
   magic link → first report → first prep sheet → first wrap-up, on a phone
   and a laptop, with the browser console open. Every "Loading…" and every
   empty state on that path is the first impression.
-- [ ] ✘ Seed data cleared from the production org, or a separate demo org.
-  The live account today shows the Forkcast demo team (Jordan Breedlove,
-  Pip Haberlin…); make sure a screenshot for the site is not also the data a
-  founding member can see if invited into the wrong org.
+- [x] ✔ Seed data cleared from the production org, or a separate demo org.
+  Done 2026-10-22. The Forkcast Labs demo org (its own org, five tagged demo
+  managers) was deleted by `backend/scripts/2026-10-22_prelaunch_account_cleanup.sql`
+  (b217b0b). Checked live the same night: 5 accounts remain (Andrew, Susie,
+  Susie's +1/+2/+3), each the only member of its own org, and no Forkcast or
+  demo-tagged Auth user is left. Jordan Breedlove, Pip Haberlin and the rest
+  were never seed data: they are Andrew's real AgriWebb team in his own org,
+  and they stay. Real work data, so it is not a source for site screenshots;
+  if screenshots need a demo org, rerun `seed_forkcast_demo.py --apply`, which
+  only ever writes its own org.
 - [ ] ✘ Founding-places form → what happens next is written down: who gets
   the email, what they reply, how the account is provisioned, and by when.
 - [ ] ✘ Support path exists: a `support@` or `hello@` address that reaches
