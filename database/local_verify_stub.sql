@@ -86,6 +86,16 @@ $$;
 grant usage on schema public to anon, authenticated, service_role;
 grant usage on schema auth to anon, authenticated, service_role;
 
+-- Supabase's default privileges: every table, sequence and function created
+-- in public is granted to anon, authenticated and service_role directly.
+-- Without this, `revoke all on function f() from public` looks like it locks
+-- anon out locally while production still lets anon execute f() (found by the
+-- 2026-10-22 drift check). Check anon's reach on a function you add with
+-- has_function_privilege('anon', 'public.f()', 'execute').
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+
 create extension if not exists pgcrypto;
 
 -- Minimal storage schema stub (buckets/objects/foldername) — covers only

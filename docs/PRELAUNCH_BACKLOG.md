@@ -774,10 +774,23 @@ Decided the same day, behind the sentence:
   backups exist today. Settle it before the first founding manager puts a
   real team in; it's the one gap on this list that can't be fixed after
   the fact.
-- [ ] ✘ Schema drift check. `database/schema.sql` declares 52 tables and
-  there are 31 dated migrations; the rule says both move together. Run
-  `schema.sql` against `local_verify_stub.sql` once more as a clean gate,
-  and diff a `pg_dump --schema-only` of production against it.
+- [x] ✔ Schema drift check. `schema.sql` builds clean on the local stub
+  (66 tables, 74 policies, 144 indexes, 18 functions, no errors or notices).
+  Production was compared with read-only catalog queries, fingerprinting
+  tables and RLS flags, columns, constraints, indexes, policies (including
+  storage), functions, triggers, the storage bucket and seed rows. The first
+  pass found rollups that never picked up the archive change and stale
+  `team_meetings` constraint names (`2026-10-22_rollups_skip_archived.sql`,
+  now live). The second pass, after that migration, matches on every count
+  and fingerprint. The only differences are comments that `schema.sql` has
+  inside `accept_direct_report_invite()` and `complete_performance_review()`
+  and production's copies lack, which is cosmetic. Grants were checked too: `anon` could
+  execute eleven signed-in-only functions, because Supabase grants new
+  functions to `anon` directly and `revoke ... from public` doesn't remove
+  that. Fixed in `2026-10-22_revoke_anon_rpc_execute.sql`. The local stub
+  now reproduces Supabase's default grants, so the local gate catches this
+  from now on. To re-run, follow the steps at the top of
+  `database/checks/schema_drift.sql`.
 - [x] ✔ Account deletion and data export. No route deletes a user or org
   (16 `@router.delete` handlers, all for child records); no export. For a
   product whose pitch is "you own the record", a manager needs to be able to

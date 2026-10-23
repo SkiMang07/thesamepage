@@ -391,12 +391,24 @@ The deliberate exceptions to RLS, all in `schema.sql`:
 | `org_unit_goals_rollup()` | goal status counts per unit |
 | `org_unit_projects_rollup()` | project status counts per unit |
 | `org_unit_people_rollup()` | headcount + role breakdown per unit |
-| `get_invite_preview(token)` | the only function granted to `anon`; returns names + expiry, never the row |
+| `get_invite_preview(token)` | the only RPC a signed-out caller may execute; returns names + expiry, never the row |
 | `accept_direct_report_invite(token)` | claims a report row for `auth.uid()`, re-checks `auth.email()` internally as defense in depth |
 | `handle_new_user()` | signup trigger; defaults every new user to `role = 'manager'` |
 | `ensure_entitlement()` | creates the caller's `subscriptions` row; see Entitlement below |
 | `account_deletion_preflight()` | the refusals `delete_my_account()` makes, callable first so they cost nothing |
 | `delete_my_account()` | deletes everything the caller's account owns, the org and the `auth.users` row, in one transaction; see Account export and deletion |
+
+**Revoke from `anon` by name, not just from `public`.** Supabase's default
+privileges grant EXECUTE on every new function in `public` straight to `anon`,
+so `revoke all ... from public` alone leaves signed-out callers able to run it.
+Functions the app calls signed in use `revoke all on function f() from public,
+anon;` then `grant execute ... to authenticated;`. Two keep `anon` on purpose:
+`get_invite_preview()` (the invite page runs before sign-in) and
+`current_org_id()` (RLS policies call it, and a policy's functions are checked
+as the querying role, so revoking it would turn a signed-out read into an
+error instead of zero rows; it returns null for `anon`). The local stub
+reproduces Supabase's default grants, so `has_function_privilege('anon',
+'public.f()', 'execute')` locally tells you what production will do.
 
 **Every rollup returns aggregates only, by construction** — a count or a summed
 figure per org unit, never a row identifying a person. That is what makes

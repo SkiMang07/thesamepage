@@ -1893,6 +1893,8 @@ as $$
   select org_id from public.users where id = auth.uid()
 $$;
 
+-- anon keeps EXECUTE (Supabase grants it by default): RLS policies call this,
+-- and policy functions are checked as the querying role. Returns null for anon.
 revoke all on function public.current_org_id() from public;
 grant execute on function public.current_org_id() to authenticated;
 
@@ -2312,7 +2314,7 @@ as $$
   select id from led
 $$;
 
-revoke all on function public.led_org_unit_ids() from public;
+revoke all on function public.led_org_unit_ids() from public, anon;
 grant execute on function public.led_org_unit_ids() to authenticated;
 
 -- ------------------------------------------------------------
@@ -2399,7 +2401,7 @@ begin
 end;
 $$;
 
-revoke all on function public.org_unit_capacity_rollup(date, date) from public;
+revoke all on function public.org_unit_capacity_rollup(date, date) from public, anon;
 grant execute on function public.org_unit_capacity_rollup(date, date) to authenticated;
 
 -- ------------------------------------------------------------
@@ -2427,7 +2429,7 @@ as $$
   group by g.org_unit_id, g.status
 $$;
 
-revoke all on function public.org_unit_goals_rollup() from public;
+revoke all on function public.org_unit_goals_rollup() from public, anon;
 grant execute on function public.org_unit_goals_rollup() to authenticated;
 
 -- ============================================================
@@ -2514,7 +2516,7 @@ begin
 end;
 $$;
 
-revoke all on function public.record_goal_check_in(uuid, text, integer, numeric, text, uuid) from public;
+revoke all on function public.record_goal_check_in(uuid, text, integer, numeric, text, uuid) from public, anon;
 grant execute on function public.record_goal_check_in(uuid, text, integer, numeric, text, uuid) to authenticated;
 
 -- ============================================================
@@ -2586,7 +2588,7 @@ begin
 end;
 $$;
 
-revoke all on function public.record_project_check_in(uuid, text, integer, text, uuid) from public;
+revoke all on function public.record_project_check_in(uuid, text, integer, text, uuid) from public, anon;
 grant execute on function public.record_project_check_in(uuid, text, integer, text, uuid) to authenticated;
 
 -- ============================================================
@@ -2694,7 +2696,7 @@ begin
 end;
 $$;
 
-revoke all on function public.complete_performance_review(uuid, integer, jsonb, uuid) from public;
+revoke all on function public.complete_performance_review(uuid, integer, jsonb, uuid) from public, anon;
 grant execute on function public.complete_performance_review(uuid, integer, jsonb, uuid) to authenticated;
 
 -- ============================================================
@@ -2965,7 +2967,7 @@ begin
 end;
 $$;
 
-revoke all on function public.approve_role_expectation_draft(uuid, integer) from public;
+revoke all on function public.approve_role_expectation_draft(uuid, integer) from public, anon;
 grant execute on function public.approve_role_expectation_draft(uuid, integer) to authenticated;
 
 -- Once a goal has a recorded reading, what those numbers mean is fixed: the
@@ -3020,7 +3022,7 @@ as $$
   group by coalesce(g.org_unit_id, dr.org_unit_id), p.status
 $$;
 
-revoke all on function public.org_unit_projects_rollup() from public;
+revoke all on function public.org_unit_projects_rollup() from public, anon;
 grant execute on function public.org_unit_projects_rollup() to authenticated;
 
 -- ------------------------------------------------------------
@@ -3061,7 +3063,7 @@ as $$
   group by org_unit_id
 $$;
 
-revoke all on function public.org_unit_people_rollup() from public;
+revoke all on function public.org_unit_people_rollup() from public, anon;
 grant execute on function public.org_unit_people_rollup() to authenticated;
 
 -- ------------------------------------------------------------
@@ -3172,7 +3174,7 @@ begin
 end;
 $$;
 
-revoke all on function public.accept_direct_report_invite(text) from public;
+revoke all on function public.accept_direct_report_invite(text) from public, anon;
 grant execute on function public.accept_direct_report_invite(text) to authenticated;
 
 -- ============================================================
@@ -3320,7 +3322,7 @@ begin
   );
 end;
 $$;
-revoke all on function public.ensure_entitlement() from public;
+revoke all on function public.ensure_entitlement() from public, anon;
 grant execute on function public.ensure_entitlement() to authenticated;
 
 
