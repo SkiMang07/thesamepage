@@ -8,7 +8,8 @@ segments, transcribed, and thrown away. Only text is kept.
 fixes of 2026-10-23), the meeting experience (session 3: Meet, the meeting
 screen, the recording pill) and the browser capture engine that records the
 mic and the call tab and queues segments on the device (session 2, with the
-server's echo dedupe). The wrap-up's use of the transcript (session 4) and the
+server's echo dedupe), and the wrap-up that drafts from the transcript plus
+the report's read-only view (session 4). Team and Beyond meetings and the
 launch surface are later build sessions; the plan lives in the gitignored
 `docs/CALL_TRANSCRIPTION_BUILD_SCOPING.md`, the decision record in
 `docs/CALL_TRANSCRIPTION_SCOPING.md`.
@@ -85,8 +86,8 @@ capture client (browser now, Mac helper later)
   segment keeps its own `billed_seconds` for cost reporting. Users can read their own rows; nothing but
   `add_transcription_seconds()` writes them.
 - `one_on_ones.private_notes`: notes typed while off the record. Manager only
-  (`one_on_ones` has no report policy). Never sent to the wrap-up. The
-  meeting screen and wrap-up sessions write it.
+  (`one_on_ones` has no report policy). Never sent to the wrap-up. Save log
+  on the meeting screen writes it.
 - `transcription_consent_at` on `direct_reports` and `outside_people`: set the
   first time a 1:1 with that person starts with consent confirmed (or by
   `PUT /consent`), kept on later ticks, cleared from the person's page.
@@ -179,7 +180,9 @@ the report's response field by field, so `kind`, `capture_mode`,
 | `public/recorder/level-worklet.js` | the AudioWorklet that measures loudness on the audio thread |
 | `lib/recorder/stubEngine.ts` | a no-audio engine kept for design work on the meeting screen; not used by the app. `window.__tspRecorderStub.autoStop(reason)` exists only on it |
 | `lib/recorder/prefs.ts` | "Ask for the call tab", "tip shown" and the Transcribe switch's last choice, in localStorage (try/catch) |
-| `lib/meeting-draft.ts` | the local draft per 1:1 row: call notes and off-the-record notes apart, covered ticks, added topics; cleared on Save log |
+| `lib/meeting-draft.ts` | the local draft per 1:1 row: call notes and off-the-record notes apart, covered ticks, added topics; cleared on Save log, with a copy kept 30 minutes for Undo |
+| `components/meet/MeetingWrapUp.tsx` | the in-place wrap-up (B7) |
+| `lib/report-transcript.ts`, `app/app/ic/transcripts/[id]/page.tsx`, `app/app/ic/page.tsx` | the report's read-only transcript and the list on their landing page |
 | `components/meet/RecordingPill.tsx` | the pill in every state, its menu, the one-time tip and our explainer before the share dialog |
 | `components/meet/MeetPicker.tsx`, `StartOneOnOne.tsx`, `useStartMeeting.tsx` | Meet in the top bar, Start 1:1 on the Desk, Start on the Last → next card and Mission Control; consent asked once per person; a 409 `already_recording` offered back ("Go back to it" / "End it and start this one") |
 | `components/meet/MeetingRoom.tsx`, `MeetingColumns.tsx` | `/app/reports/[id]/meet`: three columns from 980px of content, two (agenda and history tabbed) from 640px, phone tabs below; widths follow the content column so Scribe is accounted for |
@@ -189,11 +192,58 @@ the report's response field by field, so `kind`, `capture_mode`,
 - **Off the record** switches the notes field to the private note. Save log
   sends it as `private_notes` on `POST /api/one-on-ones`; it never reaches the
   wrap-up draft.
-- **End 1:1** stops transcription and, until session 4, opens the existing
-  wrap-up review drafted from the notes. Unticked agenda topics are offered as
-  carry-forwards.
+- **End 1:1** stops transcription and turns the screen into the wrap-up (below).
+  "Back to the 1:1" resumes the same transcript, with the stopped time as a gap.
 - The `Permissions-Policy` header allows `display-capture=(self)` for the call
   tab, alongside `microphone=(self)`.
+
+**The wrap-up** (`MeetingWrapUp.tsx`, `POST /api/one-on-ones/wrapup`)
+
+- **In place, three columns.** Left: Covered, then "Carry into the next 1:1"
+  with unticked prepped and added topics pre-ticked, plus what the draft found
+  left open. Centre: Summary, Commitments and "Open next time with". Right,
+  "What's kept": transcribed and not-transcribed minutes, audio discarded,
+  the private-note count, how a gap reads in the report's copy, the
+  off-the-record note itself, and Delete the transcript (asks first; the draft
+  stays). The left and right columns need no AI and show at once.
+- **Waiting for the transcript.** The client polls `GET /{id}` until the
+  transcript is `ready` or `failed`, for up to 20 seconds, then drafts anyway
+  and says the end may be missing. After a reload or an Undo it finds the 1:1's
+  newest ended transcript itself. One AI call drafts everything; the centre
+  shows skeletons until it lands. **Save log stays disabled until the draft is
+  ready**, so End 1:1 → Save log is two clicks.
+- **The request carries call notes and `transcript_id` only.** There is no
+  field for off-the-record notes. The route reads only the caller's own
+  transcript, and only one attached to a 1:1 with that same person (404
+  otherwise), through `lines_for_wrapup()`: interleaved, echoes dropped, and
+  every line inside a gap removed again.
+- **The prompt** takes two labelled inputs, the manager's notes and the
+  transcript, with each line numbered, timed and labelled by track (`YOU
+  (manager)`, the report's first name, or `MIC (both of you, speaker
+  unknown)`). The notes win on emphasis; owners come from the labels; no long
+  quotes. Each commitment cites its line (`L14`) or `notes`. The server checks
+  the citation against the real lines and turns it into "From the call,
+  12:03"; a line from the `mixed` track always marks the owner as unsure, and a
+  citation that doesn't exist is dropped. Calls past 120,000 characters keep
+  their start and say so.
+- **Owners.** Each owner chip is a one-tap You ↔ report switch. With only the
+  mic on: "Only your mic was on, so check who owns each one. Tap a name to
+  switch it." Source and unsure flags are display only, never saved.
+- **Eval:** `eval/test_wrapup_transcript.py` runs three fictional calls
+  (two-track, mic only, an off-the-record gap) against the real model and
+  checks commitments, `committed_by`, the unsure flags, and that no
+  off-the-record speech or note reaches the prompt.
+
+**The report's view** (`/app/ic`, `/app/ic/transcripts/[id]`)
+
+- Their landing page lists their 1:1 transcripts; each opens read-only, without
+  the manager's navigation. RLS shows a call only once it has ended.
+- Labels are turned round: their track is "You", the manager's is the
+  manager's first name (read as the report, so "Your manager" where RLS
+  doesn't show it). Mic-only lines carry no label, with one line saying why.
+- Every gap reads "Not transcribed · N min", built from start and end only.
+  "Machine transcript" and audio discarded are stated. No notification, and
+  transcripts never feed prep.
 
 **The capture engine**
 

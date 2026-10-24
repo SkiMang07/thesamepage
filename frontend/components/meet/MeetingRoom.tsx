@@ -20,9 +20,8 @@
 // Notes survive a reload: a local draft per 1:1 row (lib/meeting-draft.ts),
 // call notes and off-the-record notes kept apart, cleared on Save log.
 //
-// End 1:1 opens the existing wrap-up review in place of the room for now,
-// drafted from the notes. Session 4 replaces it with the in-place wrap-up
-// that also reads the transcript (build plan B7).
+// End 1:1 turns the same screen into the wrap-up (MeetingWrapUp, build plan
+// B7), drafted from the call notes plus the transcript.
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,20 +34,17 @@ import {
   getOneOnOne,
   getOneOnOneHistory,
   updateCommitment,
-  wrapUpOneOnOne,
   type CaptureNote,
   type Commitment,
   type DirectReport,
   type OneOnOne,
-  type WrapUpDraft,
 } from "@/lib/api";
 import { BTN_PRIMARY, BTN_SECONDARY } from "@/lib/tokens";
 import PageShell from "@/components/PageShell";
 import PersonAvatar from "@/components/team/PersonAvatar";
-import WaitNote from "@/components/WaitNote";
-import WrapUpReview from "@/app/app/reports/[id]/wrap-up-review";
+import MeetingWrapUp from "./MeetingWrapUp";
 import { dueState, instantDate, localDateStr, mediumDate, shortDate } from "@/components/team/dates";
-import { clearDraft, EMPTY_DRAFT, loadDraft, pruneDrafts, saveDraft, type MeetingDraft } from "@/lib/meeting-draft";
+import { clearDraftKeepingForUndo, EMPTY_DRAFT, loadDraft, pruneDrafts, saveDraft, type MeetingDraft } from "@/lib/meeting-draft";
 import { useMeetingClock, useRecorder } from "@/lib/recorder/RecorderProvider";
 import { AgendaColumn, HistoryColumn, NotesColumn, dateOf, type AgendaRow } from "./MeetingColumns";
 
@@ -247,18 +243,22 @@ export default function MeetingRoom({ personId }: { personId: string }) {
 
   if (meeting?.phase === "ending") {
     return (
-      <WrapUpBridge
-        data={data}
-        draft={draft}
-        rows={rows}
-        covered={covered}
-        onBack={() => void recorder.backToMeeting()}
-        onSaved={() => {
-          finishedRef.current = true;
-          clearDraft(data.session.id);
-          recorder.finishMeeting();
-        }}
-      />
+        <MeetingWrapUp
+          widthRef={widthRef}
+          report={data.report}
+          session={data.session}
+          draft={draft}
+          rows={rows}
+          covered={covered}
+          transcriptId={meeting.transcriptId}
+          layout={layout}
+          onBack={() => void recorder.backToMeeting()}
+          onSaved={() => {
+            finishedRef.current = true;
+            clearDraftKeepingForUndo(data.session.id, draft);
+            recorder.finishMeeting();
+          }}
+        />
     );
   }
 
@@ -519,95 +519,5 @@ function AutoStopNotice({ onEnd }: { onEnd: () => void }) {
         End 1:1
       </button>
     </div>
-  );
-}
-
-// ── End 1:1 → the existing wrap-up review (until session 4) ────────────────
-
-function WrapUpBridge({
-  data,
-  draft,
-  rows,
-  covered,
-  onBack,
-  onSaved,
-}: {
-  data: Loaded;
-  draft: MeetingDraft;
-  rows: AgendaRow[];
-  covered: Set<string>;
-  onBack: () => void;
-  onSaved: () => void;
-}) {
-  const [result, setResult] = useState<WrapUpDraft | null>(null);
-  const [failed, setFailed] = useState(false);
-  const notes = draft.notes.trim();
-
-  // Topics left unticked are offered as carry-forwards; prepped and added
-  // topics only (commitments stay one live record and are never copied).
-  const unticked = rows.filter((r) => !covered.has(r.key) && (r.key.startsWith("a-") || r.key.startsWith("add-") || r.key.startsWith("cf-"))).map((r) => r.title);
-
-  const run = useCallback(() => {
-    setFailed(false);
-    if (!notes) {
-      setResult({ summary: "", commitments: [], follow_up_items: [], opening_line: "" });
-      return;
-    }
-    wrapUpOneOnOne({ direct_report_id: data.report.id, raw_notes: draft.notes })
-      .then(setResult)
-      .catch(() => setFailed(true));
-  }, [notes, data.report.id, draft.notes]);
-
-  useEffect(() => {
-    run();
-    // Draft once per End 1:1; the notes don't change on this screen.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!result) {
-    return (
-      <PageShell maxWidth="2xl">
-        <button type="button" onClick={onBack} className="text-sm text-ink-secondary hover:underline">
-          ← Back to the 1:1
-        </button>
-        <h1 className="mt-4 text-2xl font-semibold text-ink">Wrap up your 1:1 with {data.report.name.split(" ")[0]}</h1>
-        <p className="mt-2 text-ink-secondary">Nothing is saved until you save it.</p>
-        {failed ? (
-          <div className="mt-6" role="alert">
-            <p className="text-sm text-ink-body">Couldn&apos;t draft the log. Your notes are safe.</p>
-            <button type="button" onClick={run} className={`mt-3 ${BTN_PRIMARY}`}>
-              Try again
-            </button>
-          </div>
-        ) : (
-          <div className="mt-6">
-            <p className="text-sm text-ink-body" role="status">
-              Drafting from your notes…
-            </p>
-            <WaitNote active typical="10 to 25 seconds" className="mt-2" />
-          </div>
-        )}
-      </PageShell>
-    );
-  }
-
-  const merged: WrapUpDraft = {
-    ...result,
-    follow_up_items: Array.from(new Set([...result.follow_up_items, ...unticked])),
-  };
-  return (
-    <WrapUpReview
-      directReportId={data.report.id}
-      reportName={data.report.name}
-      rawNotes={draft.notes}
-      draft={merged}
-      onBack={onBack}
-      backLabel="Back to the 1:1"
-      oneOnOneId={data.session.id}
-      initialMeetingDate={localDateStr()}
-      willRecur={!!data.session.recurrence_weeks}
-      privateNotes={draft.privateNotes}
-      onSaved={onSaved}
-    />
   );
 }

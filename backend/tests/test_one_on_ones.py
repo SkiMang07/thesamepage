@@ -1,4 +1,6 @@
 import asyncio
+import pytest
+from fastapi import HTTPException
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -233,6 +235,7 @@ class _MemoryClient:
         # partial-failure path.
         self.fail_on: dict[str, set[str]] = {}
         self.rows = {
+            "call_transcripts": [],
             "one_on_ones": [
                 {
                     "id": "current",
@@ -939,3 +942,116 @@ def test_ensure_open_session_refuses_someone_elses_report():
         ensure_open_session("report", auth=("manager", client))
     assert err.value.status_code == 404
     assert client.rows["one_on_ones"] == []
+
+
+# ── Undo on the receipt (call transcription session 4) ──────────────────
+
+def _log_for_undo(client, **overrides):
+    body = dict(
+        direct_report_id="report",
+        one_on_one_id="current",
+        summary="Aligned on the recovery plan.",
+        notes="Northwind wants a usage review.",
+        private_notes="Family move in spring.",
+        new_commitments=[NewCommitmentIn(description="Send the deck", committed_by="manager")],
+        carry_forward_items=["Team-lead path"],
+        opening_line="How did the usage review land?",
+        meeting_date="2026-08-25",
+    )
+    body.update(overrides)
+    return _resolve(log_one_on_one(LogOneOnOneIn(**body), auth=("manager", client)))
+
+
+def _undo(client, meeting_id="current"):
+    from routes.one_on_ones import undo_log
+    return undo_log.__wrapped__(SimpleNamespace(), meeting_id, auth=("manager", client))
+
+
+def test_undo_puts_a_completed_workspace_back_and_removes_what_the_log_added():
+    client = _MemoryClient()
+    before = {k: v for k, v in client.rows["one_on_ones"][0].items()}
+    result = _log_for_undo(client)
+    assert result["undo_until"]
+    assert len(client.rows["one_on_ones"]) == 2 and len(client.rows["commitments"]) == 1
+
+    undone = _undo(client)
+    assert undone["undone"] and undone["meeting"]["status"] == "planned"
+    assert [r["id"] for r in client.rows["one_on_ones"]] == ["current"]
+    row = client.rows["one_on_ones"][0]
+    assert row["summary"] is None and row["log_undo"] is None
+    assert row["scheduled_at"] == before["scheduled_at"] and row.get("logged_at") is None
+    # Nothing the manager typed is lost: logging again starts from it.
+    assert row["notes"] == "Northwind wants a usage review."
+    assert row["private_notes"] == "Family move in spring."
+    assert client.rows["commitments"] == []
+
+
+def test_undo_restores_an_existing_next_workspace_field_by_field():
+    client = _MemoryClient()
+    # An ad-hoc conversation logged apart from the prepped workspace, which
+    # collects the carry-forwards and the opener.
+    client.rows["one_on_ones"][0]["opening_line"] = "Earlier opener"
+    client.rows["one_on_ones"][0]["carry_forward_items"] = ["Already there"]
+    result = _log_for_undo(client, one_on_one_id=None, separate_occurrence=True)
+    workspace = next(r for r in client.rows["one_on_ones"] if r["id"] == "current")
+    assert workspace["opening_line"] == "How did the usage review land?"
+    assert workspace["carry_forward_items"] == ["Already there", "Team-lead path"]
+
+    _undo(client, result["meeting"]["id"])
+    assert [r["id"] for r in client.rows["one_on_ones"]] == ["current"]
+    workspace = client.rows["one_on_ones"][0]
+    assert workspace["opening_line"] == "Earlier opener"
+    assert workspace["carry_forward_items"] == ["Already there"]
+    assert workspace["scheduled_at"] == "2026-08-25T12:00:00+00:00"
+    assert client.rows["commitments"] == []
+
+
+def test_undo_is_refused_after_30_minutes():
+    client = _MemoryClient()
+    _log_for_undo(client)
+    row = next(r for r in client.rows["one_on_ones"] if r["id"] == "current")
+    row["log_undo"]["saved_at"] = (datetime.now(timezone.utc) - timedelta(minutes=31)).isoformat()
+    with pytest.raises(HTTPException) as err:
+        _undo(client)
+    assert err.value.status_code == 409 and err.value.detail["code"] == "undo_window_passed"
+    assert row["summary"]
+
+
+def test_undo_is_refused_once_the_next_1_1_has_been_prepped():
+    client = _MemoryClient()
+    result = _log_for_undo(client)
+    nxt = next(r for r in client.rows["one_on_ones"] if r["id"] == result["next_session"]["id"])
+    nxt["prep_guide"] = {"situation_summary": "Built since"}
+    with pytest.raises(HTTPException) as err:
+        _undo(client)
+    assert err.value.detail["code"] == "next_meeting_changed"
+    assert len(client.rows["commitments"]) == 1
+
+
+def test_a_meeting_without_a_snapshot_cannot_be_undone():
+    client = _MemoryClient()
+    client.rows["one_on_ones"][0]["summary"] = "Logged before Undo existed"
+    with pytest.raises(HTTPException) as err:
+        _undo(client)
+    assert err.value.detail["code"] == "nothing_to_undo"
+
+
+def test_undo_of_an_ad_hoc_log_with_a_transcript_never_deletes_the_transcript():
+    # Deleting a meeting cascades to its transcripts, so a row with one
+    # attached goes back to unfinished instead of being removed.
+    client = _MemoryClient()
+    result = _log_for_undo(client, one_on_one_id=None, separate_occurrence=True)
+    meeting_id = result["meeting"]["id"]
+    client.rows["call_transcripts"].append({"id": "t1", "one_on_one_id": meeting_id, "owner_id": "manager"})
+    _undo(client, meeting_id)
+    row = next(r for r in client.rows["one_on_ones"] if r["id"] == meeting_id)
+    assert row["summary"] is None and row["log_undo"] is None
+    assert client.rows["call_transcripts"][0]["one_on_one_id"] == meeting_id
+
+
+def test_the_undo_snapshot_never_holds_notes():
+    client = _MemoryClient()
+    _log_for_undo(client)
+    snapshot = next(r for r in client.rows["one_on_ones"] if r["id"] == "current")["log_undo"]
+    flat = repr(snapshot)
+    assert "Northwind wants a usage review" not in flat and "Family move" not in flat

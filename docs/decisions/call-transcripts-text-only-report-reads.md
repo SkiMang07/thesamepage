@@ -1,8 +1,9 @@
 # Call transcripts: text only, the report reads theirs, gaps stay neutral
 
-**Status:** Accepted 2026-10-23 (Andrew). Server pipeline implemented
-2026-10-23, review fixes (session 1b) the same day; capture and meeting
-screen not yet built.
+**Status:** Accepted 2026-10-23 (Andrew). Implemented for 1:1s: server
+pipeline and review fixes 2026-10-23, capture engine and meeting screen
+2026-10-24, wrap-up and the report's read-only view 2026-10-24. Team and
+Beyond meetings not yet built.
 
 ## Context
 

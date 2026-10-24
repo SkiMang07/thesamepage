@@ -12,7 +12,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getOneOnOneHistory, logOneOnOne, CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
+import { CommittedBy, WrapUpCommitment, WrapUpDraft } from "@/lib/api";
+import { saveOneOnOneLog } from "@/lib/one-on-one-save";
 import { stashOneOnOneReceipt } from "@/lib/one-on-one-receipt";
 import PageShell from "@/components/PageShell";
 import { joinDraft } from "@/lib/aiDraftTelemetry";
@@ -154,16 +155,15 @@ export default function WrapUpReview({
     setSaving(true);
     setError(null);
     const submittedSummary = summary.trim();
-    const startedAt = Date.now();
     try {
-      const result = await logOneOnOne({
+      const outcome = await saveOneOnOneLog({
         direct_report_id: directReportId,
         summary: submittedSummary,
         notes: rawNotes,
         meeting_date: meetingDate || null,
         separate_occurrence: separateOccurrence,
         new_commitments: commitments
-          .map(({ key: _key, ...c }) => ({ ...c, description: c.description.trim() }))
+          .map(({ description, committed_by, due_date }) => ({ description: description.trim(), committed_by, due_date }))
           .filter((c) => c.description),
         carry_forward_items: followUps.map((item) => item.text.trim()).filter(Boolean),
         opening_line: openingLine.trim() || null,
@@ -171,48 +171,21 @@ export default function WrapUpReview({
         ...(privateNotes?.trim() ? { private_notes: privateNotes } : {}),
       });
       onSaved?.();
-      // The receipt on the person page renders exactly what the server says
-      // it saved. The review stays put until then; nothing here is cleared.
       reportSaved();
-      stashOneOnOneReceipt({ ...result, personId: directReportId });
-      router.push(`/app/reports/${directReportId}?logged=${result.meeting.id}`);
-    } catch (e) {
-      // The server undoes a partially written log before it answers with an
-      // error, so a failure normally means nothing was saved. The exception
-      // is a save that succeeded but whose answer never arrived (a dropped
-      // connection). Check before inviting a retry that would log it twice.
-      const recorded = await findRecordedMeeting(submittedSummary, startedAt);
-      if (recorded) {
-        onSaved?.();
-        reportSaved();
-        router.push(`/app/reports/${directReportId}?logged=${recorded}&reconciled=1`);
-        return;
+      if (outcome.kind === "saved") {
+        // The receipt on the person page renders exactly what the server says
+        // it saved. The review stays put until then; nothing here is cleared.
+        stashOneOnOneReceipt({ ...outcome.result, personId: directReportId });
+        router.push(`/app/reports/${directReportId}?logged=${outcome.result.meeting.id}`);
+      } else {
+        router.push(`/app/reports/${directReportId}?logged=${outcome.meetingId}&reconciled=1`);
       }
+    } catch (e) {
       // The raw API error isn't actionable. What is: the review is intact.
       console.error("[wrap-up] save failed", e instanceof Error ? e.name : "error");
       setError("Couldn't save this meeting. Your review is still here — try again.");
       savingRef.current = false;
       setSaving(false);
-    }
-  }
-
-  // A completed meeting for this person with exactly this reviewed summary,
-  // logged since this save began. Returns its id, or null when there is none
-  // or the check itself could not run (then the error stays and the manager
-  // decides; nothing is assumed saved).
-  async function findRecordedMeeting(submittedSummary: string, startedAt: number): Promise<string | null> {
-    try {
-      const history = await getOneOnOneHistory(directReportId);
-      const match = history.find(
-        (session) =>
-          session.status === "completed" &&
-          (session.summary ?? "").trim() === submittedSummary &&
-          session.logged_at != null &&
-          new Date(session.logged_at).getTime() >= startedAt - 60_000
-      );
-      return match?.id ?? null;
-    } catch {
-      return null;
     }
   }
 

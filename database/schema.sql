@@ -285,6 +285,12 @@ create table one_on_ones (
   -- was moved by itself ("Just this 1:1"). Null: scheduled_at is the usual
   -- day. Logging steps the next occurrence from here. (2026-10-07)
   series_slot_at   timestamptz,
+  -- The before-picture of every row a Save log changed, so Undo on the
+  -- receipt can put each back within 30 minutes. Cleared by Undo. Never
+  -- holds call notes or private notes. (2026-10-24)
+  log_undo         jsonb
+                    constraint one_on_ones_log_undo_object
+                    check (log_undo is null or jsonb_typeof(log_undo) = 'object'),
   created_at       timestamptz not null default now(),
   constraint one_on_ones_series_owner_fkey
     foreign key (series_id, manager_id, direct_report_id)

@@ -213,7 +213,12 @@ export default function RecordingPill() {
       </button>
     );
   } else if (rec.reason === "ended") {
-    pill = <span className={PILL_QUIET}>Transcription stopped · {minutesSince(meeting.startedAt, rec.at)} min</span>;
+    pill = (
+      <span className={PILL_QUIET}>
+        <span className="hidden sm:inline">Transcription stopped · {minutesSince(meeting.startedAt, rec.at)} min</span>
+        <span className="sm:hidden">Stopped · {minutesSince(meeting.startedAt, rec.at)} min</span>
+      </span>
+    );
   } else {
     const auto = rec.reason !== "manual";
     pill = (

@@ -8,13 +8,14 @@
 // says the carried topics aren't recorded against the meeting.
 //
 // It is feedback on one confirmed operation, not a new object: dismissing it
-// removes it, and nothing here writes.
+// removes it. The one write is Undo, offered for 30 minutes after the save
+// (the server enforces the window and says when a log can't be undone).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Commitment, OneOnOne } from "@/lib/api";
 import PersonAvatar from "@/components/team/PersonAvatar";
-import { shortDate } from "@/components/team/dates";
+import { mediumDate, shortDate } from "@/components/team/dates";
 import { firstName, fullDate, ownerOf, recurrenceLabel, sessionDate } from "./desk";
 
 export type ReceiptView = {
@@ -25,7 +26,13 @@ export type ReceiptView = {
   next: OneOnOne | null;
   /** The save's response was lost; the meeting was found already recorded. */
   reconciled: boolean;
+  /** Until when Undo is offered; null when it isn't. */
+  undoUntil?: string | null;
 };
+
+function plural(n: number, one: string, many = `${one}s`) {
+  return `${n} ${n === 1 ? one : many}`;
+}
 
 export default function OneOnOneReceipt({
   receipt,
@@ -35,6 +42,7 @@ export default function OneOnOneReceipt({
   retrying,
   onRetryRefresh,
   onDismiss,
+  onUndo,
   onViewConversation,
 }: {
   receipt: ReceiptView;
@@ -44,6 +52,8 @@ export default function OneOnOneReceipt({
   retrying: boolean;
   onRetryRefresh: () => void;
   onDismiss: () => void;
+  /** Throws when the server refuses; the message is shown here. */
+  onUndo?: () => Promise<void>;
   onViewConversation: () => void;
 }) {
   const [fullSummary, setFullSummary] = useState(false);
@@ -55,6 +65,38 @@ export default function OneOnOneReceipt({
   const long = summary.length > 320;
   const keptPrep = next?.status === "planned";
 
+  // Undo hides itself when its window closes.
+  const undoUntil = receipt.undoUntil ? Date.parse(receipt.undoUntil) : 0;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!undoUntil) return;
+    const left = undoUntil - Date.now();
+    if (left <= 0) return;
+    const t = window.setTimeout(() => setNow(Date.now()), Math.min(left + 50, 2 ** 31 - 1));
+    return () => window.clearTimeout(t);
+  }, [undoUntil, now]);
+  const canUndo = !!onUndo && undoUntil > now;
+  const [undoing, setUndoing] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  async function undo() {
+    if (!onUndo || undoing) return;
+    setUndoing(true);
+    setUndoError(null);
+    try {
+      await onUndo();
+    } catch (e) {
+      setUndoError(undoMessage(e));
+      setUndoing(false);
+    }
+  }
+
+  const line = [
+    "Logged",
+    plural(commitments.length, "commitment"),
+    ...(carried ? [`${plural(carried.length, "topic")} carried`] : []),
+    ...(nextDate ? [`next 1:1 ${mediumDate(nextDate)}`] : []),
+  ].join(" · ");
+
   return (
     <section
       aria-labelledby="receipt-heading"
@@ -64,13 +106,30 @@ export default function OneOnOneReceipt({
         <p className="text-2xs font-semibold uppercase tracking-[0.14em] text-brand">
           <span aria-hidden="true">✓ </span>Saved
         </p>
-        <button type="button" onClick={onDismiss} className="rounded px-2 py-1 text-xs text-ink-secondary hover:bg-surface hover:text-ink">
-          Dismiss
-        </button>
+        <div className="flex items-center gap-1">
+          {canUndo && (
+            <button
+              type="button"
+              onClick={() => void undo()}
+              disabled={undoing}
+              className="rounded px-2 py-1 text-xs font-medium text-brand hover:bg-surface hover:text-brand-hover disabled:opacity-50"
+            >
+              {undoing ? "Undoing…" : "Undo"}
+            </button>
+          )}
+          <button type="button" onClick={onDismiss} className="rounded px-2 py-1 text-xs text-ink-secondary hover:bg-surface hover:text-ink">
+            Dismiss
+          </button>
+        </div>
       </div>
-      <h2 id="receipt-heading" tabIndex={-1} className="mt-2 font-serif text-2xl font-normal leading-tight text-ink focus:outline-none">
-        The conversation is recorded.
+      <h2 id="receipt-heading" tabIndex={-1} className="mt-2 text-base font-semibold leading-snug text-ink focus:outline-none">
+        {line}
       </h2>
+      {undoError && (
+        <p role="alert" className="mt-2 text-xs text-amber-700">
+          {undoError}
+        </p>
+      )}
       {reconciled && (
         <p className="mt-2 text-xs text-ink-secondary">
           The save went through even though its confirmation didn&apos;t reach you, so it wasn&apos;t logged twice.
@@ -176,4 +235,16 @@ export default function OneOnOneReceipt({
       </div>
     </section>
   );
+}
+
+function undoMessage(e: unknown): string {
+  const fallback = "Couldn't undo this just now. Try again.";
+  if (!(e instanceof Error)) return fallback;
+  try {
+    const body = JSON.parse(e.message.replace(/^API error \d+: /, ""));
+    const msg = body?.detail?.message;
+    return typeof msg === "string" ? msg : fallback;
+  } catch {
+    return fallback;
+  }
 }

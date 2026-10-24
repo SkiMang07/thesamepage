@@ -330,20 +330,40 @@ def _matching_plan(supabase, user_id: str, direct_report_id: str, session_id: st
     return None
 
 
-def on_session_logged(supabase, user_id: str, direct_report_id: str, meeting: dict) -> None:
+def on_session_logged(supabase, user_id: str, direct_report_id: str, meeting: dict) -> dict | None:
+    """Marks a planned career conversation on this 1:1 held. Returns what the
+    row looked like before, for Undo on the log's receipt, or None when
+    nothing changed. Never raises."""
     try:
         day = meeting_day_of(meeting)
         row = _matching_plan(supabase, user_id, direct_report_id, meeting["id"], day)
         if not row:
-            return
+            return None
         supabase.table("career_conversations").update({
             "status": "held",
             "held_on": (day or rhythm.to_day(row.get("planned_for"))).isoformat(),
             "one_on_one_id": meeting["id"],
             "updated_at": _now(),
         }).eq("id", row["id"]).eq("manager_id", user_id).execute()
+        return {key: row.get(key) for key in ("id", "status", "held_on", "one_on_one_id")}
     except Exception as exc:
         logger.warning("career conversation not marked held: %s", type(exc).__name__)
+        return None
+
+
+def on_session_log_undone(supabase, user_id: str, before: dict | None) -> None:
+    """Puts back a career conversation a log marked held. Never raises."""
+    if not before or not before.get("id"):
+        return
+    try:
+        supabase.table("career_conversations").update({
+            "status": before.get("status") or "planned",
+            "held_on": before.get("held_on"),
+            "one_on_one_id": before.get("one_on_one_id"),
+            "updated_at": _now(),
+        }).eq("id", before["id"]).eq("manager_id", user_id).eq("status", "held").execute()
+    except Exception as exc:
+        logger.warning("career conversation not put back after Undo: %s", type(exc).__name__)
 
 
 def on_session_moved(supabase, user_id: str, before: dict, after: dict) -> None:

@@ -8,13 +8,14 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 
 | Route | Notes |
 |---|---|
-| `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for". Returns `meeting`, `next_session`, the `commitments` actually inserted, and the cleaned `carry_forward_items` — see "Logging is all-or-nothing" |
+| `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for". Returns `meeting`, `next_session`, the `commitments` actually inserted, the cleaned `carry_forward_items`, and `undo_until` — see "Logging is all-or-nothing" |
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
 | `POST /open/{direct_report_id}` | the same, creating an empty gathering occurrence (no AI call) when there is none, so the meeting screen always has a row to start on |
 | `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one. `opening_line` omitted keeps the occurrence's; null clears it. Returns the sheet's `drew_on` source list |
 | `PATCH /session/{id}/schedule` | edits an unfinished occurrence's date and 1–4 week repeat rule; `scope` moves just this one or this and every one after |
-| `POST /wrapup` | notes → draft summary, commitments, carry-forward topics, and an `opening_line` for the next 1:1 |
+| `POST /wrapup` | notes, plus an optional `transcript_id` → draft summary, commitments, carry-forward topics, and an `opening_line` for the next 1:1. Saves nothing |
+| `POST /session/{id}/undo-log` | Undo on the receipt: reverses one Save log within 30 minutes (see below) |
 | `GET`/`POST /{direct_report_id}/captures`, `DELETE /captures/{id}` | between-session capture notes |
 
 `/overview` is declared before `/{id}`.
@@ -159,7 +160,24 @@ reload it is rebuilt, for the latest conversation only, from persisted records:
 the meeting and its linked commitments; carried topics are not recorded against
 a past meeting and are not reconstructed. If the page's refresh fails after a
 successful save, the receipt says so and offers a re-read, never a re-log.
-Dismissing it removes the query parameter. Decisions stay in the summary.
+Dismissing it removes the query parameter. Decisions stay in the summary. Its
+headline reads "Logged · 3 commitments · 2 topics carried · next 1:1 Thu, Oct
+30".
+
+**Undo.** For 30 minutes after a save the receipt offers Undo
+(`POST /session/{id}/undo-log`). The save records a before-picture of every
+row it changed in `one_on_ones.log_undo` (row ids, dates, the next
+workspace's carry-forwards and opening line, a career conversation it marked
+held; never notes). Undo removes the commitments the log added, puts the next
+workspace back field by field (or deletes the one the log created), returns a
+career conversation to planned, and returns the meeting to unfinished with
+its call notes, private notes and transcript still on it. A log that created
+its own row deletes that row, unless a transcript is attached (deleting a
+meeting cascades to its transcripts), in which case it too returns to
+unfinished. Undo is refused once the next 1:1 has been logged or prepped
+since, and after 30 minutes. In the browser, Save log keeps a copy of the
+meeting screen's local draft (ticks included) that Undo restores, so "Back to
+the 1:1" reopens it as it was.
 
 ## Scheduling and recurrence
 
@@ -476,6 +494,11 @@ Notes typed while off the record are saved with the log as
 value leaves the column alone, and a failed log puts the old value back.
 
 ## Wrap-up
+
+**On the meeting screen**, End 1:1 turns the same screen into the wrap-up and
+drafts from the call notes plus the call's transcript, when there is one
+(`call-transcription.md` → "The wrap-up"). The review screen below is the Log
+a 1:1 and prep path; both save through the same log.
 
 **Getting the notes in.** The call-notes field takes typing, dictation
 (`NoteField`), a pasted transcript from any recording tool, or an attached file

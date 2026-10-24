@@ -360,6 +360,19 @@ def drop_echo(lines: list[dict]) -> list[dict]:
     return [l for l in lines if l.get("speaker") != "self" or not is_echo(l)]
 
 
+def _manager_first_name(supabase, owner_id: str) -> Optional[str]:
+    """The recording manager's first name, for the report's read-only view.
+    Read as the report, so it only resolves where RLS already lets the
+    report see that user row (same org). None otherwise: the page says
+    "Your manager" rather than this widening what a report can read."""
+    try:
+        rows = supabase.table("users").select("full_name").eq("id", owner_id).limit(1).execute().data or []
+    except Exception:
+        return None
+    name = ((rows[0].get("full_name") if rows else "") or "").strip()
+    return name.split(" ")[0] if name else None
+
+
 def _summary(row: dict, user_id: str) -> dict:
     owner = row["owner_id"] == user_id
     out = {
@@ -475,7 +488,16 @@ def list_transcripts(
     rows = [_close_if_stale(supabase, r) if r["owner_id"] == user_id else r for r in rows]
     if status:
         rows = [r for r in rows if r.get("status") == status]
-    return {"transcripts": [_summary(r, user_id) for r in rows]}
+    names: dict[str, Optional[str]] = {}
+    out = []
+    for r in rows:
+        item = _summary(r, user_id)
+        if r["owner_id"] != user_id:
+            if r["owner_id"] not in names:
+                names[r["owner_id"]] = _manager_first_name(supabase, r["owner_id"])
+            item["manager_first_name"] = names[r["owner_id"]]
+        out.append(item)
+    return {"transcripts": out}
 
 
 @router.post("")
@@ -824,10 +846,34 @@ def get_transcript(transcript_id: str, auth=Depends(get_authenticated_client)):
 
     return {
         **_summary(row, user_id),
+        **({} if owner else {"manager_first_name": _manager_first_name(supabase, row["owner_id"])}),
         "segment_count": len(segments),
         "lines": outside_gaps(drop_echo(interleave(segments)), gaps),
         "gaps": gaps,
     }
+
+
+def lines_for_wrapup(supabase, transcript_id: str, user_id: str) -> tuple[dict, list[dict]]:
+    """The manager's own transcript, read the same way GET reads it for the
+    owner: tracks interleaved, echoes removed, and every line inside a pause,
+    off-the-record or stopped interval dropped. That last step is what keeps
+    off-the-record speech out of the wrap-up prompt even if a segment was cut
+    late. Raises 404 for a transcript that isn't the caller's own, so a report
+    (who can read it) can never draft from it."""
+    rows = (
+        supabase.table("call_transcripts").select(_TRANSCRIPT_COLUMNS)
+        .eq("id", transcript_id).eq("owner_id", user_id).limit(1).execute().data
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    row = _close_if_stale(supabase, rows[0])
+    segments = (
+        supabase.table("call_transcript_segments").select("seq, track, offset_ms, lines")
+        .eq("transcript_id", transcript_id).eq("owner_id", user_id)
+        .order("seq").order("track").execute().data or []
+    )
+    gaps = _gaps(supabase, transcript_id)
+    return row, outside_gaps(drop_echo(interleave(segments)), gaps)
 
 
 @router.delete("/{transcript_id}")

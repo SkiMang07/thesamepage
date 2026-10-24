@@ -247,6 +247,8 @@ export type OneOnOne = {
   direct_report_id: string;
   summary: string | null;
   notes?: string | null;
+  // Notes typed off the record on the meeting screen. Manager only.
+  private_notes?: string | null;
   prep_guide?: PrepGuide | null;
   scheduled_at: string | null;
   series_id?: string | null;
@@ -350,6 +352,12 @@ export type WrapUpCommitment = {
   description: string;
   committed_by: CommittedBy;
   due_date: string | null;
+  // Set when the draft drew on a transcript: "call" (source_ms is the time
+  // into the call) or "notes". Display only; never sent back on save.
+  source?: "call" | "notes" | null;
+  source_ms?: number | null;
+  // The owner couldn't be read off a speaker label (mic only).
+  owner_unsure?: boolean;
 };
 
 export type WrapUpDraft = {
@@ -358,6 +366,8 @@ export type WrapUpDraft = {
   follow_up_items: string[];
   // One line to open the next 1:1 with; "" when nothing was left open.
   opening_line: string;
+  // Present when the draft drew on the call's transcript.
+  transcript?: { status: CallTranscriptStatus; lines: number; mic_only: boolean; truncated: boolean } | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -1880,8 +1890,15 @@ export const updateOneOnOneSchedule = (
 
 // Raw call notes → AI-drafted summary + commitments (both sides). Draft only —
 // nothing is saved until logOneOnOne.
-export const wrapUpOneOnOne = (body: { direct_report_id: string; raw_notes: string }): Promise<WrapUpDraft> =>
+// With transcript_id, it also drafts from the call's transcript. Call notes
+// only: off-the-record notes are never sent here.
+export const wrapUpOneOnOne = (body: { direct_report_id: string; raw_notes: string; transcript_id?: string | null }): Promise<WrapUpDraft> =>
   authedFetch("/api/one-on-ones/wrapup", { method: "POST", body: JSON.stringify(body) });
+
+// Reverses a Save log from its receipt, within 30 minutes. Notes and the
+// transcript stay on the meeting; it becomes unfinished again.
+export const undoOneOnOneLog = (oneOnOneId: string): Promise<{ undone: true; meeting: OneOnOne | null; direct_report_id: string }> =>
+  authedFetch(`/api/one-on-ones/session/${oneOnOneId}/undo-log`, { method: "POST" });
 
 export const logOneOnOne = (body: {
   direct_report_id: string;
@@ -1920,6 +1937,8 @@ export type LogOneOnOneResult = {
   commitments: Commitment[];
   carry_forward_items: string[];
   opening_line?: string | null;
+  // Until when the receipt offers Undo; null when it can't.
+  undo_until?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -4454,6 +4473,9 @@ export type CallTranscript = {
   capture_mode?: "tab" | "screen" | "mic_only" | "desktop";
   ended_reason?: CallStopReason | null;
   ended_at_ms?: number | null;
+  // Report only: the recording manager's first name, when the report's
+  // account can see it (same org). Null: say "your manager".
+  manager_first_name?: string | null;
 };
 
 export type CallTranscriptGap = { start_ms: number; end_ms: number | null; kind?: "pause" | "off_record" | "stopped" };
@@ -4511,6 +4533,15 @@ export const uploadCallSegment = (
 
 export const getCallTranscript = (id: string): Promise<CallTranscriptDetail> =>
   authedFetch(`/api/call-transcripts/${id}`);
+
+// The caller's transcripts for one 1:1 (newest first). For the manager, how
+// the wrap-up finds the call's transcript after a reload; for the report,
+// the list RLS lets them read (ended calls of their own 1:1s only).
+export const listCallTranscripts = (params: { one_on_one_id?: string } = {}): Promise<{ transcripts: CallTranscript[] }> =>
+  authedFetch(`/api/call-transcripts${params.one_on_one_id ? `?one_on_one_id=${encodeURIComponent(params.one_on_one_id)}` : ""}`);
+
+export const deleteCallTranscript = (id: string): Promise<{ deleted: true }> =>
+  authedFetch(`/api/call-transcripts/${id}`, { method: "DELETE" });
 
 // The caller's running call, if any — how the pill comes back after a reload.
 export const getRecordingCallTranscripts = (): Promise<{ transcripts: CallTranscript[] }> =>

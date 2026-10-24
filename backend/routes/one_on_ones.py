@@ -49,6 +49,7 @@ from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from prep_guard import GuardContext, commitment_ref, expectation_ref, guard_item, manager_owed_refs, normalize_refs, unsupported_words
 from routes import career
+from routes.call_transcripts import lines_for_wrapup
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
@@ -184,13 +185,35 @@ class LogOneOnOneIn(BaseModel):
 
 class WrapUpRequest(BaseModel):
     direct_report_id: str
-    raw_notes: str  # what actually happened on the call — typed live or pasted
+    # The manager's call notes, typed live or pasted. Never the off-the-record
+    # notes: there is deliberately no field for those here.
+    raw_notes: str = Field(default="", max_length=60000)
+    # The meeting screen's transcript of this call, when it was transcribed.
+    # Must be the caller's own and attached to a 1:1 with this person.
+    transcript_id: str | None = None
 
 
 class WrapUpCommitment(BaseModel):
     description: str
     committed_by: str  # 'manager' | 'direct_report'
     due_date: str | None = None
+    # Where the draft found it: "call" (with source_ms, milliseconds into the
+    # call) or "notes". None for a draft made without a transcript.
+    source: Literal["call", "notes"] | None = None
+    source_ms: int | None = None
+    # The owner couldn't be read off a speaker label (the mic alone heard
+    # both people), so the manager should confirm it.
+    owner_unsure: bool = False
+
+
+class WrapUpTranscriptUse(BaseModel):
+    status: str
+    lines: int
+    # Only the mic was on for all of it: nothing in the transcript says who
+    # was speaking.
+    mic_only: bool
+    # Very long calls are cut to fit the prompt; the start is kept.
+    truncated: bool = False
 
 
 class WrapUpDraft(BaseModel):
@@ -201,6 +224,8 @@ class WrapUpDraft(BaseModel):
     # One sentence the manager could open the next 1:1 with. "" = nothing
     # left open that warrants one.
     opening_line: str = ""
+    # Set when the draft drew on a transcript.
+    transcript: WrapUpTranscriptUse | None = None
 
 
 class ScheduleUpdate(BaseModel):
@@ -578,22 +603,73 @@ Apply the frameworks and return the JSON described above."""
     return CachedPrompt(prefix, body)
 
 
-def _build_wrapup_prompt(report_name: str, raw_notes: str, today_iso: str) -> str:
-    """Distill raw in-call notes (typed live or pasted from a recorder) into a
-    draft summary, commitments from BOTH sides, and possible carry-forward
-    topics. The manager reviews and edits everything before it is saved."""
-    prefix = """You are helping a manager log a 1:1 they just had with one of their direct reports. Distill the raw call notes into a clean, reviewable record. The manager will edit your draft before saving — be precise, not exhaustive. The report's name, today's date and the notes follow in the material below.
+# A 60-minute two-track call is roughly 10–14k tokens. Two hours on both
+# tracks still fits; past this the start of the call is kept and the draft
+# says it was cut.
+WRAPUP_TRANSCRIPT_MAX_CHARS = 120_000
 
+
+def _call_clock(ms: int) -> str:
+    """Milliseconds into the call as m:ss, or h:mm:ss past an hour."""
+    total = max(0, int(ms)) // 1000
+    hours, rest = divmod(total, 3600)
+    minutes, seconds = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+
+
+def _speaker_label(track: str, report_name: str) -> str:
+    if track == "self":
+        return "YOU (manager)"
+    if track == "other":
+        return report_name.split(" ")[0].upper() or "THEM"
+    return "MIC (both of you, speaker unknown)"
+
+
+def format_transcript_for_wrapup(lines: list[dict], report_name: str) -> tuple[str, bool]:
+    """Numbered, timed, labelled lines for the prompt. L-numbers start at 1
+    and index into `lines`, so the route can map a cited line back to its
+    time and track. Returns (block, truncated)."""
+    out: list[str] = []
+    used = 0
+    for i, line in enumerate(lines, start=1):
+        text = " ".join(str(line.get("text") or "").split())
+        row = f"[L{i} {_call_clock(line.get('t_ms', 0))}] {_speaker_label(line.get('speaker', 'mixed'), report_name)}: {text}"
+        if used + len(row) > WRAPUP_TRANSCRIPT_MAX_CHARS:
+            return "\n".join(out), True
+        out.append(row)
+        used += len(row) + 1
+    return "\n".join(out), False
+
+
+_WRAPUP_TASK = """You are helping a manager log a 1:1 they just had with one of their direct reports. Distill the material into a clean, reviewable record. The manager will edit your draft before saving — be precise, not exhaustive. The report's name, today's date and the material follow below."""
+
+_WRAPUP_TRANSCRIPT_RULES = """
+You have two labelled inputs:
+- THE MANAGER'S NOTES: what the manager thought mattered, in their own words. They may be short or empty.
+- THE TRANSCRIPT: what was said, by whom. It is a machine transcript: words, and especially names, can be misheard. Prefer the notes' spelling of any name.
+
+How to use them:
+- The notes win on emphasis. Lead the summary with what the notes treat as important. Where the notes and the transcript disagree, follow the notes.
+- Use the transcript for what the notes leave out: who agreed to what, dates that were said, details the manager didn't write down.
+- Never quote the transcript at length. Write the summary in your own words; a quoted phrase of more than a few words is never needed.
+- Ignore small talk, greetings and logistics about the call itself.
+- Each transcript line starts with an id, a time into the call and a speaker label. The label comes from which microphone heard it, never from a guess:
+  - YOU (manager) is the manager.
+  - The report's first name in capitals is the report.
+  - MIC (both of you, speaker unknown) means only the manager's microphone was on, so that line could be either person.
+"""
+
+_WRAPUP_OUTPUTS = """
 Produce:
 
 1. summary — 2–4 sentences capturing what was actually discussed: decisions made, concerns raised, wins, changes in the situation. Write it so that reading it three weeks from now instantly restores context. State the substance directly — no "we discussed X" padding.
 
 2. commitments — every explicit commitment made by either person. Rules:
    - Include only things someone actually agreed to DO. Topics discussed, open questions, and vague intentions ("we should think about...") are NOT commitments unless clearly accepted as an action.
+   - A commitment needs support in the material. Do NOT invent commitments. An empty list is a valid answer.
    - committed_by: "manager" if the manager owes it, "direct_report" if the report owes it.
    - due_date: ISO date (YYYY-MM-DD) only when a deadline was stated or clearly implied — resolve relative dates from today's date. Otherwise null. Never guess a date.
-   - Phrase each as one short actionable sentence starting with a verb ("Send intro to the design team").
-   - Do NOT invent commitments. An empty list is a valid answer.
+   - Phrase each as one short actionable sentence starting with a verb ("Send intro to the design team").{commitment_extra}
 
 3. follow_up_items — unresolved topics or questions the manager may want to revisit in the next 1:1. Rules:
    - These are NOT actions someone agreed to take; those belong in commitments.
@@ -604,18 +680,50 @@ Produce:
 4. opening_line — one sentence the manager could say to open the NEXT 1:1, picking up the single most important thread this call left open (a commitment with a date, or a topic explicitly deferred). Rules:
    - Written as the manager would say it to the report: plain, warm, specific, ending in a question. Name the thing and, if one was stated, the date.
    - Ask where it landed; never check up on the person. No "don't forget", no "you said you'd", no "as you promised".
-   - Only from what is in these notes. If nothing was left open that is worth opening with, return "". An empty string is a valid answer.
+   - Only from what is in this material. If nothing was left open that is worth opening with, return "". An empty string is a valid answer.
 
 Return ONLY valid JSON. No commentary, no markdown, no code fences.
 
-{"summary": "...", "commitments": [{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"], "opening_line": "Last time we agreed to revisit the renewal forecast by the 3rd. Where did it land?"}"""
+{example}"""
+
+_COMMITMENT_TRANSCRIPT_RULES = """
+   - committed_by comes from who took it on. In the transcript that is the speaker label of the person who agreed to do it (often the one who answered "sure, I'll..."), not the person who asked.
+   - source: the id of the transcript line where it was agreed ("L14"), or "notes" when it is only in the notes.
+   - owner_unsure: true when you can't tell the owner from a label — always for a line labelled MIC (both of you, speaker unknown) — and false otherwise."""
+
+_EXAMPLE_NOTES_ONLY = """{"summary": "...", "commitments": [{"description": "...", "committed_by": "manager", "due_date": "2026-08-07"}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"], "opening_line": "Last time we agreed to revisit the renewal forecast by the 3rd. Where did it land?"}"""
+
+_EXAMPLE_TRANSCRIPT = """{"summary": "...", "commitments": [{"description": "...", "committed_by": "manager", "due_date": "2026-08-07", "source": "L14", "owner_unsure": false}], "follow_up_items": ["Revisit how the Acme renewal risk is changing"], "opening_line": "Last time we agreed to revisit the renewal forecast by the 3rd. Where did it land?"}"""
+
+
+def _build_wrapup_prompt(report_name: str, raw_notes: str, today_iso: str, transcript_block: str | None = None) -> str:
+    """Distill the call into a draft summary, commitments from BOTH sides,
+    and possible carry-forward topics. With a transcript, the prompt takes
+    two labelled inputs (the manager's notes and the transcript); the notes
+    win on emphasis and owners come from the speaker labels. Off-the-record
+    notes never reach this function. The manager reviews and edits
+    everything before it is saved."""
+    with_transcript = transcript_block is not None
+    prefix = _WRAPUP_TASK + (_WRAPUP_TRANSCRIPT_RULES if with_transcript else "") + _WRAPUP_OUTPUTS.format(
+        commitment_extra=_COMMITMENT_TRANSCRIPT_RULES if with_transcript else "",
+        example=_EXAMPLE_TRANSCRIPT if with_transcript else _EXAMPLE_NOTES_ONLY,
+    )
+
+    if with_transcript:
+        material = f"""THE MANAGER'S NOTES (typed during the call):
+{raw_notes.strip() or '(The manager wrote no notes. Work from the transcript.)'}
+
+THE TRANSCRIPT (machine transcript, one line per utterance):
+{transcript_block or '(Nothing was transcribed.)'}"""
+    else:
+        material = f"""RAW CALL NOTES (typed during the call, or pasted from a transcript/recording tool — may be messy, fragmentary, or verbatim):
+{raw_notes}"""
 
     body = f"""THIS 1:1 WAS WITH {report_name}.
 
 Today's date: {today_iso} (use it to resolve relative deadlines like "by Friday" or "end of month").
 
-RAW CALL NOTES (typed during the call, or pasted from a transcript/recording tool — may be messy, fragmentary, or verbatim):
-{raw_notes}
+{material}
 
 Return the JSON described above."""
     return CachedPrompt(prefix, body)
@@ -1675,13 +1783,54 @@ def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_a
     if not report_result.data:
         raise HTTPException(status_code=404, detail="Direct report not found")
 
+    report_name = report_result.data["name"]
+
+    lines: list[dict] = []
+    transcript_use: WrapUpTranscriptUse | None = None
+    transcript_block: str | None = None
+    if body.transcript_id:
+        lines, transcript_use, transcript_block = _wrapup_transcript(
+            supabase, user_id, body.direct_report_id, body.transcript_id, report_name
+        )
+
+    if not body.raw_notes.strip() and not lines:
+        # Nothing to draft from. The review asks for a summary by hand.
+        return WrapUpDraft(summary="", commitments=[], follow_up_items=[], opening_line="", transcript=transcript_use)
+
     prompt = _build_wrapup_prompt(
-        report_name=report_result.data["name"],
+        report_name=report_name,
         raw_notes=body.raw_notes,
         today_iso=date.today().isoformat(),
+        transcript_block=transcript_block,
     )
-    raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=1500)
+    raw = generate_text(prompt, model=AI_DEFAULT_MODEL_HEAVY, max_tokens=2500 if transcript_block is not None else 1500)
+    return _parse_wrapup_draft(raw, lines, transcript_use)
 
+
+def _wrapup_transcript(supabase, user_id: str, direct_report_id: str, transcript_id: str, report_name: str):
+    """The lines a wrap-up may draw on, or 404. Only the manager's own
+    transcript, and only one attached to a 1:1 with this same person."""
+    row, lines = lines_for_wrapup(supabase, transcript_id, user_id)
+    meeting_id = row.get("one_on_one_id")
+    owned = meeting_id and (
+        supabase.table("one_on_ones").select("id")
+        .eq("id", meeting_id).eq("manager_id", user_id).eq("direct_report_id", direct_report_id)
+        .limit(1).execute().data
+    )
+    if not owned:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    block, truncated = format_transcript_for_wrapup(lines, report_name)
+    speakers = {line.get("speaker") for line in lines}
+    use = WrapUpTranscriptUse(
+        status=row.get("status") or "ready",
+        lines=len(lines),
+        mic_only=bool(lines) and speakers <= {"mixed"},
+        truncated=truncated,
+    )
+    return lines, use, block
+
+
+def _parse_wrapup_draft(raw: str, lines: list[dict], transcript_use: "WrapUpTranscriptUse | None") -> WrapUpDraft:
     # Strip markdown code fences — model sometimes wraps JSON in ```json...```
     raw_clean = raw.strip()
     if raw_clean.startswith("```"):
@@ -1695,9 +1844,13 @@ def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_a
         # Empty draft — the review screen requires a summary before saving,
         # so the manager writes one by hand instead of getting an error.
         parsed = {"summary": "", "commitments": [], "follow_up_items": [], "opening_line": ""}
+    if not isinstance(parsed, dict):
+        parsed = {}
 
     commitments: list[WrapUpCommitment] = []
-    for item in parsed.get("commitments", []):
+    for item in parsed.get("commitments") or []:
+        if not isinstance(item, dict):
+            continue
         description = (item.get("description") or "").strip()
         if not description:
             continue
@@ -1708,20 +1861,49 @@ def wrap_up_one_on_one(request: Request, body: WrapUpRequest, auth=Depends(get_a
         if due_date:
             try:
                 date.fromisoformat(due_date)
-            except ValueError:
+            except (TypeError, ValueError):
                 due_date = None
+        source = source_ms = None
+        owner_unsure = False
+        if transcript_use is not None:
+            source, source_ms, owner_unsure = _commitment_source(item, lines)
         commitments.append(
-            WrapUpCommitment(description=description, committed_by=committed_by, due_date=due_date)
+            WrapUpCommitment(
+                description=description, committed_by=committed_by, due_date=due_date,
+                source=source, source_ms=source_ms, owner_unsure=owner_unsure,
+            )
         )
 
-    follow_up_items = _clean_follow_up_items(parsed.get("follow_up_items") or [])
+    follow_up_items = _clean_follow_up_items([i for i in (parsed.get("follow_up_items") or []) if isinstance(i, str)])
     opening_line = parsed.get("opening_line")
+    summary = parsed.get("summary")
     return WrapUpDraft(
-        summary=parsed.get("summary", "") or "",
+        summary=summary if isinstance(summary, str) else "",
         commitments=commitments,
         follow_up_items=follow_up_items,
         opening_line=_clean_opening_line(opening_line if isinstance(opening_line, str) else None) or "",
+        transcript=transcript_use,
     )
+
+
+def _commitment_source(item: dict, lines: list[dict]) -> tuple[str | None, int | None, bool]:
+    """Checks the line the model cited against the real lines. A cited line
+    that doesn't exist is dropped, never trusted. A line the mic alone heard
+    names nobody, so its owner is always for the manager to confirm,
+    whatever the model said."""
+    cited = str(item.get("source") or "").strip().upper()
+    unsure = item.get("owner_unsure") is True
+    if cited.startswith("L") and cited[1:].isdigit():
+        index = int(cited[1:]) - 1
+        if 0 <= index < len(lines):
+            line = lines[index]
+            if line.get("speaker") == "mixed":
+                unsure = True
+            return "call", int(line.get("t_ms", 0)), unsure
+        return None, None, True
+    if cited == "NOTES":
+        return "notes", None, unsure
+    return None, None, unsure
 
 
 @router.post("")
@@ -1841,6 +2023,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         if c.description.strip()
     ]
     created_commitments: list[dict] = []
+    next_before: dict | None = None
     try:
         # One statement, so the reviewed commitments land together or not at
         # all — never the first two of five.
@@ -1904,6 +2087,14 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         )
         open_rows = open_rows_query.limit(1).execute().data
         if open_rows:
+            next_before = {
+                "id": open_rows[0]["id"],
+                "inserted": False,
+                "before": {
+                    **{key: open_rows[0].get(key) for key in _NEXT_UNDO_FIELDS},
+                    "had_prep": bool(open_rows[0].get("prep_guide")),
+                },
+            }
             merged = _clean_follow_up_items(
                 [*(open_rows[0].get("carry_forward_items") or []), *carry_forward_items]
             )
@@ -1946,6 +2137,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
                 .execute()
                 .data[0]
             )
+            next_before = {"id": next_session["id"], "inserted": True, "before": None}
         next_session["one_on_one_series"] = series or {}
         next_session = _serialize_session(next_session)
 
@@ -1970,7 +2162,28 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
 
     # A planned career conversation on this 1:1 is now held. Never fails
     # the log (routes/career.py).
-    career.on_session_logged(supabase, user_id, body.direct_report_id, meeting)
+    career_before = career.on_session_logged(supabase, user_id, body.direct_report_id, meeting)
+
+    # Undo on the receipt: the before-picture of every row this save changed.
+    # Never the call notes or private notes; Undo leaves those where they
+    # are so nothing the manager typed is lost. Best effort: a failure here
+    # only means the receipt can't offer Undo.
+    undo_until = None
+    try:
+        snapshot = {
+            "saved_at": logged_at,
+            "meeting": {
+                "inserted": prior_session is None,
+                **({key: prior_session.get(key) for key in ("logged_at", "scheduled_at")} if prior_session else {}),
+            },
+            "commitment_ids": [row["id"] for row in created_commitments if row.get("id")],
+            "next": next_before,
+            "career": career_before,
+        }
+        supabase.table("one_on_ones").update({"log_undo": snapshot}).eq("id", meeting["id"]).eq("manager_id", user_id).execute()
+        undo_until = (datetime.fromisoformat(logged_at) + LOG_UNDO_WINDOW).isoformat()
+    except Exception as exc:
+        logger.warning("1:1 log saved without Undo: %s", type(exc).__name__)
 
     # Everything the receipt shows comes from what the database returned for
     # this request: the completed meeting, the commitments actually inserted
@@ -1982,6 +2195,107 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         "commitments": created_commitments,
         "carry_forward_items": carry_forward_items,
         "opening_line": opening_line,
+        # When Undo stops being offered; None when it can't be.
+        "undo_until": undo_until,
+    }
+
+
+# Undo is offered on the receipt for this long after a save.
+LOG_UNDO_WINDOW = timedelta(minutes=30)
+# What a save may change on the next 1:1's workspace, and so what Undo puts back.
+_NEXT_UNDO_FIELDS = ("carry_forward_items", "opening_line", "series_id", "scheduled_at", "series_slot_at")
+
+
+@router.post("/session/{one_on_one_id}/undo-log")
+@limiter.limit("10/minute")
+def undo_log(request: Request, one_on_one_id: str, auth=Depends(get_authenticated_client)):
+    """Reverse a Save log from its receipt, within 30 minutes. Removes the
+    commitments it added, puts the next 1:1's workspace back as it was (or
+    removes the one it created), returns a planned career conversation to
+    planned, and returns the meeting to unfinished. The call notes, private
+    notes and any transcript stay on the meeting, so logging it again starts
+    from everything the manager had."""
+    user_id, supabase = auth
+    rows = (
+        supabase.table("one_on_ones").select("*")
+        .eq("id", one_on_one_id).eq("manager_id", user_id).limit(1).execute().data
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting = rows[0]
+    snapshot = meeting.get("log_undo")
+    if not meeting.get("summary") or not isinstance(snapshot, dict):
+        raise HTTPException(status_code=409, detail={"code": "nothing_to_undo", "message": "This log can't be undone."})
+    try:
+        saved_at = datetime.fromisoformat(snapshot["saved_at"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=409, detail={"code": "nothing_to_undo", "message": "This log can't be undone."})
+    if datetime.now(timezone.utc) - saved_at > LOG_UNDO_WINDOW:
+        raise HTTPException(status_code=409, detail={
+            "code": "undo_window_passed",
+            "message": "It's been more than 30 minutes, so this log can't be undone. Edit it on the person's page instead.",
+        })
+
+    next_info = snapshot.get("next") or {}
+    next_row = None
+    if next_info.get("id"):
+        found = (
+            supabase.table("one_on_ones").select("*")
+            .eq("id", next_info["id"]).eq("manager_id", user_id).limit(1).execute().data
+        )
+        next_row = found[0] if found else None
+        # Something has happened to the next 1:1 since (it was logged, or a
+        # prep sheet was built on it). Undoing now would throw that away.
+        had_prep = bool((next_info.get("before") or {}).get("had_prep"))
+        if next_row and (next_row.get("summary") or (next_row.get("prep_guide") and not had_prep)):
+            raise HTTPException(status_code=409, detail={
+                "code": "next_meeting_changed",
+                "message": "The next 1:1 has changed since you saved, so this log can't be undone.",
+            })
+
+    for commitment_id in snapshot.get("commitment_ids") or []:
+        supabase.table("commitments").delete().eq("id", commitment_id).eq("owner_id", user_id).execute()
+
+    # The next workspace first: there is one unfinished 1:1 per person, and
+    # the meeting becomes unfinished again below.
+    if next_row:
+        if next_info.get("inserted"):
+            supabase.table("one_on_ones").delete().eq("id", next_row["id"]).eq("manager_id", user_id).is_("summary", "null").execute()
+        elif isinstance(next_info.get("before"), dict):
+            restore = {key: next_info["before"].get(key) for key in _NEXT_UNDO_FIELDS}
+            if restore.get("carry_forward_items") is None:
+                restore["carry_forward_items"] = []
+            supabase.table("one_on_ones").update(restore).eq("id", next_row["id"]).eq("manager_id", user_id).execute()
+
+    career.on_session_log_undone(supabase, user_id, snapshot.get("career"))
+
+    meeting_info = snapshot.get("meeting") or {}
+    # Deleting a meeting deletes its transcripts with it (on delete cascade),
+    # so a row with a transcript attached is only ever returned to unfinished.
+    has_transcript = bool(
+        supabase.table("call_transcripts").select("id")
+        .eq("one_on_one_id", meeting["id"]).eq("owner_id", user_id).limit(1).execute().data
+    )
+    if meeting_info.get("inserted") and not has_transcript:
+        # An ad-hoc log made this row. Without the log it was never a 1:1.
+        supabase.table("commitments").delete().eq("source_type", "one_on_one").eq("source_id", meeting["id"]).eq("owner_id", user_id).execute()
+        supabase.table("one_on_ones").delete().eq("id", meeting["id"]).eq("manager_id", user_id).execute()
+        restored = None
+    else:
+        restored = (
+            supabase.table("one_on_ones").update({
+                "summary": None,
+                "logged_at": meeting_info.get("logged_at"),
+                "scheduled_at": meeting_info.get("scheduled_at"),
+                "log_undo": None,
+            }).eq("id", meeting["id"]).eq("manager_id", user_id).execute().data or [None]
+        )[0]
+
+    analytics.capture(user_id, "one_on_one_log_undone", {"ad_hoc": bool(meeting_info.get("inserted"))})
+    return {
+        "undone": True,
+        "meeting": _serialize_session(restored) if restored else None,
+        "direct_report_id": meeting["direct_report_id"],
     }
 
 

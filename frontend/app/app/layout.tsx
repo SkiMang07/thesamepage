@@ -71,7 +71,9 @@ const DARK_WITHOUT_NAV = new Set(["/app/start"]);
 function AppShell({ children }: { children: React.ReactNode }) {
   const { isOpen, toggle, close } = useDrawer();
   const pathname = usePathname();
-  const showNav = !NO_NAV_PATHS.has(pathname ?? "");
+  // The report's pages (/app/ic and its transcripts) sit outside the
+  // manager's product chrome, like the IC landing always has.
+  const showNav = !NO_NAV_PATHS.has(pathname ?? "") && !(pathname ?? "").startsWith("/app/ic/");
   const dark = showNav || DARK_WITHOUT_NAV.has(pathname ?? "");
 
   const handleKeyDown = useCallback(

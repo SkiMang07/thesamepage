@@ -67,6 +67,7 @@ import {
   DevelopmentBundle,
   CareerPersonDetail,
   CaptureNote,
+  undoOneOnOneLog,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
 import StartOneOnOne from "@/components/meet/StartOneOnOne";
@@ -79,6 +80,7 @@ import { createSectionLoader } from "@/lib/sectionLoader";
 import PersonAvatar from "@/components/team/PersonAvatar";
 import { addDaysStr, localDateStr } from "@/components/team/dates";
 import { takeOneOnOneReceipt, type OneOnOneReceiptStash } from "@/lib/one-on-one-receipt";
+import { restoreDraftAfterUndo } from "@/lib/meeting-draft";
 import ConversationPanel from "@/components/relationship/ConversationPanel";
 import CareerConversation from "@/components/relationship/CareerConversation";
 import CaptureBox from "@/components/relationship/CaptureBox";
@@ -319,6 +321,7 @@ function RelationshipDesk() {
         carried: stash.carry_forward_items ?? null,
         next: stash.next_session,
         reconciled: false,
+        undoUntil: stash.undo_until ?? null,
       });
     } else if (recorded && recorded.id === history.find((s) => s.status === "completed")?.id) {
       // Rebuilt only for the latest conversation: its successor is the
@@ -330,6 +333,9 @@ function RelationshipDesk() {
         carried: null,
         next: history.find((s) => s.status !== "completed") ?? null,
         reconciled: reconciledParam,
+        // The server keeps Undo for 30 minutes after the save, and says so
+        // if this log can't be undone.
+        undoUntil: recorded.logged_at ? new Date(Date.parse(recorded.logged_at) + 30 * 60_000).toISOString() : null,
       });
     } else {
       // Nothing this manager can verify: no receipt, and drop the param.
@@ -395,6 +401,27 @@ function RelationshipDesk() {
     setReceipt(null);
     stashRef.current = null;
     router.replace(`/app/reports/${id}`, { scroll: false });
+  }
+
+  // Undo on the receipt: the log is reversed on the server, and the meeting
+  // screen's draft comes back so the 1:1 reopens with everything typed.
+  const [undone, setUndone] = useState<{ reopened: boolean } | null>(null);
+  async function undoReceipt() {
+    if (!receipt) return;
+    const meeting = receipt.meeting;
+    const res = await undoOneOnOneLog(meeting.id);
+    if (res.meeting) restoreDraftAfterUndo(meeting.id, { notes: meeting.notes, private_notes: meeting.private_notes });
+    setReceipt(null);
+    stashRef.current = null;
+    setUndone({ reopened: !!res.meeting });
+    router.replace(`/app/reports/${id}`, { scroll: false });
+    try {
+      const data = await loadAll();
+      applyLoaded(data);
+      setLoadedVersion((v) => v + 1);
+    } catch {
+      /* the lists refresh on the next visit */
+    }
   }
 
   function showCommitments() {
@@ -632,6 +659,24 @@ function RelationshipDesk() {
 
       {/* Relationship */}
       <div id="desk-panel-relationship" role="tabpanel" aria-labelledby="desk-tab-relationship" hidden={view !== "relationship"} className="pt-7">
+        {undone && !receipt && (
+          <div role="status" className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-surface px-5 py-4 text-sm text-ink-body">
+            <span className="min-w-0 flex-1">
+              {undone.reopened
+                ? `Undone. Nothing from that log is saved, and the 1:1 with ${report.name.split(" ")[0]} is open again with your notes.`
+                : "Undone. Nothing from that log is saved."}
+            </span>
+            {undone.reopened && (
+              <Link href={`/app/reports/${id}/meet`} className="font-medium text-brand hover:text-brand-hover">
+                Back to the 1:1
+              </Link>
+            )}
+            <button type="button" onClick={() => setUndone(null)} className="rounded px-2 py-1 text-xs text-ink-secondary hover:bg-sunken hover:text-ink">
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {receipt && (
           <OneOnOneReceipt
             receipt={receipt}
@@ -641,6 +686,7 @@ function RelationshipDesk() {
             retrying={refreshing}
             onRetryRefresh={retryRefresh}
             onDismiss={dismissReceipt}
+            onUndo={undoReceipt}
             onViewConversation={() => openConversation(receipt.meeting.id)}
           />
         )}

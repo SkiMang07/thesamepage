@@ -76,3 +76,64 @@ export function pruneDrafts() {
     /* best effort */
   }
 }
+
+// ── kept for Undo ─────────────────────────────────────────────────────────
+// Save log clears the draft, and the receipt's Undo (30 minutes, enforced on
+// the server) reopens the 1:1. So Save log moves the draft here instead of
+// dropping it, and Undo moves it back: covered ticks and added topics
+// included, which the server never had.
+
+const UNDO_PREFIX = "tsp:meeting-draft-undo:";
+const UNDO_MAX_AGE_MS = 30 * 60 * 1000;
+
+/** Clears the draft, keeping a copy for the receipt's Undo. */
+export function clearDraftKeepingForUndo(oneOnOneId: string, draft: MeetingDraft) {
+  try {
+    pruneUndoDrafts();
+    window.localStorage.setItem(UNDO_PREFIX + oneOnOneId, JSON.stringify({ ...draft, updatedAt: Date.now() }));
+  } catch {
+    /* without storage, Undo falls back to the notes saved with the log */
+  }
+  clearDraft(oneOnOneId);
+}
+
+/** After Undo: the draft back as it was at Save log, or built from the notes
+ *  the log saved when this browser didn't keep one. */
+export function restoreDraftAfterUndo(oneOnOneId: string, fallback: { notes?: string | null; private_notes?: string | null }) {
+  let restored: MeetingDraft | null = null;
+  try {
+    const raw = window.localStorage.getItem(UNDO_PREFIX + oneOnOneId);
+    window.localStorage.removeItem(UNDO_PREFIX + oneOnOneId);
+    if (raw) {
+      const d = JSON.parse(raw) as Partial<MeetingDraft>;
+      restored = {
+        notes: typeof d.notes === "string" ? d.notes : "",
+        privateNotes: typeof d.privateNotes === "string" ? d.privateNotes : "",
+        covered: Array.isArray(d.covered) ? d.covered.filter((x): x is string => typeof x === "string") : [],
+        added: Array.isArray(d.added) ? d.added.filter((x): x is string => typeof x === "string") : [],
+        updatedAt: Date.now(),
+      };
+    }
+  } catch {
+    restored = null;
+  }
+  saveDraft(
+    oneOnOneId,
+    restored ?? { ...EMPTY_DRAFT, notes: fallback.notes ?? "", privateNotes: fallback.private_notes ?? "", updatedAt: Date.now() },
+  );
+}
+
+function pruneUndoDrafts() {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key?.startsWith(UNDO_PREFIX)) continue;
+      const d = JSON.parse(window.localStorage.getItem(key) || "{}") as Partial<MeetingDraft>;
+      if (!d.updatedAt || Date.now() - d.updatedAt > UNDO_MAX_AGE_MS) stale.push(key);
+    }
+    stale.forEach((k) => window.localStorage.removeItem(k));
+  } catch {
+    /* best effort */
+  }
+}
