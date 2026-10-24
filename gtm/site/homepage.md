@@ -194,6 +194,52 @@ organisation-level product.
 - The product has demonstrated improvements in confidence, management quality,
   employee performance, engagement, retention or conversion.
 
+## Call transcription copy (held until the real-call check)
+
+Backlog Block I ("It isn't only typing"). The Digital Customers read the page as
+all typing and said that's where they'd stop. Built-in 1:1 transcription answers
+that directly, so the week note leads with it. The honest limit about other
+tools stays.
+
+**The ways in, in the same words everywhere** (site, first-run screens, empty
+states): transcribe the 1:1, say it, paste a transcript, upload a file, or type.
+
+**Week note, decided 2026-10-24.** This replaces the `strip_note` field on
+`home-week.module`, which today still defaults to the old "Yes, it's somewhere
+else to write things down" line:
+
+> **That's the week.** Four entries, and one of them is the 1:1 you'd have had
+> anyway. You don't have to write it down. Start the 1:1 here and it's
+> transcribed on your computer, with no bot joining the call. Or say it, paste a
+> transcript from another tool, or type. Nothing arrives on its own from your
+> other tools, so what's there is what you put there.
+
+The Tuesday entry ("You write up your 1:1") reads as typing next to that note.
+It changes in the same edit, to "You hold your 1:1 here", with the result line
+"It drafts the summary and the commitment from the transcript and your notes.
+You fix the date and approve it." Those two lines are still hardcoded in the
+module.
+
+**The gate.** None of this goes live until (1) the real-call check has passed
+on Andrew's 1:1 (call-tab capture, echo, names, End → Save, the report's view)
+and (2) every claim is checked on the deployed app. Then the note is pasted
+into the HubSpot field. No developer is needed.
+
+**What the copy may claim once live:**
+
+- Supported: transcribed on the manager's computer; no bot joins the call;
+  audio isn't kept, only text; the wrap-up drafts from the transcript and the
+  notes, and nothing saves until the manager approves it.
+- Requires qualification: the other side of a video call is added from Chrome
+  (other browsers hear the microphone only); labels come from which source
+  heard a line, not from recognising voices.
+- Unsupported: "records your meetings" (we transcribe and throw the audio
+  away); speaker recognition; anything automatic from Granola, Gemini or Otter;
+  team and outside meetings until session 5 ships.
+
+**Already in the app.** The first-1:1 "Prep sheet saved" banner carries the
+ways-in line, because Meet is live there.
+
 ## The product promise
 
 Written 2026-09-27 from Andrew's ask to articulate what a complete The Same Page gets

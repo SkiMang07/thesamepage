@@ -464,6 +464,11 @@ def set_consent(request: Request, body: ConsentIn, auth=Depends(get_authenticate
         return {"transcription_consent_at": current}
     value = _now().isoformat() if body.consented else None
     supabase.table(table).update({"transcription_consent_at": value}).eq(key, pid).eq(owner_col, user_id).execute()
+    if not body.consented and current:
+        # Only a real clear counts, never a second untick. Flags only.
+        analytics.capture(user_id, "transcription_consent_cleared", {
+            "person_kind": "direct_report" if body.direct_report_id else "outside_person",
+        })
     return {"transcription_consent_at": value}
 
 
@@ -882,6 +887,30 @@ def delete_transcript(request: Request, transcript_id: str, auth=Depends(get_aut
     """The manager deletes a transcript at any time. Segments and gaps go with
     it; the hours it used stay used."""
     user_id, supabase = auth
-    _load_own(supabase, transcript_id, user_id)
+    row = _load_own(supabase, transcript_id, user_id)
     supabase.table("call_transcripts").delete().eq("id", transcript_id).eq("owner_id", user_id).execute()
+    analytics.capture(user_id, "call_transcript_deleted", {"meeting_type": _meeting_type(row)})
     return {"deleted": True}
+
+
+def meeting_has_transcript(supabase, user_id: str, one_on_one_id: str) -> bool:
+    """True when this manager's 1:1 has a transcript with at least one stored
+    segment. Used only for the call_transcript_used_in_wrapup event, so a
+    failed lookup answers False rather than failing the caller."""
+    try:
+        ids = [
+            r["id"] for r in (
+                supabase.table("call_transcripts").select("id")
+                .eq("one_on_one_id", one_on_one_id).eq("owner_id", user_id).execute().data or []
+            )
+        ]
+        if not ids:
+            return False
+        seg = (
+            supabase.table("call_transcript_segments").select("seq")
+            .in_("transcript_id", ids).limit(1).execute().data
+        )
+        return bool(seg)
+    except Exception:
+        logger.info("transcript lookup for analytics failed", exc_info=True)
+        return False

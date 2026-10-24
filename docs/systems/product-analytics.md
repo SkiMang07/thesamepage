@@ -67,6 +67,9 @@ What we measure about how managers use the app, how it is collected, and the rul
 |`call_transcription_started`|server, `POST /api/call-transcripts`|a call transcript starts (the row is created)|`capture_mode` (`tab`, `screen`, `mic_only` or `desktop`), `meeting_type` (`one_on_one`, `team_meeting` or `outside_meeting`). No names or text|
 |`call_transcription_ended`|server, `POST /api/call-transcripts/{id}/end`|the manager or the client stops transcribing (each stop, including after a resume)|`ended_reason` (`manager`, `silence`, `max_length`, `share_ended` or `allowance`), `minutes_bucket` (`<15`, `15-30`, `30-60` or `60+`, wall time since start), `segments_failed` (int, the track/seq pairs in `seqs_by_track` not yet stored at that moment; with only `last_seq`, seqs with no track stored)|
 |`call_transcription_allowance_hit`|server, `POST /api/call-transcripts`|a start is refused because the allowance is used up|`plan_state` (`paid`, `comped`, `founding`, `test`, `trial`, `read_only`, `ic` or `none`)|
+|`call_transcript_used_in_wrapup`|server, `POST /api/one-on-ones`|a 1:1 log saves and that 1:1 has a call transcript with at least one stored segment (after the save and its Undo snapshot, so a failed save never counts)|`meeting_type` (`one_on_one`; team and outside meetings join when their transcription ships)|
+|`call_transcript_deleted`|server, `DELETE /api/call-transcripts/{id}`|the manager deletes a transcript (allowed on every plan, read-only included)|`meeting_type` (`one_on_one`, `team_meeting` or `outside_meeting`)|
+|`transcription_consent_cleared`|server, `PUT /api/call-transcripts/consent`|consent that was set is cleared from the person's page (a second untick fires nothing)|`person_kind` (`direct_report` or `outside_person`)|
 
 `is_first` is worked out before the write by `_manager_has_prep_sheet()` in `routes/one_on_ones.py`: any 1:1 row for this manager with `prep_guide` set, planned or completed.
 

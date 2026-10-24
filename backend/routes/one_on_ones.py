@@ -49,7 +49,7 @@ from ai_core import CachedPrompt, generate_text
 from config import AI_DEFAULT_MODEL_HEAVY
 from prep_guard import GuardContext, commitment_ref, expectation_ref, guard_item, manager_owed_refs, normalize_refs, unsupported_words
 from routes import career
-from routes.call_transcripts import lines_for_wrapup
+from routes.call_transcripts import lines_for_wrapup, meeting_has_transcript
 from routes.beyond import fetch_secondhand_notes
 from routes.direct_reports import fetch_role_expectations
 from utils import (
@@ -2184,6 +2184,11 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         undo_until = (datetime.fromisoformat(logged_at) + LOG_UNDO_WINDOW).isoformat()
     except Exception as exc:
         logger.warning("1:1 log saved without Undo: %s", type(exc).__name__)
+
+    # Did this saved wrap-up have a call transcript behind it? Answers "does
+    # transcription change wrap-up completion". Flags only.
+    if meeting_has_transcript(supabase, user_id, meeting["id"]):
+        analytics.capture(user_id, "call_transcript_used_in_wrapup", {"meeting_type": "one_on_one"})
 
     # Everything the receipt shows comes from what the database returned for
     # this request: the completed meeting, the commitments actually inserted

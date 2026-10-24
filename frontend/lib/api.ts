@@ -2,6 +2,7 @@
 // Prism Tree's frontend/src/lib/api.ts. Add new backend calls to this file
 // rather than calling fetch() ad hoc from components.
 import { createClient } from "./supabase";
+import type { CallUsage } from "./transcriptionUsage";
 import type { AiDraftReport } from "./aiDraftTelemetry";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -4493,6 +4494,10 @@ export type CallAllowance = {
   at_limit: boolean;
   resets_on: string | null;
 };
+
+/** This manager's transcription allowance and use (GET /usage). The words
+ *  for it live in lib/transcriptionUsage.ts. */
+export const getCallUsage = (): Promise<CallUsage> => authedFetch("/api/call-transcripts/usage");
 
 export const startCallTranscript = (body: {
   one_on_one_id: string;

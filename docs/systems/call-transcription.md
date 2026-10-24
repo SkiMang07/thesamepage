@@ -113,6 +113,16 @@ the report's response field by field, so `kind`, `capture_mode`,
   that crosses 100% finishes, and the next start is refused with **403**
   `{code: "allowance_reached", message, resets_on, allowed_hours, tier}`. Not
   402: `api.ts` treats every 402 as the read-only banner.
+- **Usage shown.** Settings → Your account always shows a "Call transcription"
+  line ("12 of 30 hours used this month. Resets November 1."; the trial reads
+  "3 of 5 trial hours used."). Read-only accounts see that transcription is off
+  and that deleting transcripts and clearing consent still work; an IC sees no
+  block. The pill's menu re-reads `GET /usage` each time it opens during a
+  transcribed meeting and adds one muted line from 80% up, so it is right to
+  within one stored segment. At 100% it says the current 1:1 keeps
+  transcribing. All wording lives in `frontend/lib/transcriptionUsage.ts`
+  (tests: `npm run test:transcription-usage`): "Under 1" below half an hour,
+  one decimal below 10 hours, whole hours above.
 - **Segments are idempotent.** A stored `(id, seq, track)` returns the stored
   result without calling the vendor; billing is per segment row and runs again
   harmlessly, so a crash between store and bill is billed on the retry.
@@ -295,4 +305,17 @@ the report's response field by field, so `kind`, `capture_mode`,
 ## Analytics
 
 `call_transcription_started`, `call_transcription_ended`,
-`call_transcription_allowance_hit`; see `product-analytics.md`.
+`call_transcription_allowance_hit`, `call_transcript_used_in_wrapup` (a saved
+1:1 log whose meeting has a transcript with a stored segment, checked by
+`meeting_has_transcript()`, which never fails the save),
+`call_transcript_deleted` and `transcription_consent_cleared` (only a real
+clear); see `product-analytics.md`.
+
+## Public wording
+
+The privacy policy's transcription edits (a Call Transcripts section, the
+OpenAI row, retention and deletion, and consent under people on your team)
+live in `website/prototype/legal-body-privacy.html`, behind a counsel-review
+draft note, and are pasted into HubSpot when transcription goes live. Site copy
+is held in `gtm/site/homepage.md` → Call transcription copy until the real-call
+check passes.

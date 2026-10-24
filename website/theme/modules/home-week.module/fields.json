@@ -18,6 +18,12 @@
     "default": "You jot things down as the week happens. By Friday they're together on Maya's page, and The Same Page has drafted your prep for Tuesday from all of it."
   },
   {
+    "name": "strip_note",
+    "label": "Note under the week (swap for the transcription line when it's live; see gtm/site/homepage.md)",
+    "type": "richtext",
+    "default": "<b>That's the week.</b> Four entries, and one of them is the 1:1 notes you'd have written anyway. Yes, it's somewhere else to write things down. Nothing arrives from your other tools, so what's there is what you put there."
+  },
+  {
     "name": "anchor_id",
     "label": "Anchor id (for links like #week)",
     "type": "text",

@@ -16,6 +16,7 @@
     "test:commitments-table": "node --experimental-strip-types --test lib/commitmentsTable.test.mjs",
     "test:role-draft-cap": "node --experimental-strip-types --test lib/roleDraftCap.test.mjs",
     "test:member-label": "node --experimental-strip-types --test lib/memberLabel.test.mjs",
+    "test:transcription-usage": "node --experimental-strip-types --test lib/transcriptionUsage.test.mjs",
     "test:wait-message": "node --experimental-strip-types --test lib/waitMessage.test.mjs",
     "test:goal-draft": "node --experimental-strip-types --test lib/goalDraft.test.mjs",
     "test:notes-dump-placement": "node --experimental-strip-types --test lib/notesDumpPlacement.test.mjs",

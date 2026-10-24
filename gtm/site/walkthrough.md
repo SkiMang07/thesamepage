@@ -128,6 +128,18 @@ Grounding: `one-on-ones.md` — capture notes, automatic-assembly-then-
 deliberate-synthesis prep, mandatory closing question, draft-then-review
 wrap-up, carry-forward.
 
+### Held for transcription launch (Block I)
+
+Not built yet; this page isn't built either (the nav's "How it works" still
+points home). When it is, Section 3 gains this step, under the same gate as
+the homepage note (`homepage.md` → Call transcription copy):
+
+| Slot | Copy |
+|---|---|
+| Heading | Hold the 1:1 here |
+| Body | Click Meet and pick who. It's transcribed on your computer as you talk, with no bot joining the call. Your agenda, their history and what's still open stay on the same screen. |
+| Detail line | End the 1:1 and the summary drafts from the transcript and your notes. You fix anything before it saves. The audio is never kept. |
+
 ## Section 4 — Step 3: Or just tell it what happened
 
 **Job:** introduce the Scribe as a second way in, not a replacement for the

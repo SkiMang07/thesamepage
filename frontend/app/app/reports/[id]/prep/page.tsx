@@ -684,6 +684,12 @@ function PrepFlow() {
                   to add as commitments, below the agenda.
                 </p>
               )}
+              {/* Block I: the ways in, in the same words as the site. */}
+              <p className="mt-1 text-sm text-ink-body" data-testid="first-run-ways-in">
+                When you meet, click Meet in the top bar and pick {reportName.split(" ")[0] || "them"}. The 1:1 is
+                transcribed on your computer, with no bot joining the call. Or log it afterwards: say it, paste a
+                transcript, upload a file, or type.
+              </p>
               <p className="mt-1 text-sm text-ink-secondary">
                 Steps {FIRST_RUN_STEPS + 1} to {PATH_STEPS} are next, on Mission Control: team and roles, expectations, goals.
               </p>

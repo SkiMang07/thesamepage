@@ -72,7 +72,10 @@ Start free → /app/login → email → /auth/confirm (works on any device)
   they're on and where they're stuck, what they want from the role, and how
   the two will run these 1:1s, and says plainly that nothing else is recorded.
 - With `?first=1` the sheet shows "Step 3 of 3" and a "Prep sheet saved"
-  receipt with "Go to Mission Control".
+  receipt with "Go to Mission Control". The receipt names the ways in for
+  the 1:1 itself, in the site's words: Meet in the top bar transcribes it
+  with no bot, or log it afterwards by saying it, pasting a transcript,
+  uploading a file, or typing (backlog Block I).
 - Promises in the note become commitments the manager confirms ("Promises in
   your note", `one-on-ones.md`); the first-run receipt links there while rows
   wait.

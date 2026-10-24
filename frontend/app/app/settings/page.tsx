@@ -37,6 +37,7 @@ import {
   createRoleLevel,
   deleteWorkUnitConfig,
   getArchivedDirectReports,
+  getCallUsage,
   getAwayPeriods,
   getCapacitySettings,
   getDirectReports,
@@ -58,6 +59,7 @@ import {
   updateProfile,
   upsertWorkUnitConfig,
 } from "@/lib/api";
+import { settingsUsageLine, type CallUsage } from "@/lib/transcriptionUsage";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { createClient } from "@/lib/supabase";
@@ -610,9 +612,35 @@ function AccountSection({ profile, onSignedOut }: { profile: Profile | null; onS
       </button>
       {signOutError && <p className="mt-3 text-sm text-red-700">{signOutError}</p>}
 
+      <TranscriptionUsage />
       <ExportYourData />
       <DeleteYourAccount />
     </section>
+  );
+}
+
+// Call transcription usage, always shown here (the pill's menu shows it only
+// from 80%). Hidden for an invited report, who never transcribes. A failed
+// load hides the block rather than showing a wrong number.
+function TranscriptionUsage() {
+  const [usage, setUsage] = useState<CallUsage | null>(null);
+  useEffect(() => {
+    let live = true;
+    getCallUsage()
+      .then((u) => live && setUsage(u))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  const line = usage ? settingsUsageLine(usage) : null;
+  if (!line) return null;
+  return (
+    <div className="mt-8 max-w-xl border-t border-hairline pt-6" data-testid="transcription-usage">
+      <h3 className="text-sm font-semibold text-ink">Call transcription</h3>
+      <p className="mt-1 text-sm text-ink-secondary">{line}</p>
+      <p className="mt-2 text-xs text-ink-muted">Counts meeting time. Adding the other side of a call doesn&apos;t double it.</p>
+    </div>
   );
 }
 

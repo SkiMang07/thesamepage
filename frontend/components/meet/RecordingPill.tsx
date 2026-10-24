@@ -29,6 +29,8 @@ import { usePathname } from "next/navigation";
 import { ELEVATED, SCRIM, BTN_PRIMARY, BTN_SECONDARY } from "@/lib/tokens";
 import { clockSince, minutesSince, useMeetingClock, useRecorder, type RecState } from "@/lib/recorder/RecorderProvider";
 import { getAskForTab, getTipSeen, setAskForTab, setTipSeen } from "@/lib/recorder/prefs";
+import { getCallUsage } from "@/lib/api";
+import { pillUsageNote, type CallUsage } from "@/lib/transcriptionUsage";
 
 const PILL = "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none";
 const PILL_LIVE = `${PILL} border border-brand/60 text-brand hover:bg-brand-tint`;
@@ -99,6 +101,22 @@ export default function RecordingPill() {
   useEffect(() => {
     if (rec.kind !== "transcribing" || callTab) setTipOpen(false);
   }, [rec.kind, callTab]);
+
+  // Usage, re-read each time the menu opens while there's a transcript. The
+  // server counts every stored segment, so it's right to within one segment.
+  // The note shows only from 80%; a failed read just leaves it out.
+  const [usage, setUsage] = useState<CallUsage | null>(null);
+  const transcriptId = meeting?.transcriptId ?? null;
+  useEffect(() => {
+    if (!menuOpen || !transcriptId) return;
+    let live = true;
+    getCallUsage()
+      .then((u) => live && setUsage(u))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [menuOpen, transcriptId]);
 
   // Provider messages (a share without sound, a failed pause) surface here.
   useEffect(() => {
@@ -245,6 +263,7 @@ export default function RecordingPill() {
             callTab={callTab}
             supportsCallTab={supportsCallTab}
             canResume={canResume}
+            usageNote={transcriptId ? pillUsageNote(usage) : null}
             onClose={closeMenu}
             onAddSide={() => {
               setMenuOpen(false);
@@ -328,6 +347,7 @@ function PillMenu({
   callTab,
   supportsCallTab,
   canResume,
+  usageNote,
   onClose,
   onAddSide,
   onDropSide,
@@ -344,6 +364,8 @@ function PillMenu({
   callTab: string | null;
   supportsCallTab: boolean;
   canResume: boolean;
+  /** From 80% of the allowance; otherwise null. */
+  usageNote: string | null;
   onClose: (refocus?: boolean) => void;
   onAddSide: () => void;
   onDropSide: () => void;
@@ -471,6 +493,15 @@ function PillMenu({
           <Link href={meetHref} role="menuitem" className={MENU_ROW} onClick={() => onClose(false)}>
             Back to the 1:1
           </Link>
+        </>
+      )}
+
+      {usageNote && (
+        <>
+          <div className="my-1 h-px bg-divider" />
+          <p className="px-3 py-2 text-xs leading-relaxed text-ink-muted" data-testid="pill-usage-note">
+            {usageNote}
+          </p>
         </>
       )}
     </div>

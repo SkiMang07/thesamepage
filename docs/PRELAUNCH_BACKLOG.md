@@ -936,6 +936,12 @@ puts talk-to-text in the note fields. The page never says so. Andrew pastes in
 his own Granola transcripts. The messaging has to be true, on the site, and
 in the first-run path, or the launch repeats the miss.
 
+**Status, 2026-10-24:** built-in 1:1 transcription is now the lead way in. The
+copy is decided and held in `gtm/site/homepage.md` → Call transcription copy
+until the real-call check passes. The homepage note is a `strip_note` field on
+`home-week.module`, so the swap is a HubSpot edit. The first-1:1 receipt in the
+app already names the ways in.
+
 - [ ] **Website says how notes get in.** The homepage ("One week with Maya"
   and the line "Yes, it's somewhere else to write things down") and How It
   Works state that a note can be written, dictated or pasted from a

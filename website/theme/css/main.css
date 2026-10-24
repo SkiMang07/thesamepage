@@ -1386,6 +1386,7 @@ a{color:inherit;text-decoration:none}
 .h6-root .h6-strip .h6-to{display:block;margin-top:.4rem;font-size:.86rem;color:var(--ink-on-carbon)}
 .h6-root .h6-strip-note{margin-top:1.2rem;font-size:.95rem;line-height:1.6;color:var(--control)}
 .h6-root .h6-strip-note b{color:var(--on-dark)}
+.h6-root .h6-strip-note p{margin:0}
 .h6-root .h6-prep5{border:0;box-shadow:0 40px 60px -30px rgba(0,0,0,.6)}
 .h6-root .h6-prep5 .h6-prep-h b.h6-t{font-size:1.15rem;margin:.35rem 0 .45rem;letter-spacing:-.01em}
 .h6-root .h6-prep5 .h6-sit{font-size:.95rem;line-height:1.55;color:var(--ink-body)}
