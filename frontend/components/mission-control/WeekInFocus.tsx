@@ -65,6 +65,8 @@ import {
   startOfNextLocalDay,
 } from "@/components/mission-control/ActionBrief";
 import MoveOneOnOne from "@/components/MoveOneOnOne";
+import StartOneOnOne from "@/components/meet/StartOneOnOne";
+import { localDateStr } from "@/components/team/dates";
 import { careerAsks, isCareerDay } from "@/lib/career";
 
 // ---------------------------------------------------------------------------
@@ -1169,6 +1171,8 @@ function Detail({
     const linkedGoals = c.direct_report_id
       ? week.goals.filter((g) => g.level === "individual" && g.direct_report_id === c.direct_report_id).slice(0, 2)
       : [];
+    // Today's (or an overdue, unlogged) 1:1 can start from here.
+    const startable = c.kind === "one_on_one" && c.state !== "completed" && !!c.direct_report_id && c.date <= localDateStr();
     return (
       <section aria-labelledby="detail-heading" className="text-sm">
         <DetailHead label="Conversation" onClose={onClose} />
@@ -1229,7 +1233,10 @@ function Detail({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Link href={primaryActionHref(c)} className={BTN_PRIMARY_SM}>{primaryActionLabel(c)}</Link>
+          {startable && c.direct_report_id && (
+            <StartOneOnOne person={{ id: c.direct_report_id, name: c.title }} label="Start" size="sm" align="left" />
+          )}
+          <Link href={primaryActionHref(c)} className={startable ? "text-xs font-medium text-brand hover:text-brand-hover" : BTN_PRIMARY_SM}>{primaryActionLabel(c)}</Link>
           {c.person_href && primaryActionHref(c) !== c.person_href && (
             <Link href={c.person_href} className="text-xs text-brand hover:text-brand-hover">Person page →</Link>
           )}

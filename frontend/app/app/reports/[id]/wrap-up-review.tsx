@@ -66,6 +66,8 @@ export default function WrapUpReview({
   initialMeetingDate,
   separateOccurrence = false,
   willRecur = false,
+  privateNotes,
+  onSaved,
 }: {
   directReportId: string;
   reportName: string;
@@ -84,6 +86,11 @@ export default function WrapUpReview({
   // have prep saved for, so it logs as its own occurrence.
   separateOccurrence?: boolean;
   willRecur?: boolean;
+  // The meeting screen: notes typed off the record. Saved to private_notes
+  // with the log, never part of the draft.
+  privateNotes?: string;
+  // The meeting screen clears its local draft once the log is saved.
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [summary, setSummary] = useState(draft.summary);
@@ -161,7 +168,9 @@ export default function WrapUpReview({
         carry_forward_items: followUps.map((item) => item.text.trim()).filter(Boolean),
         opening_line: openingLine.trim() || null,
         one_on_one_id: oneOnOneId,
+        ...(privateNotes?.trim() ? { private_notes: privateNotes } : {}),
       });
+      onSaved?.();
       // The receipt on the person page renders exactly what the server says
       // it saved. The review stays put until then; nothing here is cleared.
       reportSaved();
@@ -174,6 +183,7 @@ export default function WrapUpReview({
       // connection). Check before inviting a retry that would log it twice.
       const recorded = await findRecordedMeeting(submittedSummary, startedAt);
       if (recorded) {
+        onSaved?.();
         reportSaved();
         router.push(`/app/reports/${directReportId}?logged=${recorded}&reconciled=1`);
         return;
@@ -234,6 +244,11 @@ export default function WrapUpReview({
         saved until you do. The summary shows up in history and next time you prep;
         commitments stay open until they&apos;re done.
       </p>
+      {privateNotes?.trim() && (
+        <p className="mt-3 rounded-md bg-sunken px-3 py-2 text-sm text-ink-secondary">
+          Your off-the-record note is kept as a private note on {firstName}&apos;s page. It isn&apos;t used in this draft.
+        </p>
+      )}
 
       <div className="mt-8">
         <label htmlFor="wrap-up-meeting-date" className="block text-sm font-medium text-ink-body">

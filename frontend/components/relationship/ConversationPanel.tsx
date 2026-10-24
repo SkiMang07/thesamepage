@@ -3,8 +3,8 @@
 // Last-to-next conversation: the Relationship Desk's lead surface. The latest
 // reviewed summary's own opening words sit directly above the next
 // occurrence, so "where we left it" and "what's gathering" read as one
-// thread. Preparation and the call itself stay on the canonical /prep
-// workspace; this surface previews and hands off.
+// thread. Preparation stays on the canonical /prep workspace and the call
+// itself on the meeting screen (/meet); this surface previews and hands off.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import type { CaptureNote, OneOnOne } from "@/lib/api";
 import type { OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
 import { BTN_PRIMARY } from "@/lib/tokens";
 import MoveOneOnOne from "@/components/MoveOneOnOne";
+import StartOneOnOne from "@/components/meet/StartOneOnOne";
 import { instantDate, localDateStr, shortDate } from "@/components/team/dates";
 import {
   cadenceSentence,
@@ -49,7 +50,10 @@ export default function ConversationPanel({
   onShowCommitments,
   onNextMoved,
   careerOn = null,
+  person = null,
 }: {
+  /** For Start on a 1:1 that's today or overdue. */
+  person?: { id: string; name: string; consented: boolean } | null;
   personId: string;
   personFirstName: string;
   lastCompleted: OneOnOne | null;
@@ -80,6 +84,7 @@ export default function ConversationPanel({
   const nextDate = sessionDate(next && next.scheduled_at ? next : null);
   const isCareer = Boolean(careerOn && nextDate && nextDate.slice(0, 10) === careerOn);
   const datePassed = nextDate != null && nextDate < localDateStr();
+  const startNow = nextDate != null && nextDate.slice(0, 10) <= localDateStr();
   const repeat = recurrenceLabel(next?.recurrence_weeks);
   const carried = next?.carry_forward_items ?? [];
   const openingLine = next?.opening_line?.trim() || null;
@@ -373,9 +378,20 @@ export default function ConversationPanel({
         </div>
 
         <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
-          <Link href={startHref} className={`${BTN_PRIMARY} whitespace-nowrap`}>
-            {prepared ? "Start 1:1 →" : "Review & prepare →"}
-          </Link>
+          {/* Today or overdue, the 1:1 itself is the next step: Start opens
+              the meeting screen (call transcription session 3). */}
+          {startNow && person ? (
+            <>
+              <StartOneOnOne person={person} label="Start" align="left" />
+              <Link href={startHref} className="text-sm font-medium text-brand hover:text-brand-hover">
+                {prepared ? "Open prep sheet" : "Review & prepare"}
+              </Link>
+            </>
+          ) : (
+            <Link href={startHref} className={`${BTN_PRIMARY} whitespace-nowrap`}>
+              {prepared ? "Open prep sheet →" : "Review & prepare →"}
+            </Link>
+          )}
           {prepared && (
             <Link href={reviewHref} className="text-sm font-medium text-brand hover:text-brand-hover">
               Review sources

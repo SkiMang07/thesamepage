@@ -12,8 +12,9 @@
 //   it, compact work/growth previews, and a searchable timeline of past
 //   conversations. After a reviewed log, a receipt of what was saved.
 //
-// Preparing, running, logging and scheduling a 1:1 stay on the canonical
-// /prep and /log workspaces; this page previews and hands off. Capture notes
+// Preparing, logging and scheduling a 1:1 stay on the canonical /prep and
+// /log workspaces, and the call itself on the meeting screen (/meet); this
+// page previews and hands off. Capture notes
 // are temporary inputs to the next preparation. Private notes are persistent,
 // manager-only records and never flow into prep automatically. Nothing on
 // this page is shared with the person.
@@ -68,6 +69,7 @@ import {
   CaptureNote,
 } from "@/lib/api";
 import PageShell from "@/components/PageShell";
+import StartOneOnOne from "@/components/meet/StartOneOnOne";
 import { GroupedRoleSelect, orgUnitLabel, roleLabel } from "@/components/RolePicker";
 import { BTN_SECONDARY, EYEBROW } from "@/lib/tokens";
 import { deriveOneOnOneSuggestions } from "@/lib/one-on-one-workspace";
@@ -590,11 +592,14 @@ function RelationshipDesk() {
           <button type="button" onClick={() => setSettingsOpen(true)} className={BTN_SECONDARY}>
             Person settings
           </button>
-          <Link href={`/app/reports/${id}/log`} className={BTN_SECONDARY}>
-            Log a 1:1
-          </Link>
+          <StartOneOnOne person={{ id: report.id, name: report.name, consented: !!report.transcription_consent_at }} />
         </div>
       </header>
+      <p className="mt-2 text-xs">
+        <Link href={`/app/reports/${id}/log`} className="text-ink-secondary underline decoration-hairline underline-offset-2 hover:text-ink">
+          Log a past 1:1
+        </Link>
+      </p>
       {report.notes && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm text-ink-secondary">{report.notes}</p>}
       <p className="mt-3 text-xs text-ink-muted">
         Only you can see this page. Saving here doesn&apos;t send anything to {first}.
@@ -673,6 +678,7 @@ function RelationshipDesk() {
               onReadLastSummary={() => lastCompleted && openConversation(lastCompleted.id)}
               onShowCommitments={showCommitments}
               careerOn={career?.state === "planned" ? career.planned?.planned_for ?? null : null}
+              person={{ id: report.id, name: report.name, consented: !!report.transcription_consent_at }}
               onNextMoved={(saved) => {
                 setHistory((rows) => rows.map((row) => (row.id === saved.id ? { ...row, ...saved } : row)));
                 // A career conversation planned on that 1:1 moved with it.

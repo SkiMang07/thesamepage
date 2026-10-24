@@ -839,3 +839,103 @@ def test_next_occurrence_can_be_held_after_the_day_a_moved_meeting_happened():
     now = datetime(2027, 1, 1, tzinfo=timezone.utc)
     assert _next_occurrence_at(USUAL_TUE, 1, now) == "2027-03-09T12:00:00+00:00"
     assert _next_occurrence_at(USUAL_TUE, 1, now, after="2027-03-10T12:00:00+00:00") == "2027-03-16T12:00:00+00:00"
+
+
+# ── Meeting screen (call transcription session 3) ─────────────────────────
+
+def test_log_saves_off_the_record_notes_apart_from_call_notes():
+    """Notes typed off the record land in private_notes, never in notes (the
+    column the wrap-up reads from)."""
+    client = _MemoryClient()
+    result = _resolve(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                one_on_one_id="current",
+                summary="Aligned on the recovery plan.",
+                notes="Northwind wants a usage review.",
+                private_notes="  Mentioned a family move, keep it to myself.  ",
+                meeting_date="2026-08-25",
+            ),
+            auth=("manager", client),
+        )
+    )
+    saved = next(r for r in client.rows["one_on_ones"] if r["id"] == "current")
+    assert saved["notes"] == "Northwind wants a usage review."
+    assert saved["private_notes"] == "Mentioned a family move, keep it to myself."
+    assert result["meeting"]["status"] == "completed"
+
+
+def test_blank_private_notes_leave_the_column_alone():
+    client = _MemoryClient()
+    client.rows["one_on_ones"][0]["private_notes"] = "Earlier private note"
+    _resolve(
+        log_one_on_one(
+            LogOneOnOneIn(
+                direct_report_id="report",
+                one_on_one_id="current",
+                summary="Short check-in.",
+                private_notes="   ",
+                meeting_date="2026-08-25",
+            ),
+            auth=("manager", client),
+        )
+    )
+    saved = next(r for r in client.rows["one_on_ones"] if r["id"] == "current")
+    assert saved["private_notes"] == "Earlier private note"
+
+
+def test_a_failed_log_puts_private_notes_back():
+    client = _MemoryClient()
+    client.fail_on = {"commitments": {"insert"}}
+    try:
+        _resolve(
+            log_one_on_one(
+                LogOneOnOneIn(
+                    direct_report_id="report",
+                    one_on_one_id="current",
+                    summary="Will fail.",
+                    private_notes="Should not stick",
+                    new_commitments=[NewCommitmentIn(description="Anything")],
+                    meeting_date="2026-08-25",
+                ),
+                auth=("manager", client),
+            )
+        )
+    except Exception:
+        pass
+    saved = next(r for r in client.rows["one_on_ones"] if r["id"] == "current")
+    assert saved["summary"] is None
+    assert saved.get("private_notes") is None
+
+
+def test_ensure_open_session_returns_the_existing_workspace():
+    from routes.one_on_ones import ensure_open_session
+    client = _MemoryClient()
+    row = ensure_open_session("report", auth=("manager", client))
+    assert row["id"] == "current"
+    assert len(client.rows["one_on_ones"]) == 1
+
+
+def test_ensure_open_session_creates_an_empty_one_without_ai():
+    from routes.one_on_ones import ensure_open_session
+    client = _MemoryClient()
+    client.rows["one_on_ones"] = []
+    client.rows["direct_reports"] = [{"id": "report", "manager_id": "manager"}]
+    row = ensure_open_session("report", auth=("manager", client))
+    assert row["status"] == "gathering"
+    assert row["prep_guide"] is None
+    assert client.rows["one_on_ones"][0]["manager_id"] == "manager"
+
+
+def test_ensure_open_session_refuses_someone_elses_report():
+    import pytest
+    from fastapi import HTTPException
+    from routes.one_on_ones import ensure_open_session
+    client = _MemoryClient()
+    client.rows["one_on_ones"] = []
+    client.rows["direct_reports"] = [{"id": "report", "manager_id": "another-manager"}]
+    with pytest.raises(HTTPException) as err:
+        ensure_open_session("report", auth=("manager", client))
+    assert err.value.status_code == 404
+    assert client.rows["one_on_ones"] == []

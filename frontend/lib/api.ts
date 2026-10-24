@@ -98,6 +98,10 @@ function announceRecordChange(path: string, method: string) {
   if (path === "/api/beyond/suggestions/refresh") return;
   // Deleting the account is followed by sign-out, not a refresh.
   if (path === "/api/settings/account") return;
+  // Starting, pausing and ending a transcript changes no record any page
+  // reads; announcing each one would refetch the whole shell every pause.
+  // Consent (the person page shows it) and deleting a transcript still do.
+  if (path.startsWith("/api/call-transcripts") && path !== "/api/call-transcripts/consent" && method !== "DELETE") return;
   window.dispatchEvent(new Event(RECORDS_CHANGED_EVENT));
   window.localStorage.setItem(RECORDS_CHANGED_STORAGE_KEY, String(Date.now()));
 }
@@ -196,6 +200,10 @@ export type DirectReport = {
   // Present on GET /api/direct-reports/{id} only: the assigned role's
   // configured expectations. null when no role is assigned.
   expectations?: RoleExpectations | null;
+  // When the manager confirmed this person knows their 1:1s are transcribed
+  // (docs/systems/call-transcription.md). Null until confirmed, cleared from
+  // the person's page.
+  transcription_consent_at?: string | null;
 };
 
 // What GET /api/direct-reports/{id} returns under `expectations` — the DR's
@@ -1828,6 +1836,12 @@ export const getOneOnOne = (id: string): Promise<OneOnOne> =>
 export const getOpenOneOnOne = (directReportId: string): Promise<OneOnOne | null> =>
   authedFetch(`/api/one-on-ones/open/${directReportId}`);
 
+// The current unfinished occurrence, created empty (no AI call) when the
+// person has none: a first-ever 1:1, or someone just added. The meeting
+// screen starts on it.
+export const ensureOpenOneOnOne = (directReportId: string): Promise<OneOnOne> =>
+  authedFetch(`/api/one-on-ones/open/${directReportId}`, { method: "POST" });
+
 // Dismiss an unfinished occurrence. If it belongs to an active series, this
 // also stops recurrence. Completed history is never deleted here.
 export const deleteOneOnOne = (id: string): Promise<{ deleted: boolean }> =>
@@ -1887,6 +1901,9 @@ export const logOneOnOne = (body: {
   separate_occurrence?: boolean;
   // Kept at review; saved onto the next occurrence. Null/empty keeps nothing.
   opening_line?: string | null;
+  // Notes typed off the record on the meeting screen. Manager-only, saved
+  // to private_notes, never sent to the wrap-up. Blank leaves it alone.
+  private_notes?: string | null;
 }): Promise<LogOneOnOneResult> =>
   authedFetch("/api/one-on-ones", { method: "POST", body: JSON.stringify(body) });
 
@@ -4410,3 +4427,92 @@ export const reportAiDraft = (report: AiDraftReport): Promise<void> =>
     () => undefined,
     () => undefined,
   );
+
+
+// ---------------------------------------------------------------------------
+// Call transcription — docs/systems/call-transcription.md. The capture
+// engine posts segments (session 2); everything else the meeting screen and
+// the recording pill need is here.
+// ---------------------------------------------------------------------------
+
+export type CallTranscriptStatus = "recording" | "finishing" | "ready" | "failed";
+export type CallTrack = "self" | "other" | "mixed";
+export type CallStopReason = "manager" | "silence" | "max_length" | "share_ended" | "allowance";
+
+export type CallTranscript = {
+  id: string;
+  status: CallTranscriptStatus;
+  meeting_type: "one_on_one" | "team_meeting" | "outside_meeting";
+  one_on_one_id: string | null;
+  team_meeting_id: string | null;
+  outside_meeting_id: string | null;
+  started_at: string;
+  ended_at: string | null;
+  label: string;
+  viewer: "owner" | "report";
+  // Owner only.
+  capture_mode?: "tab" | "screen" | "mic_only" | "desktop";
+  ended_reason?: CallStopReason | null;
+  ended_at_ms?: number | null;
+};
+
+export type CallTranscriptGap = { start_ms: number; end_ms: number | null; kind?: "pause" | "off_record" | "stopped" };
+
+export type CallTranscriptDetail = CallTranscript & {
+  segment_count: number;
+  lines: { t_ms: number; speaker: CallTrack; text: string }[];
+  gaps: CallTranscriptGap[];
+};
+
+export type CallAllowance = {
+  tier: string;
+  allowed_hours: number;
+  used_hours?: number;
+  at_limit: boolean;
+  resets_on: string | null;
+};
+
+export const startCallTranscript = (body: {
+  one_on_one_id: string;
+  capture_mode: "tab" | "mic_only";
+  consent_confirmed: boolean;
+}): Promise<{ transcript: CallTranscript; allowance: CallAllowance }> =>
+  authedFetch("/api/call-transcripts", { method: "POST", body: JSON.stringify(body) });
+
+export const pauseCallTranscript = (id: string, body: { kind: "pause" | "off_record"; at_ms: number }): Promise<{ transcript: CallTranscript }> =>
+  authedFetch(`/api/call-transcripts/${id}/pause`, { method: "POST", body: JSON.stringify(body) });
+
+export const resumeCallTranscript = (id: string, at_ms: number): Promise<{ transcript: CallTranscript }> =>
+  authedFetch(`/api/call-transcripts/${id}/resume`, { method: "POST", body: JSON.stringify({ at_ms }) });
+
+export const endCallTranscript = (
+  id: string,
+  body: { reason: CallStopReason; at_ms: number; seqs_by_track: Partial<Record<CallTrack, number[]>> },
+): Promise<{ transcript: CallTranscript }> =>
+  authedFetch(`/api/call-transcripts/${id}/end`, { method: "POST", body: JSON.stringify(body) });
+
+export const getCallTranscript = (id: string): Promise<CallTranscriptDetail> =>
+  authedFetch(`/api/call-transcripts/${id}`);
+
+// The caller's running call, if any — how the pill comes back after a reload.
+export const getRecordingCallTranscripts = (): Promise<{ transcripts: CallTranscript[] }> =>
+  authedFetch("/api/call-transcripts?status=recording");
+
+export const setTranscriptionConsent = (body: { direct_report_id: string; consented: boolean }): Promise<{ transcription_consent_at: string | null }> =>
+  authedFetch("/api/call-transcripts/consent", { method: "PUT", body: JSON.stringify(body) });
+
+/** The `code` a call-transcription refusal carries (already_recording,
+ *  allowance_reached, resume_window_passed, max_length), plus its id/message. */
+export function callTranscriptRefusal(err: unknown): { status: number; code: string | null; id: string | null; message: string } | null {
+  if (!(err instanceof ApiError)) return null;
+  let code: string | null = null;
+  let id: string | null = null;
+  try {
+    const body = JSON.parse(err.message.replace(/^API error \d+: /, ""));
+    code = typeof body?.detail?.code === "string" ? body.detail.code : null;
+    id = typeof body?.detail?.id === "string" ? body.detail.id : null;
+  } catch {
+    /* not JSON */
+  }
+  return { status: err.status, code, id, message: err.detail };
+}

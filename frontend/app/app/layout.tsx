@@ -59,6 +59,7 @@ import Sidebar from "@/components/Sidebar";
 import DictationHotkey from "@/components/DictationHotkey";
 import EntitlementNotice from "@/components/EntitlementNotice";
 import { ZoneDataProvider } from "@/components/ZoneMap";
+import { RecorderProvider } from "@/lib/recorder/RecorderProvider";
 import SentryUser from "@/components/SentryUser";
 import AnalyticsUser from "@/components/AnalyticsUser";
 
@@ -107,6 +108,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // nav is hidden, so /app/login and /app/ic make no zone calls.
   return (
     <ZoneDataProvider enabled={showNav}>
+      {/* The meeting in progress and its recorder (lib/recorder): mounted
+          here so the pill and the call survive navigation between pages. */}
+      <RecorderProvider enabled={showNav}>
       <div className={`flex min-h-screen ${dark ? "theme-dark bg-canvas text-ink" : ""}`}>
         {showNav && <Sidebar />}
 
@@ -140,6 +144,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </aside>
         )}
       </div>
+      </RecorderProvider>
     </ZoneDataProvider>
   );
 }

@@ -176,6 +176,10 @@ class LogOneOnOneIn(BaseModel):
     # edited) by the manager. Saved onto the next occurrence; empty keeps
     # nothing and leaves an existing one alone.
     opening_line: str | None = None
+    # Notes typed while the call was off the record (the meeting screen keeps
+    # them apart from `notes`). Manager-only, saved to one_on_ones.private_notes,
+    # never sent to the wrap-up. Omitted or blank leaves the column alone.
+    private_notes: str | None = None
 
 
 class WrapUpRequest(BaseModel):
@@ -1064,6 +1068,33 @@ def get_open_session(direct_report_id: str, auth=Depends(get_authenticated_clien
     return _serialize_session(row) if row else None
 
 
+@router.post("/open/{direct_report_id}")
+def ensure_open_session(direct_report_id: str, auth=Depends(get_authenticated_client)):
+    """The person's current unfinished occurrence, creating an empty one when
+    there is none (a first-ever 1:1, or someone just added). The meeting
+    screen needs a row to start on; this makes one without an AI call, the
+    same shape a logged 1:1 leaves behind."""
+    user_id, supabase = auth
+    row = _find_open_session(supabase, user_id, direct_report_id)
+    if row:
+        return _serialize_session(row)
+    owned = (
+        supabase.table("direct_reports").select("id")
+        .eq("id", direct_report_id).eq("manager_id", user_id)
+        .limit(1).execute().data
+    )
+    if not owned:
+        raise HTTPException(status_code=404, detail="Person not found")
+    created = (
+        supabase.table("one_on_ones")
+        .insert({"manager_id": user_id, "direct_report_id": direct_report_id, "carry_forward_items": []})
+        .execute()
+        .data[0]
+    )
+    created["one_on_one_series"] = {}
+    return _serialize_session(created)
+
+
 def _manager_has_prep_sheet(supabase, user_id: str) -> bool:
     """Whether this manager has any 1:1 with a prep sheet on it (planned or
     completed). One indexed row at most; used only for analytics."""
@@ -1700,6 +1731,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
     # None means "leave whatever date this occurrence already carried".
     meeting_at = _encode_meeting_date(body.meeting_date)
     logged_at = datetime.now(timezone.utc).isoformat()
+    private_notes = (body.private_notes or "").strip()[:20000] or None
     source_session = None
     # True only when this log completed the person's existing next-meeting
     # workspace. A separate ad-hoc occurrence leaves that workspace alone,
@@ -1747,7 +1779,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
     # What the completed occurrence looked like before this log touched it,
     # so a failure further down can put it back (see _undo_partial_log).
     prior_session = (
-        {key: source_session.get(key) for key in ("notes", "logged_at", "scheduled_at")}
+        {key: source_session.get(key) for key in ("notes", "logged_at", "scheduled_at", "private_notes")}
         if source_session
         else None
     )
@@ -1760,6 +1792,8 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
         }
         if meeting_at:
             updates["scheduled_at"] = meeting_at
+        if private_notes:
+            updates["private_notes"] = private_notes
         result = (
             supabase.table("one_on_ones")
             .update(updates)
@@ -1785,6 +1819,7 @@ def log_one_on_one(body: LogOneOnOneIn, auth=Depends(get_authenticated_client)):
                 # ad-hoc conversation is not one of the recurring slots.
                 "scheduled_at": meeting_at,
                 "logged_at": logged_at,
+                **({"private_notes": private_notes} if private_notes else {}),
             })
             .execute()
             .data[0]
@@ -1979,6 +2014,7 @@ def _undo_partial_log(
                 "notes": (prior_session or {}).get("notes"),
                 "logged_at": (prior_session or {}).get("logged_at"),
                 "scheduled_at": (prior_session or {}).get("scheduled_at"),
+                "private_notes": (prior_session or {}).get("private_notes"),
             }).eq("id", meeting_id).eq("manager_id", user_id).execute()
     except Exception as exc:  # pragma: no cover - logged, not raised
         logger.error("could not undo a failed 1:1 log's meeting write: %s", type(exc).__name__)

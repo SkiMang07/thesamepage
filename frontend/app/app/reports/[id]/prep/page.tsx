@@ -9,7 +9,6 @@ import {
   getOpenOneOnOne,
   prepOneOnOne,
   updateOneOnOneSchedule,
-  wrapUpOneOnOne,
   getCaptureNotes,
   deleteCaptureNote,
   getCommitments,
@@ -20,14 +19,13 @@ import {
   getOneOnOneHistory,
   PrepResponse,
   AgendaItem,
-  WrapUpDraft,
   CaptureNote,
   Commitment,
   FIRST_RUN_STEPS,
   PATH_STEPS,
 } from "@/lib/api";
 import WaitNote from "@/components/WaitNote";
-import WrapUpReview from "../wrap-up-review";
+import StartOneOnOne from "@/components/meet/StartOneOnOne";
 import PageShell from "@/components/PageShell";
 import { SECTION_GAP } from "@/components/ZoneMap";
 import { deriveOneOnOneSuggestions, OneOnOneSuggestion } from "@/lib/one-on-one-workspace";
@@ -141,23 +139,15 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
 }
 
 // ---------------------------------------------------------------------------
-// Main prep flow: notes → prep sheet + live notes → review → saved
+// Main prep flow: sources → prep sheet. The call itself and its wrap-up
+// happen on the meeting screen (/meet), reached from Start 1:1.
 // ---------------------------------------------------------------------------
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2;
 type RecurrenceWeeks = 1 | 2 | 3 | 4;
 
 function scheduledAtToDate(value: string | null | undefined) {
   return value ? value.slice(0, 10) : "";
-}
-
-// Local calendar day, not the UTC one. Only a fallback here: an undated
-// occurrence still has to hand the review screen a meeting date.
-function localDateStr(d: Date = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function longDayLabel(value: string) {
@@ -237,10 +227,6 @@ function PrepFlow() {
   // saved source notes when a prepared sheet is reopened for editing.
   const [captures, setCaptures] = useState<CaptureNote[]>([]);
 
-  // Step 2 — notes taken during the call (typed live or pasted afterward)
-  const [callNotes, setCallNotes] = useState("");
-  const [wrappingUp, setWrappingUp] = useState(false);
-  const [draft, setDraft] = useState<WrapUpDraft | null>(null);
 
   // Promises in the note the sheet was just built from, offered as
   // commitments under the sheet (components/NotePromises.tsx). Held here so
@@ -422,22 +408,6 @@ function PrepFlow() {
       setError(err instanceof Error ? err.message : "Could not save the meeting date.");
     } finally {
       setScheduleSaving(false);
-    }
-  }
-
-  // Step 2 → 3: distill call notes into a draft log for review
-  async function handleWrapUp() {
-    if (!callNotes.trim()) return;
-    setWrappingUp(true);
-    setError(null);
-    try {
-      const result = await wrapUpOneOnOne({ direct_report_id: id, raw_notes: callNotes });
-      setDraft(result);
-      setStep(3);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
-    } finally {
-      setWrappingUp(false);
     }
   }
 
@@ -688,7 +658,7 @@ function PrepFlow() {
   }
 
   // ---------------------------------------------------------------------------
-  // Step 2 — Prep sheet (left) + live call notes (right)
+  // Step 2 — Prep sheet (left) + Start 1:1 (right)
   // ---------------------------------------------------------------------------
   if (step === 2 && prep) {
     return (
@@ -852,54 +822,27 @@ function PrepFlow() {
             <NotePromises np={promises} reportName={reportName} />
           </div>
 
-          {/* Right — what's actually happening on the call */}
-          <div className="lg:sticky lg:top-8 lg:self-start">
-            <h2 className="text-2xl font-semibold">Call notes</h2>
-            <p className="mt-2 text-sm text-ink-secondary">
-              Type as you talk, or paste your notes afterward — from Granola or
-              whatever you record with. When you&apos;re done, we&apos;ll draft the
-              summary and pull out the commitments for you to review.
-            </p>
-            <NoteField
-              value={callNotes}
-              onChange={setCallNotes}
-              placeholder={"– Wants more ownership of onboarding, unsure how to ask for it\n– I'll set up time with Sam on the design team\n– They'll send me a draft plan by Friday"}
-              rows={18}
-              className="mt-4"
-            />
-            {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
-            <button
-              onClick={handleWrapUp}
-              disabled={wrappingUp || !callNotes.trim()}
-              className="mt-4 w-full rounded-md bg-brand px-4 py-3 font-medium text-on-brand hover:bg-brand-hover disabled:opacity-40"
-            >
-              {wrappingUp ? "Drafting your log…" : "Wrap up & log →"}
-            </button>
+          {/* Right — the call itself happens on the meeting screen
+              (call transcription session 3); /prep is only about preparing. */}
+          <div className="lg:sticky lg:top-24 lg:self-start">
+            <div className="rounded-xl border border-hairline bg-surface p-5">
+              <h2 className="text-lg font-semibold text-ink">Ready when you are</h2>
+              <p className="mt-1.5 text-sm text-ink-secondary">
+                Start the 1:1 when you meet. This agenda, your notes and {reportName.split(" ")[0] || "their"}&apos;s history are all on one screen.
+              </p>
+              <div className="mt-4">
+                <StartOneOnOne person={{ id, name: reportName || "your report" }} align="left" />
+              </div>
+              {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+              <p className="mt-3 text-xs">
+                <Link href={`/app/reports/${id}/log`} className="text-ink-secondary underline decoration-hairline underline-offset-2 hover:text-ink">
+                  Log a past 1:1
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
       </PageShell>
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Step 3 — Review the drafted log, then save
-  // ---------------------------------------------------------------------------
-  if (step === 3 && draft) {
-    return (
-      <WrapUpReview
-        directReportId={id}
-        reportName={reportName}
-        rawNotes={callNotes}
-        draft={draft}
-        onBack={() => setStep(2)}
-        backLabel="Back to the call"
-        oneOnOneId={oneOnOneId ?? undefined}
-        // The MEETING DATE from the sheet carries straight through, so the
-        // usual case needs no second thought. It stays editable on review for
-        // the meeting that slipped a day.
-        initialMeetingDate={scheduleDate || localDateStr()}
-        willRecur={recurrenceWeeks !== null}
-      />
     );
   }
 

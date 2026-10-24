@@ -41,7 +41,10 @@ import { createClient } from "@/lib/supabase";
 import { PATH_STEPS, SETUP_REVEAL_EVENT, pathStepsDone } from "@/lib/api";
 import { Icon, NAV_STRIP_HEIGHT, getNavContext, useZoneData } from "@/components/ZoneMap";
 import QuickAddModal from "@/components/QuickAddModal";
-import { BTN_TOPBAR_NEUTRAL, BTN_TOPBAR_SCRIBE, BTN_TOPBAR_SCRIBE_OPEN, ELEVATED } from "@/lib/tokens";
+import RecordingPill from "@/components/meet/RecordingPill";
+import MeetPicker from "@/components/meet/MeetPicker";
+import { useRecorder } from "@/lib/recorder/RecorderProvider";
+import { BTN_TOPBAR, BTN_TOPBAR_NEUTRAL, BTN_TOPBAR_SCRIBE, BTN_TOPBAR_SCRIBE_OPEN, ELEVATED } from "@/lib/tokens";
 
 function initialsOf(name: string | null) {
   if (!name) return "—";
@@ -70,6 +73,33 @@ export default function AppNav() {
   const avatarMenuRef = useRef<HTMLDivElement>(null);
 
   const ctx = getNavContext(pathname ?? "", params ?? {});
+  // Meet (call transcription session 3): the top bar's primary action, which
+  // gives way to the recording pill while a 1:1 is running.
+  const { meeting } = useRecorder();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const meetButtonRef = useRef<HTMLButtonElement>(null);
+  const onMeetScreen = !!pathname && /^\/app\/reports\/[^/]+\/meet$/.test(pathname);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setPickerOpen(false);
+        meetButtonRef.current?.focus();
+      }
+    }
+    function onClick(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [pickerOpen]);
+  useEffect(() => setPickerOpen(false), [pathname]);
 
   // Escape + click-outside close the avatar menu.
   useEffect(() => {
@@ -142,13 +172,36 @@ export default function AppNav() {
                 </span>
               </Link>
             )}
+            <RecordingPill />
+            {!meeting && (
+              <div className="relative" ref={pickerRef}>
+                <button
+                  ref={meetButtonRef}
+                  type="button"
+                  onClick={() => setPickerOpen((v) => !v)}
+                  aria-haspopup="dialog"
+                  aria-expanded={pickerOpen}
+                  className={`${BTN_TOPBAR} bg-brand text-on-brand hover:bg-brand-hover`}
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="9" cy="8" r="3.5" />
+                    <path d="M2.5 20a6.5 6.5 0 0113 0" />
+                    <path d="M17 8.5c1.6.4 2.8 1.9 2.8 3.6M16.5 4.5a3.5 3.5 0 010 7" />
+                  </svg>
+                  Meet
+                </button>
+                {pickerOpen && <MeetPicker onClose={() => setPickerOpen(false)} />}
+              </div>
+            )}
+            {/* Quick add gives the top bar's label to Meet and keeps its "+". */}
             <button
+              type="button"
               onClick={openQuickAdd}
-              className={BTN_TOPBAR_NEUTRAL}
+              title="Quick add"
+              aria-label="Quick add"
+              className={`${BTN_TOPBAR_NEUTRAL} w-8 justify-center px-0`}
             >
-              <span aria-hidden className="text-ink-muted">+</span>
-              <span className="hidden sm:inline">Quick add</span>
-              <span className="sr-only sm:hidden">Quick add</span>
+              <span aria-hidden className="text-lg font-normal leading-none text-ink-secondary">+</span>
             </button>
             <button
               onClick={toggleDrawer}
@@ -217,7 +270,7 @@ export default function AppNav() {
           top-[55px], a measured approximation of the old padding-derived
           height; now an exact match since the header's height is a fixed
           token rather than something to measure). */}
-      {ctx.kind === "person" && (
+      {ctx.kind === "person" && !onMeetScreen && (
         <div className="sticky top-14 z-30 border-b border-hairline bg-canvas/85 backdrop-blur">
           <div className="flex items-center gap-2 overflow-x-auto px-6 py-2 sm:px-8">
             {zone.roster.map((p) => {

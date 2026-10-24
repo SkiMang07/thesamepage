@@ -2,7 +2,7 @@
 
 The core product loop and the app's original IP. Backend: `routes/one_on_ones.py`.
 Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
-`/app/reports/[id]/log`.
+`/app/reports/[id]/meet`, `/app/reports/[id]/log`.
 
 ## Endpoints (`/api/one-on-ones`)
 
@@ -11,6 +11,7 @@ Surfaces: `/app/1-1s`, `/app/reports/[id]`, `/app/reports/[id]/prep`,
 | `GET`/`POST ""` | the log. `POST` takes a manager-confirmed `meeting_date`, and `separate_occurrence` for "this was not the meeting I have prep saved for". Returns `meeting`, `next_session`, the `commitments` actually inserted, and the cleaned `carry_forward_items` — see "Logging is all-or-nothing" |
 | `GET /overview` | per-report `is_due`, `days_since_last`, `cadence_days`, `cadence_source`, `planned_session`, `last_completed` — **the single canonical "who's due" computation**, backing `/app/1-1s` and the legacy Mission Control rollback; the action brief uses the same shared cadence resolver |
 | `GET /open/{direct_report_id}` | current gathering, scheduled, or already-prepared occurrence |
+| `POST /open/{direct_report_id}` | the same, creating an empty gathering occurrence (no AI call) when there is none, so the meeting screen always has a row to start on |
 | `POST /prep` | generates the prep sheet from reviewed workspace sources and attaches it to the current occurrence, or creates one. `opening_line` omitted keeps the occurrence's; null clears it. Returns the sheet's `drew_on` source list |
 | `PATCH /session/{id}/schedule` | edits an unfinished occurrence's date and 1–4 week repeat rule; `scope` moves just this one or this and every one after |
 | `POST /wrapup` | notes → draft summary, commitments, carry-forward topics, and an `opening_line` for the next 1:1 |
@@ -57,10 +58,11 @@ single accumulating object for carry-forwards, captures, live commitments, and
 current goal/development signals. `/app/1-1s` remains a triage surface: an
 undated gathering workspace does not make a not-yet-due person look scheduled.
 Gathering and scheduled occurrences open the source review; a planned occurrence
-resumes the generated sheet. On the person page, the primary action is
-**Review & prepare**, or **Start 1:1** once a sheet exists; the secondary
-**Log a 1:1** path remains for a conversation that happened without
-preparation. The page's layout is described under "The Relationship Desk"
+resumes the generated sheet. On the person page, the header's primary action is
+**Start 1:1**; the Last → next card offers **Review & prepare** (or **Open prep
+sheet** once one exists), plus **Start** when the 1:1 is today or overdue; the
+quiet **Log a past 1:1** link remains for a conversation that happened without
+the meeting screen. The page's layout is described under "The Relationship Desk"
 below. Its past-conversations timeline renders only completed occurrences; the
 unfinished next occurrence appears only in the next-conversation surface.
 
@@ -459,9 +461,19 @@ two questions for Jonah. Fixture: `tests/test_prep_expectations.py`.
 
 ## The call
 
-The in-call screen is two-column on desktop: prep sheet left, a sticky live "Call
-notes" pane right. The screen open *during* a 1:1 has to answer both "what should
-we cover" and "what's actually happening" without navigation.
+The call happens on the meeting screen, `/app/reports/[id]/meet`, reached from
+Meet in the top bar, Start 1:1 on the Relationship Desk, Start on the Last →
+next card when the 1:1 is today or overdue, and Start on Mission Control's
+today items. It holds today's agenda with covered ticks (or, unprepped, what
+was already gathered: carry-forwards, kept thoughts, commitments both ways),
+the manager's notes, and the person's history and open commitments, so a 1:1
+needs no navigation. `/prep` is only about preparing; its sheet ends in Start
+1:1. Recording, the local notes draft and the layouts are described in
+`call-transcription.md` → "The meeting experience".
+
+Notes typed while off the record are saved with the log as
+`one_on_ones.private_notes` (manager-only, never sent to the wrap-up); a blank
+value leaves the column alone, and a failed log puts the old value back.
 
 ## Wrap-up
 

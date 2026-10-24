@@ -27,7 +27,7 @@
 // between-section one, and the two aren't redundant with each other the
 // way the old chip + breadcrumb were.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -50,7 +50,19 @@ export default function Sidebar() {
   const { collapsed: collapsedPref, toggle, mobileOpen, setMobileOpen } = useSidebar();
   // The slide-over is always the full rail; the collapse preference is a
   // desktop choice.
-  const collapsed = collapsedPref && !mobileOpen;
+  // The meeting screen needs its width between 1024 and 1279px: the nav
+  // collapses to the icon rail there (build plan B3) without changing the
+  // manager's own collapse preference.
+  const onMeetScreen = !!pathname && /^\/app\/reports\/[^/]+\/meet$/.test(pathname);
+  const [laptopWidth, setLaptopWidth] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1279px)");
+    const update = () => setLaptopWidth(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const collapsed = (collapsedPref || (onMeetScreen && laptopWidth)) && !mobileOpen;
   const { onboarding } = useZoneData();
   const setUp = onboarding ? onboarding.set_up : null;
   const assessablePeople = onboarding ? onboarding.assessable_people : null;

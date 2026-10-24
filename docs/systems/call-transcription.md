@@ -4,10 +4,11 @@ Built-in transcription of 1:1s (later team and Beyond meetings) with no
 meeting bot. Audio is captured on the manager's own computer, posted in
 segments, transcribed, and thrown away. Only text is kept.
 
-**Built so far: the server pipeline** (session 1, plus the session 1b review
-fixes of 2026-10-23). The capture engine in the browser, the
-meeting screen, the wrap-up's use of the transcript and the launch surface are
-later build sessions; the plan lives in the gitignored
+**Built so far:** the server pipeline (session 1, plus the session 1b review
+fixes of 2026-10-23) and the meeting experience (session 3: Meet, the meeting
+screen, the recording pill, running on a stub capture engine that sends no
+audio). The browser capture engine (session 2), the wrap-up's use of the
+transcript (session 4) and the launch surface are later build sessions; the plan lives in the gitignored
 `docs/CALL_TRANSCRIPTION_BUILD_SCOPING.md`, the decision record in
 `docs/CALL_TRANSCRIPTION_SCOPING.md`.
 
@@ -156,6 +157,30 @@ the report's response field by field, so `kind`, `capture_mode`,
   `private_notes` and `expected_seqs` export with their rows.
   `delete_my_account()` deletes `call_transcripts` by owner; usage cascades
   from the login. The persona reset script clears all four.
+
+## The meeting experience (frontend)
+
+| File | Owns |
+|---|---|
+| `lib/recorder/RecorderProvider.tsx` | the active meeting and the pill's state; start / pause / resume / end through `lib/api.ts`; rebuilt from the server after a reload (`GET ?status=recording`, open gaps); the 30-minute resume window and the 2-hour stop |
+| `lib/recorder/types.ts` | the `CaptureEngine` interface session 2 implements: `start`, `reattach`, `addCallTab` (inside the click), `hold`/`release` (cut the segment at Pause / Off the record), `stop` (returns `seqs_by_track`), `onAutoStop` |
+| `lib/recorder/stubEngine.ts` | the stand-in engine: no audio is sent, but "Add Jordan's side" opens the browser's real share dialog. `window.__tspRecorderStub.autoStop(reason)` fires the timed auto-stops in sandbox checks. Swap it in `createEngine()` |
+| `lib/recorder/prefs.ts` | "Ask for the call tab", "tip shown" and the Transcribe switch's last choice, in localStorage (try/catch) |
+| `lib/meeting-draft.ts` | the local draft per 1:1 row: call notes and off-the-record notes apart, covered ticks, added topics; cleared on Save log |
+| `components/meet/RecordingPill.tsx` | the pill in every state, its menu, the one-time tip and our explainer before the share dialog |
+| `components/meet/MeetPicker.tsx`, `StartOneOnOne.tsx`, `useStartMeeting.tsx` | Meet in the top bar, Start 1:1 on the Desk, Start on the Last → next card and Mission Control; consent asked once per person; a 409 `already_recording` offered back ("Go back to it" / "End it and start this one") |
+| `components/meet/MeetingRoom.tsx`, `MeetingColumns.tsx` | `/app/reports/[id]/meet`: three columns from 980px of content, two (agenda and history tabbed) from 640px, phone tabs below; widths follow the content column so Scribe is accounted for |
+
+- **Starting** needs a 1:1 row: `POST /api/one-on-ones/open/{id}` returns the
+  open occurrence or creates an empty one (no AI call).
+- **Off the record** switches the notes field to the private note. Save log
+  sends it as `private_notes` on `POST /api/one-on-ones`; it never reaches the
+  wrap-up draft.
+- **End 1:1** stops transcription and, until session 4, opens the existing
+  wrap-up review drafted from the notes. Unticked agenda topics are offered as
+  carry-forwards.
+- The `Permissions-Policy` header allows `display-capture=(self)` for the call
+  tab, alongside `microphone=(self)`.
 
 ## Analytics
 

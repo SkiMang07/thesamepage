@@ -14,7 +14,9 @@ const MARKETING_SITE = "https://www.thesamepage.xyz";
 //     payload. Tightening this needs nonces from middleware; not worth it yet.
 //   - vercel.live: the feedback toolbar Vercel injects on preview deploys.
 // The microphone is allowed for this origin only (Permissions-Policy), which
-// is what NoteField's dictation needs; camera and location are off.
+// is what NoteField's dictation and call transcription need, and so is
+// display capture, which adding the other side's call tab uses
+// (getDisplayMedia); camera and location are off.
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://*.supabase.co";
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const isDev = process.env.NODE_ENV !== "production";
@@ -39,7 +41,7 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "microphone=(self), camera=(), geolocation=()" },
+  { key: "Permissions-Policy", value: "microphone=(self), display-capture=(self), camera=(), geolocation=()" },
   { key: "Content-Security-Policy-Report-Only", value: csp },
 ];
 
