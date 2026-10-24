@@ -5,10 +5,11 @@ meeting bot. Audio is captured on the manager's own computer, posted in
 segments, transcribed, and thrown away. Only text is kept.
 
 **Built so far:** the server pipeline (session 1, plus the session 1b review
-fixes of 2026-10-23) and the meeting experience (session 3: Meet, the meeting
-screen, the recording pill, running on a stub capture engine that sends no
-audio). The browser capture engine (session 2), the wrap-up's use of the
-transcript (session 4) and the launch surface are later build sessions; the plan lives in the gitignored
+fixes of 2026-10-23), the meeting experience (session 3: Meet, the meeting
+screen, the recording pill) and the browser capture engine that records the
+mic and the call tab and queues segments on the device (session 2, with the
+server's echo dedupe). The wrap-up's use of the transcript (session 4) and the
+launch surface are later build sessions; the plan lives in the gitignored
 `docs/CALL_TRANSCRIPTION_BUILD_SCOPING.md`, the decision record in
 `docs/CALL_TRANSCRIPTION_SCOPING.md`.
 
@@ -45,7 +46,7 @@ capture client (browser now, Mac helper later)
   POST /api/call-transcripts/{id}/pause         {kind: pause|off_record, at_ms}
   POST /api/call-transcripts/{id}/resume        {at_ms}  (also after a stop: same row)
   POST /api/call-transcripts/{id}/end           {reason, at_ms, seqs_by_track}
-  GET  /api/call-transcripts/{id}               status, interleaved lines, gaps
+  GET  /api/call-transcripts/{id}               status, interleaved lines (echoes removed), gaps
   GET  /api/call-transcripts?one_on_one_id=…&status=recording
   GET  /api/call-transcripts/usage              hours used / allowed
   PUT  /api/call-transcripts/consent            per-person consent on/off
@@ -56,7 +57,7 @@ capture client (browser now, Mac helper later)
 
 | File | Owns |
 |---|---|
-| `backend/routes/call_transcripts.py` | every endpoint above; allowance check, staleness, interleaving |
+| `backend/routes/call_transcripts.py` | every endpoint above; allowance check, staleness, interleaving, echo dedupe |
 | `backend/ai_core.py` → `transcribe_call_segment()` | the vendor call, its own 4 MB cap (dictation's 8 MB is separate), lines with timestamps, whisper's invented lines dropped |
 | `backend/config.py` → `TRANSCRIPTION_ALLOWANCES`, `AI_CALL_TRANSCRIBE_MODEL` | hours per tier; the call model (dictation keeps `AI_TRANSCRIBE_MODEL`) |
 | `backend/main.py` → `_read_only_exempt()` | delete and consent pass the read-only gate |
@@ -135,7 +136,15 @@ the report's response field by field, so `kind`, `capture_mode`,
   so the mic's segments switch between `mixed` and `self`. `capture_mode`
   means how the call started.
 - **Interleaving** sorts every line by `t_ms`, then `self` before `other`.
-  Echo de-duplication is not built yet (capture-engine session).
+- **Echo dedupe** (`drop_echo()`, on every read, after interleaving). Without
+  headphones the mic hears the other person through the speakers, so their
+  words land on `self` too. A `self` line is dropped when at least 80% of its
+  words appear in `other` lines spoken at the same moment (within 1.5 s either
+  side of the lines' spans); lines under three words need an exact match
+  within 2 s. It never touches `mixed`, never drops an `other` line, and keeps
+  a manager line that only partly overlaps, so a manager restating the other
+  person afterwards stays. Stored lines are never changed. It relies on
+  whisper-1's per-line timestamps.
 - **End** sets `finishing`; it becomes `ready` once every `(track, seq)` in
   `seqs_by_track` is stored, so a late `other` segment holds it. (An older
   client sending only `last_seq` gets the old check: each seq on some track.)
@@ -158,13 +167,17 @@ the report's response field by field, so `kind`, `capture_mode`,
   `delete_my_account()` deletes `call_transcripts` by owner; usage cascades
   from the login. The persona reset script clears all four.
 
-## The meeting experience (frontend)
+## The meeting experience and the capture engine (frontend)
 
 | File | Owns |
 |---|---|
 | `lib/recorder/RecorderProvider.tsx` | the active meeting and the pill's state; start / pause / resume / end through `lib/api.ts`; rebuilt from the server after a reload (`GET ?status=recording`, open gaps); the 30-minute resume window and the 2-hour stop |
-| `lib/recorder/types.ts` | the `CaptureEngine` interface session 2 implements: `start`, `reattach`, `addCallTab` (inside the click), `hold`/`release` (cut the segment at Pause / Off the record), `stop` (returns `seqs_by_track`), `onAutoStop` |
-| `lib/recorder/stubEngine.ts` | the stand-in engine: no audio is sent, but "Add Jordan's side" opens the browser's real share dialog. `window.__tspRecorderStub.autoStop(reason)` fires the timed auto-stops in sandbox checks. Swap it in `createEngine()` |
+| `lib/recorder/types.ts` | the `CaptureEngine` interface: `start`, `reattach`, `addCallTab` (inside the click), `hold`/`release` (cut the segment at Pause / Off the record), `stop` (returns `seqs_by_track`), `onAutoStop` |
+| `lib/recorder/browserEngine.ts` | the engine `createEngine()` returns: mic and call-tab recorders, 3-minute rotation, hold/release, the level meter and the three auto-stops |
+| `lib/recorder/queue.ts` | the on-device queue (IndexedDB `tsp-recorder`) and the uploader; recovery after a reload or crash |
+| `lib/audioFormat.ts` | mime negotiation, 32 kbps and the mic settings, shared with dictation |
+| `public/recorder/level-worklet.js` | the AudioWorklet that measures loudness on the audio thread |
+| `lib/recorder/stubEngine.ts` | a no-audio engine kept for design work on the meeting screen; not used by the app. `window.__tspRecorderStub.autoStop(reason)` exists only on it |
 | `lib/recorder/prefs.ts` | "Ask for the call tab", "tip shown" and the Transcribe switch's last choice, in localStorage (try/catch) |
 | `lib/meeting-draft.ts` | the local draft per 1:1 row: call notes and off-the-record notes apart, covered ticks, added topics; cleared on Save log |
 | `components/meet/RecordingPill.tsx` | the pill in every state, its menu, the one-time tip and our explainer before the share dialog |
@@ -181,6 +194,53 @@ the report's response field by field, so `kind`, `capture_mode`,
   carry-forwards.
 - The `Permissions-Policy` header allows `display-capture=(self)` for the call
   tab, alongside `microphone=(self)`.
+
+**The capture engine**
+
+- **Rotation without timers.** Each recorder runs with a 1-second timeslice,
+  and each data event is the clock: a window 3 minutes old is closed and the
+  next one opened (the next opens first, so no word falls between them).
+  The Same Page is usually a background tab behind the call, where timers are
+  throttled but recorder events keep coming.
+- **One seq per window.** All tracks open and close together and share a seq,
+  which is what billing by seq position needs. Adding or dropping the call
+  tab closes the window too, so the mic switches between `mixed` and `self`
+  at a seq boundary. `seq = max(last + 1, whole seconds since started_at)`, so
+  it stays unique after a reload even if storage was lost.
+- **Hold** (Pause, Off the record) closes the window at that moment. The
+  streams stay open so Resume is instant; nothing is recorded while held.
+- **The queue.** IndexedDB `tsp-recorder`: `chunks` (each 1-second chunk as it
+  arrives, so a reload or crash loses about a second), `segments` (closed
+  segments waiting to send) and `transcripts` (every seq queued per track,
+  which `stop()` returns for End across reloads, plus time captured for the
+  2-hour stop). Memory stands in when IndexedDB can't open. One tab uploads at
+  a time (Web Locks), oldest first. A segment is deleted on success or a
+  duplicate reply. Network errors, 401, 402, 408, 429 and 5xx retry with
+  backoff (5 s doubling to 5 min) for up to 24 hours; a success, a reload or
+  coming back online sends everything waiting at once. Other refusals drop the
+  segment; 409 `max_length` also stops the call.
+- **After a reload** the provider calls `reattach()`: leftover chunks become a
+  segment, the queue is flushed, and recording resumes on the same timeline
+  (the mic is `mixed`: the call tab can't survive a reload). Any page load
+  also sends what a closed tab left behind once its chunks have been quiet
+  for 30 seconds. A tab that finds another tab already recording the call
+  (Web Lock `tsp-recorder-live:{id}`) only shows the pill.
+- **Silence.** The worklet posts each track's loudness four times a second;
+  RMS above 0.006 (about −44 dBFS) counts as speech. Ten minutes with no
+  track above it stops the call. A window nobody spoke in is not uploaded
+  (cost, and whisper invents text on silence). If the meter can't run (no
+  AudioWorklet, or a reloaded page that hasn't been clicked yet: the first
+  click or key starts it), the silence clock stands still and every window is
+  sent.
+- **The 2-hour stop** counts recorder time (pauses excluded) from the
+  `transcripts` record; the server's per-track cap backs it up.
+- **The call tab ending** (closed, or Stop sharing) fires `share_ended` from
+  the track's `ended` event, or on the next recorder tick if the track is over
+  without one.
+- **Sandbox checks** build with `NEXT_PUBLIC_RECORDER_TEST_TIMINGS` =
+  `segmentMs,silenceMs,maxMs` to see rotation and the auto-stops in seconds.
+  Never set in a deploy. Chromium in the sandbox doesn't end a capture when
+  its tab is closed, so the real-call check confirms that on a real Chrome.
 
 ## Analytics
 

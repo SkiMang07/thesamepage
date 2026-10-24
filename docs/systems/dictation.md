@@ -103,7 +103,8 @@ live MediaStream, not a second transcription path.
 
 | File | Owns |
 |---|---|
-| `frontend/lib/useDictation.ts` | MediaRecorder lifecycle, mime negotiation, timer, level meter, `setNativeFieldValue` (drives a field's native setter + dispatches `input`, used by both the caret-insert helper and undo), cancel |
+| `frontend/lib/useDictation.ts` | MediaRecorder lifecycle, timer, level meter, `setNativeFieldValue` (drives a field's native setter + dispatches `input`, used by both the caret-insert helper and undo), cancel |
+| `frontend/lib/audioFormat.ts` | mime negotiation, the 32 kbps hint and the mic settings, shared with the call recorder (`lib/recorder/browserEngine.ts`) |
 | `frontend/components/NoteField.tsx` | The app's textarea. Mic built in. **Reach for this instead of a raw `<textarea>`.** Owns its own `justDictated` tint/undo state, since it controls the field's React value |
 | `frontend/components/DictationLevelMeter.tsx` | The small live-input meter, shared by NoteField and DictationHotkey |
 | `frontend/components/DictationHotkey.tsx` | ⌘⇧Space, global. Mounted once in `app/app/layout.tsx`. Owns its own `justDictated` tracking for whatever field it last typed into, since it doesn't control that field's React state and has to write an undo back through the native setter |

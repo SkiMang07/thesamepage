@@ -5,10 +5,10 @@
 // server lifecycle: start, pause, resume and end go through lib/api.ts, the
 // pill's state lives there, and a reload rebuilds it from the server.
 //
-// A CaptureEngine owns audio and nothing else. Session 3 ships the stub
-// (stubEngine.ts): no audio leaves the browser. Session 2 replaces it with
-// the browser engine, which posts 3-minute segments per track. The provider
-// does not change when it does.
+// A CaptureEngine owns audio and nothing else. browserEngine.ts records the
+// mic and the call tab in 3-minute segments per track and queues them on the
+// device (queue.ts) until the server has them. stubEngine.ts sends nothing and
+// is kept for design work.
 //
 // Rules the engine keeps (CALL_TRANSCRIPTION_BUILD_SCOPING.md, Part C):
 //   - Every offset is milliseconds since the transcript's started_at, by the

@@ -12,8 +12,8 @@
 //     record / stopped and why), rebuilt from the server after a reload;
 //   - the server lifecycle (start, pause, resume, end) through lib/api.ts.
 //
-// What it does not own: audio. That is the CaptureEngine's (types.ts). The
-// stub ships now; session 2 swaps in the browser engine in createEngine().
+// What it does not own: audio. That is the CaptureEngine's (types.ts), and
+// createEngine() returns the browser engine.
 //
 // Timing: every at_ms is milliseconds since the transcript's started_at by
 // the wall clock (build plan Part C), so a reload recomputes it from the
@@ -34,12 +34,13 @@ import {
   type CallStopReason,
   type CallTranscript,
 } from "@/lib/api";
-import { createStubEngine } from "./stubEngine";
+import { createBrowserEngine } from "./browserEngine";
 import type { AddTabResult, AutoStopReason, CaptureEngine } from "./types";
 
-// Session 2: return the browser engine here.
+// The browser engine (browserEngine.ts). stubEngine.ts stays as the
+// no-audio stand-in for design work on the meeting screen.
 function createEngine(): CaptureEngine {
-  return createStubEngine();
+  return createBrowserEngine();
 }
 
 const STORAGE_KEY = "tsp:active-meeting";

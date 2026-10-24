@@ -63,6 +63,7 @@
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, transcribeAudio } from "./api";
+import { MIC_CONSTRAINTS, createSpeechRecorder } from "./audioFormat";
 
 export type DictationState = "idle" | "starting" | "recording" | "transcribing";
 
@@ -70,13 +71,6 @@ export type DictationState = "idle" | "starting" | "recording" | "transcribing";
  *  talking into a text box; anything longer is a recording, which is a
  *  different product decision entirely (see docs/systems/dictation.md). */
 export const MAX_DICTATION_SECONDS = 300;
-
-const MIME_CANDIDATES = [
-  "audio/webm;codecs=opus", // Chrome, Edge, Firefox, Safari 18.4+
-  "audio/webm",
-  "audio/mp4", // Safari < 18.4
-  "", // let the browser pick, and hope
-];
 
 const NO_SPEECH_MESSAGE = "Didn't catch anything.";
 
@@ -86,18 +80,6 @@ export function isDictationSupported(): boolean {
     typeof window.MediaRecorder !== "undefined" &&
     !!navigator.mediaDevices?.getUserMedia
   );
-}
-
-function pickMimeType(): string {
-  for (const type of MIME_CANDIDATES) {
-    if (!type) return "";
-    try {
-      if (window.MediaRecorder.isTypeSupported(type)) return type;
-    } catch {
-      /* isTypeSupported itself can throw on old WebKit */
-    }
-  }
-  return "";
 }
 
 type Options = {
@@ -226,7 +208,7 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
+        audio: MIC_CONSTRAINTS,
       });
     } catch (e) {
       setState("idle");
@@ -245,25 +227,16 @@ export function useDictation({ onText, vocabulary = "" }: Options) {
     chunksRef.current = [];
     discardRef.current = false;
 
-    const mimeType = pickMimeType();
-    let recorder: MediaRecorder;
-    try {
-      // Bitrate is a hint. Safari ignores it; everyone else honours it and the
-      // blob comes back roughly a quarter the size for no audible loss on speech.
-      recorder = new MediaRecorder(stream, {
-        ...(mimeType ? { mimeType } : {}),
-        audioBitsPerSecond: 32000,
-      });
-    } catch {
-      try {
-        recorder = new MediaRecorder(stream); // isTypeSupported lied; take the default
-      } catch {
-        teardown();
-        setState("idle");
-        setError("This browser can't record audio.");
-        return;
-      }
+    // Mime negotiation and the 32 kbps hint live in lib/audioFormat.ts, shared
+    // with the call recorder.
+    const made = createSpeechRecorder(stream);
+    if (!made) {
+      teardown();
+      setState("idle");
+      setError("This browser can't record audio.");
+      return;
     }
+    const { recorder, mimeType } = made;
 
     recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);

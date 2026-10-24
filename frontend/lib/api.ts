@@ -4491,6 +4491,24 @@ export const endCallTranscript = (
 ): Promise<{ transcript: CallTranscript }> =>
   authedFetch(`/api/call-transcripts/${id}/end`, { method: "POST", body: JSON.stringify(body) });
 
+/** One 3-minute audio segment for one track. Idempotent on (id, seq, track):
+ *  a retry of a stored segment comes back with duplicate: true. Called only by
+ *  the capture engine's upload queue (lib/recorder/queue.ts). */
+export const uploadCallSegment = (
+  id: string,
+  seg: { blob: Blob; seq: number; track: CallTrack; offset_ms: number; duration_ms: number; vocabulary?: string },
+): Promise<{ duplicate: boolean; status: CallTranscriptStatus }> => {
+  const form = new FormData();
+  // The server reads the format from the blob's MIME type, not the filename.
+  form.append("file", seg.blob, "segment");
+  form.append("seq", String(seg.seq));
+  form.append("track", seg.track);
+  form.append("offset_ms", String(Math.max(0, Math.round(seg.offset_ms))));
+  form.append("duration_ms", String(Math.max(1, Math.round(seg.duration_ms))));
+  if (seg.vocabulary) form.append("vocabulary", seg.vocabulary);
+  return authedFormFetch(`/api/call-transcripts/${id}/segments`, form);
+};
+
 export const getCallTranscript = (id: string): Promise<CallTranscriptDetail> =>
   authedFetch(`/api/call-transcripts/${id}`);
 

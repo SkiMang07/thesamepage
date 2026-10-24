@@ -292,6 +292,74 @@ def interleave(segments: list[dict]) -> list[dict]:
     return lines
 
 
+# ── echo dedupe (scoping §5) ──────────────────────────────────────────────
+# Without headphones the manager's mic also hears Jordan through the
+# speakers, so Jordan's words land on both tracks. The call tab is the clean
+# copy: a `self` line that repeats `other` text spoken at the same moment is
+# the echo, and goes. It runs on read, after interleave(), so it doesn't care
+# what order segments arrived in and never changes what is stored.
+#
+# What it never does: touch `mixed` (no second copy to compare with), drop an
+# `other` line, or drop a manager's line that only partly overlaps. A manager
+# restating Jordan ("so you'll send the deck Friday") comes after Jordan has
+# finished, outside the window. Keeping a duplicate is better than losing
+# something the manager said.
+ECHO_LEAD_MS = 1_500        # the echo can be timestamped a little before Jordan's line
+ECHO_LAG_MS = 1_500         # ... or a little after it ends
+ECHO_MIN_TOKENS = 3         # shorter lines need an exact match
+ECHO_CONTAINMENT = 0.8      # share of the manager's words that must appear in Jordan's
+ECHO_SHORT_WINDOW_MS = 2_000
+_MS_PER_WORD = 500          # how long a line lasts when nothing follows it
+
+
+def _tokens(text: str) -> list[str]:
+    cleaned = "".join(ch.lower() if ch.isalnum() else " " for ch in text.replace("'", "").replace("’", ""))
+    return cleaned.split()
+
+
+def drop_echo(lines: list[dict]) -> list[dict]:
+    """`lines` as interleave() returns them (sorted by t_ms). Returns the same
+    list without `self` lines that are echoes of `other` lines."""
+    others = [l for l in lines if l.get("speaker") == "other"]
+    if not others or not any(l.get("speaker") == "self" for l in lines):
+        return lines
+
+    spans = []  # (start, end, tokens) per `other` line
+    for i, line in enumerate(others):
+        toks = _tokens(line["text"])
+        start = int(line["t_ms"])
+        natural = start + max(2_000, len(toks) * _MS_PER_WORD)
+        nxt = int(others[i + 1]["t_ms"]) if i + 1 < len(others) else None
+        end = min(natural, nxt) if nxt is not None and nxt > start else natural
+        spans.append((start, end, toks))
+
+    def is_echo(line: dict) -> bool:
+        toks = _tokens(line["text"])
+        if not toks:
+            return False
+        t = int(line["t_ms"])
+        if len(toks) < ECHO_MIN_TOKENS:
+            return any(abs(t - start) <= ECHO_SHORT_WINDOW_MS and o == toks for start, _, o in spans)
+        # The echo may cover two of Jordan's lines (the tracks split sentences
+        # differently), so compare with every line its own span overlaps.
+        own_end = t + max(1_000, len(toks) * _MS_PER_WORD)
+        near: dict[str, int] = {}
+        for start, end, o in spans:
+            if start - ECHO_LEAD_MS <= own_end and t <= end + ECHO_LAG_MS:
+                for tok in o:
+                    near[tok] = near.get(tok, 0) + 1
+        if not near:
+            return False
+        matched = 0
+        for tok in toks:
+            if near.get(tok, 0) > 0:
+                near[tok] -= 1
+                matched += 1
+        return matched / len(toks) >= ECHO_CONTAINMENT
+
+    return [l for l in lines if l.get("speaker") != "self" or not is_echo(l)]
+
+
 def _summary(row: dict, user_id: str) -> dict:
     owner = row["owner_id"] == user_id
     out = {
@@ -732,8 +800,8 @@ def end(request: Request, transcript_id: str, body: EndIn, auth=Depends(get_auth
 
 @router.get("/{transcript_id}")
 def get_transcript(transcript_id: str, auth=Depends(get_authenticated_client)):
-    """Status plus the interleaved lines. The manager also gets each gap's
-    kind; the report gets gaps as start/end only."""
+    """Status plus the interleaved lines, echoes removed. The manager also
+    gets each gap's kind; the report gets gaps as start/end only."""
     user_id, supabase = auth
     row = _load(supabase, transcript_id)
     owner = row["owner_id"] == user_id
@@ -757,7 +825,7 @@ def get_transcript(transcript_id: str, auth=Depends(get_authenticated_client)):
     return {
         **_summary(row, user_id),
         "segment_count": len(segments),
-        "lines": outside_gaps(interleave(segments), gaps),
+        "lines": outside_gaps(drop_echo(interleave(segments)), gaps),
         "gaps": gaps,
     }
 
