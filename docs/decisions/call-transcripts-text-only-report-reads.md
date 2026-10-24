@@ -1,7 +1,8 @@
 # Call transcripts: text only, the report reads theirs, gaps stay neutral
 
 **Status:** Accepted 2026-10-23 (Andrew). Server pipeline implemented
-2026-10-23; capture and meeting screen not yet built.
+2026-10-23, review fixes (session 1b) the same day; capture and meeting
+screen not yet built.
 
 ## Context
 
@@ -16,7 +17,8 @@ manager's alone, and nothing a manager recorded about a 1:1 reached the report.
   in the same request; never Storage, disk or a log. Transcript text is never
   logged either.
 - **The report can read their own 1:1 transcript, read-only, from day one**,
-  wherever they have a login, with no notification. RLS grants it through the
+  wherever they have a login, with no notification, **once the call has
+  ended** (review fix, 2026-10-23: never while it's being transcribed). RLS grants it through the
   SECURITY DEFINER `call_transcript_ids_for_report()`; there is no cross-manager
   read and no access to team or Beyond transcripts.
 - **Gaps are neutral to the report.** Paused, off-the-record and stopped time
@@ -26,8 +28,15 @@ manager's alone, and nothing a manager recorded about a 1:1 reached the report.
 - **Speaker labels come from the track, never from voice.** No voiceprint is
   built, which keeps Illinois's biometric law (BIPA) out of scope.
 - **Usage is a ledger, not a property of the transcript.** Deleting a
-  transcript never refunds hours; only `add_transcription_seconds()` writes it,
-  once per stored segment.
+  transcript never refunds hours; only `add_transcription_seconds()` writes it.
+  It counts meeting time: each 3-minute slot bills once, at its longest
+  track (review fix, 2026-10-23), so adding the other side of a call never
+  halves the allowance.
+- **Nothing said in a gap becomes text** (review fix, 2026-10-23). The server
+  drops lines inside a pause or off-the-record gap, on upload and on read, so
+  off the record doesn't rest on the browser alone.
+- **Deleting is never behind the paywall** (review fix, 2026-10-23). A
+  read-only account can still delete a transcript and withdraw consent.
 
 ## Rejected alternatives
 

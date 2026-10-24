@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     # if accuracy on manager-speak disappoints: "gpt-4o-transcribe" (older,
     # 4.0% WER), "gpt-4o-mini-transcribe" (cheapest at $0.18/hr, 4.5% WER).
     AI_TRANSCRIBE_MODEL: str = "gpt-transcribe"
+    # Call transcription (docs/systems/call-transcription.md) has its own
+    # model, so dictation is unchanged. whisper-1 because it returns per-line
+    # timestamps and the audio's length (verbose_json): two tracks interleave
+    # line by line, echo dedupe can match lines seconds apart, and billing uses
+    # the vendor's measured seconds. The gpt-*-transcribe family returns one
+    # block of text per 3-minute segment and no length. The real-call check
+    # compares accuracy on names before launch. Never a diarizing model
+    # (gpt-4o-transcribe-diarize): it labels speakers by voice (BIPA).
+    AI_CALL_TRANSCRIBE_MODEL: str = "whisper-1"
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""
@@ -78,6 +87,7 @@ AI_SCRIBE_THINKING = settings.AI_SCRIBE_THINKING
 # Transcription model — an OpenAI name, NOT an Anthropic one. This never
 # routes through the Anthropic path or the provider-fallback map.
 AI_TRANSCRIBE_MODEL = settings.AI_TRANSCRIBE_MODEL
+AI_CALL_TRANSCRIBE_MODEL = settings.AI_CALL_TRANSCRIBE_MODEL
 
 # Call transcription allowances, by the tier transcription_allowance_state()
 # names in the database: (hours, period). "month" resets on the 1st (UTC);

@@ -274,6 +274,7 @@ create table one_on_ones (
   scheduled_at     timestamptz,
   summary          text,   -- post-meeting log, shown in history
   notes            text,   -- private to manager only
+  private_notes    text,   -- off-the-record notes from the meeting screen; manager only, never sent to the wrap-up (2026-10-23)
   prep_guide       jsonb,  -- AI-generated prep, stored for reference
   logged_at        timestamptz,  -- when the write-up was saved, not the meeting date
   carry_forward_items jsonb not null default '[]'::jsonb
@@ -3582,6 +3583,11 @@ create table if not exists call_transcripts (
   -- Highest seq the client said it sent when it ended. Ready once every seq
   -- 0..last_seq has a stored segment.
   last_seq             integer check (last_seq is null or last_seq >= -1),
+  -- The seqs the client sent, per track ({"self": [0,1,..], "other": [4,5,..]}),
+  -- given on End. Ready waits for every one (2026-10-23 review fixes).
+  expected_seqs        jsonb
+                       constraint call_transcripts_expected_seqs_object
+                       check (expected_seqs is null or jsonb_typeof(expected_seqs) = 'object'),
   status               text not null default 'recording'
                        check (status in ('recording', 'finishing', 'ready', 'failed')),
   -- A segment, pause, resume or end. A recording/finishing row idle for 30
@@ -3664,12 +3670,12 @@ create table if not exists transcription_usage (
 alter table transcription_usage enable row level security;
 
 -- The 1:1 transcripts the caller can read as the report: transcripts of 1:1s
--- whose direct_reports row is linked to their login. SECURITY DEFINER so the
--- policy below never re-enters RLS on one_on_ones/direct_reports (and never
--- touches users). Returns nothing for a signed-out caller, and keeps anon's
--- EXECUTE for the same reason current_org_id() does: policies run their
--- functions as the querying role, so revoking it would turn a signed-out read
--- into an error instead of zero rows.
+-- whose direct_reports row is linked to their login, once the call has ended
+-- (finishing with an end time, or ready). Never while recording, so the
+-- report can't watch it grow or read it before the manager could delete an
+-- accidental recording. A resumed call is hidden again until it ends.
+-- SECURITY DEFINER so the policy never re-enters RLS on one_on_ones/
+-- direct_reports. Keeps anon's EXECUTE for the reason current_org_id() does.
 create or replace function public.call_transcript_ids_for_report()
 returns setof uuid
 language sql
@@ -3683,6 +3689,8 @@ as $$
   join direct_reports d on d.id = o.direct_report_id
   where auth.uid() is not null
     and d.user_id = auth.uid()
+    and t.ended_at is not null
+    and t.status in ('finishing', 'ready')
 $$;
 
 -- Gaps for a transcript the caller may read, without kind. The report's view
@@ -3707,11 +3715,14 @@ $$;
 revoke all on function public.call_transcript_report_gaps(uuid) from public, anon;
 grant execute on function public.call_transcript_report_gaps(uuid) to authenticated;
 
--- Bills one stored segment to the caller's month, once. Idempotent: a second
--- call for the same segment (a retried upload) adds nothing. Seconds come
--- from the segment row the backend wrote, never from a parameter, so no
--- caller can pass a negative number to refund themselves. Returns the
--- caller's seconds for the current UTC month after the call.
+-- Bills one stored segment to the caller's month, once, counting meeting
+-- time rather than tracks: the first track stored for a seq bills its
+-- seconds; another track for the same seq adds only what it runs longer.
+-- A two-track hour therefore uses one hour of the allowance. Idempotent: a
+-- second call for the same segment adds nothing. The advisory lock makes two
+-- tracks of one seq, billed at the same moment, see each other. Seconds come
+-- from the segment rows the backend wrote, never from a parameter. Returns
+-- the caller's seconds for the current UTC month after the call.
 create or replace function public.add_transcription_seconds(p_segment_id uuid)
 returns integer
 language plpgsql
@@ -3721,28 +3732,52 @@ as $$
 declare
   v_uid   uuid := auth.uid();
   v_month date := date_trunc('month', now() at time zone 'utc')::date;
+  v_tid   uuid;
+  v_seq   integer;
   v_secs  integer;
+  v_prev  integer;
+  v_add   integer;
   v_total integer;
 begin
   if v_uid is null then
     raise exception 'Not authenticated';
   end if;
 
+  select transcript_id into v_tid
+    from call_transcript_segments
+   where id = p_segment_id and owner_id = v_uid;
+  if v_tid is null then
+    select seconds into v_total from transcription_usage
+     where user_id = v_uid and month = v_month;
+    return coalesce(v_total, 0);
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('call_transcript_billing:' || v_tid::text, 0));
+
   update call_transcript_segments
      set billed_at = now()
    where id = p_segment_id
      and owner_id = v_uid
      and billed_at is null
-  returning billed_seconds into v_secs;
+  returning seq, billed_seconds into v_seq, v_secs;
 
-  if found and v_secs > 0 then
-    insert into transcription_usage (user_id, month, seconds, updated_at)
-    values (v_uid, v_month, v_secs, now())
-    on conflict (user_id, month) do update
-      set seconds    = transcription_usage.seconds + excluded.seconds,
-          updated_at = now()
-    returning seconds into v_total;
-    return v_total;
+  if found then
+    select coalesce(max(billed_seconds), 0) into v_prev
+      from call_transcript_segments
+     where transcript_id = v_tid
+       and seq = v_seq
+       and id <> p_segment_id
+       and billed_at is not null;
+    v_add := greatest(coalesce(v_secs, 0) - v_prev, 0);
+    if v_add > 0 then
+      insert into transcription_usage (user_id, month, seconds, updated_at)
+      values (v_uid, v_month, v_add, now())
+      on conflict (user_id, month) do update
+        set seconds    = transcription_usage.seconds + excluded.seconds,
+            updated_at = now()
+      returning seconds into v_total;
+      return v_total;
+    end if;
   end if;
 
   select seconds into v_total from transcription_usage

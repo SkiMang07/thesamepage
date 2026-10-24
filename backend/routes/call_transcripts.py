@@ -49,13 +49,16 @@ BILL_SLACK_MS = 15_000          # a client duration is never billed past segment
 MAX_TRACK_MS = 2 * 60 * 60_000  # 2-hour cap per call, per track
 MAX_SEGMENT_DURATION_MS = 600_000
 STALE_AFTER = timedelta(minutes=30)
+MAX_PAUSE = timedelta(hours=3)            # an open pause keeps a call alive this long, no longer
+RESUME_WINDOW = timedelta(minutes=30)     # a stopped call can be resumed this long after it stopped
+MAX_SEGMENT_AUDIO_SECONDS = 240           # a 3-minute segment, with slack; longer is refused unstored
 TRACKS = ("self", "other", "mixed")
 _TRACK_ORDER = {t: i for i, t in enumerate(TRACKS)}
 
 _TRANSCRIPT_COLUMNS = (
     "id, owner_id, one_on_one_id, team_meeting_id, outside_meeting_id, capture_mode, "
     "consent_confirmed_at, started_at, ended_at, ended_at_ms, ended_reason, last_seq, "
-    "status, last_activity_at, created_at"
+    "status, last_activity_at, created_at, expected_seqs"
 )
 
 
@@ -159,37 +162,83 @@ def _touch(supabase, transcript_id: str, extra: Optional[dict] = None) -> dict:
     return _update(supabase, transcript_id, {"last_activity_at": _now().isoformat(), **(extra or {})})
 
 
-def _stored_seqs(supabase, transcript_id: str) -> set[int]:
+def _stored(supabase, transcript_id: str) -> set[tuple[str, int]]:
+    """Every (track, seq) stored for this transcript."""
     rows = (
-        supabase.table("call_transcript_segments").select("seq")
+        supabase.table("call_transcript_segments").select("seq, track")
         .eq("transcript_id", transcript_id).execute().data or []
     )
-    return {r["seq"] for r in rows}
+    return {(r["track"], r["seq"]) for r in rows}
+
+
+def _missing(row: dict, stored: set[tuple[str, int]]) -> set[tuple[str, int]]:
+    """What End said was sent and isn't stored yet. With expected_seqs (per
+    track, from End) every listed (track, seq) must be in: a late `other`
+    segment holds the call in finishing even when `self` for that seq landed.
+    With only last_seq (an older client), every position 0..last_seq needs at
+    least one track, as before."""
+    expected = row.get("expected_seqs")
+    if isinstance(expected, dict) and expected:
+        want = {(track, int(seq)) for track, seqs in expected.items() for seq in (seqs or [])}
+        return want - stored
+    last_seq = row.get("last_seq")
+    if last_seq is None or last_seq < 0:
+        return set()
+    have = {seq for _, seq in stored}
+    return {("*", seq) for seq in range(last_seq + 1) if seq not in have}
+
+
+def _gaps(supabase, transcript_id: str) -> list[dict]:
+    return (
+        supabase.table("call_transcript_gaps").select("start_ms, end_ms, kind, created_at")
+        .eq("transcript_id", transcript_id).order("start_ms").execute().data or []
+    )
+
+
+def outside_gaps(lines: list[dict], gaps: list[dict]) -> list[dict]:
+    """Drop any line whose time falls inside a gap (an open gap runs on).
+    The client stops sending audio while paused or off the record; this is
+    the server's own guarantee, so audio that slipped through anyway (a
+    recorder bug, a segment cut late) never becomes text anyone can read."""
+    spans = [(g["start_ms"], g.get("end_ms")) for g in gaps or []]
+    if not spans:
+        return lines
+    return [
+        line for line in lines
+        if not any(start <= int(line.get("t_ms", 0)) and (end is None or int(line.get("t_ms", 0)) < end)
+                   for start, end in spans)
+    ]
 
 
 def _close_if_stale(supabase, row: dict) -> dict:
     """A recording/finishing row with no activity for 30 minutes is closed:
-    ready if it has segments, failed if not. Resume can still reopen it."""
+    ready if it has segments, failed if not. An open pause keeps it alive
+    (a long interruption is not an abandoned call) for up to 3 hours.
+    ended_at is the last activity, not the moment someone looked, so reading
+    an old call never reopens its resume window."""
     if row.get("status") not in ("recording", "finishing"):
         return row
     last = _parse_ts(row.get("last_activity_at")) or _parse_ts(row.get("started_at"))
     if last and _now() - last < STALE_AFTER:
         return row
-    status = "ready" if _stored_seqs(supabase, row["id"]) else "failed"
+    open_gaps = [g for g in _gaps(supabase, row["id"]) if g.get("end_ms") is None]
+    if open_gaps:
+        opened = _parse_ts(open_gaps[0].get("created_at"))
+        if opened and _now() - opened < MAX_PAUSE:
+            return row
+    status = "ready" if _stored(supabase, row["id"]) else "failed"
     fields = {"status": status}
     if not row.get("ended_at"):
-        fields["ended_at"] = _now().isoformat()
+        fields["ended_at"] = (last or _now()).isoformat()
     return _update(supabase, row["id"], fields) or {**row, **fields}
 
 
 def _settle(supabase, row: dict) -> dict:
-    """finishing -> ready once every seq up to last_seq has a stored segment."""
+    """finishing -> ready once everything End said was sent is stored."""
     if row.get("status") != "finishing":
         return row
-    last_seq = row.get("last_seq")
-    if last_seq is not None and last_seq >= 0:
-        if not set(range(last_seq + 1)) <= _stored_seqs(supabase, row["id"]):
-            return row
+    if _missing(row, _stored(supabase, row["id"])):
+        return row
     return _update(supabase, row["id"], {"status": "ready"}) or {**row, "status": "ready"}
 
 
@@ -291,6 +340,10 @@ class EndIn(BaseModel):
     reason: Literal["manager", "silence", "max_length", "share_ended", "allowance"] = "manager"
     at_ms: Optional[int] = None
     last_seq: Optional[int] = None
+    # Every seq the client sent, per track: {"mixed": [0, 1], "self": [2, 3], "other": [2, 3]}.
+    # A call tab added mid-call starts at a later seq, and the mic's label
+    # changes when it is added, so one last_seq can't say what to wait for.
+    seqs_by_track: Optional[dict[Literal["self", "other", "mixed"], list[int]]] = None
 
 
 class ConsentIn(BaseModel):
@@ -308,7 +361,8 @@ def usage(auth=Depends(get_authenticated_client)):
 
 
 @router.put("/consent")
-def set_consent(body: ConsentIn, auth=Depends(get_authenticated_client)):
+@limiter.limit("30/minute")
+def set_consent(request: Request, body: ConsentIn, auth=Depends(get_authenticated_client)):
     """Per-person consent: ticked once (the date is kept on later ticks),
     cleared from the person's page."""
     user_id, supabase = auth
@@ -441,7 +495,7 @@ def start(request: Request, body: StartIn, auth=Depends(get_authenticated_client
 
 
 @router.post("/{transcript_id}/segments")
-@limiter.limit("60/minute")
+@limiter.limit("30/minute")  # two tracks every 3 minutes, plus a queue flushing after an outage
 def upload_segment(
     request: Request,
     transcript_id: str,
@@ -519,6 +573,18 @@ def upload_segment(
     )
     del raw  # the audio goes no further than this request
 
+    audio_seconds = result.get("audio_seconds")
+    if audio_seconds is not None and audio_seconds > MAX_SEGMENT_AUDIO_SECONDS:
+        # A real segment is 3 minutes. Longer is a client that isn't rotating,
+        # or one trying to get more transcribed than it is billed for.
+        logger.warning("call_segment_too_long", extra={"fields": {
+            "transcript_id": transcript_id, "seq": seq, "track": track, "audio_seconds": audio_seconds,
+        }})
+        raise HTTPException(status_code=413, detail={
+            "code": "segment_too_long", "message": "Segments are at most 4 minutes long.",
+        })
+    lines = outside_gaps(result["lines"], _gaps(supabase, transcript_id))
+
     try:
         inserted = supabase.table("call_transcript_segments").insert({
             "transcript_id": transcript_id,
@@ -527,8 +593,8 @@ def upload_segment(
             "track": track,
             "offset_ms": offset_ms,
             "duration_ms": duration_ms,
-            "lines": result["lines"],
-            "billed_seconds": billable_seconds(result.get("audio_seconds"), duration_ms),
+            "lines": lines,
+            "billed_seconds": billable_seconds(audio_seconds, duration_ms),
         }).execute().data
     except APIError as err:
         if _api_code(err) == "23505":  # a concurrent retry stored it first
@@ -540,13 +606,15 @@ def upload_segment(
     _touch(supabase, transcript_id)
     logger.info("call_segment_stored", extra={"fields": {
         "transcript_id": transcript_id, "seq": seq, "track": track,
-        "lines": len(result["lines"]), "status_before": row.get("status"),
+        "lines": len(lines), "dropped_in_gaps": len(result["lines"]) - len(lines),
+        "status_before": row.get("status"),
     }})
     return reply(inserted[0], duplicate=False)
 
 
 @router.post("/{transcript_id}/pause")
-def pause(transcript_id: str, body: PauseIn, auth=Depends(get_authenticated_client)):
+@limiter.limit("30/minute")
+def pause(request: Request, transcript_id: str, body: PauseIn, auth=Depends(get_authenticated_client)):
     """Pause or go off the record. Neither is transcribed; the client stops
     sending audio until resume. Notes typed while off the record are the
     client's to keep apart from the wrap-up."""
@@ -569,7 +637,8 @@ def pause(transcript_id: str, body: PauseIn, auth=Depends(get_authenticated_clie
 
 
 @router.post("/{transcript_id}/resume")
-def resume(transcript_id: str, body: ResumeIn, auth=Depends(get_authenticated_client)):
+@limiter.limit("30/minute")
+def resume(request: Request, transcript_id: str, body: ResumeIn, auth=Depends(get_authenticated_client)):
     """Resume after a pause, or after a stop ("Back to the 1:1", or Resume
     after an auto-stop). A stopped call continues the same row: status back
     to recording, and the stopped time recorded as a gap."""
@@ -577,6 +646,16 @@ def resume(transcript_id: str, body: ResumeIn, auth=Depends(get_authenticated_cl
     row = _load_own(supabase, transcript_id, user_id)
     if body.at_ms < 0:
         raise HTTPException(status_code=422, detail="at_ms must not be negative")
+
+    if row["status"] != "recording":
+        stopped = _parse_ts(row.get("ended_at")) or _parse_ts(row.get("last_activity_at"))
+        if not stopped or _now() - stopped > RESUME_WINDOW:
+            # Resume skips the allowance check, so it only continues a call
+            # that just stopped. Anything older is a new start.
+            raise HTTPException(status_code=409, detail={
+                "code": "resume_window_passed",
+                "message": "This call stopped more than 30 minutes ago. End the 1:1, or start a new one.",
+            })
 
     _close_open_gap(supabase, transcript_id, body.at_ms)
     if row["status"] == "recording":
@@ -587,7 +666,7 @@ def resume(transcript_id: str, body: ResumeIn, auth=Depends(get_authenticated_cl
         stopped_at = body.at_ms
     try:
         reopened = _touch(supabase, transcript_id, {
-            "status": "recording", "ended_at": None, "last_seq": None,
+            "status": "recording", "ended_at": None, "last_seq": None, "expected_seqs": None,
         })
     except APIError as err:
         if _api_code(err) == "23505":
@@ -604,7 +683,8 @@ def resume(transcript_id: str, body: ResumeIn, auth=Depends(get_authenticated_cl
 
 
 @router.post("/{transcript_id}/end")
-def end(transcript_id: str, body: EndIn, auth=Depends(get_authenticated_client)):
+@limiter.limit("30/minute")
+def end(request: Request, transcript_id: str, body: EndIn, auth=Depends(get_authenticated_client)):
     """Stop transcribing. finishing until every segment up to last_seq is in,
     then ready."""
     user_id, supabase = auth
@@ -617,24 +697,35 @@ def end(transcript_id: str, body: EndIn, auth=Depends(get_authenticated_client))
         _close_open_gap(supabase, transcript_id, body.at_ms)
     if body.last_seq is not None and body.last_seq < -1:
         raise HTTPException(status_code=422, detail="last_seq must be -1 or more")
+    expected_seqs = None
+    if body.seqs_by_track is not None:
+        expected_seqs = {}
+        for track, seqs in body.seqs_by_track.items():
+            if len(seqs) > 1000 or any(s < 0 for s in seqs):
+                raise HTTPException(status_code=422, detail="Invalid seqs_by_track")
+            expected_seqs[track] = sorted(set(seqs))
+    last_seq = body.last_seq
+    if last_seq is None and expected_seqs:
+        last_seq = max((max(v) for v in expected_seqs.values() if v), default=-1)
 
     ended = _touch(supabase, transcript_id, {
         "status": "finishing",
         "ended_at": _now().isoformat(),
         "ended_at_ms": body.at_ms,
         "ended_reason": body.reason,
-        "last_seq": body.last_seq,
+        "last_seq": last_seq,
+        "expected_seqs": expected_seqs,
     }) or row
-    settled = _settle(supabase, {**row, **ended})
+    merged = {**row, **ended, "last_seq": last_seq, "expected_seqs": expected_seqs}
+    settled = _settle(supabase, merged)
 
-    stored = _stored_seqs(supabase, transcript_id)
-    expected = set(range(body.last_seq + 1)) if body.last_seq is not None and body.last_seq >= 0 else set()
+    missing = _missing(merged, _stored(supabase, transcript_id))
     started = _parse_ts(row.get("started_at"))
     minutes = (_now() - started).total_seconds() / 60 if started else 0
     analytics.capture(user_id, "call_transcription_ended", {
         "ended_reason": body.reason,
         "minutes_bucket": "<15" if minutes < 15 else "15-30" if minutes < 30 else "30-60" if minutes < 60 else "60+",
-        "segments_failed": len(expected - stored),
+        "segments_failed": len(missing),
     })
     return {"transcript": _summary(settled, user_id)}
 
@@ -656,10 +747,7 @@ def get_transcript(transcript_id: str, auth=Depends(get_authenticated_client)):
     if owner:
         gaps = [
             {"start_ms": g["start_ms"], "end_ms": g.get("end_ms"), "kind": g["kind"]}
-            for g in (
-                supabase.table("call_transcript_gaps").select("start_ms, end_ms, kind")
-                .eq("transcript_id", transcript_id).order("start_ms").execute().data or []
-            )
+            for g in _gaps(supabase, transcript_id)
         ]
     else:
         raw = supabase.rpc("call_transcript_report_gaps", {"p_transcript_id": transcript_id}).execute().data or []
@@ -669,13 +757,14 @@ def get_transcript(transcript_id: str, auth=Depends(get_authenticated_client)):
     return {
         **_summary(row, user_id),
         "segment_count": len(segments),
-        "lines": interleave(segments),
+        "lines": outside_gaps(interleave(segments), gaps),
         "gaps": gaps,
     }
 
 
 @router.delete("/{transcript_id}")
-def delete_transcript(transcript_id: str, auth=Depends(get_authenticated_client)):
+@limiter.limit("30/minute")
+def delete_transcript(request: Request, transcript_id: str, auth=Depends(get_authenticated_client)):
     """The manager deletes a transcript at any time. Segments and gaps go with
     it; the hours it used stay used."""
     user_id, supabase = auth

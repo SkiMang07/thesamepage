@@ -11,7 +11,7 @@ import time
 import httpx
 from fastapi import HTTPException
 
-from config import settings, AI_DEFAULT_MODEL_HEAVY, AI_DEFAULT_MODEL_LIGHT, AI_TRANSCRIBE_MODEL
+from config import settings, AI_DEFAULT_MODEL_HEAVY, AI_DEFAULT_MODEL_LIGHT, AI_TRANSCRIBE_MODEL, AI_CALL_TRANSCRIBE_MODEL
 
 logger = logging.getLogger("ai_core")
 
@@ -564,13 +564,29 @@ def transcribe_audio(
 # line per spoken segment; one that doesn't gives one line per audio segment at
 # its offset, so interleaving degrades to segment order instead of breaking.
 
-# A 3-minute track at 32 kbps is ~0.7 MB. Safari ignores the bitrate hint, so
-# the headroom is generous; OpenAI's own ceiling is 25 MB.
-MAX_CALL_SEGMENT_BYTES = 12 * 1024 * 1024
+# A 3-minute track at 32 kbps is ~0.7 MB. Safari below 18.4 ignores the
+# bitrate hint and records AAC, up to ~3 MB for 3 minutes, so 4 MB holds every
+# real segment. It is not the cost guard on its own: the route also refuses a
+# segment whose measured length runs past 4 minutes (2026-10-23 review).
+MAX_CALL_SEGMENT_BYTES = 4 * 1024 * 1024
 
 # Models that accept response_format=verbose_json with segment timestamps.
 # The gpt-*-transcribe family answers json/text only.
 _TIMESTAMP_MODELS = {"whisper-1"}
+
+
+def _is_hallucinated(seg: dict) -> bool:
+    """Whisper's own failure signals: a segment it judged silent and was
+    unsure of, or a looping repetition (compression ratio over 2.4). On a quiet
+    track these are invented lines ("Thank you for watching."), and the report
+    can read this transcript."""
+    try:
+        no_speech = float(seg.get("no_speech_prob") or 0)
+        logprob = float(seg.get("avg_logprob") or 0)
+        ratio = float(seg.get("compression_ratio") or 0)
+    except (TypeError, ValueError):
+        return False
+    return (no_speech > 0.6 and logprob < -1.0) or ratio > 2.4
 
 
 def _call_segment_lines(body: dict, offset_ms: int) -> list[dict]:
@@ -578,7 +594,7 @@ def _call_segment_lines(body: dict, offset_ms: int) -> list[dict]:
     if isinstance(segments, list) and segments:
         lines = []
         for seg in segments:
-            if not isinstance(seg, dict):
+            if not isinstance(seg, dict) or _is_hallucinated(seg):
                 continue
             text = str(seg.get("text") or "").strip()
             if not text:
@@ -588,8 +604,9 @@ def _call_segment_lines(body: dict, offset_ms: int) -> list[dict]:
             except (TypeError, ValueError):
                 start = 0.0
             lines.append({"t_ms": offset_ms + round(start * 1000), "text": text})
-        if lines:
-            return lines
+        # Segments were given: whatever survived is the transcript, even
+        # nothing (a silent track), never the unfiltered whole-text fallback.
+        return lines
     text = str(body.get("text") or "").strip()
     return [{"t_ms": offset_ms, "text": text}] if text else []
 
@@ -616,8 +633,8 @@ def transcribe_call_segment(
     if len(audio_bytes) > MAX_CALL_SEGMENT_BYTES:
         raise HTTPException(status_code=413, detail="Segment too large")
 
-    timestamps = AI_TRANSCRIBE_MODEL in _TIMESTAMP_MODELS
-    data: dict = {"model": AI_TRANSCRIBE_MODEL,
+    timestamps = AI_CALL_TRANSCRIBE_MODEL in _TIMESTAMP_MODELS
+    data: dict = {"model": AI_CALL_TRANSCRIBE_MODEL,
                   "response_format": "verbose_json" if timestamps else "json"}
     if timestamps:
         data["timestamp_granularities[]"] = "segment"
@@ -636,7 +653,7 @@ def transcribe_call_segment(
         )
         resp.raise_for_status()
     except httpx.HTTPStatusError as e:
-        _log_failure("openai", "transcribe_call", AI_TRANSCRIBE_MODEL, e.response.status_code, started)
+        _log_failure("openai", "transcribe_call", AI_CALL_TRANSCRIBE_MODEL, e.response.status_code, started)
         raise HTTPException(status_code=502, detail="Could not transcribe that segment")
     except httpx.RequestError as e:
         logger.warning("call transcription request error: %s", type(e).__name__)
@@ -663,7 +680,7 @@ def transcribe_call_segment(
     logger.info("ai_call", extra={"fields": {
         "provider": "openai",
         "kind": "transcribe_call",
-        "model": AI_TRANSCRIBE_MODEL,
+        "model": AI_CALL_TRANSCRIBE_MODEL,
         "latency_ms": round((time.monotonic() - started) * 1000),
         "audio_bytes": len(audio_bytes),
         "lines": len(lines),

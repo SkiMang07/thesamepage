@@ -451,9 +451,11 @@ read policy on any base table.
 
 ### Privacy boundary
 
-- `one_on_ones.notes` — the writing manager only.
+- `one_on_ones.notes` and `one_on_ones.private_notes` (off-the-record notes,
+  never sent to the wrap-up) — the writing manager only.
 - Call transcripts — the recording manager, plus read-only access for the report
-  to their own 1:1 transcripts; why a gap exists never reaches the report
+  to their own 1:1 transcripts once the call has ended; why a gap exists never
+  reaches the report
   (`docs/decisions/call-transcripts-text-only-report-reads.md`).
 - Everything else (assessments, metrics, development plans, goals) — the direct
   manager and up the hierarchy chain.

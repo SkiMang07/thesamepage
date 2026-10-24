@@ -67,7 +67,8 @@ def test_interleave_orders_by_time_and_labels_by_track():
 
 def test_call_segments_have_their_own_size_cap():
     assert ai_core.MAX_DICTATION_BYTES == 8 * 1024 * 1024   # dictation untouched
-    assert ai_core.MAX_CALL_SEGMENT_BYTES >= ai_core.MAX_DICTATION_BYTES
+    # 4 MB holds Safari's ~3 MB AAC segment; the length check is the cost guard.
+    assert ai_core.MAX_CALL_SEGMENT_BYTES == 4 * 1024 * 1024
 
 
 def test_transcribe_call_segment_logs_no_text(monkeypatch, caplog):
@@ -213,7 +214,10 @@ def test_writes_stay_behind_the_read_only_gate():
 
 def test_ai_calling_routes_are_rate_limited():
     src = (REPO / "backend" / "routes" / "call_transcripts.py").read_text()
-    for route in ('@router.post("")', '@router.post("/{transcript_id}/segments")'):
+    for route in ('@router.post("")', '@router.post("/{transcript_id}/segments")',
+                  '@router.post("/{transcript_id}/pause")', '@router.post("/{transcript_id}/resume")',
+                  '@router.post("/{transcript_id}/end")', '@router.delete("/{transcript_id}")',
+                  '@router.put("/consent")'):
         i = src.index(route)
         assert "@limiter.limit(" in src[i:i + 120], route
 

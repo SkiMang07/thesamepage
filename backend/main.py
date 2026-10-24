@@ -1,4 +1,5 @@
 import logging
+import re
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -76,6 +77,21 @@ _READ_ONLY_ALLOWED = (
     # Export and delete: an account whose clock ran out can still leave.
     "/api/settings/account",
 )
+# Method-specific exceptions: removing a record of someone's words, or
+# withdrawing their consent, is never behind the paywall (2026-10-23 review).
+# Recording, pausing and ending stay gated.
+_READ_ONLY_ALLOWED_EXACT = (
+    ("DELETE", re.compile(r"^/api/call-transcripts/[^/]+$")),
+    ("PUT", re.compile(r"^/api/call-transcripts/consent$")),
+)
+
+
+def _read_only_exempt(method: str, path: str) -> bool:
+    if path.startswith(_READ_ONLY_ALLOWED):
+        return True
+    return any(method == m and rx.match(path) for m, rx in _READ_ONLY_ALLOWED_EXACT)
+
+
 READ_ONLY_DETAIL = (
     "Your free period has ended, so your account is read-only. "
     "Everything you saved is still here."
@@ -94,7 +110,7 @@ async def read_only_gate(request: Request, call_next):
     if (
         request.method in _WRITE_METHODS
         and path.startswith("/api/")
-        and not path.startswith(_READ_ONLY_ALLOWED)
+        and not _read_only_exempt(request.method, path)
         and authorization.startswith("Bearer ")
     ):
         try:
